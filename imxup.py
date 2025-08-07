@@ -410,42 +410,60 @@ def load_cookies_from_file(cookie_file="cookies.txt"):
 
 class ImxToUploader:
     def _get_credentials(self):
-        """Get username and password from stored config"""
+        """Get credentials from stored config (username/password or API key)"""
         config = configparser.ConfigParser()
         config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
         
         if os.path.exists(config_file):
             config.read(config_file)
             if 'CREDENTIALS' in config:
-                username = config['CREDENTIALS'].get('username')
-                encrypted_password = config['CREDENTIALS'].get('password', '')
+                auth_type = config['CREDENTIALS'].get('auth_type', 'username_password')
                 
-                if username and encrypted_password:
-                    password = decrypt_password(encrypted_password)
-                    if password:
-                        return username, password
+                if auth_type == 'username_password':
+                    username = config['CREDENTIALS'].get('username')
+                    encrypted_password = config['CREDENTIALS'].get('password', '')
+                    
+                    if username and encrypted_password:
+                        password = decrypt_password(encrypted_password)
+                        if password:
+                            return username, password, None
+                
+                elif auth_type == 'api_key':
+                    encrypted_api_key = config['CREDENTIALS'].get('api_key', '')
+                    
+                    if encrypted_api_key:
+                        api_key = decrypt_password(encrypted_api_key)
+                        if api_key:
+                            return None, None, api_key
         
-        return None, None
+        return None, None, None
     
     def __init__(self):
-        self.api_key = os.getenv('IMX_API')
-        
-        if not self.api_key:
-            raise ValueError("IMX_API key not found in environment variables")
-        
         # Get credentials from stored config
-        self.username, self.password = self._get_credentials()
+        self.username, self.password, self.api_key = self._get_credentials()
         
-        if not self.username or not self.password:
-            print(f"{timestamp()} Failed to get credentials. Please run --setup-secure first.")
+        # Fallback to environment variable for API key if not in config
+        if not self.api_key:
+            self.api_key = os.getenv('IMX_API')
+        
+        # Check if we have either username/password or API key
+        has_credentials = (self.username and self.password) or self.api_key
+        
+        if not has_credentials:
+            print(f"{timestamp()} Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.")
             sys.exit(1)
         
         self.base_url = "https://api.imx.to/v1"
         self.web_url = "https://imx.to"
         self.upload_url = f"{self.base_url}/upload.php"
-        self.headers = {
-            "X-API-Key": self.api_key
-        }
+        
+        # Set headers based on authentication method
+        if self.api_key:
+            self.headers = {
+                "X-API-Key": self.api_key
+            }
+        else:
+            self.headers = {}
         
         # Session for web interface
         self.session = requests.Session()
@@ -460,8 +478,12 @@ class ImxToUploader:
     def login(self):
         """Login to imx.to web interface"""
         if not self.username or not self.password:
-            print(f"{timestamp()} Warning: No stored credentials, gallery naming disabled")
-            return False
+            if self.api_key:
+                print(f"{timestamp()} Using API key authentication - gallery naming may be limited")
+                return True
+            else:
+                print(f"{timestamp()} Warning: No stored credentials, gallery naming disabled")
+                return False
         
         max_retries = 3
         for attempt in range(max_retries):
@@ -983,7 +1005,7 @@ URL=https://imx.to/g/{gallery_id}
             except requests.exceptions.RequestException as e:
                 raise Exception(f"Network error during upload: {str(e)}")
     
-    def upload_folder(self, folder_path, gallery_name=None, thumbnail_size=3, thumbnail_format=2, max_retries=3, public_gallery=1):
+    def upload_folder(self, folder_path, gallery_name=None, thumbnail_size=3, thumbnail_format=2, max_retries=3, public_gallery=1, parallel_batch_size=4):
         """
         Upload all images in a folder as a gallery
         
@@ -1100,17 +1122,16 @@ URL=https://imx.to/g/{gallery_id}
         uploaded_images = []
         failed_images = []
         
-        # Main upload progress bar
+                # Main upload progress bar
         with tqdm(total=len(image_files), desc=f"Uploading to {gallery_name}", 
                  unit="img", leave=False) as pbar:
             
-            # Process images in batches of 4 for concurrent uploads
-            batch_size = 4
-            for i in range(0, len(image_files), batch_size):
-                batch = image_files[i:i + batch_size]
+            # Process images in batches for concurrent uploads
+            for i in range(0, len(image_files), parallel_batch_size):
+                batch = image_files[i:i + parallel_batch_size]
                 
                 # Upload batch concurrently
-                with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                with ThreadPoolExecutor(max_workers=parallel_batch_size) as executor:
                     # Submit all uploads in the batch
                     future_to_file = {
                         executor.submit(upload_single_image, image_file, 1, pbar): image_file 
@@ -1140,7 +1161,7 @@ URL=https://imx.to/g/{gallery_id}
             with tqdm(total=len(failed_images), desc=f"Retry {retry_count}/{max_retries}", 
                      unit="img", leave=False) as retry_pbar:
                 
-                with ThreadPoolExecutor(max_workers=4) as executor:
+                with ThreadPoolExecutor(max_workers=parallel_batch_size) as executor:
                     future_to_file = {
                         executor.submit(upload_single_image, image_file, retry_count + 1, retry_pbar): image_file 
                         for image_file, _ in failed_images
@@ -1248,6 +1269,9 @@ def main():
     parser.add_argument('--public-gallery', type=int, choices=[0, 1], 
                        default=user_defaults.get('public_gallery', 1),
                        help='Gallery visibility: 0=private, 1=public (default: 1)')
+    parser.add_argument('--parallel-batch-size', type=int, 
+                       default=user_defaults.get('parallel_batch_size', 4),
+                       help='Number of images to upload simultaneously (default: 4)')
     parser.add_argument('--private', action='store_true',
                        help='Make galleries private (overrides --public-gallery)')
     parser.add_argument('--public', action='store_true',
@@ -1416,7 +1440,8 @@ def main():
                     thumbnail_size=args.thumbnail_size,
                     thumbnail_format=args.thumbnail_format,
                     max_retries=args.max_retries,
-                    public_gallery=public_gallery
+                    public_gallery=public_gallery,
+                    parallel_batch_size=args.parallel_batch_size
                 )
                 all_results.append(results)
                 
