@@ -279,15 +279,23 @@ class GUIImxToUploader(ImxToUploader):
                                 self.worker_thread.current_item.uploaded_images_data.append((image_file, image_data))
                             except Exception:
                                 pass
-                        if self.worker_thread:
-                            # Update uploaded bytes cheaply without repeatedly statting files later
-                            try:
-                                if self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
-                                    fp = os.path.join(folder_path, image_file)
-                                    self.worker_thread.current_item.uploaded_bytes += os.path.getsize(fp)
-                            except Exception:
-                                pass
-                            self.worker_thread.log_message.emit(f"{timestamp()} ✓ Uploaded: {image_file}")
+                    if self.worker_thread:
+                        # Update uploaded bytes cheaply without repeatedly statting files later
+                        try:
+                            if self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
+                                fp = os.path.join(folder_path, image_file)
+                                self.worker_thread.current_item.uploaded_bytes += os.path.getsize(fp)
+                        except Exception:
+                            pass
+                        self.worker_thread.log_message.emit(f"{timestamp()} ✓ Uploaded: {image_file}")
+                        # Emit periodic queue stats
+                        try:
+                            now_ts = time.time()
+                            if now_ts - self.worker_thread._stats_last_emit >= 0.5:
+                                self.worker_thread._emit_queue_stats()
+                                self.worker_thread._stats_last_emit = now_ts
+                        except Exception:
+                            pass
                     else:
                         failed_images.append((image_file, error))
                         if self.worker_thread:
@@ -398,6 +406,10 @@ class GUIImxToUploader(ImxToUploader):
                                         kbps = (total_bytes / max_elapsed) / 1024.0
                                         self.worker_thread.bandwidth_updated.emit(kbps)
                                         self.worker_thread._bw_last_emit = now_ts
+                                # Periodic queue stats during retry as well
+                                if now_ts - self.worker_thread._stats_last_emit >= 0.5:
+                                    self.worker_thread._emit_queue_stats()
+                                    self.worker_thread._stats_last_emit = now_ts
                             except Exception:
                                 pass
                         if not remaining.empty():
@@ -493,6 +505,7 @@ class UploadWorker(QThread):
     gallery_exists = pyqtSignal(str, list)  # gallery_name, existing_files
     log_message = pyqtSignal(str)
     bandwidth_updated = pyqtSignal(float)  # current KB/s across active uploads
+    queue_stats = pyqtSignal(dict)  # aggregate status stats for GUI updates
     
     def __init__(self, queue_manager):
         super().__init__()
@@ -503,6 +516,7 @@ class UploadWorker(QThread):
         self._soft_stop_requested_for = None
         self.auto_rename_enabled = True
         self._bw_last_emit = 0.0
+        self._stats_last_emit = 0.0
         
     def stop(self):
         self.running = False
@@ -545,7 +559,7 @@ class UploadWorker(QThread):
                     method = None
 
                 if method in ('cookies', 'credentials'):
-                    self.log_message.emit(f"{timestamp()} Login successful")
+                    self.log_message.emit(f"{timestamp()} Login successful using {method}")
                     # Auto-rename unnamed galleries only when a web session exists
                     try:
                         if self.auto_rename_enabled:
@@ -572,6 +586,11 @@ class UploadWorker(QThread):
                 # Get next item from queue
                 item = self.queue_manager.get_next_item()
                 if item is None:
+                    # Periodically emit queue stats even when idle
+                    try:
+                        self._emit_queue_stats()
+                    except Exception:
+                        pass
                     time.sleep(0.1)
                     continue
                 
@@ -581,9 +600,17 @@ class UploadWorker(QThread):
                     self.upload_gallery(item)
                 elif item.status == "paused":
                     # Skip paused items
+                    try:
+                        self._emit_queue_stats()
+                    except Exception:
+                        pass
                     time.sleep(0.1)
                 else:
                     # Put item back in queue if not ready
+                    try:
+                        self._emit_queue_stats()
+                    except Exception:
+                        pass
                     time.sleep(0.1)
                 
         except Exception as e:
@@ -603,6 +630,11 @@ class UploadWorker(QThread):
             
             # Emit signal to update display immediately
             self.gallery_started.emit(item.path, item.total_images or 0)
+            # Also emit queue stats since states changed
+            try:
+                self._emit_queue_stats(force=True)
+            except Exception:
+                pass
             # If soft stop already requested by the time we start, reflect status to incomplete in UI
             if getattr(self, '_soft_stop_requested_for', None) == item.path:
                 self.queue_manager.update_item_status(item.path, "incomplete")
@@ -656,19 +688,35 @@ class UploadWorker(QThread):
                         # Still generate files and show as failed with partial content
                         self.gallery_completed.emit(item.path, results)
                         self.log_message.emit(f"{timestamp()} Completed with failures: {item.name} -> {item.gallery_url}")
+                        try:
+                            self._emit_queue_stats(force=True)
+                        except Exception:
+                            pass
                     else:
                         self.queue_manager.update_item_status(item.path, "completed")
                         self.gallery_completed.emit(item.path, results)
                         self.log_message.emit(f"{timestamp()} Completed: {item.name} -> {item.gallery_url}")
+                        try:
+                            self._emit_queue_stats(force=True)
+                        except Exception:
+                            pass
             else:
                 # If soft stop was requested, do NOT mark failed; mark incomplete instead
                 if self._soft_stop_requested_for == item.path:
                     self.queue_manager.update_item_status(item.path, "incomplete")
                     item.status = "incomplete"
                     self.log_message.emit(f"{timestamp()} Marked incomplete: {item.name}")
+                    try:
+                        self._emit_queue_stats(force=True)
+                    except Exception:
+                        pass
                 else:
                     self.queue_manager.update_item_status(item.path, "failed")
                     self.gallery_failed.emit(item.path, "Upload failed")
+                    try:
+                        self._emit_queue_stats(force=True)
+                    except Exception:
+                        pass
                 
         except Exception as e:
             error_msg = str(e)
@@ -794,6 +842,8 @@ class UploadWorker(QThread):
                     json.dump(json_payload, jf, ensure_ascii=False, indent=2)
             try:
                 self.log_message.emit(f"{timestamp()} Saved gallery files to central location: {get_central_storage_path()}")
+                # Emit queue stats after artifacts are saved
+                self._emit_queue_stats(force=True)
             except Exception:
                 pass
         except Exception:
@@ -1419,6 +1469,9 @@ class GalleryTableWidget(QTableWidget):
             if completed_paths:
                 copy_action = menu.addAction("Copy BBCode")
                 copy_action.triggered.connect(lambda: self.copy_bbcode_via_menu_multi(completed_paths))
+                # Open gallery link(s) for completed items
+                open_link_action = menu.addAction("Open Gallery Link")
+                open_link_action.triggered.connect(lambda: self.open_gallery_links_via_menu(completed_paths))
         
         else:
             # No selection: offer Add Folders via the same dialog as the toolbar button
@@ -1559,6 +1612,68 @@ class GalleryTableWidget(QTableWidget):
                     widget.statusBar().showMessage(message, 2500)
             except Exception:
                 pass
+
+    def open_gallery_links_via_menu(self, paths):
+        """Open gallery link(s) in the system browser for completed items."""
+        # Find the main GUI window for access to queue_manager and logging
+        widget = self
+        while widget and not hasattr(widget, 'queue_manager'):
+            widget = widget.parent()
+        if not widget:
+            return
+        opened = 0
+        for path in paths:
+            try:
+                item = widget.queue_manager.get_item(path)
+            except Exception:
+                item = None
+            if not item or item.status != "completed":
+                continue
+            url = (item.gallery_url or "").strip()
+            if not url:
+                # Fallback: attempt to read JSON and extract meta.gallery_url
+                try:
+                    folder_name = os.path.basename(path)
+                    from imxup import get_central_storage_path, build_gallery_filenames
+                    json_path_candidates = []
+                    uploaded_subdir = os.path.join(path, ".uploaded")
+                    if item.gallery_id and (item.name or folder_name):
+                        _, json_filename, _ = build_gallery_filenames(item.name or folder_name, item.gallery_id)
+                        json_path_candidates.append(os.path.join(uploaded_subdir, json_filename))
+                        json_path_candidates.append(os.path.join(get_central_storage_path(), json_filename))
+                    # As a last resort, consider any JSON inside .uploaded
+                    if os.path.isdir(uploaded_subdir):
+                        for fname in os.listdir(uploaded_subdir):
+                            if fname.lower().endswith('.json'):
+                                json_path_candidates.append(os.path.join(uploaded_subdir, fname))
+                    for jp in json_path_candidates:
+                        if os.path.exists(jp):
+                            with open(jp, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
+                                url = ((data.get('meta') or {}).get('gallery_url') or "").strip()
+                            if url:
+                                break
+                except Exception:
+                    url = ""
+            if url:
+                try:
+                    QDesktopServices.openUrl(QUrl(url))
+                    opened += 1
+                except Exception:
+                    pass
+        # Brief user feedback
+        try:
+            if opened:
+                message = f"Opened {opened} gallery link" + ("s" if opened != 1 else "")
+            else:
+                message = "No gallery link found to open"
+            if hasattr(widget, 'add_log_message'):
+                from imxup import timestamp
+                widget.add_log_message(f"{timestamp()} {message}")
+            if hasattr(widget, 'statusBar') and widget.statusBar():
+                widget.statusBar().showMessage(message, 2500)
+        except Exception:
+            pass
 
 class ActionButtonWidget(QWidget):
     """Action buttons widget for table cells"""
@@ -2912,7 +3027,7 @@ class ImxUploadGUI(QMainWindow):
         settings_layout.addWidget(self.confirm_delete_check, 5, 1)
 
         # Auto-rename unnamed galleries after successful login
-        self.auto_rename_check = QCheckBox("Auto-rename galleries after login")
+        self.auto_rename_check = QCheckBox("Auto-rename galleries")
         # Default enabled
         self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
         self.auto_rename_check.toggled.connect(self.on_setting_changed)
@@ -3218,8 +3333,9 @@ class ImxUploadGUI(QMainWindow):
             self.worker.gallery_exists.connect(self.on_gallery_exists)
             self.worker.log_message.connect(self.add_log_message)
             self.worker.bandwidth_updated.connect(self.on_bandwidth_updated)
+            self.worker.queue_stats.connect(self.on_queue_stats)
             self.worker.start()
-            self.add_log_message(f"{timestamp()} Worker started")
+            self.add_log_message(f"{timestamp()} Worker thread started")
             # Propagate auto-rename preference to worker
             try:
                 self.worker.auto_rename_enabled = self.auto_rename_check.isChecked()
@@ -3229,6 +3345,43 @@ class ImxUploadGUI(QMainWindow):
     def on_bandwidth_updated(self, kbps: float):
         """Receive current aggregate bandwidth from worker (KB/s)."""
         self._current_transfer_kbps = kbps
+
+    def on_queue_stats(self, stats: dict):
+        """Render aggregate queue stats beneath the overall progress bar.
+        Example: "1 uploading (100 images / 111 MB) • 12 queued (912 images / 1.9 GB) • 4 ready (192 images / 212 MB) • 63 completed (2245 images / 1.5 GB)"
+        """
+        try:
+            def fmt_section(label: str, s: dict) -> str:
+                count = int(s.get('count', 0) or 0)
+                if count <= 0:
+                    return ""
+                images = int(s.get('images', 0) or 0)
+                by = int(s.get('bytes', 0) or 0)
+                if by >= 1024*1024*1024:
+                    size_str = f"{by/(1024*1024*1024):.1f} GB"
+                else:
+                    size_str = f"{by/(1024*1024):.1f} MB"
+                return f"{count} {label} ({images} images / {size_str})"
+
+            order = [
+                ('uploading', 'uploading'),
+                ('queued', 'queued'),
+                ('ready', 'ready'),
+                ('incomplete', 'incomplete'),
+                ('paused', 'paused'),
+                ('completed', 'completed'),
+                ('failed', 'failed'),
+            ]
+            parts = []
+            for key, label in order:
+                sec = stats.get(key, {}) if isinstance(stats, dict) else {}
+                txt = fmt_section(label, sec)
+                if txt:
+                    parts.append(txt)
+            self.stats_label.setText(" • ".join(parts) if parts else "No galleries in queue")
+        except Exception:
+            # Fall back to previous text if formatting fails
+            pass
     
     def browse_for_folders(self):
         """Open folder browser to select galleries"""
@@ -3453,18 +3606,26 @@ class ImxUploadGUI(QMainWindow):
         scrollbar = self.gallery_table.verticalScrollBar()
         scrollbar.setValue(scroll_position)
         
-        # Enable/disable top-level controls based on item statuses
+        # Enable/disable top-level controls and update counts on buttons
         try:
-            has_ready = any(item.status == "ready" for item in items)
-            has_queued = any(item.status == "queued" for item in items)
-            has_uploading = any(item.status == "uploading" for item in items)
-            # Consider 'incomplete' as resumable
-            has_resumable = any(item.status == "incomplete" for item in items)
-            self.start_all_btn.setEnabled(has_ready or has_resumable)
-            self.pause_all_btn.setEnabled(has_queued)
+            count_startable = sum(1 for item in items if item.status in ("ready", "paused", "incomplete"))
+            count_queued = sum(1 for item in items if item.status == "queued")
+            count_completed = sum(1 for item in items if item.status == "completed")
+
+            # Update button texts with counts (preserve leading space for visual alignment)
+            self.start_all_btn.setText(f" Start All ({count_startable})")
+            self.pause_all_btn.setText(f" Pause All ({count_queued})")
+            self.clear_completed_btn.setText(f" Clear Completed ({count_completed})")
+
+            # Enable/disable based on counts
+            self.start_all_btn.setEnabled(count_startable > 0)
+            self.pause_all_btn.setEnabled(count_queued > 0)
+            self.clear_completed_btn.setEnabled(count_completed > 0)
+
             # Disable settings when any items are queued or uploading
+            has_uploading = any(item.status == "uploading" for item in items)
             try:
-                self.settings_group.setEnabled(not (has_queued or has_uploading))
+                self.settings_group.setEnabled(not (count_queued > 0 or has_uploading))
             except Exception:
                 pass
         except Exception:
@@ -3586,29 +3747,7 @@ class ImxUploadGUI(QMainWindow):
         current_kbps = float(getattr(self, "_current_transfer_kbps", 0.0))
         self.stats_current_speed_label.setText(f"Current speed: {current_kbps:.1f} KB/s")
         self.stats_fastest_speed_label.setText(f"Fastest speed: {fastest_kbps:.1f} KB/s")
-        # Update statistics
-        completed = sum(1 for item in items if item.status == "completed")
-        uploading = sum(1 for item in items if item.status == "uploading")
-        failed = sum(1 for item in items if item.status == "failed")
-        incomplete = sum(1 for item in items if item.status == "incomplete")
-        queued = len(items) - completed - uploading - failed
-        
-        stats_parts = []
-        if queued > 0:
-            stats_parts.append(f"{queued} queued")
-        if uploading > 0:
-            stats_parts.append(f"{uploading} uploading")
-        if completed > 0:
-            stats_parts.append(f"{completed} completed")
-        if failed > 0:
-            stats_parts.append(f"{failed} failed")
-        if incomplete > 0:
-            stats_parts.append(f"{incomplete} incomplete")
-        
-        if stats_parts:
-            self.stats_label.setText(" • ".join(stats_parts))
-        else:
-            self.stats_label.setText("No galleries in queue")
+        # Status summary text is updated via signal handlers to avoid timer-driven churn
     
     def on_gallery_started(self, path: str, total_images: int):
         """Handle gallery start"""
