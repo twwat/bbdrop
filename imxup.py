@@ -36,9 +36,119 @@ import winreg
 # Load environment variables
 load_dotenv()
 
+# Application version
+__version__ = "0.2.2"
+
 def timestamp():
     """Return current timestamp for logging"""
     return datetime.now().strftime("%H:%M:%S")
+
+def get_config_path() -> str:
+    """Return the canonical path to the application's config file (~/.imxup/imxup.ini)."""
+    base_dir = os.path.join(os.path.expanduser("~"), ".imxup")
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, "imxup.ini")
+
+def get_legacy_config_path() -> str:
+    """Return legacy config path (~/.imxup.ini)."""
+    return os.path.join(os.path.expanduser("~"), ".imxup.ini")
+
+def _unique_destination_path(dest_dir: str, filename: str) -> str:
+    """Generate a unique destination path within dest_dir.
+    If a file with the same name exists, append _1, _2, ... before the extension.
+    """
+    name, ext = os.path.splitext(filename)
+    candidate = os.path.join(dest_dir, filename)
+    if not os.path.exists(candidate):
+        return candidate
+    suffix = 1
+    while True:
+        new_name = f"{name}_{suffix}{ext}"
+        candidate = os.path.join(dest_dir, new_name)
+        if not os.path.exists(candidate):
+            return candidate
+        suffix += 1
+
+def migrate_legacy_storage() -> None:
+    """Migrate legacy folders/files to new structure.
+
+    - Move templates from ~/imxup_galleries files starting with '.template' to ~/.imxup/templates
+    - Move remaining files from ~/imxup_galleries to ~/.imxup/galleries with conflict-safe suffixing
+    - Move ~/.imxup.ini to ~/.imxup/imxup.ini (backup new if both exist)
+    - Remove legacy ~/imxup_galleries when empty
+    """
+    try:
+        home_dir = os.path.expanduser("~")
+        legacy_dir = os.path.join(home_dir, "imxup_galleries")
+        new_base = os.path.join(home_dir, ".imxup")
+        new_galleries = os.path.join(new_base, "galleries")
+        new_templates = os.path.join(new_base, "templates")
+
+        # Ensure new directories exist
+        os.makedirs(new_galleries, exist_ok=True)
+        os.makedirs(new_templates, exist_ok=True)
+
+        # 1) Migrate legacy folder contents (if present)
+        if os.path.isdir(legacy_dir):
+            # Walk recursively and move files only (flatten into destination roots)
+            for root, _dirs, files in os.walk(legacy_dir):
+                for filename in files:
+                    src_path = os.path.join(root, filename)
+                    if filename.startswith(".template"):
+                        dest_dir = new_templates
+                    else:
+                        dest_dir = new_galleries
+                    dest_path = _unique_destination_path(dest_dir, filename)
+                    try:
+                        os.replace(src_path, dest_path)
+                        print(f"{timestamp()} Migrated '{src_path}' -> '{dest_path}'")
+                    except Exception as e:
+                        print(f"{timestamp()} Warning: failed to migrate '{src_path}': {e}")
+
+            # Attempt to remove empty directories bottom-up and finally legacy root if empty
+            for root, dirs, files in os.walk(legacy_dir, topdown=False):
+                try:
+                    if not dirs and not files:
+                        os.rmdir(root)
+                except Exception:
+                    pass
+            # Remove legacy root if now empty
+            try:
+                if os.path.isdir(legacy_dir) and not os.listdir(legacy_dir):
+                    os.rmdir(legacy_dir)
+                    print(f"{timestamp()} Removed empty legacy folder '{legacy_dir}'")
+            except Exception:
+                pass
+
+        # 2) Migrate config file from legacy path to new path
+        legacy_cfg = get_legacy_config_path()
+        new_cfg = get_config_path()
+
+        if os.path.exists(legacy_cfg):
+            # If new already exists, back it up to imxup.ini.bak (with numeric suffix if needed)
+            if os.path.exists(new_cfg):
+                base_bak = new_cfg + ".bak"
+                bak_path = base_bak
+                idx = 1
+                while os.path.exists(bak_path):
+                    bak_path = f"{base_bak}.{idx}"
+                    idx += 1
+                try:
+                    os.replace(new_cfg, bak_path)
+                    print(f"{timestamp()} Existing new config found. Backed up to '{bak_path}'")
+                except Exception as e:
+                    print(f"{timestamp()} Warning: failed to backup existing config '{new_cfg}': {e}")
+            # Move legacy into place
+            try:
+                os.replace(legacy_cfg, new_cfg)
+                print(f"{timestamp()} Migrated config to '{new_cfg}'")
+            except Exception as e:
+                print(f"{timestamp()} Warning: failed to migrate legacy config '{legacy_cfg}': {e}")
+    except Exception as e:
+        print(f"{timestamp()} Migration error: {e}")
+
+# Perform migration at import time so all subsequent code uses the new locations
+migrate_legacy_storage()
 
 def create_windows_context_menu():
     """Create Windows context menu integration"""
@@ -226,7 +336,7 @@ def decrypt_password(encrypted_password):
 def load_user_defaults():
     """Load user defaults from config file"""
     config = configparser.ConfigParser()
-    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+    config_file = get_config_path()
     
     if os.path.exists(config_file):
         config.read(config_file)
@@ -254,7 +364,7 @@ def load_user_defaults():
 def setup_secure_password():
     """Interactive setup for secure password storage"""
     print("Setting up secure password storage for imx.to")
-    print("This will store a hashed version of your password in ~/.imxup.ini")
+    print("This will store a hashed version of your password in ~/.imxup/imxup.ini")
     print()
     
     username = input("Enter your imx.to username: ")
@@ -274,7 +384,7 @@ def setup_secure_password():
 def _save_credentials(username, password):
     """Save credentials to config file"""
     config = configparser.ConfigParser()
-    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+    config_file = get_config_path()
     
     if os.path.exists(config_file):
         config.read(config_file)
@@ -294,7 +404,7 @@ def _save_credentials(username, password):
 def save_unnamed_gallery(gallery_id, intended_name):
     """Save unnamed gallery for later renaming"""
     config = configparser.ConfigParser()
-    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+    config_file = get_config_path()
     
     if os.path.exists(config_file):
         config.read(config_file)
@@ -362,7 +472,7 @@ def check_if_gallery_exists(folder_name):
 def get_unnamed_galleries():
     """Get list of unnamed galleries"""
     config = configparser.ConfigParser()
-    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+    config_file = get_config_path()
     
     if os.path.exists(config_file):
         config.read(config_file)
@@ -380,6 +490,14 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
     success_count = 0
     for gallery_id, intended_name in unnamed_galleries.items():
         if uploader.rename_gallery_with_session(gallery_id, intended_name):
+            # Inform GUI (if present) about the rename
+            try:
+                if hasattr(uploader, 'worker_thread') and uploader.worker_thread is not None:
+                    uploader.worker_thread.log_message.emit(
+                        f"{timestamp()} Successfully renamed gallery '{gallery_id}' to '{intended_name}'"
+                    )
+            except Exception:
+                pass
             remove_unnamed_gallery(gallery_id)
             success_count += 1
     return success_count
@@ -387,7 +505,7 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
 def remove_unnamed_gallery(gallery_id):
     """Remove gallery from unnamed list after successful renaming"""
     config = configparser.ConfigParser()
-    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+    config_file = get_config_path()
     
     if os.path.exists(config_file):
         config.read(config_file)
@@ -484,8 +602,8 @@ def load_cookies_from_file(cookie_file="cookies.txt"):
     return cookies
 
 def get_template_path():
-    """Get the template directory path"""
-    template_path = os.path.join(os.path.expanduser("~"), ".imxup", "galleries")
+    """Get the template directory path (~/.imxup/templates)."""
+    template_path = os.path.join(os.path.expanduser("~"), ".imxup", "templates")
     os.makedirs(template_path, exist_ok=True)
     return template_path
 
@@ -556,7 +674,7 @@ class ImxToUploader:
     def _get_credentials(self):
         """Get credentials from stored config (username/password or API key)"""
         config = configparser.ConfigParser()
-        config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+        config_file = get_config_path()
         
         if os.path.exists(config_file):
             config.read(config_file)
@@ -622,6 +740,46 @@ class ImxToUploader:
     def login(self):
         """Login to imx.to web interface"""
         if not self.username or not self.password:
+            # Attempt cookie-based session login even without stored username/password if enabled
+            use_cookies = True
+            try:
+                cfg = configparser.ConfigParser()
+                cfg_path = get_config_path()
+                if os.path.exists(cfg_path):
+                    cfg.read(cfg_path)
+                    if 'CREDENTIALS' in cfg:
+                        use_cookies = str(cfg['CREDENTIALS'].get('cookies_enabled', 'true')).lower() != 'false'
+            except Exception:
+                use_cookies = True
+            if use_cookies:
+                try:
+                    print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
+                    firefox_cookies = get_firefox_cookies("imx.to")
+                    file_cookies = load_cookies_from_file("cookies.txt")
+                    all_cookies = {}
+                    if firefox_cookies:
+                        print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
+                        all_cookies.update(firefox_cookies)
+                    if file_cookies:
+                        print(f"{timestamp()} Found {len(file_cookies)} cookies from cookies.txt")
+                        all_cookies.update(file_cookies)
+                    if all_cookies:
+                        for name, cookie_data in all_cookies.items():
+                            try:
+                                self.session.cookies.set(name, cookie_data['value'], domain=cookie_data['domain'], path=cookie_data['path'])
+                            except Exception:
+                                pass
+                        test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
+                        if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
+                            print(f"{timestamp()} Successfully authenticated using cookies (no password login)")
+                            try:
+                                self.last_login_method = "cookies"
+                            except Exception:
+                                pass
+                            return True
+                except Exception:
+                    # Ignore cookie errors and fall back
+                    pass
             if self.api_key:
                 print(f"{timestamp()} Using API key authentication - gallery naming may be limited")
                 try:
@@ -644,34 +802,47 @@ class ImxToUploader:
                     print(f"{timestamp()} Retry attempt {attempt + 1}/{max_retries}")
                     time.sleep(2 ** attempt)  # Exponential backoff
                 
-                # Try to get cookies first (browser + file)
-                print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
-                firefox_cookies = get_firefox_cookies("imx.to")
-                file_cookies = load_cookies_from_file("cookies.txt")
-                all_cookies = {}
-                if firefox_cookies:
-                    print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
-                    all_cookies.update(firefox_cookies)
-                if file_cookies:
-                    print(f"{timestamp()} Found {len(file_cookies)} cookies from cookies.txt")
-                    all_cookies.update(file_cookies)
-                if all_cookies:
-                    # Add cookies to session
-                    for name, cookie_data in all_cookies.items():
-                        try:
-                            self.session.cookies.set(name, cookie_data['value'], domain=cookie_data['domain'], path=cookie_data['path'])
-                        except Exception:
-                            # Best effort
-                            pass
-                    # Test if we're already logged in with cookies
-                    test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
-                    if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                        print(f"{timestamp()} Successfully authenticated using cookies (no password login)")
-                        try:
-                            self.last_login_method = "cookies"
-                        except Exception:
-                            pass
-                        return True
+                # Try to get cookies first (browser + file) if enabled
+                use_cookies = True
+                try:
+                    cfg = configparser.ConfigParser()
+                    cfg_path = get_config_path()
+                    if os.path.exists(cfg_path):
+                        cfg.read(cfg_path)
+                        if 'CREDENTIALS' in cfg:
+                            use_cookies = str(cfg['CREDENTIALS'].get('cookies_enabled', 'true')).lower() != 'false'
+                except Exception:
+                    use_cookies = True
+                if use_cookies:
+                    print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
+                    firefox_cookies = get_firefox_cookies("imx.to")
+                    file_cookies = load_cookies_from_file("cookies.txt")
+                    all_cookies = {}
+                    if firefox_cookies:
+                        print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
+                        all_cookies.update(firefox_cookies)
+                    if file_cookies:
+                        print(f"{timestamp()} Found {len(file_cookies)} cookies from cookies.txt")
+                        all_cookies.update(file_cookies)
+                    if all_cookies:
+                        # Add cookies to session
+                        for name, cookie_data in all_cookies.items():
+                            try:
+                                self.session.cookies.set(name, cookie_data['value'], domain=cookie_data['domain'], path=cookie_data['path'])
+                            except Exception:
+                                # Best effort
+                                pass
+                        # Test if we're already logged in with cookies
+                        test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
+                        if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
+                            print(f"{timestamp()} Successfully authenticated using cookies (no password login)")
+                            try:
+                                self.last_login_method = "cookies"
+                            except Exception:
+                                pass
+                            return True
+                else:
+                    print(f"{timestamp()} Skipping Firefox cookies per settings")
                 
                 # Fall back to regular login
                 print(f"{timestamp()} Attempting login to {self.web_url}/login.php")
@@ -690,9 +861,9 @@ class ImxToUploader:
                 # Check if we hit DDoS-Guard
                 if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
                     print(f"{timestamp()} DDoS-Guard detected, trying browser cookies...")
-                    firefox_cookies = get_firefox_cookies("imx.to")
-                    file_cookies = load_cookies_from_file("cookies.txt")
-                    all_cookies = {**firefox_cookies, **file_cookies}
+                    firefox_cookies = get_firefox_cookies("imx.to") if use_cookies else {}
+                    file_cookies = load_cookies_from_file("cookies.txt") if use_cookies else {}
+                    all_cookies = {**firefox_cookies, **file_cookies} if use_cookies else {}
                     
                     if all_cookies:
                         print(f"{timestamp()} Retrying with browser cookies...")
@@ -1282,11 +1453,28 @@ class ImxToUploader:
                 except Exception:
                     size_bytes = 0
                 data0 = preseed_images[0]
+                # Ensure lowercase extension
+                try:
+                    base0, ext0 = os.path.splitext(first_fname)
+                    first_fname_norm = base0 + ext0.lower()
+                except Exception:
+                    first_fname_norm = first_fname
+                # Derive thumb_url from image_url if missing
+                t0 = data0.get('thumb_url')
+                if not t0 and data0.get('image_url'):
+                    try:
+                        parts = data0.get('image_url').split('/i/')
+                        if len(parts) == 2 and parts[1]:
+                            img_id = parts[1].split('/')[0]
+                            ext_use = ext0.lower() if ext0 else '.jpg'
+                            t0 = f"https://imx.to/u/t/{img_id}{ext_use}"
+                    except Exception:
+                        pass
                 images_payload.append({
-                    'filename': first_fname,
+                    'filename': first_fname_norm,
                     'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'image_url': data0.get('image_url'),
-                    'thumb_url': data0.get('thumb_url'),
+                    'thumb_url': t0,
                     'bbcode': data0.get('bbcode'),
                     'width': w,
                     'height': h,
@@ -1299,11 +1487,28 @@ class ImxToUploader:
                     size_bytes = os.path.getsize(os.path.join(folder_path, fname))
                 except Exception:
                     size_bytes = 0
+                # Lowercase extension for filename
+                try:
+                    base, ext = os.path.splitext(fname)
+                    fname_norm = base + ext.lower()
+                except Exception:
+                    fname_norm = fname
+                # Derive thumb_url from image_url if missing
+                t = data.get('thumb_url')
+                if not t and data.get('image_url'):
+                    try:
+                        parts = data.get('image_url').split('/i/')
+                        if len(parts) == 2 and parts[1]:
+                            img_id = parts[1].split('/')[0]
+                            ext_use = ext.lower() if ext else '.jpg'
+                            t = f"https://imx.to/u/t/{img_id}{ext_use}"
+                    except Exception:
+                        pass
                 images_payload.append({
-                    'filename': fname,
+                    'filename': fname_norm,
                     'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'image_url': data.get('image_url'),
-                    'thumb_url': data.get('thumb_url'),
+                    'thumb_url': t,
                     'bbcode': data.get('bbcode'),
                     'width': w,
                     'height': h,
@@ -1326,7 +1531,8 @@ class ImxToUploader:
                     'gallery_url': gallery_url,
                     'status': 'completed',
                     'started_at': datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S'),
-                    'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'uploader_version': __version__,
                 },
                 'settings': {
                     'thumbnail_size': thumbnail_size,
@@ -1369,7 +1575,8 @@ def main():
     # Load user defaults
     user_defaults = load_user_defaults()
     
-    parser = argparse.ArgumentParser(description='Upload image folders to imx.to as galleries and generate bbcode.\n\nSettings file: ' + os.path.join(os.path.expanduser('~'), '.imxup.ini'))
+    parser = argparse.ArgumentParser(description='Upload image folders to imx.to as galleries and generate bbcode.\n\nSettings file: ' + get_config_path())
+    parser.add_argument('-v', '--version', action='store_true', help='Show version and exit')
     parser.add_argument('folder_paths', nargs='*', help='Paths to folders containing images')
     parser.add_argument('--name', help='Gallery name (optional, uses folder name if not specified)')
     parser.add_argument('--size', type=int, choices=[1, 2, 3, 4, 6], 
@@ -1406,6 +1613,9 @@ def main():
                        help='Launch graphical user interface')
     
     args = parser.parse_args()
+    if args.version:
+        print(f"imxup {__version__}")
+        return
     
     # Handle GUI launch
     if args.gui:

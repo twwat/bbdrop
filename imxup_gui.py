@@ -34,7 +34,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices
 
 # Import the core uploader functionality
-from imxup import ImxToUploader, load_user_defaults, timestamp, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session
+from imxup import ImxToUploader, load_user_defaults, timestamp, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path
 
 # Single instance communication port
 COMMUNICATION_PORT = 27849
@@ -42,7 +42,7 @@ COMMUNICATION_PORT = 27849
 def check_stored_credentials():
     """Check if credentials are stored"""
     config = configparser.ConfigParser()
-    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+    config_file = get_config_path()
     
     if os.path.exists(config_file):
         config.read(config_file)
@@ -58,6 +58,17 @@ def check_stored_credentials():
                 encrypted_api_key = config.get('CREDENTIALS', 'api_key', fallback='')
                 if encrypted_api_key:
                     return True
+    return False
+
+def api_key_is_set() -> bool:
+    """Return True if an API key exists in the credentials config, regardless of auth_type."""
+    config = configparser.ConfigParser()
+    config_file = get_config_path()
+    if os.path.exists(config_file):
+        config.read(config_file)
+        if 'CREDENTIALS' in config:
+            encrypted_api_key = config.get('CREDENTIALS', 'api_key', fallback='')
+            return bool(encrypted_api_key)
     return False
 
 @dataclass
@@ -87,6 +98,7 @@ class GalleryQueueItem:
     # Resume support
     uploaded_files: set = field(default_factory=set)
     uploaded_images_data: list = field(default_factory=list)
+    uploaded_bytes: int = 0
     
 class GUIImxToUploader(ImxToUploader):
     """Custom uploader for GUI that doesn't block on user input"""
@@ -268,6 +280,13 @@ class GUIImxToUploader(ImxToUploader):
                             except Exception:
                                 pass
                         if self.worker_thread:
+                            # Update uploaded bytes cheaply without repeatedly statting files later
+                            try:
+                                if self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
+                                    fp = os.path.join(folder_path, image_file)
+                                    self.worker_thread.current_item.uploaded_bytes += os.path.getsize(fp)
+                            except Exception:
+                                pass
                             self.worker_thread.log_message.emit(f"{timestamp()} ✓ Uploaded: {image_file}")
                     else:
                         failed_images.append((image_file, error))
@@ -282,6 +301,23 @@ class GUIImxToUploader(ImxToUploader):
                             folder_path, completed_count, original_total_images, progress_percent, image_file
                         )
                         self.worker_thread.log_message.emit(f"{timestamp()} Progress: {completed_count}/{original_total_images} ({progress_percent}%)")
+                        # Emit throttled bandwidth update ~10Hz
+                        try:
+                            now_ts = time.time()
+                            if now_ts - self.worker_thread._bw_last_emit >= 0.1:
+                                # Aggregate uploaded_bytes across active items
+                                total_bytes = 0
+                                max_elapsed = 0.0
+                                for it in self.worker_thread.queue_manager.get_all_items():
+                                    if it.status == "uploading" and it.start_time:
+                                        total_bytes += getattr(it, 'uploaded_bytes', 0)
+                                        max_elapsed = max(max_elapsed, now_ts - it.start_time)
+                                if max_elapsed > 0:
+                                    kbps = (total_bytes / max_elapsed) / 1024.0
+                                    self.worker_thread.bandwidth_updated.emit(kbps)
+                                    self.worker_thread._bw_last_emit = now_ts
+                        except Exception:
+                            pass
                     
                     # Only submit new uploads if no soft stop has been requested for this item
                     if not remaining.empty():
@@ -327,6 +363,12 @@ class GUIImxToUploader(ImxToUploader):
                                 try:
                                     self.worker_thread.current_item.uploaded_files.add(image_file)
                                     self.worker_thread.current_item.uploaded_images_data.append((image_file, image_data))
+                                    # Also update uploaded_bytes incrementally
+                                    try:
+                                        fp = os.path.join(folder_path, image_file)
+                                        self.worker_thread.current_item.uploaded_bytes += os.path.getsize(fp)
+                                    except Exception:
+                                        pass
                                 except Exception:
                                     pass
                             if self.worker_thread:
@@ -342,6 +384,22 @@ class GUIImxToUploader(ImxToUploader):
                             self.worker_thread.progress_updated.emit(
                                 folder_path, completed_count, original_total_images, progress_percent, image_file
                             )
+                            # Emit throttled bandwidth update ~10Hz
+                            try:
+                                now_ts = time.time()
+                                if now_ts - self.worker_thread._bw_last_emit >= 0.1:
+                                    total_bytes = 0
+                                    max_elapsed = 0.0
+                                    for it in self.worker_thread.queue_manager.get_all_items():
+                                        if it.status == "uploading" and it.start_time:
+                                            total_bytes += getattr(it, 'uploaded_bytes', 0)
+                                            max_elapsed = max(max_elapsed, now_ts - it.start_time)
+                                    if max_elapsed > 0:
+                                        kbps = (total_bytes / max_elapsed) / 1024.0
+                                        self.worker_thread.bandwidth_updated.emit(kbps)
+                                        self.worker_thread._bw_last_emit = now_ts
+                            except Exception:
+                                pass
                         if not remaining.empty():
                             nxt = remaining.get()
                             futures_map[executor.submit(upload_single_image, nxt, retry_count + 1)] = nxt
@@ -434,6 +492,7 @@ class UploadWorker(QThread):
     gallery_failed = pyqtSignal(str, str)  # path, error_message
     gallery_exists = pyqtSignal(str, list)  # gallery_name, existing_files
     log_message = pyqtSignal(str)
+    bandwidth_updated = pyqtSignal(float)  # current KB/s across active uploads
     
     def __init__(self, queue_manager):
         super().__init__()
@@ -443,6 +502,7 @@ class UploadWorker(QThread):
         self.current_item = None
         self._soft_stop_requested_for = None
         self.auto_rename_enabled = True
+        self._bw_last_emit = 0.0
         
     def stop(self):
         self.running = False
@@ -543,6 +603,16 @@ class UploadWorker(QThread):
                 parallel_batch_size=defaults.get('parallel_batch_size', 4),
                 template_name=item.template_name
             )
+            # Save artifacts in worker thread to avoid blocking GUI
+            try:
+                self._save_artifacts(item.path, results)
+                results['artifacts_saved'] = True
+            except Exception as _e:
+                # Log but do not fail the upload
+                try:
+                    self.log_message.emit(f"{timestamp()} Artifact save error: {_e}")
+                except Exception:
+                    pass
             
             # Check if item was paused during upload
             if item.status == "paused":
@@ -588,6 +658,129 @@ class UploadWorker(QThread):
             item.error_message = error_msg
             self.queue_manager.update_item_status(item.path, "failed")
             self.gallery_failed.emit(item.path, error_msg)
+    
+    def _save_artifacts(self, path: str, results: dict) -> None:
+        """Write BBCode and JSON artifacts to disk. Runs in worker thread."""
+        try:
+            from imxup import (
+                build_gallery_filenames,
+                get_central_storage_path,
+                load_user_defaults,
+            )
+            # Determine storage preferences
+            defaults = load_user_defaults()
+            store_in_uploaded = defaults.get('store_in_uploaded', True)
+            store_in_central = defaults.get('store_in_central', True)
+            gallery_id = results.get('gallery_id', '')
+            gallery_name = results.get('gallery_name', os.path.basename(path))
+            if not gallery_id or not gallery_name:
+                return
+            # Ensure .uploaded exists if needed
+            uploaded_subdir = os.path.join(path, ".uploaded")
+            if store_in_uploaded:
+                os.makedirs(uploaded_subdir, exist_ok=True)
+            # Build filenames
+            _, json_filename, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
+            # Build BBCode from results images
+            all_images_bbcode = ""
+            for image_data in results.get('images', []):
+                all_images_bbcode += image_data.get('bbcode', '') + "  "
+            # Save BBCode
+            if store_in_uploaded:
+                with open(os.path.join(uploaded_subdir, bbcode_filename), 'w', encoding='utf-8') as f:
+                    f.write(all_images_bbcode.strip())
+            if store_in_central:
+                central_path = get_central_storage_path()
+                os.makedirs(central_path, exist_ok=True)
+                with open(os.path.join(central_path, bbcode_filename), 'w', encoding='utf-8') as f:
+                    f.write(all_images_bbcode.strip())
+            # Build images JSON entries
+            images_payload = []
+            for image_data in results.get('images', []):
+                orig_name = image_data.get('original_filename', '') or ''
+                try:
+                    if '.' in orig_name:
+                        base, ext = os.path.splitext(orig_name)
+                        filename_norm = base + ext.lower()
+                    else:
+                        filename_norm = orig_name
+                except Exception:
+                    filename_norm = orig_name
+                img_url = image_data.get('image_url') or ''
+                thumb_url = image_data.get('thumb_url')
+                try:
+                    if not thumb_url and img_url:
+                        parts = img_url.split('/i/')
+                        if len(parts) == 2 and parts[1]:
+                            image_id = parts[1].split('/')[0]
+                            _, ext = os.path.splitext(filename_norm)
+                            ext = (ext.lower() or '.jpg') if ext else '.jpg'
+                            thumb_url = f"https://imx.to/u/t/{image_id}{ext}"
+                except Exception:
+                    pass
+                images_payload.append({
+                    'filename': filename_norm,
+                    'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'image_url': img_url,
+                    'thumb_url': thumb_url,
+                    'bbcode': image_data.get('bbcode'),
+                })
+            # Failures
+            failures_payload = [
+                {
+                    'filename': fname,
+                    'failed_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'reason': reason
+                }
+                for fname, reason in results.get('failed_details', [])
+            ]
+            # Compose JSON
+            json_payload = {
+                'meta': {
+                    'gallery_name': gallery_name,
+                    'gallery_id': gallery_id,
+                    'gallery_url': f"https://imx.to/g/{gallery_id}",
+                    'status': 'completed',
+                    'started_at': None,
+                    'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                },
+                'settings': {
+                    'thumbnail_size': results.get('thumbnail_size', 0),
+                    'thumbnail_format': results.get('thumbnail_format', 0),
+                    'public_gallery': results.get('public_gallery', 1),
+                    'template_name': results.get('template_name', 'default'),
+                    'parallel_batch_size': results.get('parallel_batch_size', 0)
+                },
+                'stats': {
+                    'total_images': results.get('total_images', 0),
+                    'successful_count': results.get('successful_count', 0),
+                    'failed_count': results.get('failed_count', 0),
+                    'upload_time': results.get('upload_time', 0),
+                    'total_size': results.get('total_size', 0),
+                    'uploaded_size': results.get('uploaded_size', 0),
+                    'avg_width': results.get('avg_width', 0),
+                    'avg_height': results.get('avg_height', 0),
+                    'transfer_speed_mb_s': (results.get('transfer_speed', 0) / (1024*1024)) if results.get('transfer_speed', 0) else 0
+                },
+                'images': images_payload,
+                'failures': failures_payload,
+                'bbcode_full': all_images_bbcode.strip()
+            }
+            # Write JSON
+            if store_in_uploaded:
+                with open(os.path.join(uploaded_subdir, json_filename), 'w', encoding='utf-8') as jf:
+                    json.dump(json_payload, jf, ensure_ascii=False, indent=2)
+            if store_in_central:
+                central_path = get_central_storage_path()
+                with open(os.path.join(central_path, json_filename), 'w', encoding='utf-8') as jf:
+                    json.dump(json_payload, jf, ensure_ascii=False, indent=2)
+            try:
+                self.log_message.emit(f"{timestamp()} Saved gallery files to central location: {get_central_storage_path()}")
+            except Exception:
+                pass
+        except Exception:
+            # Swallow any artifact exceptions here to not impact worker
+            pass
     
 
 
@@ -1526,7 +1719,7 @@ class CredentialSetupDialog(QDialog):
         
         # Username status
         username_status_layout = QHBoxLayout()
-        username_status_layout.addWidget(QLabel("Username:"))
+        username_status_layout.addWidget(QLabel("Username: "))
         self.username_status_label = QLabel("NOT SET")
         self.username_status_label.setStyleSheet("color: #666; font-style: italic;")
         username_status_layout.addWidget(self.username_status_label)
@@ -1536,7 +1729,7 @@ class CredentialSetupDialog(QDialog):
             self.username_change_btn.setText(" " + self.username_change_btn.text())
         self.username_change_btn.clicked.connect(self.change_username)
         username_status_layout.addWidget(self.username_change_btn)
-        self.username_remove_btn = QPushButton("Remove")
+        self.username_remove_btn = QPushButton("Unset")
         if not self.username_remove_btn.text().startswith(" "):
             self.username_remove_btn.setText(" " + self.username_remove_btn.text())
         self.username_remove_btn.clicked.connect(self.remove_username)
@@ -1545,7 +1738,7 @@ class CredentialSetupDialog(QDialog):
         
         # Password status
         password_status_layout = QHBoxLayout()
-        password_status_layout.addWidget(QLabel("Password:"))
+        password_status_layout.addWidget(QLabel("Password: "))
         self.password_status_label = QLabel("NOT SET")
         self.password_status_label.setStyleSheet("color: #666; font-style: italic;")
         password_status_layout.addWidget(self.password_status_label)
@@ -1555,7 +1748,7 @@ class CredentialSetupDialog(QDialog):
             self.password_change_btn.setText(" " + self.password_change_btn.text())
         self.password_change_btn.clicked.connect(self.change_password)
         password_status_layout.addWidget(self.password_change_btn)
-        self.password_remove_btn = QPushButton("Remove")
+        self.password_remove_btn = QPushButton("Unset")
         if not self.password_remove_btn.text().startswith(" "):
             self.password_remove_btn.setText(" " + self.password_remove_btn.text())
         self.password_remove_btn.clicked.connect(self.remove_password)
@@ -1564,7 +1757,7 @@ class CredentialSetupDialog(QDialog):
         
         # API Key status
         api_key_status_layout = QHBoxLayout()
-        api_key_status_layout.addWidget(QLabel("API Key:"))
+        api_key_status_layout.addWidget(QLabel("API Key: "))
         self.api_key_status_label = QLabel("NOT SET")
         self.api_key_status_label.setStyleSheet("color: #666; font-style: italic;")
         api_key_status_layout.addWidget(self.api_key_status_label)
@@ -1574,12 +1767,31 @@ class CredentialSetupDialog(QDialog):
             self.api_key_change_btn.setText(" " + self.api_key_change_btn.text())
         self.api_key_change_btn.clicked.connect(self.change_api_key)
         api_key_status_layout.addWidget(self.api_key_change_btn)
-        self.api_key_remove_btn = QPushButton("Remove")
+        self.api_key_remove_btn = QPushButton("Unset")
         if not self.api_key_remove_btn.text().startswith(" "):
             self.api_key_remove_btn.setText(" " + self.api_key_remove_btn.text())
         self.api_key_remove_btn.clicked.connect(self.remove_api_key)
         api_key_status_layout.addWidget(self.api_key_remove_btn)
         status_layout.addLayout(api_key_status_layout)
+
+        # Firefox cookies toggle status
+        cookies_status_layout = QHBoxLayout()
+        cookies_status_layout.addWidget(QLabel("Firefox cookies: "))
+        self.cookies_status_label = QLabel("Unknown")
+        self.cookies_status_label.setStyleSheet("color: #666; font-style: italic;")
+        cookies_status_layout.addWidget(self.cookies_status_label)
+        cookies_status_layout.addStretch()
+        self.cookies_enable_btn = QPushButton("Enable")
+        if not self.cookies_enable_btn.text().startswith(" "):
+            self.cookies_enable_btn.setText(" " + self.cookies_enable_btn.text())
+        self.cookies_enable_btn.clicked.connect(self.enable_cookies_setting)
+        cookies_status_layout.addWidget(self.cookies_enable_btn)
+        self.cookies_disable_btn = QPushButton("Disable")
+        if not self.cookies_disable_btn.text().startswith(" "):
+            self.cookies_disable_btn.setText(" " + self.cookies_disable_btn.text())
+        self.cookies_disable_btn.clicked.connect(self.disable_cookies_setting)
+        cookies_status_layout.addWidget(self.cookies_disable_btn)
+        status_layout.addLayout(cookies_status_layout)
         
         layout.addWidget(status_group)
         
@@ -1587,7 +1799,7 @@ class CredentialSetupDialog(QDialog):
         destructive_layout = QHBoxLayout()
         # Place on bottom-left to reduce accidental clicks
         destructive_layout.addStretch()  # we'll remove this and add after button to push left
-        self.remove_all_btn = QPushButton("Remove All")
+        self.remove_all_btn = QPushButton("Unset All")
         if not self.remove_all_btn.text().startswith(" "):
             self.remove_all_btn.setText(" " + self.remove_all_btn.text())
         self.remove_all_btn.clicked.connect(self.remove_all_credentials)
@@ -1622,7 +1834,7 @@ class CredentialSetupDialog(QDialog):
     def load_current_credentials(self):
         """Load and display current credentials"""
         config = configparser.ConfigParser()
-        config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+        config_file = get_config_path()
         
         if os.path.exists(config_file):
             config.read(config_file)
@@ -1634,16 +1846,49 @@ class CredentialSetupDialog(QDialog):
                 if username:
                     self.username_status_label.setText(username)
                     self.username_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+                    # Buttons: Change/Unset
+                    try:
+                        txt = " Change"
+                        if not txt.startswith(" "):
+                            txt = " " + txt
+                        self.username_change_btn.setText(txt)
+                    except Exception:
+                        self.username_change_btn.setText(" Change")
+                    self.username_remove_btn.setEnabled(True)
                 else:
                     self.username_status_label.setText("NOT SET")
                     self.username_status_label.setStyleSheet("color: #666; font-style: italic;")
+                    try:
+                        txt = " Set"
+                        if not txt.startswith(" "):
+                            txt = " " + txt
+                        self.username_change_btn.setText(txt)
+                    except Exception:
+                        self.username_change_btn.setText(" Set")
+                    self.username_remove_btn.setEnabled(False)
                 
                 if password:
                     self.password_status_label.setText("********")
                     self.password_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+                    try:
+                        txt = " Change"
+                        if not txt.startswith(" "):
+                            txt = " " + txt
+                        self.password_change_btn.setText(txt)
+                    except Exception:
+                        self.password_change_btn.setText(" Change")
+                    self.password_remove_btn.setEnabled(True)
                 else:
                     self.password_status_label.setText("NOT SET")
                     self.password_status_label.setStyleSheet("color: #666; font-style: italic;")
+                    try:
+                        txt = " Set"
+                        if not txt.startswith(" "):
+                            txt = " " + txt
+                        self.password_change_btn.setText(txt)
+                    except Exception:
+                        self.password_change_btn.setText(" Set")
+                    self.password_remove_btn.setEnabled(False)
                 
                 # Check API key
                 encrypted_api_key = config.get('CREDENTIALS', 'api_key', fallback='')
@@ -1654,15 +1899,67 @@ class CredentialSetupDialog(QDialog):
                             masked_key = api_key[:4] + "*" * 20 + api_key[-4:]
                             self.api_key_status_label.setText(masked_key)
                             self.api_key_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+                            try:
+                                txt = " Change"
+                                if not txt.startswith(" "):
+                                    txt = " " + txt
+                                self.api_key_change_btn.setText(txt)
+                            except Exception:
+                                self.api_key_change_btn.setText(" Change")
+                            self.api_key_remove_btn.setEnabled(True)
                         else:
                             self.api_key_status_label.setText("SET")
                             self.api_key_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+                            try:
+                                txt = " Change"
+                                if not txt.startswith(" "):
+                                    txt = " " + txt
+                                self.api_key_change_btn.setText(txt)
+                            except Exception:
+                                self.api_key_change_btn.setText(" Change")
+                            self.api_key_remove_btn.setEnabled(True)
                     except:
                         self.api_key_status_label.setText("SET")
                         self.api_key_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+                        try:
+                            txt = " Change"
+                            if not txt.startswith(" "):
+                                txt = " " + txt
+                            self.api_key_change_btn.setText(txt)
+                        except Exception:
+                            self.api_key_change_btn.setText(" Change")
+                        self.api_key_remove_btn.setEnabled(True)
                 else:
                     self.api_key_status_label.setText("NOT SET")
                     self.api_key_status_label.setStyleSheet("color: #666; font-style: italic;")
+                     # When not set, offer Set and disable Unset
+                    try:
+                        txt = " Set"
+                        if not txt.startswith(" "):
+                            txt = " " + txt
+                        self.api_key_change_btn.setText(txt)
+                    except Exception:
+                        self.api_key_change_btn.setText(" Set")
+                    self.api_key_remove_btn.setEnabled(False)
+
+                # Cookies setting
+                cookies_enabled_val = str(config['CREDENTIALS'].get('cookies_enabled', 'true')).lower()
+                cookies_enabled = cookies_enabled_val != 'false'
+                if cookies_enabled:
+                    self.cookies_status_label.setText("Enabled")
+                    self.cookies_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+                else:
+                    self.cookies_status_label.setText("Disabled")
+                    self.cookies_status_label.setStyleSheet("color: #c0392b; font-weight: bold;")
+                # Toggle button states
+                self.cookies_enable_btn.setEnabled(not cookies_enabled)
+                self.cookies_disable_btn.setEnabled(cookies_enabled)
+        else:
+            # Defaults if no file
+            self.cookies_status_label.setText("Enabled")
+            self.cookies_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+            self.cookies_enable_btn.setEnabled(False)
+            self.cookies_disable_btn.setEnabled(True)
     
     def change_username(self):
         """Open dialog to change username only"""
@@ -1707,7 +2004,7 @@ class CredentialSetupDialog(QDialog):
             if username:
                 try:
                     config = configparser.ConfigParser()
-                    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+                    config_file = get_config_path()
                     
                     if os.path.exists(config_file):
                         config.read(config_file)
@@ -1773,7 +2070,7 @@ class CredentialSetupDialog(QDialog):
             if password:
                 try:
                     config = configparser.ConfigParser()
-                    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+                    config_file = get_config_path()
                     
                     if os.path.exists(config_file):
                         config.read(config_file)
@@ -1837,7 +2134,7 @@ class CredentialSetupDialog(QDialog):
             if api_key:
                 try:
                     config = configparser.ConfigParser()
-                    config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+                    config_file = get_config_path()
                     
                     if os.path.exists(config_file):
                         config.read(config_file)
@@ -1859,6 +2156,38 @@ class CredentialSetupDialog(QDialog):
             else:
                 QMessageBox.warning(self, "Missing Information", "Please enter your API key.")
 
+    def enable_cookies_setting(self):
+        """Enable Firefox cookies usage for login"""
+        try:
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+            if os.path.exists(config_file):
+                config.read(config_file)
+            if 'CREDENTIALS' not in config:
+                config['CREDENTIALS'] = {}
+            config['CREDENTIALS']['cookies_enabled'] = 'true'
+            with open(config_file, 'w') as f:
+                config.write(f)
+            self.load_current_credentials()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to enable cookies: {str(e)}")
+
+    def disable_cookies_setting(self):
+        """Disable Firefox cookies usage for login"""
+        try:
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+            if os.path.exists(config_file):
+                config.read(config_file)
+            if 'CREDENTIALS' not in config:
+                config['CREDENTIALS'] = {}
+            config['CREDENTIALS']['cookies_enabled'] = 'false'
+            with open(config_file, 'w') as f:
+                config.write(f)
+            self.load_current_credentials()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to disable cookies: {str(e)}")
+
     def remove_username(self):
         """Remove stored username with confirmation"""
         reply = QMessageBox.question(
@@ -1872,7 +2201,7 @@ class CredentialSetupDialog(QDialog):
             return
         try:
             config = configparser.ConfigParser()
-            config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+            config_file = get_config_path()
             if os.path.exists(config_file):
                 config.read(config_file)
             if 'CREDENTIALS' not in config:
@@ -1898,7 +2227,7 @@ class CredentialSetupDialog(QDialog):
             return
         try:
             config = configparser.ConfigParser()
-            config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+            config_file = get_config_path()
             if os.path.exists(config_file):
                 config.read(config_file)
             if 'CREDENTIALS' not in config:
@@ -1924,7 +2253,7 @@ class CredentialSetupDialog(QDialog):
             return
         try:
             config = configparser.ConfigParser()
-            config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+            config_file = get_config_path()
             if os.path.exists(config_file):
                 config.read(config_file)
             if 'CREDENTIALS' not in config:
@@ -1950,7 +2279,7 @@ class CredentialSetupDialog(QDialog):
             return
         try:
             config = configparser.ConfigParser()
-            config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+            config_file = get_config_path()
             if os.path.exists(config_file):
                 config.read(config_file)
             if 'CREDENTIALS' not in config:
@@ -2351,7 +2680,7 @@ class ImxUploadGUI(QMainWindow):
         self.setup_system_tray()
         self.restore_settings()
         
-        # Check for stored credentials
+        # Check for stored credentials (only prompt if API key missing)
         self.check_credentials()
         
         # Start worker thread
@@ -2374,10 +2703,14 @@ class ImxUploadGUI(QMainWindow):
                 self.update_queue_display()
             self.update_progress_display()
         self.update_timer.timeout.connect(_tick)
-        self.update_timer.start(1000)  # Low-frequency tick
+        self.update_timer.start(500)  # 2Hz tick
         
     def setup_ui(self):
-        self.setWindowTitle("IMX.to Gallery Uploader")
+        try:
+            from imxup import __version__
+            self.setWindowTitle(f"IMX.to Gallery Uploader v{__version__}")
+        except Exception:
+            self.setWindowTitle("IMX.to Gallery Uploader")
         self.setMinimumSize(800, 600)
         
         central_widget = QWidget()
@@ -2730,25 +3063,37 @@ class ImxUploadGUI(QMainWindow):
         progress_group.setMaximumHeight(100)
         bottom_layout.addWidget(progress_group, 3)  # Match left/right ratio (3:1)
 
-        # Help group (right)
+        # Help group (right) -> repurpose as Stats details
         stats_group = QGroupBox("Stats")
-        stats_layout = QVBoxLayout(stats_group)
+        stats_layout = QGridLayout(stats_group)
         
-        self.stats_btn = QPushButton("Open Help")
-        if not self.stats_btn.text().startswith(" "):
-            self.stats_btn.setText(" " + self.stats_btn.text())
-        self.stats_btn.setMinimumHeight(30)
-        self.stats_btn.setToolTip("Open program documentation")
-        #self.stats_btn.clicked.connect(self.open_help_dialog)
-        # Center the button
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        btn_row.addWidget(self.stats_btn)
-        btn_row.addStretch()
-        stats_layout.addLayout(btn_row)
+        # Detailed stats labels
+        self.stats_unnamed_label = QLabel("Unnamed galleries: 0")
+        self.stats_total_galleries_label = QLabel("Total galleries uploaded: 0")
+        self.stats_total_images_label = QLabel("Total images uploaded: 0")
+        self.stats_total_size_label = QLabel("Total size uploaded: 0.0 MB")
+        self.stats_current_speed_label = QLabel("Current speed: 0.0 KB/s")
+        self.stats_fastest_speed_label = QLabel("Fastest speed: 0.0 KB/s")
+        for lbl in (
+            self.stats_unnamed_label,
+            self.stats_total_galleries_label,
+            self.stats_total_images_label,
+            self.stats_total_size_label,
+            self.stats_current_speed_label,
+            self.stats_fastest_speed_label,
+        ):
+            lbl.setStyleSheet("color: #333;")
+        # Arrange in two columns, three rows
+        stats_layout.addWidget(self.stats_unnamed_label, 0, 0)
+        stats_layout.addWidget(self.stats_total_galleries_label, 1, 0)
+        stats_layout.addWidget(self.stats_total_images_label, 2, 0)
+        stats_layout.addWidget(self.stats_total_size_label, 0, 1)
+        stats_layout.addWidget(self.stats_current_speed_label, 1, 1)
+        stats_layout.addWidget(self.stats_fastest_speed_label, 2, 1)
+        
         # Keep bottom short like the original progress box
         stats_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        stats_group.setMaximumHeight(100)
+        stats_group.setMaximumHeight(120)
 
         bottom_layout.addWidget(stats_group, 1)
 
@@ -2761,16 +3106,15 @@ class ImxUploadGUI(QMainWindow):
             pass
         
     def check_credentials(self):
-        """Check for stored credentials and prompt if missing"""
-        if not check_stored_credentials():
-            # Show credential setup dialog directly instead of confirmation
+        """Prompt to set credentials only if API key is not set."""
+        if not api_key_is_set():
             dialog = CredentialSetupDialog(self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.add_log_message(f"{timestamp()} Credentials saved securely")
             else:
                 self.add_log_message(f"{timestamp()} Credential setup cancelled")
         else:
-            self.add_log_message(f"{timestamp()} Using stored credentials")
+            self.add_log_message(f"{timestamp()} API key found; skipping credential setup dialog")
     
     def manage_templates(self):
         """Open template management dialog"""
@@ -2855,6 +3199,7 @@ class ImxUploadGUI(QMainWindow):
             self.worker.gallery_failed.connect(self.on_gallery_failed)
             self.worker.gallery_exists.connect(self.on_gallery_exists)
             self.worker.log_message.connect(self.add_log_message)
+            self.worker.bandwidth_updated.connect(self.on_bandwidth_updated)
             self.worker.start()
             self.add_log_message(f"{timestamp()} Worker started")
             # Propagate auto-rename preference to worker
@@ -2862,6 +3207,10 @@ class ImxUploadGUI(QMainWindow):
                 self.worker.auto_rename_enabled = self.auto_rename_check.isChecked()
             except Exception:
                 pass
+
+    def on_bandwidth_updated(self, kbps: float):
+        """Receive current aggregate bandwidth from worker (KB/s)."""
+        self._current_transfer_kbps = kbps
     
     def browse_for_folders(self):
         """Open folder browser to select galleries"""
@@ -3196,7 +3545,29 @@ class ImxUploadGUI(QMainWindow):
                 }
                 """
             )
-        
+        # Update Stats box values
+        try:
+            from imxup import get_unnamed_galleries
+            unnamed_count = len(get_unnamed_galleries())
+        except Exception:
+            unnamed_count = 0
+        self.stats_unnamed_label.setText(f"Unnamed galleries: {unnamed_count}")
+        # Totals persisted in QSettings
+        settings = QSettings("ImxUploader", "Stats")
+        total_galleries = settings.value("total_galleries", 0, type=int)
+        total_images_acc = settings.value("total_images", 0, type=int)
+        total_size_acc = settings.value("total_size_bytes", 0, type=int)
+        fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
+        self.stats_total_galleries_label.setText(f"Total galleries uploaded: {total_galleries}")
+        self.stats_total_images_label.setText(f"Total images uploaded: {total_images_acc}")
+        self.stats_total_size_label.setText(f"Total size uploaded: {total_size_acc / (1024*1024):.1f} MB")
+        # Current transfer speed: 0 if no active uploads; else latest emitted from worker
+        any_uploading = any(it.status == "uploading" for it in items)
+        if not any_uploading:
+            self._current_transfer_kbps = 0.0
+        current_kbps = float(getattr(self, "_current_transfer_kbps", 0.0))
+        self.stats_current_speed_label.setText(f"Current speed: {current_kbps:.1f} KB/s")
+        self.stats_fastest_speed_label.setText(f"Fastest speed: {fastest_kbps:.1f} KB/s")
         # Update statistics
         completed = sum(1 for item in items if item.status == "completed")
         uploading = sum(1 for item in items if item.status == "uploading")
@@ -3329,6 +3700,8 @@ class ImxUploadGUI(QMainWindow):
                                 status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
                             self.gallery_table.setItem(row, 4, status_item)
                         
+                # Bandwidth updates are now emitted from worker; GUI handler will update labels
+
                 # Update status if it's completed (100%)
                 if progress_percent >= 100:
                     # Set finished timestamp if not already set
@@ -3396,7 +3769,7 @@ class ImxUploadGUI(QMainWindow):
                 failed_summary_lines.append(f"... and {len(failed_details) - 20} more")
             failed_summary = "\n" + "\n".join(failed_summary_lines)
 
-        # Calculate statistics (always, not only when failures exist)
+                    # Calculate statistics (always, not only when failures exist)
         queue_item = self.queue_manager.get_item(path)
         total_size = results.get('total_size', 0) or (queue_item.total_size if queue_item and getattr(queue_item, 'total_size', 0) else 0)
         folder_size = f"{(total_size) / (1024*1024):.1f} MB"
@@ -3440,6 +3813,7 @@ class ImxUploadGUI(QMainWindow):
                 build_gallery_filenames,
                 get_central_storage_path,
                 load_user_defaults,
+                __version__ as IMXUP_VERSION,
             )
             # Determine storage preferences
             defaults = load_user_defaults()
@@ -3457,11 +3831,37 @@ class ImxUploadGUI(QMainWindow):
             # Compose JSON using results we have in GUI context
             images_payload = []
             for image_data in results.get('images', []):
+                orig_name = image_data.get('original_filename', '') or ''
+                # Ensure lowercase extension for filename
+                try:
+                    if '.' in orig_name:
+                        base, ext = os.path.splitext(orig_name)
+                        filename_norm = base + ext.lower()
+                    else:
+                        filename_norm = orig_name
+                except Exception:
+                    filename_norm = orig_name
+                img_url = image_data.get('image_url') or ''
+                # Derive thumb_url as /u/t/{id}.ext when possible
+                thumb_url = image_data.get('thumb_url')
+                try:
+                    if not thumb_url and img_url:
+                        # Extract id from /i/{id}
+                        # Accept forms like https://imx.to/i/68uhhf
+                        parts = img_url.split('/i/')
+                        if len(parts) == 2 and parts[1]:
+                            image_id = parts[1].split('/')[0]
+                            # Choose extension from filename if available; fallback to jpg
+                            _, ext = os.path.splitext(filename_norm)
+                            ext = (ext.lower() or '.jpg') if ext else '.jpg'
+                            thumb_url = f"https://imx.to/u/t/{image_id}{ext}"
+                except Exception:
+                    pass
                 images_payload.append({
-                    'filename': image_data.get('original_filename', ''),
+                    'filename': filename_norm,
                     'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'image_url': image_data.get('image_url'),
-                    'thumb_url': image_data.get('thumb_url'),
+                    'image_url': img_url,
+                    'thumb_url': thumb_url,
                     'bbcode': image_data.get('bbcode'),
                 })
 
@@ -3481,7 +3881,8 @@ class ImxUploadGUI(QMainWindow):
                     'gallery_url': f"https://imx.to/g/{gallery_id}",
                     'status': 'completed',
                     'started_at': datetime.fromtimestamp(self.queue_manager.items[path].start_time).strftime('%Y-%m-%d %H:%M:%S') if path in self.queue_manager.items and self.queue_manager.items[path].start_time else None,
-                    'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'uploader_version': IMXUP_VERSION,
                 },
                 'settings': {
                     'thumbnail_size': self.thumbnail_size_combo.currentIndex() + 1,
@@ -3533,7 +3934,7 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
 
-        # Update display when status changes
+                    # Update display when status changes
         self.update_queue_display()
         
         gallery_url = results.get('gallery_url', '')
@@ -3543,6 +3944,29 @@ class ImxUploadGUI(QMainWindow):
         
         self.add_log_message(f"{timestamp()} ✓ Completed: {gallery_name} ({gallery_id})")
         self.add_log_message(f"{timestamp()} Uploaded {successful_count} images ({total_size / (1024*1024):.1f} MB) in {upload_time:.1f}s")
+        # Update cumulative stats
+        try:
+            settings = QSettings("ImxUploader", "Stats")
+            total_galleries = settings.value("total_galleries", 0, type=int) + 1
+            total_images_acc = settings.value("total_images", 0, type=int) + successful_count
+            total_size_acc = settings.value("total_size_bytes", 0, type=int) + int(results.get('uploaded_size', 0) or 0)
+            # Current and fastest speeds in KB/s
+            transfer_speed = float(results.get('transfer_speed', 0) or 0)
+            current_kbps = transfer_speed / 1024.0
+            fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
+            if current_kbps > fastest_kbps:
+                fastest_kbps = current_kbps
+            settings.setValue("total_galleries", total_galleries)
+            settings.setValue("total_images", total_images_acc)
+            settings.setValue("total_size_bytes", total_size_acc)
+            settings.setValue("fastest_kbps", fastest_kbps)
+            settings.sync()
+            # Update current speed immediately for Stats box
+            self._current_transfer_kbps = current_kbps
+            # Refresh stats labels
+            self.update_progress_display()
+        except Exception:
+            pass
     
     def on_gallery_exists(self, gallery_name: str, existing_files: list):
         """Handle existing gallery detection"""
@@ -3869,7 +4293,7 @@ class ImxUploadGUI(QMainWindow):
             
             # Load existing config
             config = configparser.ConfigParser()
-            config_file = os.path.join(os.path.expanduser("~"), ".imxup.ini")
+            config_file = get_config_path()
             
             if os.path.exists(config_file):
                 config.read(config_file)
