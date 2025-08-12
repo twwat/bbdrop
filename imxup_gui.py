@@ -897,7 +897,7 @@ class GalleryTableWidget(QTableWidget):
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)         # Order - fixed
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)       # Gallery Name - stretch to fill space
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)   # Gallery Name - user-resizable (we will auto-expand on window grow)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)   # Uploaded - resizable
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)   # Progress - resizable
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)   # Status - resizable
@@ -994,6 +994,35 @@ class GalleryTableWidget(QTableWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.setFocus()
         super().mousePressEvent(event)
+    
+    def resizeEvent(self, event):
+        """Auto-expand Gallery Name (col 1) when there is extra horizontal space.
+        Keep it otherwise user-resizable and clamp to a reasonable minimum when shrinking."""
+        super().resizeEvent(event)
+        try:
+            name_col_index = 1
+            if self.isColumnHidden(name_col_index):
+                return
+            # Calculate available space for the name column
+            viewport_width = self.viewport().width()
+            other_widths = 0
+            for col in range(self.columnCount()):
+                if col == name_col_index or self.isColumnHidden(col):
+                    continue
+                other_widths += self.columnWidth(col)
+            # Account for vertical scrollbar if visible
+            vscroll = self.verticalScrollBar()
+            if vscroll and vscroll.isVisible():
+                other_widths += vscroll.width()
+            available = viewport_width - other_widths
+            # Clamp and apply
+            min_width = 120
+            current = self.columnWidth(name_col_index)
+            target = max(min_width, available)
+            if target != current and target > 0:
+                self.setColumnWidth(name_col_index, target)
+        except Exception:
+            pass
     
     def handle_enter_or_double_click(self):
         """Handle Enter key or double-click for viewing completed items"""
@@ -2428,6 +2457,23 @@ class TableProgressWidget(QWidget):
                 }
             """)
 
+class NumericTableWidgetItem(QTableWidgetItem):
+    """Table widget item that sorts numerically based on an integer value."""
+    def __init__(self, value: int):
+        super().__init__(str(value))
+        try:
+            self._numeric_value = int(value)
+        except Exception:
+            self._numeric_value = 0
+
+    def __lt__(self, other: "QTableWidgetItem") -> bool:  # type: ignore[override]
+        if isinstance(other, NumericTableWidgetItem):
+            return self._numeric_value < other._numeric_value
+        try:
+            return self._numeric_value < int(other.text())
+        except Exception:
+            return super().__lt__(other)
+
 class SingleInstanceServer(QThread):
     """Server for single instance communication"""
     
@@ -2581,6 +2627,14 @@ class ImxUploadGUI(QMainWindow):
         self.gallery_table = GalleryTableWidget()
         self.gallery_table.setMinimumHeight(400)  # Taller table
         queue_layout.addWidget(self.gallery_table, 1)  # Give it stretch priority
+        # Header context menu for column visibility + persist widths/visibility
+        try:
+            header = self.gallery_table.horizontalHeader()
+            header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            header.customContextMenuRequested.connect(self.show_header_context_menu)
+            header.sectionResized.connect(self._on_header_section_resized)
+        except Exception:
+            pass
         
         # Add keyboard shortcut hint
         shortcut_hint = QLabel("💡 Tips: Press Delete key to remove selected items / drag and drop to add folders")
@@ -2970,7 +3024,7 @@ class ImxUploadGUI(QMainWindow):
         bottom_layout.addWidget(progress_group, 3)  # Match left/right ratio (3:1)
 
         # Help group (right) -> repurpose as Stats details
-        stats_group = QGroupBox("Stats")
+        stats_group = QGroupBox("Info")
         stats_layout = QGridLayout(stats_group)
         try:
             stats_layout.setContentsMargins(10, 8, 10, 8)
@@ -3516,8 +3570,8 @@ class ImxUploadGUI(QMainWindow):
         # Populate the table with current items
         for row, item in enumerate(items):
             
-            # Order number
-            order_item = QTableWidgetItem(str(item.insertion_order))
+            # Order number (numeric-sorting item)
+            order_item = NumericTableWidgetItem(item.insertion_order)
             order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             order_item.setFont(QFont("Arial", 9))
@@ -4442,11 +4496,73 @@ class ImxUploadGUI(QMainWindow):
         if isinstance(confirm_delete, str):
             confirm_delete = confirm_delete.lower() == 'true'
         self.confirm_delete_check.setChecked(confirm_delete)
+        # Restore table columns (widths and visibility)
+        self.restore_table_settings()
     
     def save_settings(self):
         """Save window settings"""
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("confirm_delete", self.confirm_delete_check.isChecked())
+        self.save_table_settings()
+
+    def save_table_settings(self):
+        """Persist table column widths and visibility to settings"""
+        try:
+            column_count = self.gallery_table.columnCount()
+            widths = [self.gallery_table.columnWidth(i) for i in range(column_count)]
+            visibility = [not self.gallery_table.isColumnHidden(i) for i in range(column_count)]
+            self.settings.setValue("table/column_widths", json.dumps(widths))
+            self.settings.setValue("table/column_visible", json.dumps(visibility))
+        except Exception:
+            pass
+
+    def restore_table_settings(self):
+        """Restore table column widths and visibility from settings"""
+        try:
+            column_count = self.gallery_table.columnCount()
+            widths_raw = self.settings.value("table/column_widths")
+            visible_raw = self.settings.value("table/column_visible")
+            if widths_raw:
+                try:
+                    widths = json.loads(widths_raw)
+                    for i in range(min(column_count, len(widths))):
+                        if isinstance(widths[i], int) and widths[i] > 0:
+                            self.gallery_table.setColumnWidth(i, widths[i])
+                except Exception:
+                    pass
+            if visible_raw:
+                try:
+                    visible = json.loads(visible_raw)
+                    for i in range(min(column_count, len(visible))):
+                        self.gallery_table.setColumnHidden(i, not bool(visible[i]))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _on_header_section_resized(self, logicalIndex, oldSize, newSize):
+        """Save widths on resize events"""
+        self.save_table_settings()
+
+    def show_header_context_menu(self, position):
+        """Right-click on header: toggle column visibility"""
+        from PyQt6.QtWidgets import QMenu
+        header = self.gallery_table.horizontalHeader()
+        menu = QMenu(self)
+        for col in range(self.gallery_table.columnCount()):
+            header_item = self.gallery_table.horizontalHeaderItem(col)
+            title = header_item.text() if header_item else f"Column {col}"
+            action = menu.addAction(title)
+            action.setCheckable(True)
+            action.setChecked(not self.gallery_table.isColumnHidden(col))
+            action.triggered.connect(lambda checked, c=col: self._set_column_visibility(c, checked))
+        global_pos = header.mapToGlobal(position)
+        if menu.actions():
+            menu.exec(global_pos)
+
+    def _set_column_visibility(self, column_index: int, visible: bool):
+        self.gallery_table.setColumnHidden(column_index, not visible)
+        self.save_table_settings()
     
     def on_setting_changed(self):
         """Handle when any setting is changed"""

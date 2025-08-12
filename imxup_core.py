@@ -117,6 +117,13 @@ class UploadEngine:
             raise Exception(f"Failed to create gallery: {first_response}")
         gallery_id = first_response['data'].get('gallery_id')
         preseed_images = [first_response['data']]
+        # Log first image success with URL
+        if on_log:
+            try:
+                first_url = first_response['data'].get('image_url', '')
+                on_log(f"✓ [{gallery_id}] {first_file} uploaded successfully ({first_url})")
+            except Exception:
+                pass
         initial_completed = 1
         try:
             initial_uploaded_size = os.path.getsize(first_image_path)
@@ -200,6 +207,13 @@ class UploadEngine:
                     image_file, image_data, error = fut.result()
                     if image_data:
                         uploaded_images.append((image_file, image_data))
+                        # Per-image success log
+                        if on_log:
+                            try:
+                                img_url = image_data.get('image_url', '')
+                                on_log(f"✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
+                            except Exception:
+                                pass
                         # Per-image callback for resume-aware consumers
                         if on_image_uploaded:
                             try:
@@ -243,6 +257,13 @@ class UploadEngine:
                                 except Exception:
                                     size_bytes = 0
                                 on_image_uploaded(image_file, image_data, size_bytes)
+                            # Per-image success log (retry path)
+                            if on_log:
+                                try:
+                                    img_url = image_data.get('image_url', '')
+                                    on_log(f"✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
+                                except Exception:
+                                    pass
                             if on_log:
                                 on_log(f"Retry successful: {image_file}")
                         else:
