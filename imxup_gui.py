@@ -94,6 +94,10 @@ class GalleryQueueItem:
     total_size: int = 0
     avg_width: float = 0.0
     avg_height: float = 0.0
+    max_width: float = 0.0
+    max_height: float = 0.0
+    min_width: float = 0.0
+    min_height: float = 0.0
     scan_complete: bool = False
     # Resume support
     uploaded_files: set = field(default_factory=set)
@@ -456,9 +460,18 @@ class GUIImxToUploader(ImxToUploader):
                     successful_dimensions.append((w, h))
             avg_width = sum(w for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
             avg_height = sum(h for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
+            
+            max_width = max(w for w, h in successful_dimensions) if successful_dimensions else 0
+            max_height = max(h for w, h in successful_dimensions) if successful_dimensions else 0
+            min_width = min(w for w, h in successful_dimensions) if successful_dimensions else 0
+            min_height = min(h for w, h in successful_dimensions) if successful_dimensions else 0
         except Exception:
             avg_width = 0
             avg_height = 0
+            max_width = 0
+            max_height = 0
+            min_width = 0
+            min_height = 0
         
         # Add statistics to results
         results.update({
@@ -470,6 +483,10 @@ class GUIImxToUploader(ImxToUploader):
             'transfer_speed': transfer_speed,
             'avg_width': avg_width,
             'avg_height': avg_height,
+            'max_width': max_width,
+            'max_height': max_height,
+            'min_width': min_width,
+            'min_height': min_height,
             'successful_count': initial_completed + len(uploaded_images),
             'failed_count': len(failed_images),
             'failed_details': failed_images
@@ -826,6 +843,10 @@ class UploadWorker(QThread):
                     'uploaded_size': results.get('uploaded_size', 0),
                     'avg_width': results.get('avg_width', 0),
                     'avg_height': results.get('avg_height', 0),
+                    'max_width': results.get('max_width', 0),
+                    'max_height': results.get('max_height', 0),
+                    'min_width': results.get('min_width', 0),
+                    'min_height': results.get('min_height', 0),
                     'transfer_speed_mb_s': (results.get('transfer_speed', 0) / (1024*1024)) if results.get('transfer_speed', 0) else 0
                 },
                 'images': images_payload,
@@ -1062,6 +1083,10 @@ class QueueManager:
                     item.total_size = total_size
                     item.avg_width = avg_w
                     item.avg_height = avg_h
+                    item.max_width = max_w
+                    item.max_height = max_h
+                    item.min_width = min_w
+                    item.min_height = min_h
                     item.scan_complete = True
                     # Only flip to ready if not already moved forward
                     if item.status == "scanning":
@@ -4142,6 +4167,10 @@ class ImxUploadGUI(QMainWindow):
         folder_size = f"{(total_size) / (1024*1024):.1f} MB"
         avg_width = (queue_item.avg_width if queue_item and getattr(queue_item, 'avg_width', 0) else 0) or results.get('avg_width', 0)
         avg_height = (queue_item.avg_height if queue_item and getattr(queue_item, 'avg_height', 0) else 0) or results.get('avg_height', 0)
+        max_width = (queue_item.max_width if queue_item and getattr(queue_item, 'max_width', 0) else 0) or results.get('max_width', 0)
+        max_height = (queue_item.max_height if queue_item and getattr(queue_item, 'max_height', 0) else 0) or results.get('max_height', 0)
+        min_width = (queue_item.min_width if queue_item and getattr(queue_item, 'min_width', 0) else 0) or results.get('min_width', 0)
+        min_height = (queue_item.min_height if queue_item and getattr(queue_item, 'min_height', 0) else 0) or results.get('min_height', 0)
 
         # Get most common extension from uploaded images
         extensions = []
@@ -4158,9 +4187,14 @@ class ImxUploadGUI(QMainWindow):
             # Prepare template data
             template_data = {
                 'folder_name': gallery_name,
-                'width': int(avg_width),
-                'height': int(avg_height),
-                'longest': int(max(avg_width, avg_height)),
+                #'width': int(avg_width),
+                #'height': int(avg_height),
+                #'longest': int(max(avg_width, avg_height)),
+                'longest': int(max(max_width, max_height)),
+                'shortest': int(min(min_width, min_height)),
+                'avg_width': int(avg_width),
+                'avg_height': int(avg_height),
+
                 'extension': extension,
                 'picture_count': len(results.get('images', [])),
                 'folder_size': folder_size,
@@ -4267,6 +4301,10 @@ class ImxUploadGUI(QMainWindow):
                     'uploaded_size': results.get('uploaded_size', 0),
                     'avg_width': results.get('avg_width', 0),
                     'avg_height': results.get('avg_height', 0),
+                    'max_width': results.get('max_width', 0),
+                    'max_height': results.get('max_height', 0),
+                    'min_width': results.get('min_width', 0),
+                    'min_height': results.get('min_height', 0),
                     'transfer_speed_mb_s': (results.get('transfer_speed', 0) / (1024*1024)) if results.get('transfer_speed', 0) else 0
                 },
                 'images': images_payload,

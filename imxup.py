@@ -1398,6 +1398,11 @@ class ImxToUploader:
                                for img_file, _ in uploaded_images])
         avg_width = sum(w for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
         avg_height = sum(h for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
+        print(f"{timestamp()} Successful dimensions: {successful_dimensions}")
+        max_width = max(w for w, h in successful_dimensions) if successful_dimensions else 0
+        max_height = max(h for w, h in successful_dimensions) if successful_dimensions else 0
+        min_width = min(w for w, h in successful_dimensions) if successful_dimensions else 0
+        min_height = min(h for w, h in successful_dimensions) if successful_dimensions else 0
         
         # Add statistics to results
         results.update({
@@ -1409,6 +1414,10 @@ class ImxToUploader:
             'transfer_speed': transfer_speed,
             'avg_width': avg_width,
             'avg_height': avg_height,
+            'max_width': max_width,
+            'max_height': max_height,
+            'min_width': min_width,
+            'min_height': min_height,
             'successful_count': initial_completed + len(uploaded_images),
             'failed_count': len(failed_images)
         })
@@ -1584,6 +1593,10 @@ class ImxToUploader:
                     'uploaded_size': uploaded_size,
                     'avg_width': avg_width,
                     'avg_height': avg_height,
+                    'max_width': max_width,
+                    'max_height': max_height,
+                    'min_width': min_width,
+                    'min_height': min_height,
                     'transfer_speed_mb_s': transfer_speed / (1024*1024) if transfer_speed else 0
                 },
                 'images': images_payload,
