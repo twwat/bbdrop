@@ -91,6 +91,16 @@ class UploadEngine:
         # Determine gallery name
         if not gallery_name:
             gallery_name = os.path.basename(folder_path)
+        # Sanitize gallery name using the canonical helper (lazy import to avoid circular deps)
+        try:
+            from imxup import sanitize_gallery_name  # type: ignore
+            original_name = gallery_name
+            gallery_name = sanitize_gallery_name(gallery_name)
+            if on_log and original_name != gallery_name:
+                on_log(f"Sanitized gallery name: '{original_name}' -> '{gallery_name}'")
+        except Exception:
+            # Best-effort; if unavailable, proceed with provided name
+            pass
 
         # Try to create named gallery first
         gallery_id: Optional[str] = self.uploader.create_gallery_with_name(gallery_name, public_gallery, skip_login=True)
@@ -113,6 +123,12 @@ class UploadEngine:
             if first_response.get('status') != 'success':
                 raise Exception(f"Failed to create gallery: {first_response}")
             gallery_id = first_response['data'].get('gallery_id')
+            # Log this as an unnamed gallery for later auto-renaming (lazy import avoids circular deps)
+            try:
+                from imxup import save_unnamed_gallery  # type: ignore
+                save_unnamed_gallery(gallery_id, gallery_name)
+            except Exception:
+                pass
             preseed_images = [first_response['data']]
             initial_completed = 1
             try:

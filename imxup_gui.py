@@ -895,7 +895,7 @@ class GalleryTableWidget(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(32)  # Compact rows
+        self.verticalHeader().setDefaultSectionSize(28)  # Slightly shorter rows
         
         # Enable multi-selection
         self.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
@@ -2230,6 +2230,50 @@ class HelpDialog(QDialog):
         button_box.accepted.connect(self.accept)
         layout.addWidget(button_box)
 
+class LogTextEdit(QTextEdit):
+    """Text edit for logs that emits a signal on double-click."""
+    doubleClicked = pyqtSignal()
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            try:
+                self.doubleClicked.emit()
+            except Exception:
+                pass
+        super().mouseDoubleClickEvent(event)
+
+class LogViewerDialog(QDialog):
+    """Popout viewer for application logs."""
+    def __init__(self, initial_text: str = "", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Log Viewer")
+        self.setModal(False)
+        self.resize(900, 700)
+
+        layout = QVBoxLayout(self)
+
+        self.log_view = QPlainTextEdit()
+        self.log_view.setReadOnly(True)
+        try:
+            self.log_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        except Exception:
+            pass
+        self.log_view.setFont(QFont("Consolas", 10))
+        if initial_text:
+            self.log_view.setPlainText(initial_text)
+        layout.addWidget(self.log_view)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.rejected.connect(self.reject)
+        button_box.accepted.connect(self.accept)
+        layout.addWidget(button_box)
+
+    def append_message(self, message: str):
+        try:
+            self.log_view.appendPlainText(message)
+        except Exception:
+            pass
+
 class TableProgressWidget(QWidget):
     """Progress bar widget for table cells - properly centered and sized"""
     
@@ -2244,8 +2288,8 @@ class TableProgressWidget(QWidget):
         self.progress_bar.setMaximum(100)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("%p%")
-        self.progress_bar.setMinimumHeight(20)  # Slightly shorter
-        self.progress_bar.setMaximumHeight(22)  # Control maximum height
+        self.progress_bar.setMinimumHeight(16)  # Slightly shorter
+        self.progress_bar.setMaximumHeight(18)  # Control maximum height
         self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the text
         
         # Style for better text visibility and proper sizing
@@ -2420,6 +2464,8 @@ class ImxUploadGUI(QMainWindow):
             self.update_progress_display()
         self.update_timer.timeout.connect(_tick)
         self.update_timer.start(500)  # 2Hz tick
+        # Log viewer dialog reference
+        self._log_viewer_dialog = None
         
     def setup_ui(self):
         try:
@@ -2472,12 +2518,7 @@ class ImxUploadGUI(QMainWindow):
         
         # Drag-and-drop is handled at the window level; no dedicated drop label
         
-        # Add folder button
-        add_folder_btn = QPushButton("Browse for Folders...")
-        if not add_folder_btn.text().startswith(" "):
-            add_folder_btn.setText(" " + add_folder_btn.text())
-        add_folder_btn.clicked.connect(self.browse_for_folders)
-        queue_layout.addWidget(add_folder_btn)
+        # (Moved Browse button into controls row below)
         
         # Gallery table
         self.gallery_table = GalleryTableWidget()
@@ -2530,6 +2571,14 @@ class ImxUploadGUI(QMainWindow):
         self.clear_completed_btn.clicked.connect(self.clear_completed)
         self.clear_completed_btn.setMinimumHeight(34)
         controls_layout.addWidget(self.clear_completed_btn)
+
+        # Browse button (moved here to be to the right of Clear Completed)
+        self.browse_btn = QPushButton("Browse")
+        if not self.browse_btn.text().startswith(" "):
+            self.browse_btn.setText(" " + self.browse_btn.text())
+        self.browse_btn.clicked.connect(self.browse_for_folders)
+        self.browse_btn.setMinimumHeight(34)
+        controls_layout.addWidget(self.browse_btn)
         
 
         
@@ -2768,7 +2817,7 @@ class ImxUploadGUI(QMainWindow):
             pass
         
         
-        self.log_text = QTextEdit()
+        self.log_text = LogTextEdit()
         self.log_text.setMinimumHeight(300)  # Much taller
         # Slightly larger font with reduced letter spacing
         _log_font = QFont("Consolas")
@@ -2781,6 +2830,17 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
         self.log_text.setFont(_log_font)
+        try:
+            # Do not wrap long lines; allow horizontal scrolling
+            self.log_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+            self.log_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.AsNeeded)
+        except Exception:
+            pass
+        # Double-click to open popout viewer
+        try:
+            self.log_text.doubleClicked.connect(self.open_log_viewer)
+        except Exception:
+            pass
         # Keep a long history in the GUI log
         try:
             self.log_text.document().setMaximumBlockCount(200000)  # ~200k lines
@@ -2856,41 +2916,68 @@ class ImxUploadGUI(QMainWindow):
         stats_group = QGroupBox("Stats")
         stats_layout = QGridLayout(stats_group)
         try:
-            stats_layout.setContentsMargins(10, 10, 10, 10)
-            stats_layout.setHorizontalSpacing(12)
-            stats_layout.setVerticalSpacing(8)
+            stats_layout.setContentsMargins(10, 8, 10, 8)
+            stats_layout.setHorizontalSpacing(10)
+            stats_layout.setVerticalSpacing(6)
         except Exception:
             pass
         
         # Detailed stats labels
         self.stats_unnamed_label = QLabel("Unnamed galleries: 0")
-        self.stats_total_galleries_label = QLabel("Total galleries uploaded: 0")
-        self.stats_total_images_label = QLabel("Total images uploaded: 0")
-        self.stats_total_size_label = QLabel("Total size uploaded: 0.0 MB")
-        self.stats_current_speed_label = QLabel("Current speed: 0.0 KB/s")
-        self.stats_fastest_speed_label = QLabel("Fastest speed: 0.0 KB/s")
+        self.stats_total_galleries_label = QLabel("Galleries uploaded: 0")
+        self.stats_total_images_label = QLabel("Images uploaded: 0")
+        #self.stats_current_speed_label = QLabel("Current speed: 0.0 KiB/s")
+        #self.stats_fastest_speed_label = QLabel("Fastest speed: 0.0 KiB/s")
         for lbl in (
             self.stats_unnamed_label,
             self.stats_total_galleries_label,
             self.stats_total_images_label,
-            self.stats_total_size_label,
-            self.stats_current_speed_label,
-            self.stats_fastest_speed_label,
+            #self.stats_current_speed_label,
+            #self.stats_fastest_speed_label,
         ):
             lbl.setStyleSheet("color: #333;")
         # Arrange in two columns, three rows
         stats_layout.addWidget(self.stats_unnamed_label, 0, 0)
         stats_layout.addWidget(self.stats_total_galleries_label, 1, 0)
         stats_layout.addWidget(self.stats_total_images_label, 2, 0)
-        stats_layout.addWidget(self.stats_total_size_label, 0, 1)
-        stats_layout.addWidget(self.stats_current_speed_label, 1, 1)
-        stats_layout.addWidget(self.stats_fastest_speed_label, 2, 1)
+        #stats_layout.addWidget(self.stats_current_speed_label, 1, 1)
+        #stats_layout.addWidget(self.stats_fastest_speed_label, 2, 1)
         
-        # Keep bottom short like the original progress box
-        stats_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        # Keep bottom short like the original progress box; do not expand horizontally
+        stats_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         stats_group.setMaximumHeight(120)
 
         bottom_layout.addWidget(stats_group, 1)
+
+        speed_group = QGroupBox("Speed")
+        speed_layout = QGridLayout(speed_group)
+        try:
+            speed_layout.setContentsMargins(10, 10, 10, 10)
+            speed_layout.setHorizontalSpacing(12)
+            speed_layout.setVerticalSpacing(8)
+        except Exception:
+            pass
+        
+        # Detailed stats labels
+        self.speed_current_speed_label = QLabel("Current:  0.0 KiB/s")
+        self.speed_fastest_speed_label = QLabel("Fastest:  0.0 KiB/s")
+        self.speed_total_transferred_label = QLabel("Transferred:  0 B")
+        for lbl in (
+            self.speed_current_speed_label,
+            self.speed_fastest_speed_label,
+            self.speed_total_transferred_label,
+        ):
+            lbl.setStyleSheet("color: #333;")
+        
+        speed_layout.addWidget(self.speed_current_speed_label, 0, 0)
+        speed_layout.addWidget(self.speed_fastest_speed_label, 1, 0)
+        speed_layout.addWidget(self.speed_total_transferred_label, 2, 0)
+
+        
+        # Keep bottom short like the original progress box; do not expand horizontally
+        speed_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        speed_group.setMaximumHeight(120)
+        bottom_layout.addWidget(speed_group, 1)
 
         main_layout.addLayout(bottom_layout)
         # Ensure the top section takes remaining space and bottom stays compact
@@ -3145,10 +3232,11 @@ class ImxUploadGUI(QMainWindow):
                     return ""
                 images = int(s.get('images', 0) or 0)
                 by = int(s.get('bytes', 0) or 0)
-                if by >= 1024*1024*1024:
-                    size_str = f"{by/(1024*1024*1024):.1f} GB"
-                else:
-                    size_str = f"{by/(1024*1024):.1f} MB"
+                try:
+                    from imxup import format_binary_size
+                    size_str = format_binary_size(by, precision=1)
+                except Exception:
+                    size_str = f"{by} B"
                 return f"{count} {label} ({images} images / {size_str})"
 
             order = [
@@ -3512,7 +3600,7 @@ class ImxUploadGUI(QMainWindow):
                 }
                 """
             )
-        # Update Stats box values
+        # Update Stats and Speed box values
         try:
             from imxup import get_unnamed_galleries
             unnamed_count = len(get_unnamed_galleries())
@@ -3532,14 +3620,30 @@ class ImxUploadGUI(QMainWindow):
         fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
         self.stats_total_galleries_label.setText(f"Total galleries uploaded: {total_galleries}")
         self.stats_total_images_label.setText(f"Total images uploaded: {total_images_acc}")
-        self.stats_total_size_label.setText(f"Total size uploaded: {total_size_acc / (1024*1024):.1f} MB")
+        try:
+            from imxup import format_binary_size
+            total_size_str = format_binary_size(total_size_acc, precision=1)
+        except Exception:
+            total_size_str = f"{total_size_acc} B"
+        # Moved from Stats to Speed: show total transferred
+        try:
+            self.speed_total_transferred_label.setText(f"Transferred:  {total_size_str}")
+        except Exception:
+            pass
         # Current transfer speed: 0 if no active uploads; else latest emitted from worker
         any_uploading = any(it.status == "uploading" for it in items)
         if not any_uploading:
             self._current_transfer_kbps = 0.0
-        current_kbps = float(getattr(self, "_current_transfer_kbps", 0.0))
-        self.stats_current_speed_label.setText(f"Current speed: {current_kbps:.1f} KB/s")
-        self.stats_fastest_speed_label.setText(f"Fastest speed: {fastest_kbps:.1f} KB/s")
+        current_kibps = float(getattr(self, "_current_transfer_kbps", 0.0))
+        try:
+            from imxup import format_binary_rate
+            current_speed_str = format_binary_rate(current_kibps, precision=1)
+            fastest_speed_str = format_binary_rate(float(fastest_kbps), precision=1)
+        except Exception:
+            current_speed_str = f"{current_kibps:.1f} KiB/s"
+            fastest_speed_str = f"{fastest_kbps:.1f} KiB/s"
+        self.speed_current_speed_label.setText(f"Current:  {current_speed_str}")
+        self.speed_fastest_speed_label.setText(f"Fastest:  {fastest_speed_str}")
         # Status summary text is updated via signal handlers to avoid timer-driven churn
     
     def on_gallery_started(self, path: str, total_images: int):
@@ -3722,7 +3826,11 @@ class ImxUploadGUI(QMainWindow):
                     # Calculate statistics (always, not only when failures exist)
         queue_item = self.queue_manager.get_item(path)
         total_size = results.get('total_size', 0) or (queue_item.total_size if queue_item and getattr(queue_item, 'total_size', 0) else 0)
-        folder_size = f"{(total_size) / (1024*1024):.1f} MB"
+        try:
+            from imxup import format_binary_size
+            folder_size = format_binary_size(total_size, precision=1)
+        except Exception:
+            folder_size = f"{total_size} B"
         avg_width = (queue_item.avg_width if queue_item and getattr(queue_item, 'avg_width', 0) else 0) or results.get('avg_width', 0)
         avg_height = (queue_item.avg_height if queue_item and getattr(queue_item, 'avg_height', 0) else 0) or results.get('avg_height', 0)
         max_width = (queue_item.max_width if queue_item and getattr(queue_item, 'max_width', 0) else 0) or results.get('max_width', 0)
@@ -3807,7 +3915,12 @@ class ImxUploadGUI(QMainWindow):
         successful_count = results.get('successful_count', 0)
         
         self.add_log_message(f"{timestamp()} ✓ Completed: {gallery_name} ({gallery_id})")
-        self.add_log_message(f"{timestamp()} Uploaded {successful_count} images ({total_size / (1024*1024):.1f} MB) in {upload_time:.1f}s")
+        try:
+            from imxup import format_binary_size
+            total_size_str = format_binary_size(total_size, precision=1)
+        except Exception:
+            total_size_str = f"{total_size} B"
+        self.add_log_message(f"{timestamp()} Uploaded {successful_count} images ({total_size_str}) in {upload_time:.1f}s")
         # Update cumulative stats
         try:
             settings = QSettings("ImxUploader", "Stats")
@@ -3841,7 +3954,9 @@ class ImxUploadGUI(QMainWindow):
     
     def on_gallery_exists(self, gallery_name: str, existing_files: list):
         """Handle existing gallery detection"""
-        message = f"Gallery '{gallery_name}' already exists with {len(existing_files)} files.\n\nContinue with upload anyway?"
+        
+        json_count = sum(1 for f in existing_files if f.lower().endswith('.json'))
+        message = f"Gallery '{gallery_name}' already exists with {json_count} .json file{'' if json_count == 1 else 's'}.\n\nContinue with upload anyway?"
         reply = QMessageBox.question(
             self,
             "Gallery Already Exists",
@@ -3883,6 +3998,25 @@ class ImxUploadGUI(QMainWindow):
         """Add message to log"""
         self.log_text.append(message)
         # Retain long history; no aggressive trimming
+        try:
+            if getattr(self, "_log_viewer_dialog", None) is not None and self._log_viewer_dialog.isVisible():
+                self._log_viewer_dialog.append_message(message)
+        except Exception:
+            pass
+
+    def open_log_viewer(self):
+        """Open or focus the popout log viewer dialog"""
+        try:
+            if self._log_viewer_dialog is None or not self._log_viewer_dialog.isVisible():
+                # Initialize with current log text
+                initial_text = self.log_text.toPlainText()
+                self._log_viewer_dialog = LogViewerDialog(initial_text, self)
+                self._log_viewer_dialog.show()
+            else:
+                self._log_viewer_dialog.activateWindow()
+                self._log_viewer_dialog.raise_()
+        except Exception:
+            pass
     
     def start_single_item(self, path: str):
         """Start a single item"""

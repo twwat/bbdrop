@@ -43,6 +43,42 @@ def timestamp():
     """Return current timestamp for logging"""
     return datetime.now().strftime("%H:%M:%S")
 
+def format_binary_size(num_bytes: int | float, precision: int = 1) -> str:
+    """Format a byte count using binary prefixes (B, KiB, MiB, GiB, TiB).
+
+    - Uses 1024 as the step size
+    - Shows no decimals for bytes; otherwise uses the given precision
+    """
+    try:
+        value = float(num_bytes or 0)
+    except Exception:
+        value = 0.0
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
+    unit_index = 0
+    while value >= 1024.0 and unit_index < len(units) - 1:
+        value /= 1024.0
+        unit_index += 1
+    if units[unit_index] == "B":
+        return f"{int(value)} B"
+    return f"{value:.{precision}f} {units[unit_index]}"
+
+def format_binary_rate(kib_per_s: float | int, precision: int = 1) -> str:
+    """Format a transfer rate given in KiB/s using binary prefixes.
+
+    - Input is expected to be in KiB/s
+    - Scales to MiB/s, GiB/s, etc. as appropriate
+    """
+    try:
+        rate = float(kib_per_s or 0)
+    except Exception:
+        rate = 0.0
+    units = ["KiB/s", "MiB/s", "GiB/s", "TiB/s"]
+    unit_index = 0
+    while rate >= 1024.0 and unit_index < len(units) - 1:
+        rate /= 1024.0
+        unit_index += 1
+    return f"{rate:.{precision}f} {units[unit_index]}"
+
 def get_config_path() -> str:
     """Return the canonical path to the application's config file (~/.imxup/imxup.ini)."""
     base_dir = os.path.join(os.path.expanduser("~"), ".imxup")
@@ -1496,8 +1532,11 @@ class ImxToUploader:
         for image_data in results['images']:
             all_images_bbcode += image_data['bbcode'] + "  "
         
-        # Calculate folder size
-        folder_size = f"{total_size / (1024*1024):.1f} MB"
+        # Calculate folder size (binary units)
+        try:
+            folder_size = format_binary_size(total_size, precision=1)
+        except Exception:
+            folder_size = f"{int(total_size)} B"
         
         # Get most common extension
         extensions = []
@@ -1940,8 +1979,20 @@ def main():
             print(f"Total galleries: {len(all_results)}")
             print(f"Total images: {total_images}")
             print(f"Total time: {total_time:.1f} seconds")
-            print(f"Total size: {total_size / (1024*1024):.1f} MB")
-            print(f"Average speed: {(total_uploaded / total_time) / (1024*1024):.1f} MB/s" if total_time > 0 else "Average speed: 0 MB/s")
+            try:
+                total_size_str = format_binary_size(total_size, precision=1)
+            except Exception:
+                total_size_str = f"{int(total_size)} B"
+            print(f"Total size: {total_size_str}")
+            if total_time > 0:
+                try:
+                    avg_kib_s = (total_uploaded / total_time) / 1024.0
+                    avg_speed_str = format_binary_rate(avg_kib_s, precision=1)
+                except Exception:
+                    avg_speed_str = f"{(total_uploaded / total_time) / 1024.0:.1f} KiB/s"
+                print(f"Average speed: {avg_speed_str}")
+            else:
+                print("Average speed: 0 KiB/s")
             
             for i, results in enumerate(all_results, 1):
                 total_attempted = results['successful_count'] + results['failed_count']
@@ -1949,8 +2000,17 @@ def main():
                 print(f"  URL: {results['gallery_url']}")
                 print(f"  Images: {results['successful_count']}/{total_attempted}")
                 print(f"  Time: {results['upload_time']:.1f}s")
-                print(f"  Size: {results['uploaded_size'] / (1024*1024):.1f} MB")
-                print(f"  Speed: {results['transfer_speed'] / (1024*1024):.1f} MB/s")
+                try:
+                    size_str = format_binary_size(results['uploaded_size'], precision=1)
+                except Exception:
+                    size_str = f"{int(results['uploaded_size'])} B"
+                print(f"  Size: {size_str}")
+                try:
+                    kib_s = (results['transfer_speed'] or 0) / 1024.0
+                    speed_str = format_binary_rate(kib_s, precision=1)
+                except Exception:
+                    speed_str = f"{((results['transfer_speed'] or 0) / 1024.0):.1f} KiB/s"
+                print(f"  Speed: {speed_str}")
                 
         else:
             print("No galleries were successfully uploaded.")
