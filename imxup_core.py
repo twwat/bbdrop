@@ -71,7 +71,8 @@ class UploadEngine:
 
         original_total_images = len(all_image_files)
 
-        # Pre-scan dimensions and total size (best effort)
+        # Fast pre-scan: only compute total size to avoid startup delay
+        # Dimension sampling (if needed) is deferred until after uploads complete
         image_dimensions_map: Dict[str, Tuple[int, int]] = {}
         total_size = 0
         for f in all_image_files:
@@ -80,13 +81,6 @@ class UploadEngine:
                 total_size += os.path.getsize(fp)
             except OSError:
                 pass
-            try:
-                from PIL import Image  # lazy import
-                with Image.open(fp) as img:
-                    w, h = img.size
-                    image_dimensions_map[f] = (w, h)
-            except Exception:
-                image_dimensions_map[f] = (0, 0)
 
         # Determine gallery name
         if not gallery_name:
@@ -102,46 +96,63 @@ class UploadEngine:
             # Best-effort; if unavailable, proceed with provided name
             pass
 
-        # Try to create named gallery first
-        gallery_id: Optional[str] = self.uploader.create_gallery_with_name(gallery_name, public_gallery, skip_login=True)
+        # Always create gallery via API by uploading the first image (faster, avoids web login delays)
+        gallery_id: Optional[str] = None
         initial_completed = 0
         initial_uploaded_size = 0
         preseed_images: List[Dict[str, Any]] = []
         files_to_upload: List[str]
-        if not gallery_id:
-            # Fallback to API-only: upload first image to create gallery
-            first_file = image_files[0]
-            first_image_path = os.path.join(folder_path, first_file)
-            if on_log:
-                on_log(f"Uploading first image to create gallery: {first_file}")
-            first_response = self.uploader.upload_image(
-                first_image_path,
-                create_gallery=True,
-                thumbnail_size=thumbnail_size,
-                thumbnail_format=thumbnail_format,
-            )
-            if first_response.get('status') != 'success':
-                raise Exception(f"Failed to create gallery: {first_response}")
-            gallery_id = first_response['data'].get('gallery_id')
-            # Log this as an unnamed gallery for later auto-renaming (lazy import avoids circular deps)
+        # Upload first image to create gallery via API
+        first_file = image_files[0]
+        first_image_path = os.path.join(folder_path, first_file)
+        if on_log:
+            on_log(f"Uploading first image to create gallery: {first_file}")
+        first_response = self.uploader.upload_image(
+            first_image_path,
+            create_gallery=True,
+            thumbnail_size=thumbnail_size,
+            thumbnail_format=thumbnail_format,
+        )
+        if first_response.get('status') != 'success':
+            raise Exception(f"Failed to create gallery: {first_response}")
+        gallery_id = first_response['data'].get('gallery_id')
+        preseed_images = [first_response['data']]
+        initial_completed = 1
+        try:
+            initial_uploaded_size = os.path.getsize(first_image_path)
+        except Exception:
+            initial_uploaded_size = 0
+        # Report the first image upload so GUI resume/merge includes it
+        if on_image_uploaded:
+            try:
+                on_image_uploaded(first_file, first_response['data'], initial_uploaded_size)
+            except Exception:
+                pass
+        # Attempt immediate rename if a web session exists; otherwise record for later auto-rename
+        try:
+            last_method = getattr(self.uploader, 'last_login_method', None)
+        except Exception:
+            last_method = None
+        if gallery_name and last_method in ('cookies', 'credentials'):
+            try:
+                rename_ok = getattr(self.uploader, 'rename_gallery_with_session', lambda *_: False)(gallery_id, gallery_name)
+                if rename_ok and on_log:
+                    on_log(f"Renamed gallery immediately using web session: '{gallery_name}'")
+            except Exception:
+                # Fall through to saving unnamed
+                pass
+        else:
+            # Save for later auto-rename if possible
             try:
                 from imxup import save_unnamed_gallery  # type: ignore
                 save_unnamed_gallery(gallery_id, gallery_name)
             except Exception:
                 pass
-            preseed_images = [first_response['data']]
-            initial_completed = 1
-            try:
-                initial_uploaded_size = os.path.getsize(first_image_path)
-            except Exception:
-                initial_uploaded_size = 0
-            # Emit an initial progress update
-            if on_progress:
-                percent_once = int((initial_completed / max(original_total_images, 1)) * 100)
-                on_progress(initial_completed, original_total_images, percent_once, first_file)
-            files_to_upload = image_files[1:]
-        else:
-            files_to_upload = image_files
+        # Emit an initial progress update
+        if on_progress:
+            percent_once = int((initial_completed / max(original_total_images, 1)) * 100)
+            on_progress(initial_completed, original_total_images, percent_once, first_file)
+        files_to_upload = image_files[1:]
 
         gallery_url = f"https://imx.to/g/{gallery_id}"
 
@@ -263,24 +274,32 @@ class UploadEngine:
             uploaded_size = 0
         transfer_speed = uploaded_size / upload_time if upload_time > 0 else 0
 
-        # Dimensions
+        # Dimensions (lazy, sampled to avoid blocking start)
         try:
-            successful_dimensions: List[Tuple[int, int]] = []
+            successful_filenames: List[str] = []
             if initial_completed == 1 and preseed_images:
-                first_file = all_image_files[0]
-                w, h = image_dimensions_map.get(first_file, (0, 0))
-                if w > 0 and h > 0:
-                    successful_dimensions.append((w, h))
+                successful_filenames.append(all_image_files[0])
             for img_file, _ in uploaded_images:
-                w, h = image_dimensions_map.get(img_file, (0, 0))
-                if w > 0 and h > 0:
-                    successful_dimensions.append((w, h))
-            avg_width = sum(w for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
-            avg_height = sum(h for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
-            max_width = max((w for w, h in successful_dimensions), default=0)
-            max_height = max((h for w, h in successful_dimensions), default=0)
-            min_width = min((w for w, h in successful_dimensions), default=0)
-            min_height = min((h for w, h in successful_dimensions), default=0)
+                successful_filenames.append(img_file)
+            # Sample up to N files for dimension computation
+            MAX_DIM_SAMPLES = 25
+            sampled_dims: List[Tuple[int, int]] = []
+            from itertools import islice
+            for fname in islice(successful_filenames, 0, MAX_DIM_SAMPLES):
+                fp = os.path.join(folder_path, fname)
+                try:
+                    from PIL import Image  # lazy import
+                    with Image.open(fp) as img:
+                        w, h = img.size
+                        sampled_dims.append((w, h))
+                except Exception:
+                    continue
+            avg_width = sum(w for w, h in sampled_dims) / len(sampled_dims) if sampled_dims else 0
+            avg_height = sum(h for w, h in sampled_dims) / len(sampled_dims) if sampled_dims else 0
+            max_width = max((w for w, h in sampled_dims), default=0)
+            max_height = max((h for w, h in sampled_dims), default=0)
+            min_width = min((w for w, h in sampled_dims), default=0)
+            min_height = min((h for w, h in sampled_dims), default=0)
         except Exception:
             avg_width = avg_height = max_width = max_height = min_width = min_height = 0
 
@@ -314,6 +333,39 @@ class UploadEngine:
             data.setdefault('width', w)
             data.setdefault('height', h)
             data.setdefault('size_bytes', size_bytes)
+        # Also enrich the preseed (first) image if present in results
+        try:
+            if preseed_images:
+                first_data = preseed_images[0]
+                fname = all_image_files[0]
+                try:
+                    size_bytes = os.path.getsize(os.path.join(folder_path, fname))
+                except Exception:
+                    size_bytes = 0
+                w, h = dims_by_name.get(fname, (0, 0))
+                try:
+                    base, ext = os.path.splitext(fname)
+                    fname_norm = base + (ext.lower() if ext else '')
+                except Exception:
+                    fname_norm = fname
+                t = first_data.get('thumb_url')
+                if not t and first_data.get('image_url'):
+                    try:
+                        parts = first_data.get('image_url').split('/i/')
+                        if len(parts) == 2 and parts[1]:
+                            img_id = parts[1].split('/')[0]
+                            _, ext = os.path.splitext(fname_norm)
+                            ext_use = (ext.lower() or '.jpg') if ext else '.jpg'
+                            t = f"https://imx.to/u/t/{img_id}{ext_use}"
+                    except Exception:
+                        pass
+                first_data.setdefault('thumb_url', t)
+                first_data.setdefault('original_filename', fname_norm)
+                first_data.setdefault('width', w)
+                first_data.setdefault('height', h)
+                first_data.setdefault('size_bytes', size_bytes)
+        except Exception:
+            pass
 
         results.update({
             'gallery_id': gallery_id,

@@ -198,7 +198,63 @@ class GUIImxToUploader(ImxToUploader):
             should_soft_stop=should_soft_stop,
             on_image_uploaded=on_image_uploaded,
         )
-        
+        # Merge previously uploaded images (from earlier partial runs) with this run's results
+        try:
+            if self.worker_thread and self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
+                item = self.worker_thread.current_item
+                # Build ordering map based on all images in the folder, like the engine
+                image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
+                all_image_files = [
+                    f for f in os.listdir(folder_path)
+                    if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
+                ]
+                file_position = {fname: idx for idx, fname in enumerate(all_image_files)}
+                # Collect enriched image data from accumulated uploads across runs
+                combined_by_name = {}
+                for fname, data in getattr(item, 'uploaded_images_data', []):
+                    try:
+                        base, ext = os.path.splitext(fname)
+                        fname_norm = base + ext.lower()
+                    except Exception:
+                        fname_norm = fname
+                    enriched = dict(data)
+                    # Ensure required fields present
+                    enriched.setdefault('original_filename', fname_norm)
+                    # Best-effort thumb_url (mirrors engine)
+                    if not enriched.get('thumb_url') and enriched.get('image_url'):
+                        try:
+                            parts = enriched.get('image_url').split('/i/')
+                            if len(parts) == 2 and parts[1]:
+                                img_id = parts[1].split('/')[0]
+                                _, ext2 = os.path.splitext(fname_norm)
+                                ext_use = (ext2.lower() or '.jpg') if ext2 else '.jpg'
+                                enriched['thumb_url'] = f"https://imx.to/u/t/{img_id}{ext_use}"
+                        except Exception:
+                            pass
+                    # Size bytes
+                    try:
+                        enriched.setdefault('size_bytes', os.path.getsize(os.path.join(folder_path, fname)))
+                    except Exception:
+                        enriched.setdefault('size_bytes', 0)
+                    combined_by_name[fname] = enriched
+                # Order by original order
+                ordered = sorted(combined_by_name.items(), key=lambda kv: file_position.get(kv[0], 10**9))
+                merged_images = [data for _fname, data in ordered]
+                if merged_images:
+                    # Replace images in results so downstream BBCode includes all
+                    results = dict(results)  # shallow copy
+                    results['images'] = merged_images
+                    results['successful_count'] = len(merged_images)
+                    # Uploaded size across all merged images
+                    try:
+                        results['uploaded_size'] = sum(int(img.get('size_bytes') or 0) for img in merged_images)
+                    except Exception:
+                        pass
+                    # Ensure total_images reflects full set
+                    results['total_images'] = len(all_image_files)
+        except Exception:
+            pass
+
         return results
 
 class UploadWorker(QThread):
@@ -2437,6 +2493,7 @@ class ImxUploadGUI(QMainWindow):
         self.server.start()
         
         self.setup_ui()
+        self.setup_menu_bar()
         self.setup_system_tray()
         self.restore_settings()
         
@@ -2922,30 +2979,49 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
         
-        # Detailed stats labels
-        self.stats_unnamed_label = QLabel("Unnamed galleries: 0")
-        self.stats_total_galleries_label = QLabel("Galleries uploaded: 0")
-        self.stats_total_images_label = QLabel("Images uploaded: 0")
+        # Detailed stats labels (split into label and value for right-aligned values)
+        self.stats_unnamed_text_label = QLabel("Unnamed galleries:")
+        self.stats_unnamed_value_label = QLabel("0")
+        self.stats_total_galleries_text_label = QLabel("Galleries uploaded:")
+        self.stats_total_galleries_value_label = QLabel("0")
+        self.stats_total_images_text_label = QLabel("Images uploaded:")
+        self.stats_total_images_value_label = QLabel("0")
         #self.stats_current_speed_label = QLabel("Current speed: 0.0 KiB/s")
         #self.stats_fastest_speed_label = QLabel("Fastest speed: 0.0 KiB/s")
         for lbl in (
-            self.stats_unnamed_label,
-            self.stats_total_galleries_label,
-            self.stats_total_images_label,
-            #self.stats_current_speed_label,
-            #self.stats_fastest_speed_label,
+            self.stats_unnamed_text_label,
+            self.stats_total_galleries_text_label,
+            self.stats_total_images_text_label,
         ):
             lbl.setStyleSheet("color: #333;")
+        for lbl in (
+            self.stats_unnamed_value_label,
+            self.stats_total_galleries_value_label,
+            self.stats_total_images_value_label,
+        ):
+            lbl.setStyleSheet("color: #333;")
+            try:
+                lbl.setFont(QFont("Consolas", 10))
+            except Exception:
+                pass
+            try:
+                lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            except Exception:
+                pass
         # Arrange in two columns, three rows
-        stats_layout.addWidget(self.stats_unnamed_label, 0, 0)
-        stats_layout.addWidget(self.stats_total_galleries_label, 1, 0)
-        stats_layout.addWidget(self.stats_total_images_label, 2, 0)
+        stats_layout.addWidget(self.stats_unnamed_text_label, 0, 0)
+        stats_layout.addWidget(self.stats_unnamed_value_label, 0, 1)
+        stats_layout.addWidget(self.stats_total_galleries_text_label, 1, 0)
+        stats_layout.addWidget(self.stats_total_galleries_value_label, 1, 1)
+        stats_layout.addWidget(self.stats_total_images_text_label, 2, 0)
+        stats_layout.addWidget(self.stats_total_images_value_label, 2, 1)
         #stats_layout.addWidget(self.stats_current_speed_label, 1, 1)
         #stats_layout.addWidget(self.stats_fastest_speed_label, 2, 1)
         
         # Keep bottom short like the original progress box; do not expand horizontally
         stats_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        stats_group.setMaximumHeight(120)
+        stats_group.setMinimumWidth(160)
+        stats_group.setMaximumHeight(100)
 
         bottom_layout.addWidget(stats_group, 1)
 
@@ -2958,25 +3034,52 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
         
-        # Detailed stats labels
-        self.speed_current_speed_label = QLabel("Current:  0.0 KiB/s")
-        self.speed_fastest_speed_label = QLabel("Fastest:  0.0 KiB/s")
-        self.speed_total_transferred_label = QLabel("Transferred:  0 B")
+        # Detailed speed labels (split into label and value for right-aligned values)
+        self.speed_current_text_label = QLabel("Current:")
+        self.speed_current_value_label = QLabel("0.0 KiB/s")
+        self.speed_fastest_text_label = QLabel("Fastest:")
+        self.speed_fastest_value_label = QLabel("0.0 KiB/s")
+        self.speed_transferred_text_label = QLabel("Transferred:")
+        self.speed_transferred_value_label = QLabel("0 B")
         for lbl in (
-            self.speed_current_speed_label,
-            self.speed_fastest_speed_label,
-            self.speed_total_transferred_label,
+            self.speed_current_text_label,
+            self.speed_fastest_text_label,
+            self.speed_transferred_text_label,
         ):
             lbl.setStyleSheet("color: #333;")
-        
-        speed_layout.addWidget(self.speed_current_speed_label, 0, 0)
-        speed_layout.addWidget(self.speed_fastest_speed_label, 1, 0)
-        speed_layout.addWidget(self.speed_total_transferred_label, 2, 0)
+        for lbl in (
+            self.speed_current_value_label,
+            self.speed_fastest_value_label,
+            self.speed_transferred_value_label,
+        ):
+            lbl.setStyleSheet("color: #333;")
+            try:
+                lbl.setFont(QFont("Consolas", 10))
+            except Exception:
+                pass
+            try:
+                lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            except Exception:
+                pass
+
+        # Make current transfer speed value 1px larger than others
+        try:
+            self.speed_current_value_label.setFont(QFont("Consolas", 11))
+        except Exception:
+            pass
+
+        speed_layout.addWidget(self.speed_current_text_label, 0, 0)
+        speed_layout.addWidget(self.speed_current_value_label, 0, 1)
+        speed_layout.addWidget(self.speed_fastest_text_label, 1, 0)
+        speed_layout.addWidget(self.speed_fastest_value_label, 1, 1)
+        speed_layout.addWidget(self.speed_transferred_text_label, 2, 0)
+        speed_layout.addWidget(self.speed_transferred_value_label, 2, 1)
 
         
         # Keep bottom short like the original progress box; do not expand horizontally
         speed_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        speed_group.setMaximumHeight(120)
+        speed_group.setMinimumWidth(160)
+        speed_group.setMaximumHeight(100)
         bottom_layout.addWidget(speed_group, 1)
 
         main_layout.addLayout(bottom_layout)
@@ -2987,6 +3090,66 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
         
+    def setup_menu_bar(self):
+        """Create a simple application menu bar."""
+        try:
+            menu_bar = self.menuBar()
+
+            # File menu
+            file_menu = menu_bar.addMenu("File")
+            action_add = file_menu.addAction("Add Folders...")
+            action_add.triggered.connect(self.browse_for_folders)
+            file_menu.addSeparator()
+            action_start_all = file_menu.addAction("Start All")
+            action_start_all.triggered.connect(self.start_all_uploads)
+            action_pause_all = file_menu.addAction("Pause All")
+            action_pause_all.triggered.connect(self.pause_all_uploads)
+            action_clear_completed = file_menu.addAction("Clear Completed")
+            action_clear_completed.triggered.connect(self.clear_completed)
+            file_menu.addSeparator()
+            action_exit = file_menu.addAction("Exit")
+            action_exit.triggered.connect(self.close)
+
+            # View menu
+            view_menu = menu_bar.addMenu("View")
+            action_log = view_menu.addAction("Open Log Viewer")
+            action_log.triggered.connect(self.open_log_viewer)
+
+            # Tools menu
+            tools_menu = menu_bar.addMenu("Tools")
+            action_templates = tools_menu.addAction("Manage BBCode Templates")
+            action_templates.triggered.connect(self.manage_templates)
+            action_credentials = tools_menu.addAction("Manage Credentials")
+            action_credentials.triggered.connect(self.manage_credentials)
+            action_locations = tools_menu.addAction("Manage File Locations")
+            action_locations.triggered.connect(self.manage_file_locations)
+
+            # Help menu
+            help_menu = menu_bar.addMenu("Help")
+            action_help = help_menu.addAction("Help")
+            action_help.triggered.connect(self.open_help_dialog)
+            action_about = help_menu.addAction("About")
+            action_about.triggered.connect(self.show_about_dialog)
+        except Exception:
+            # If menu bar creation fails, continue without it
+            pass
+
+    def show_about_dialog(self):
+        """Show a minimal About dialog."""
+        try:
+            from imxup import __version__
+            version = f"v{__version__}"
+        except Exception:
+            version = ""
+        text = "IMX.to Gallery Uploader"
+        if version:
+            text = f"{text} {version}"
+        try:
+            QMessageBox.about(self, "About", text)
+        except Exception:
+            # Fallback if about() not available
+            QMessageBox.information(self, "About", text)
+
     def check_credentials(self):
         """Prompt to set credentials only if API key is not set."""
         if not api_key_is_set():
@@ -3606,7 +3769,7 @@ class ImxUploadGUI(QMainWindow):
             unnamed_count = len(get_unnamed_galleries())
         except Exception:
             unnamed_count = 0
-        self.stats_unnamed_label.setText(f"Unnamed galleries: {unnamed_count}")
+        self.stats_unnamed_value_label.setText(f"{unnamed_count}")
         # Totals persisted in QSettings
         settings = QSettings("ImxUploader", "Stats")
         total_galleries = settings.value("total_galleries", 0, type=int)
@@ -3618,16 +3781,16 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             total_size_acc = settings.value("total_size_bytes", 0, type=int)
         fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
-        self.stats_total_galleries_label.setText(f"Total galleries uploaded: {total_galleries}")
-        self.stats_total_images_label.setText(f"Total images uploaded: {total_images_acc}")
+        self.stats_total_galleries_value_label.setText(f"{total_galleries}")
+        self.stats_total_images_value_label.setText(f"{total_images_acc}")
         try:
             from imxup import format_binary_size
             total_size_str = format_binary_size(total_size_acc, precision=1)
         except Exception:
             total_size_str = f"{total_size_acc} B"
-        # Moved from Stats to Speed: show total transferred
+        # Show transferred in Speed
         try:
-            self.speed_total_transferred_label.setText(f"Transferred:  {total_size_str}")
+            self.speed_transferred_value_label.setText(f"{total_size_str}")
         except Exception:
             pass
         # Current transfer speed: 0 if no active uploads; else latest emitted from worker
@@ -3642,8 +3805,8 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             current_speed_str = f"{current_kibps:.1f} KiB/s"
             fastest_speed_str = f"{fastest_kbps:.1f} KiB/s"
-        self.speed_current_speed_label.setText(f"Current:  {current_speed_str}")
-        self.speed_fastest_speed_label.setText(f"Fastest:  {fastest_speed_str}")
+        self.speed_current_value_label.setText(f"{current_speed_str}")
+        self.speed_fastest_value_label.setText(f"{fastest_speed_str}")
         # Status summary text is updated via signal handlers to avoid timer-driven churn
     
     def on_gallery_started(self, path: str, total_images: int):
@@ -3795,8 +3958,19 @@ class ImxUploadGUI(QMainWindow):
         with QMutexLocker(self.queue_manager.mutex):
             if path in self.queue_manager.items:
                 item = self.queue_manager.items[path]
-                item.status = "completed"
-                item.progress = 100
+                # Sync counts with merged results to avoid inconsistent UI (e.g., 450/520 but 100%)
+                total = int(results.get('total_images') or 0)
+                success = int(results.get('successful_count') or len(results.get('images', [])))
+                item.total_images = total or item.total_images
+                item.uploaded_images = success
+                # Mark as completed only if all succeeded; otherwise keep failed/incomplete state
+                if success >= (total or success):
+                    item.status = "completed"
+                    item.progress = 100
+                else:
+                    # Partial success: progress proportional
+                    item.status = item.status if item.status in ("failed", "incomplete") else "failed"
+                    item.progress = int((success / max(total, 1)) * 100)
                 item.gallery_url = results.get('gallery_url', '')
                 item.gallery_id = results.get('gallery_id', '')
                 item.finished_time = time.time()  # Set completion timestamp
