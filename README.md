@@ -9,15 +9,16 @@ A Python script to upload folders of images as galleries to imx.to
    pip install -r requirements.txt
    ```
 
-2. Add your imx.to API key to `.env`:
-   ```
-   IMX_API=your_api_key_here
-   ```
-
-## Usage
+## How To Run (GUI)
 
 ```
-python imxup.py path/to/image/folder
+python imxup.py --gui
+```
+
+## Command-line Usage
+
+```
+python imxup.py path/to/image/folder/to/upload
 ```
 
 Optional parameters:
