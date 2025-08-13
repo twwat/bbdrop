@@ -1013,8 +1013,8 @@ class GalleryTableWidget(QTableWidget):
                 background-color: #f0f0f0;
                 padding: 2px 4px; /* narrower header padding */
                 border: none;
-                font-weight: 600;
-                font-size: 11px; /* smaller header text */
+                font-weight: bold;
+                font-size: 12px; /* smaller header text */
                 border-bottom: 2px solid #3498db;
             }
             QHeaderView::section:hover {
@@ -1031,7 +1031,7 @@ class GalleryTableWidget(QTableWidget):
 
         # Disable auto-expansion behavior; make columns behave like Excel (no auto-resize of others)
         try:
-            header.setSectionsMovable(False)
+            header.setSectionsMovable(True)
             header.setStretchLastSection(False)
             self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         except Exception:
@@ -1098,10 +1098,7 @@ class GalleryTableWidget(QTableWidget):
                 if col == name_col_index or self.isColumnHidden(col):
                     continue
                 other_widths += self.columnWidth(col)
-            # Account for vertical scrollbar if visible
-            vscroll = self.verticalScrollBar()
-            if vscroll and vscroll.isVisible():
-                other_widths += vscroll.width()
+            # Do not subtract vertical scrollbar width; viewport width excludes it already
             available = viewport_width - other_widths
             # Clamp and apply
             min_width = 120
@@ -1437,11 +1434,33 @@ class ActionButtonWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(0, 2, 0, 2)  # remove left/right padding in Actions cell
+        layout.setSpacing(4)
         
         
         self.start_btn = QPushButton("Start")
         self.start_btn.setFixedSize(65, 25)
+        # Set icon and hover style
+        try:
+            assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+            def _make_icon(names: list[str], fallback_std: Optional[QStyle.StandardPixmap] = None) -> QIcon:
+                for name in names:
+                    p = os.path.join(assets_dir, name)
+                    if os.path.exists(p):
+                        return QIcon(p)
+                return self.style().standardIcon(fallback_std) if fallback_std is not None else QIcon()
+            self.start_btn.setIcon(_make_icon(["start.png", "play.png"], QStyle.StandardPixmap.SP_MediaPlay))
+            self.start_btn.setIconSize(QSize(16, 16))
+            self.start_btn.setText("")
+            self.start_btn.setToolTip("Start")
+            icon_btn_style = (
+                "QPushButton { background-color: transparent; border: none; padding: 2px; }"
+                "QPushButton:hover { background-color: rgba(0,0,0,0.06); border-radius: 4px; }"
+                "QPushButton:pressed { background-color: rgba(0,0,0,0.12); }"
+            )
+            self.start_btn.setStyleSheet(icon_btn_style)
+        except Exception:
+            pass
         
         #self.start_btn.setStyleSheet("""
         #    QPushButton {
@@ -1464,6 +1483,21 @@ class ActionButtonWidget(QWidget):
         
         self.stop_btn.setFixedSize(65, 25)
         self.stop_btn.setVisible(False)
+        try:
+            assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+            def _make_icon(names: list[str], fallback_std: Optional[QStyle.StandardPixmap] = None) -> QIcon:
+                for name in names:
+                    p = os.path.join(assets_dir, name)
+                    if os.path.exists(p):
+                        return QIcon(p)
+                return self.style().standardIcon(fallback_std) if fallback_std is not None else QIcon()
+            self.stop_btn.setIcon(_make_icon(["stop.png"], QStyle.StandardPixmap.SP_MediaStop))
+            self.stop_btn.setIconSize(QSize(16, 16))
+            self.stop_btn.setText("")
+            self.stop_btn.setToolTip("Stop")
+            self.stop_btn.setStyleSheet(icon_btn_style)
+        except Exception:
+            pass
         #self.stop_btn.setStyleSheet("""
         #    QPushButton {
         #        background-color: #f0938a;
@@ -1485,6 +1519,21 @@ class ActionButtonWidget(QWidget):
         self.view_btn = QPushButton("View")
         self.view_btn.setFixedSize(65, 25)
         self.view_btn.setVisible(False)
+        try:
+            assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+            def _make_icon(names: list[str], fallback_std: Optional[QStyle.StandardPixmap] = None) -> QIcon:
+                for name in names:
+                    p = os.path.join(assets_dir, name)
+                    if os.path.exists(p):
+                        return QIcon(p)
+                return self.style().standardIcon(fallback_std) if fallback_std is not None else QIcon()
+            self.view_btn.setIcon(_make_icon(["view.png"], QStyle.StandardPixmap.SP_DirOpenIcon))
+            self.view_btn.setIconSize(QSize(16, 16))
+            self.view_btn.setText("")
+            self.view_btn.setToolTip("View")
+            self.view_btn.setStyleSheet(icon_btn_style)
+        except Exception:
+            pass
         #self.view_btn.setStyleSheet("""
         #    QPushButton {
         #        background-color: #dfe9fb;
@@ -1522,18 +1571,36 @@ class ActionButtonWidget(QWidget):
         #    }
         #""")
         
-        layout.addStretch()  # Left stretch
         layout.addWidget(self.start_btn)
         layout.addWidget(self.stop_btn)
         layout.addWidget(self.view_btn)
         layout.addWidget(self.cancel_btn)
-        layout.addStretch()  # Right stretch
+        # Default to left alignment; will auto-center only if content fits
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        self._layout = layout
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        try:
+            # Auto-center actions only if all visible buttons fit in the available width
+            visible_buttons = [b for b in (self.start_btn, self.stop_btn, self.view_btn, self.cancel_btn) if b.isVisible()]
+            if not visible_buttons:
+                return
+            spacing = self._layout.spacing() or 0
+            content_width = sum(btn.width() for btn in visible_buttons) + spacing * (len(visible_buttons) - 1)
+            if content_width <= self.width():
+                self._layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            else:
+                self._layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        except Exception:
+            pass
     
     def update_buttons(self, status: str):
         """Update button visibility based on status"""
         if status == "ready":
             self.start_btn.setVisible(True)
-            self.start_btn.setText("Start")
+            self.start_btn.setToolTip("Start")
             self.stop_btn.setVisible(False)
             self.view_btn.setVisible(False)
             self.cancel_btn.setVisible(False)
@@ -1545,17 +1612,18 @@ class ActionButtonWidget(QWidget):
         elif status == "uploading":
             self.start_btn.setVisible(False)
             self.stop_btn.setVisible(True)
+            self.stop_btn.setToolTip("Stop")
             self.view_btn.setVisible(False)
             self.cancel_btn.setVisible(False)
         elif status == "paused":
             self.start_btn.setVisible(True)
-            self.start_btn.setText("Resume")
+            self.start_btn.setToolTip("Resume")
             self.stop_btn.setVisible(False)
             self.view_btn.setVisible(False)
             self.cancel_btn.setVisible(False)
         elif status == "incomplete":
             self.start_btn.setVisible(True)
-            self.start_btn.setText("Resume")
+            self.start_btn.setToolTip("Resume")
             self.stop_btn.setVisible(False)
             self.view_btn.setVisible(False)
             self.cancel_btn.setVisible(False)
@@ -1563,6 +1631,7 @@ class ActionButtonWidget(QWidget):
             self.start_btn.setVisible(False)
             self.stop_btn.setVisible(False)
             self.view_btn.setVisible(True)
+            self.view_btn.setToolTip("View")
             self.cancel_btn.setVisible(False)
         else:  # failed
             self.start_btn.setVisible(False)
@@ -2883,6 +2952,7 @@ class ImxUploadGUI(QMainWindow):
             header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             header.customContextMenuRequested.connect(self.show_header_context_menu)
             header.sectionResized.connect(self._on_header_section_resized)
+            header.sectionMoved.connect(self._on_header_section_moved)
         except Exception:
             pass
         
@@ -3965,16 +4035,29 @@ class ImxUploadGUI(QMainWindow):
             xfer_item = QTableWidgetItem(transfer_text)
             xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            try:
+                # Active transfers bold and full opacity; completed/failed semi-opaque and not bold
+                font = xfer_item.font()
+                if item.status == "uploading" and transfer_text:
+                    font.setBold(True)
+                    xfer_item.setFont(font)
+                    xfer_item.setForeground(QColor(0, 0, 0, 255))
+                elif item.status in ("completed", "failed") and transfer_text:
+                    font.setBold(False)
+                    xfer_item.setFont(font)
+                    xfer_item.setForeground(QColor(0, 0, 0, 160))
+            except Exception:
+                pass
             self.gallery_table.setItem(row, 9, xfer_item)
 
-            # Template name (center text if narrow enough to fit)
+            # Template name: center only if it fits; otherwise left-align so the start is visible
             template_text = item.template_name or ""
             tmpl_item = QTableWidgetItem(template_text)
             tmpl_item.setFlags(tmpl_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             try:
                 col_width = self.gallery_table.columnWidth(10)
                 fm = QFontMetrics(tmpl_item.font())
-                text_w = fm.horizontalAdvance(template_text) + 8  # small padding
+                text_w = fm.horizontalAdvance(template_text) + 8
                 if text_w <= col_width:
                     tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
                 else:
@@ -4295,6 +4378,17 @@ class ImxUploadGUI(QMainWindow):
                         xfer_item = QTableWidgetItem(rate_text)
                         xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                         xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        try:
+                            font = xfer_item.font()
+                            if rate_text:
+                                font.setBold(True)
+                                xfer_item.setFont(font)
+                                xfer_item.setForeground(QColor(0, 0, 0, 255))
+                            else:
+                                font.setBold(False)
+                                xfer_item.setFont(font)
+                        except Exception:
+                            pass
                         self.gallery_table.setItem(row, 9, xfer_item)
                         
                         # Show appropriate status if incomplete requested; otherwise show Uploading
@@ -4365,6 +4459,14 @@ class ImxUploadGUI(QMainWindow):
                     xfer_item = QTableWidgetItem(final_text)
                     xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    try:
+                        font = xfer_item.font()
+                        font.setBold(False)
+                        xfer_item.setFont(font)
+                        if final_text:
+                            xfer_item.setForeground(QColor(0, 0, 0, 160))
+                    except Exception:
+                        pass
                     self.gallery_table.setItem(row, 9, xfer_item)
                     # Update Renamed icon at completion (may be finalized later via auto-rename)
                     try:
@@ -4916,22 +5018,27 @@ class ImxUploadGUI(QMainWindow):
         self.save_table_settings()
 
     def save_table_settings(self):
-        """Persist table column widths and visibility to settings"""
+        """Persist table column widths, visibility, and order to settings"""
         try:
             column_count = self.gallery_table.columnCount()
             widths = [self.gallery_table.columnWidth(i) for i in range(column_count)]
             visibility = [not self.gallery_table.isColumnHidden(i) for i in range(column_count)]
+            # Persist header order (visual indices by logical section)
+            header = self.gallery_table.horizontalHeader()
+            order = [header.visualIndex(i) for i in range(column_count)]
             self.settings.setValue("table/column_widths", json.dumps(widths))
             self.settings.setValue("table/column_visible", json.dumps(visibility))
+            self.settings.setValue("table/column_order", json.dumps(order))
         except Exception:
             pass
 
     def restore_table_settings(self):
-        """Restore table column widths and visibility from settings"""
+        """Restore table column widths, visibility, and order from settings"""
         try:
             column_count = self.gallery_table.columnCount()
             widths_raw = self.settings.value("table/column_widths")
             visible_raw = self.settings.value("table/column_visible")
+            order_raw = self.settings.value("table/column_order")
             if widths_raw:
                 try:
                     widths = json.loads(widths_raw)
@@ -4945,6 +5052,23 @@ class ImxUploadGUI(QMainWindow):
                     visible = json.loads(visible_raw)
                     for i in range(min(column_count, len(visible))):
                         self.gallery_table.setColumnHidden(i, not bool(visible[i]))
+                except Exception:
+                    pass
+            if order_raw:
+                try:
+                    header = self.gallery_table.horizontalHeader()
+                    order = json.loads(order_raw)
+                    # order is list of visualIndex for each logical section; apply by moving sections
+                    # Build inverse mapping target_visual_index -> logical
+                    target_visual_to_logical = {v: i for i, v in enumerate(order) if isinstance(v, int)}
+                    # Move sections in order of target visual positions
+                    for target_visual in range(min(column_count, len(order))):
+                        logical = target_visual_to_logical.get(target_visual)
+                        if logical is None:
+                            continue
+                        current_visual = header.visualIndex(logical)
+                        if current_visual != target_visual:
+                            header.moveSection(current_visual, target_visual)
                 except Exception:
                     pass
         except Exception:
@@ -4978,6 +5102,13 @@ class ImxUploadGUI(QMainWindow):
             current = self.gallery_table.columnWidth(name_col)
             if available > current and available > 0:
                 self.gallery_table.setColumnWidth(name_col, available)
+        except Exception:
+            pass
+
+    def _on_header_section_moved(self, logicalIndex, oldVisualIndex, newVisualIndex):
+        """Persist order when user drags columns."""
+        try:
+            self.save_table_settings()
         except Exception:
             pass
 
