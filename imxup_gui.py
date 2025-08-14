@@ -3338,11 +3338,13 @@ class ImxUploadGUI(QMainWindow):
         self.update_timer.start(500)  # 2Hz tick
         # Log viewer dialog reference
         self._log_viewer_dialog = None
-        # Lazy-loaded status icons (check/pending)
+        # Lazy-loaded status icons (check/pending/uploading/failed)
         self._icon_check = None
         # Theme cache
         self._current_theme_mode = str(self.settings.value('ui/theme', 'system'))
         self._icon_pending = None
+        self._icon_up = None
+        self._icon_stop = None
         # Preload icons so first render has them
         try:
             self._load_status_icons_if_needed()
@@ -3351,7 +3353,7 @@ class ImxUploadGUI(QMainWindow):
 
     def _load_status_icons_if_needed(self):
         try:
-            if self._icon_check is None or self._icon_pending is None:
+            if self._icon_check is None or self._icon_pending is None or self._icon_up is None or self._icon_stop is None:
                 base_dir = os.path.dirname(os.path.abspath(__file__))
                 try:
                     import sys as _sys
@@ -3379,6 +3381,13 @@ class ImxUploadGUI(QMainWindow):
                     os.path.join(app_dir, "up.png") if app_dir else None,
                     os.path.join(app_dir, "assets", "up.png") if app_dir else None,
                 ]
+                candidates_stop = [
+                    os.path.join(base_dir, "stop.png"),
+                    os.path.join(os.getcwd(), "stop.png"),
+                    os.path.join(base_dir, "assets", "stop.png"),
+                    os.path.join(app_dir, "stop.png") if app_dir else None,
+                    os.path.join(app_dir, "assets", "stop.png") if app_dir else None,
+                ]
                 chk = QPixmap()
                 for p in candidates:
                     if not p:
@@ -3403,9 +3412,18 @@ class ImxUploadGUI(QMainWindow):
                         upm = QPixmap(p)
                         if not upm.isNull():
                             break
+                stm = QPixmap()
+                for p in candidates_stop:
+                    if not p:
+                        continue
+                    if os.path.exists(p):
+                        stm = QPixmap(p)
+                        if not stm.isNull():
+                            break
                 self._icon_check = chk if not chk.isNull() else None
                 self._icon_pending = pen if not pen.isNull() else None
                 self._icon_up = upm if not upm.isNull() else None
+                self._icon_stop = stm if not stm.isNull() else None
 
                 # Fallback: draw simple vector icons if PNG loading fails (e.g., missing imageformat plugins)
                 if self._icon_check is None:
@@ -3454,6 +3472,56 @@ class ImxUploadGUI(QMainWindow):
             # Leave icons as None if loading fails
             self._icon_check = self._icon_check or None
             self._icon_pending = self._icon_pending or None
+            self._icon_up = self._icon_up or None
+            self._icon_stop = self._icon_stop or None
+
+    def _set_status_cell_icon(self, row: int, status: str):
+        """Render the Status column as an icon only, without background/text.
+        Supported statuses: completed, failed, uploading, paused, queued, ready, incomplete, scanning.
+        Others fall back to pending icon.
+        """
+        try:
+            self._load_status_icons_if_needed()
+            col = 4
+            # Clear any existing widget/item first
+            try:
+                self.gallery_table.removeCellWidget(row, col)
+            except Exception:
+                pass
+            icon = None
+            if status == "completed" and self._icon_check is not None:
+                icon = self._icon_check
+            elif status == "failed" and self._icon_stop is not None:
+                icon = self._icon_stop
+            elif status == "uploading" and self._icon_up is not None:
+                icon = self._icon_up
+            else:
+                icon = self._icon_pending if self._icon_pending is not None else None
+            if icon is not None:
+                label = QLabel()
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                try:
+                    row_h = self.gallery_table.rowHeight(row)
+                    if not row_h or row_h <= 0:
+                        row_h = self.gallery_table.verticalHeader().defaultSectionSize()
+                    size = max(12, min(20, row_h - 6))
+                except Exception:
+                    size = 16
+                label.setPixmap(icon.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                self.gallery_table.setCellWidget(row, col, label)
+            else:
+                item = QTableWidgetItem(status.title() if isinstance(status, str) else "")
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                try:
+                    font = item.font()
+                    font.setPointSize(8)
+                    item.setFont(font)
+                except Exception:
+                    pass
+                self.gallery_table.setItem(row, col, item)
+        except Exception:
+            pass
 
     def _set_renamed_cell_icon(self, row: int, is_renamed: bool | None):
         """Set the Renamed column cell to an icon (check/pending) if available; fallback to text.
@@ -4833,106 +4901,8 @@ class ImxUploadGUI(QMainWindow):
             progress_widget.update_progress(item.progress, item.status)
             self.gallery_table.setCellWidget(row, 3, progress_widget)
             
-            # Status mapping (text replaced with icons where applicable)
-            if item.status == "scanning":
-                status_text = "Scanning"
-            elif item.status == "incomplete":
-                status_text = "Incomplete"
-            else:
-                status_text = item.status.title()
-            status_item = QTableWidgetItem(status_text)
-            status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            try:
-                font = status_item.font()
-                font.setPointSize(8)
-                status_item.setFont(font)
-            except Exception:
-                pass
-            
-            # Color code status - use stronger color application
-            if item.status == "completed":
-                # Replace text with icon widget
-                try:
-                    self._load_status_icons_if_needed()
-                    if self._icon_check is not None:
-                        label = QLabel()
-                        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        try:
-                            row_h = self.gallery_table.rowHeight(row)
-                            if row_h and not self._icon_check.isNull():
-                                label.setPixmap(self._icon_check.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                            else:
-                                label.setPixmap(self._icon_check)
-                        except Exception:
-                            label.setPixmap(self._icon_check)
-                        self.gallery_table.setCellWidget(row, 4, label)
-                        status_item = None
-                except Exception:
-                    # Fallback to colored text if icon loading fails
-                    status_item.setBackground(QColor(46, 204, 113))  # Green
-                    status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(46, 204, 113))
-                    status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
-            elif item.status == "failed":
-                status_item.setBackground(QColor(231, 76, 60))  # Red
-                status_item.setForeground(QColor(255, 255, 255))  # White text
-                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(231, 76, 60))
-                status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(255, 255, 255))
-            elif item.status == "uploading":
-                # Show up-arrow icon instead of text
-                try:
-                    self._load_status_icons_if_needed()
-                    if getattr(self, '_icon_up', None) is None:
-                        self._icon_up = self._load_icon_generic([
-                            ("up.png", "assets/up.png")
-                        ])
-                    if getattr(self, '_icon_up', None) is not None:
-                        label = QLabel()
-                        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        try:
-                            row_h = self.gallery_table.rowHeight(row)
-                            pm = self._icon_up
-                            if row_h and pm and not pm.isNull():
-                                label.setPixmap(pm.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                            else:
-                                label.setPixmap(pm)
-                        except Exception:
-                            label.setPixmap(self._icon_up)
-                        self.gallery_table.setCellWidget(row, 4, label)
-                        status_item = None
-                except Exception:
-                    # Fallback to colored text if icon loading fails
-                    status_item.setBackground(QColor(52, 152, 219))  # Blue
-                    status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
-                    status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
-            elif item.status == "paused":
-                status_item.setBackground(QColor(241, 196, 15))  # Yellow
-                status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(241, 196, 15))
-                status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
-            elif item.status == "incomplete":
-                status_item.setBackground(QColor(241, 196, 15))  # Yellow (same as paused)
-                status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(241, 196, 15))
-                status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
-            elif item.status == "queued":
-                status_item.setBackground(QColor(189, 195, 199))  # Light gray
-                status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(189, 195, 199))
-                status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
-            elif item.status == "scanning":
-                status_item.setBackground(QColor(200, 200, 200))  # Neutral gray
-                status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(200, 200, 200))
-                status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
-            elif item.status == "ready":
-                # Default styling for ready items
-                pass
-            
-            if status_item is not None:
-                self.gallery_table.setItem(row, 4, status_item)
+            # Status: icon-only, no background/text
+            self._set_status_cell_icon(row, item.status)
             
             # Added time
             added_text = ""
@@ -5287,50 +5257,9 @@ class ImxUploadGUI(QMainWindow):
                 uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.gallery_table.setItem(row, 2, uploaded_item)
                 
-                # Update status cell: prefer icon for uploading, text for incomplete
+                # Update status cell (icon-only)
                 current_status = item.status
-                if current_status == "incomplete":
-                    status_item = QTableWidgetItem("Incomplete")
-                    status_item.setBackground(QColor(241, 196, 15))
-                    status_item.setForeground(QColor(0, 0, 0))
-                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(241, 196, 15))
-                    status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
-                    status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    self.gallery_table.setItem(row, 4, status_item)
-                else:
-                    # Show up icon for uploading
-                    pm = None
-                    try:
-                        self._load_status_icons_if_needed()
-                        pm = getattr(self, '_icon_up', None)
-                        if pm is None:
-                            pm = self._load_icon_generic([("up.png", "assets/up.png")])
-                            self._icon_up = pm
-                    except Exception:
-                        pm = None
-                    if pm is not None:
-                        label = QLabel()
-                        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        try:
-                            row_h = self.gallery_table.rowHeight(row)
-                            if row_h and not pm.isNull():
-                                label.setPixmap(pm.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                            else:
-                                label.setPixmap(pm)
-                        except Exception:
-                            label.setPixmap(pm)
-                        self.gallery_table.setCellWidget(row, 4, label)
-                    else:
-                        # fallback text
-                        status_item = QTableWidgetItem("Uploading")
-                        status_item.setBackground(QColor(52, 152, 219))
-                        status_item.setForeground(QColor(0, 0, 0))
-                        status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
-                        status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
-                        status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        self.gallery_table.setItem(row, 4, status_item)
+                self._set_status_cell_icon(row, current_status)
                 
                 # Update action buttons
                 action_widget = self.gallery_table.cellWidget(row, 7)
@@ -5406,49 +5335,9 @@ class ImxUploadGUI(QMainWindow):
                             pass
                         self.gallery_table.setItem(row, 9, xfer_item)
 
-                        # Show appropriate status: icon for uploading, text for incomplete
-                        if progress_percent > 0 and progress_percent < 100:
-                            if item.status == "incomplete":
-                                status_item = QTableWidgetItem("Incomplete")
-                                status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                                status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                                status_item.setBackground(QColor(241, 196, 15))
-                                status_item.setForeground(QColor(0, 0, 0))
-                                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(241, 196, 15))
-                                status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
-                                self.gallery_table.setItem(row, 4, status_item)
-                            else:
-                                pm = None
-                                try:
-                                    self._load_status_icons_if_needed()
-                                    pm = getattr(self, '_icon_up', None)
-                                    if pm is None:
-                                        pm = self._load_icon_generic([("up.png", "assets/up.png")])
-                                        self._icon_up = pm
-                                except Exception:
-                                    pm = None
-                                if pm is not None:
-                                    label = QLabel()
-                                    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                                    try:
-                                        row_h = self.gallery_table.rowHeight(row)
-                                        if row_h and not pm.isNull():
-                                            label.setPixmap(pm.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                                        else:
-                                            label.setPixmap(pm)
-                                    except Exception:
-                                        label.setPixmap(pm)
-                                    self.gallery_table.setCellWidget(row, 4, label)
-                                else:
-                                    # fallback
-                                    status_item = QTableWidgetItem("Uploading")
-                                    status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                                    status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                                    status_item.setBackground(QColor(52, 152, 219))
-                                    status_item.setForeground(QColor(0, 0, 0))
-                                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
-                                    status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
-                                    self.gallery_table.setItem(row, 4, status_item)
+                        # Show icon-only status during in-progress
+                        if 0 < progress_percent < 100:
+                            self._set_status_cell_icon(row, item.status)
                         break
 
                 # Update status if it's completed (100%)
@@ -5464,16 +5353,8 @@ class ImxUploadGUI(QMainWindow):
                         final_status_text = "Failed"
                         row_failed = True
                     item.status = "completed" if not row_failed else "failed"
-                    status_item = QTableWidgetItem(final_status_text)
-                    status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    if row_failed:
-                        status_item.setBackground(QColor(231, 76, 60))
-                        status_item.setForeground(QColor(255, 255, 255))
-                    else:
-                        status_item.setBackground(QColor(46, 204, 113))  # Green background
-                        status_item.setForeground(QColor(0, 0, 0))  # Black text
-                    self.gallery_table.setItem(matched_row, 4, status_item)  # Status is now column 4
+                    # Final icon
+                    self._set_status_cell_icon(matched_row, item.status)
 
                     # Update the finished time column
                     finished_dt = datetime.fromtimestamp(item.finished_time)

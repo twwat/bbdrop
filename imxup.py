@@ -552,7 +552,7 @@ def get_unnamed_galleries():
 
 def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
     """Rename all unnamed galleries using an already logged-in uploader session.
-    Returns the number of successfully renamed galleries.
+    Returns the number of successfully renamed galleries. Stops early on HTTP 403 or DDoS-Guard block.
     """
     unnamed_galleries = get_unnamed_galleries()
     if not unnamed_galleries:
@@ -605,6 +605,7 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
                         pass
             except Exception:
                 pass
+            # Only remove if rename succeeded definitively
             remove_unnamed_gallery(gallery_id)
             success_count += 1
         else:
@@ -617,6 +618,7 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
                     )
             except Exception:
                 pass
+            # Keep it in unnamed list for future attempts
     return success_count
 
 def remove_unnamed_gallery(gallery_id):

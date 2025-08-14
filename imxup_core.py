@@ -171,13 +171,27 @@ class UploadEngine:
         if gallery_name and last_method in ('cookies', 'credentials'):
             try:
                 rename_ok = getattr(self.uploader, 'rename_gallery_with_session', lambda *_: False)(gallery_id, gallery_name)
-                if rename_ok and on_log:
-                    on_log(f"Renamed gallery immediately using web session: '{gallery_name}'")
+                if rename_ok:
+                    if on_log:
+                        on_log(f"Renamed gallery immediately using web session: '{gallery_name}'")
+                else:
+                    # Web session present but rename failed; queue for auto-rename later
+                    try:
+                        from imxup import save_unnamed_gallery  # type: ignore
+                        save_unnamed_gallery(gallery_id, gallery_name)
+                        if on_log:
+                            on_log(f"Queued gallery for auto-rename: '{gallery_name}'")
+                    except Exception:
+                        pass
             except Exception:
-                # Fall through to saving unnamed
-                pass
+                # On error, also queue for later rename so it doesn't slip past
+                try:
+                    from imxup import save_unnamed_gallery  # type: ignore
+                    save_unnamed_gallery(gallery_id, gallery_name)
+                except Exception:
+                    pass
         else:
-            # Save for later auto-rename if possible
+            # No web session; save for later auto-rename
             try:
                 from imxup import save_unnamed_gallery  # type: ignore
                 save_unnamed_gallery(gallery_id, gallery_name)
