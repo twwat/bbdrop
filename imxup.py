@@ -37,7 +37,7 @@ import winreg
 load_dotenv()
 
 # Application version
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 def timestamp():
     """Return current timestamp for logging"""
@@ -207,40 +207,40 @@ def create_windows_context_menu():
                 pythonw_exe = python_exe  # fallback to python.exe if pythonw not present
         
         # Create registry entries for command line upload (background right-click)
-        key_path_bg = r"Directory\Background\shell\UploadToImx"
-        key_bg = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path_bg)
-        winreg.SetValue(key_bg, "", winreg.REG_SZ, "Upload to imx.to")
-        command_key_bg = winreg.CreateKey(key_bg, "command")
-        winreg.SetValue(command_key_bg, "", winreg.REG_SZ, f'"{python_cli_exe}" "{cli_script}" "%V"')
-        winreg.CloseKey(command_key_bg)
-        winreg.CloseKey(key_bg)
+        #key_path_bg = r"Directory\Background\shell\UploadToImx"
+        #key_bg = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path_bg)
+        #winreg.SetValue(key_bg, "", winreg.REG_SZ, "Upload to imx.to")
+        #command_key_bg = winreg.CreateKey(key_bg, "command")
+        #winreg.SetValue(command_key_bg, "", winreg.REG_SZ, f'"{python_cli_exe}" "{cli_script}" "%V"')
+        #winreg.CloseKey(command_key_bg)
+        #winreg.CloseKey(key_bg)
 
         # Create registry entries for GUI mode (background right-click)
         gui_key_path_bg = r"Directory\Background\shell\UploadToImxGUI"
         gui_key_bg = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_bg)
-        winreg.SetValue(gui_key_bg, "", winreg.REG_SZ, "Upload to imx.to (GUI)")
+        winreg.SetValue(gui_key_bg, "", winreg.REG_SZ, "IMX Uploader")
         gui_command_key_bg = winreg.CreateKey(gui_key_bg, "command")
         winreg.SetValue(gui_command_key_bg, "", winreg.REG_SZ, f'"{pythonw_exe}" "{gui_script}" "%V"')
-        winreg.CloseKey(gui_command_key_bg)
+        winreg.CloseKey(gui_command_key_bg) # Close the command key
         winreg.CloseKey(gui_key_bg)
 
         # Create entries for right-click on folders (selected items)
-        key_path_dir = r"Directory\shell\UploadToImx"
-        key_dir = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path_dir)
-        winreg.SetValue(key_dir, "", winreg.REG_SZ, "Upload to imx.to")
+        #key_path_dir = r"Directory\shell\UploadToImx"
+        #key_dir = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path_dir)
+        #winreg.SetValue(key_dir, "", winreg.REG_SZ, "IMX Uploader")
         # Enable multi-select model (Explorer passes all selections to %V)
-        try:
-            winreg.SetValueEx(key_dir, "MultiSelectModel", 0, winreg.REG_SZ, "Document")
-        except Exception:
-            pass
-        command_key_dir = winreg.CreateKey(key_dir, "command")
-        winreg.SetValue(command_key_dir, "", winreg.REG_SZ, f'"{python_cli_exe}" "{cli_script}" "%V"')
-        winreg.CloseKey(command_key_dir)
-        winreg.CloseKey(key_dir)
+        #try:
+        #    winreg.SetValueEx(key_dir, "MultiSelectModel", 0, winreg.REG_SZ, "Document")
+        #except Exception:
+        #    pass
+        #command_key_dir = winreg.CreateKey(key_dir, "command")
+        #winreg.SetValue(command_key_dir, "", winreg.REG_SZ, f'"{python_cli_exe}" "{cli_script}" "%V"')
+        #winreg.CloseKey(command_key_dir)
+        #winreg.CloseKey(key_dir)
 
         gui_key_path_dir = r"Directory\shell\UploadToImxGUI"
         gui_key_dir = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_dir)
-        winreg.SetValue(gui_key_dir, "", winreg.REG_SZ, "Upload to imx.to (GUI)")
+        winreg.SetValue(gui_key_dir, "", winreg.REG_SZ, "IMX Uploader")
         try:
             winreg.SetValueEx(gui_key_dir, "MultiSelectModel", 0, winreg.REG_SZ, "Document")
         except Exception:

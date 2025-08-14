@@ -33,12 +33,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QMimeData, QUrl, 
-    QMutex, QMutexLocker, QSettings, QSize, QObject
+    QMutex, QMutexLocker, QSettings, QSize, QObject, pyqtSlot
 )
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup
 
 # Import the core uploader functionality
 from imxup import ImxToUploader, load_user_defaults, timestamp, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from imxup import create_windows_context_menu, remove_windows_context_menu
 from imxup_core import UploadEngine
 from imxup_storage import QueueStore
 from imxup_logging import get_logger
@@ -334,6 +335,10 @@ class UploadWorker(QThread):
         self.auto_rename_enabled = True
         self._bw_last_emit = 0.0
         self._stats_last_emit = 0.0
+        # Cross-thread request flags
+        self._request_mutex = QMutex()
+        self._retry_login_requested = False
+        self._retry_credentials_only = False
         
     def stop(self):
         self.running = False
@@ -407,6 +412,11 @@ class UploadWorker(QThread):
                     self.log_message.emit(f"{timestamp()} [auth] Login successful")
             
             while self.running:
+                # Handle requested login retries from GUI
+                try:
+                    self._maybe_handle_login_retry()
+                except Exception:
+                    pass
                 # Get next item from queue
                 item = self.queue_manager.get_next_item()
                 if item is None:
@@ -439,6 +449,63 @@ class UploadWorker(QThread):
                 
         except Exception as e:
             self.log_message.emit(f"{timestamp()} Worker error: {str(e)}")
+
+    def _maybe_handle_login_retry(self):
+        """If a retry has been requested from the GUI, perform it now in the worker thread."""
+        need_retry = False
+        cred_only = False
+        try:
+            self._request_mutex.lock()
+            if self._retry_login_requested:
+                need_retry = True
+                cred_only = bool(self._retry_credentials_only)
+                self._retry_login_requested = False
+                self._retry_credentials_only = False
+        finally:
+            try:
+                self._request_mutex.unlock()
+            except Exception:
+                pass
+        if not need_retry:
+            return
+        # Perform the login attempt
+        try:
+            self.log_message.emit(f"{timestamp()} [auth] Re-attempting login{' (credentials only)' if cred_only else ''}...")
+            if not self.uploader:
+                self.uploader = GUIImxToUploader(worker_thread=self)
+            if cred_only and hasattr(self.uploader, 'login_with_credentials_only'):
+                ok = self.uploader.login_with_credentials_only()
+            else:
+                ok = self.uploader.login()
+            if ok:
+                method = getattr(self.uploader, 'last_login_method', None)
+                self.log_message.emit(f"{timestamp()} [auth] Login successful using {method or 'unknown method'}")
+                # Optionally perform auto-rename of any unnamed galleries
+                try:
+                    if self.auto_rename_enabled:
+                        renamed = rename_all_unnamed_with_session(self.uploader)
+                        if renamed > 0:
+                            self.log_message.emit(f"{timestamp()} Auto-renamed {renamed} gallery(ies) after login")
+                except Exception:
+                    pass
+            else:
+                self.log_message.emit(f"{timestamp()} [auth] Login retry failed")
+        except Exception as e:
+            self.log_message.emit(f"{timestamp()} [auth] Login retry error: {e}")
+
+    def request_retry_login(self, credentials_only: bool = False) -> None:
+        """Request the worker to retry login on its own thread soon.
+        Safe to call from the GUI thread.
+        """
+        try:
+            self._request_mutex.lock()
+            self._retry_login_requested = True
+            self._retry_credentials_only = bool(credentials_only)
+        finally:
+            try:
+                self._request_mutex.unlock()
+            except Exception:
+                pass
     
     def upload_gallery(self, item: GalleryQueueItem):
         """Upload a single gallery"""
@@ -447,9 +514,8 @@ class UploadWorker(QThread):
             self._soft_stop_requested_for = None
             self.log_message.emit(f"{timestamp()} Starting upload: {item.name or os.path.basename(item.path)}")
             
-            # Set status to uploading and update display
+            # Set status to uploading and update display (single source of truth here)
             self.queue_manager.update_item_status(item.path, "uploading")
-            item.status = "uploading"
             item.start_time = time.time()
             
             # Emit signal to update display immediately
@@ -1011,13 +1077,20 @@ class GalleryTableWidget(QTableWidget):
         super().__init__(parent)
         
         # Setup table
-        # Columns: 0 #, 1 Name, 2 Uploaded, 3 Progress, 4 Status, 5 Added, 6 Finished, 7 Actions,
-        #          8 Size, 9 Transfer, 10 Template, 11 Renamed
+        # Columns: 0 #, 1 gallery name, 2 uploaded, 3 progress, 4 status, 5 added, 6 finished, 7 action,
+        #          8 size, 9 transfer, 10 template, 11 title
         self.setColumnCount(12)
         self.setHorizontalHeaderLabels([
-            "#", "Gallery Name", "Uploaded", "Progress", "Status", "Added", "Finished", "Actions",
-            "Size", "Transfer", "Template", "Renamed"
+            "#", "gallery name", "uploaded", "progress", "status", "added", "finished", "action",
+            "size", "transfer", "template", "title"
         ])
+        try:
+            # Left-align the 'gallery name' header specifically
+            hn = self.horizontalHeaderItem(1)
+            if hn:
+                hn.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        except Exception:
+            pass
         
         # Configure columns
         header = self.horizontalHeader()
@@ -1033,11 +1106,16 @@ class GalleryTableWidget(QTableWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)   # Status - resizable
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)   # Added - resizable
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)   # Finished - resizable
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)         # Actions - fixed
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)         # action - fixed
         header.setSectionResizeMode(8, QHeaderView.ResizeMode.Interactive)   # Size - resizable
         header.setSectionResizeMode(9, QHeaderView.ResizeMode.Interactive)   # Transfer - resizable
         header.setSectionResizeMode(10, QHeaderView.ResizeMode.Interactive)  # Template - resizable
-        header.setSectionResizeMode(11, QHeaderView.ResizeMode.Interactive)  # Renamed - resizable
+        header.setSectionResizeMode(11, QHeaderView.ResizeMode.Interactive)  # title - resizable
+        try:
+            # Allow headers to shrink more
+            header.setMinimumSectionSize(24)
+        except Exception:
+            pass
         # Keep widths fixed unless user drags; prevent automatic shuffling
         try:
             header.setSectionsClickable(True)
@@ -1054,11 +1132,11 @@ class GalleryTableWidget(QTableWidget):
         self.setColumnWidth(4, 120)  # Status (wider)
         self.setColumnWidth(5, 140)  # Added (wider for YYYY-MM-DD format)
         self.setColumnWidth(6, 140)  # Finished (wider for YYYY-MM-DD format)
-        self.setColumnWidth(7, 80)   # Actions
-        self.setColumnWidth(8, 110)  # Size
-        self.setColumnWidth(9, 120)  # Transfer speed
-        self.setColumnWidth(10, 140) # Template
-        self.setColumnWidth(11, 90)  # Renamed
+        self.setColumnWidth(7, 80)   # action
+        self.setColumnWidth(8, 110)  # size
+        self.setColumnWidth(9, 120)  # transfer
+        self.setColumnWidth(10, 140) # template
+        self.setColumnWidth(11, 90)  # named
         
         # Enable sorting but start with no sorting (insertion order)
         self.setSortingEnabled(True)
@@ -1097,10 +1175,10 @@ class GalleryTableWidget(QTableWidget):
             }}
             QHeaderView::section {{
                 background-color: {header_bg};
-                padding: 2px 4px; /* narrower header padding */
+                padding: 1px 3px; /* tighter header padding */
                 border: none;
                 font-weight: bold;
-                font-size: 12px; /* smaller header text */
+                font-size: 10px; /* slightly smaller header text */
                 border-bottom: 2px solid {header_bottom};
             }}
             QHeaderView::section:hover {{
@@ -1655,7 +1733,7 @@ class ActionButtonWidget(QWidget):
             self.cancel_btn.setToolTip("Pause/Cancel queued item")
             self.cancel_btn.setStyleSheet(icon_btn_style)
         except Exception:
-            pass
+            pass    
         #self.cancel_btn.setStyleSheet("""
         #    QPushButton {
         #        background-color: #f7c370;
@@ -3262,6 +3340,8 @@ class ImxUploadGUI(QMainWindow):
         self._log_viewer_dialog = None
         # Lazy-loaded status icons (check/pending)
         self._icon_check = None
+        # Theme cache
+        self._current_theme_mode = str(self.settings.value('ui/theme', 'system'))
         self._icon_pending = None
         # Preload icons so first render has them
         try:
@@ -3279,11 +3359,11 @@ class ImxUploadGUI(QMainWindow):
                 except Exception:
                     app_dir = None
                 candidates = [
-                    os.path.join(base_dir, "check.png"),
-                    os.path.join(os.getcwd(), "check.png"),
-                    os.path.join(base_dir, "assets", "check.png"),
-                    os.path.join(app_dir, "check.png") if app_dir else None,
-                    os.path.join(app_dir, "assets", "check.png") if app_dir else None,
+                    os.path.join(base_dir, "check16.png"),
+                    os.path.join(os.getcwd(), "check16.png"),
+                    os.path.join(base_dir, "assets", "check16.png"),
+                    os.path.join(app_dir, "check16.png") if app_dir else None,
+                    os.path.join(app_dir, "assets", "check16.png") if app_dir else None,
                 ]
                 candidates_pending = [
                     os.path.join(base_dir, "pending.png"),
@@ -3291,6 +3371,13 @@ class ImxUploadGUI(QMainWindow):
                     os.path.join(base_dir, "assets", "pending.png"),
                     os.path.join(app_dir, "pending.png") if app_dir else None,
                     os.path.join(app_dir, "assets", "pending.png") if app_dir else None,
+                ]
+                candidates_up = [
+                    os.path.join(base_dir, "up.png"),
+                    os.path.join(os.getcwd(), "up.png"),
+                    os.path.join(base_dir, "assets", "up.png"),
+                    os.path.join(app_dir, "up.png") if app_dir else None,
+                    os.path.join(app_dir, "assets", "up.png") if app_dir else None,
                 ]
                 chk = QPixmap()
                 for p in candidates:
@@ -3308,8 +3395,17 @@ class ImxUploadGUI(QMainWindow):
                         pen = QPixmap(p)
                         if not pen.isNull():
                             break
+                upm = QPixmap()
+                for p in candidates_up:
+                    if not p:
+                        continue
+                    if os.path.exists(p):
+                        upm = QPixmap(p)
+                        if not upm.isNull():
+                            break
                 self._icon_check = chk if not chk.isNull() else None
                 self._icon_pending = pen if not pen.isNull() else None
+                self._icon_up = upm if not upm.isNull() else None
 
                 # Fallback: draw simple vector icons if PNG loading fails (e.g., missing imageformat plugins)
                 if self._icon_check is None:
@@ -3409,8 +3505,62 @@ class ImxUploadGUI(QMainWindow):
                 if tooltip:
                     item.setToolTip(tooltip)
                 self.gallery_table.setItem(row, col, item)
+                if getattr(self, '_icon_up', None) is None:
+                    try:
+                        pm = QPixmap(24, 24)
+                        pm.fill(Qt.GlobalColor.transparent)
+                        painter = QPainter(pm)
+                        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                        painter.setPen(Qt.PenStyle.NoPen)
+                        painter.setBrush(QColor(41, 128, 185))
+                        # Draw an up arrow
+                        path = QPainterPath()
+                        path.moveTo(12, 2)
+                        path.lineTo(22, 14)
+                        path.lineTo(16, 14)
+                        path.lineTo(16, 22)
+                        path.lineTo(8, 22)
+                        path.lineTo(8, 14)
+                        path.lineTo(2, 14)
+                        path.closeSubpath()
+                        painter.drawPath(path)
+                        painter.end()
+                        self._icon_up = pm
+                    except Exception:
+                        self._icon_up = None
         except Exception:
             pass
+
+    def _load_icon_generic(self, name_pairs: list[tuple[str, str]]):
+        """Utility to load a pixmap by trying multiple relative candidates.
+        name_pairs: list of (name, assets/name)
+        """
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            try:
+                import sys as _sys
+                app_dir = os.path.dirname(os.path.abspath(_sys.argv[0]))
+            except Exception:
+                app_dir = None
+            search = []
+            for nm, asset in name_pairs:
+                search.extend([
+                    os.path.join(base_dir, nm),
+                    os.path.join(os.getcwd(), nm),
+                    os.path.join(base_dir, asset),
+                    os.path.join(app_dir, nm) if app_dir else None,
+                    os.path.join(app_dir, asset) if app_dir else None,
+                ])
+            for p in search:
+                if not p:
+                    continue
+                if os.path.exists(p):
+                    pm = QPixmap(p)
+                    if not pm.isNull():
+                        return pm
+        except Exception:
+            pass
+        return None
 
     def showEvent(self, event):
         try:
@@ -3614,7 +3764,7 @@ class ImxUploadGUI(QMainWindow):
         # Parallel upload batch size
         settings_layout.addWidget(QLabel("Concurrent Uploads:"), 3, 0)
         self.batch_size_spin = QSpinBox()
-        self.batch_size_spin.setRange(1, 20)
+        self.batch_size_spin.setRange(1, 25)
         self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
         self.batch_size_spin.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
         self.batch_size_spin.valueChanged.connect(self.on_setting_changed)
@@ -4053,6 +4203,30 @@ class ImxUploadGUI(QMainWindow):
             view_menu = menu_bar.addMenu("View")
             action_log = view_menu.addAction("Open Log Viewer")
             action_log.triggered.connect(self.open_log_viewer)
+            # Theme submenu: System / Light / Dark
+            theme_menu = view_menu.addMenu("Theme")
+            theme_group = QActionGroup(self)
+            theme_group.setExclusive(True)
+            self._theme_action_system = theme_menu.addAction("System")
+            self._theme_action_system.setCheckable(True)
+            self._theme_action_light = theme_menu.addAction("Light")
+            self._theme_action_light.setCheckable(True)
+            self._theme_action_dark = theme_menu.addAction("Dark")
+            self._theme_action_dark.setCheckable(True)
+            theme_group.addAction(self._theme_action_system)
+            theme_group.addAction(self._theme_action_light)
+            theme_group.addAction(self._theme_action_dark)
+            self._theme_action_system.triggered.connect(lambda: self.set_theme_mode('system'))
+            self._theme_action_light.triggered.connect(lambda: self.set_theme_mode('light'))
+            self._theme_action_dark.triggered.connect(lambda: self.set_theme_mode('dark'))
+            # Initialize checked state from settings
+            current_theme = str(self.settings.value('ui/theme', 'system'))
+            if current_theme == 'light':
+                self._theme_action_light.setChecked(True)
+            elif current_theme == 'dark':
+                self._theme_action_dark.setChecked(True)
+            else:
+                self._theme_action_system.setChecked(True)
 
             # Tools menu
             tools_menu = menu_bar.addMenu("Tools")
@@ -4062,6 +4236,20 @@ class ImxUploadGUI(QMainWindow):
             action_credentials.triggered.connect(self.manage_credentials)
             action_locations = tools_menu.addAction("Manage File Locations")
             action_locations.triggered.connect(self.manage_file_locations)
+
+            # Authentication submenu
+            auth_menu = tools_menu.addMenu("Authentication")
+            action_retry_login = auth_menu.addAction("Reattempt Login")
+            action_retry_login.triggered.connect(lambda: self.retry_login(False))
+            action_retry_login_creds = auth_menu.addAction("Reattempt Login (Credentials Only)")
+            action_retry_login_creds.triggered.connect(lambda: self.retry_login(True))
+
+            # Windows context menu integration
+            context_menu = tools_menu.addMenu("Windows Explorer Integration")
+            action_install_ctx = context_menu.addAction("Install Context Menu…")
+            action_install_ctx.triggered.connect(self.install_context_menu)
+            action_remove_ctx = context_menu.addAction("Remove Context Menu…")
+            action_remove_ctx.triggered.connect(self.remove_context_menu)
 
             # Help menu
             help_menu = menu_bar.addMenu("Help")
@@ -4099,6 +4287,55 @@ class ImxUploadGUI(QMainWindow):
                 self.add_log_message(f"{timestamp()} [auth] Credential setup cancelled")
         else:
             self.add_log_message(f"{timestamp()} [auth] API key found; skipping credential setup dialog")
+    
+    def retry_login(self, credentials_only: bool = False):
+        """Ask the worker to retry login soon (optionally credentials-only)."""
+        try:
+            if self.worker is None or not self.worker.isRunning():
+                self.add_log_message(f"{timestamp()} [auth] Worker not running; starting worker first")
+                self.start_worker()
+            if self.worker is not None:
+                self.worker.request_retry_login(credentials_only)
+                self.add_log_message(f"{timestamp()} [auth] Queued login reattempt{' (credentials only)' if credentials_only else ''}")
+        except Exception as e:
+            try:
+                self.add_log_message(f"{timestamp()} [auth] Failed to queue login retry: {e}")
+            except Exception:
+                pass
+
+    def install_context_menu(self):
+        """Install Windows Explorer context menu integration."""
+        try:
+            ok = create_windows_context_menu()
+            if ok:
+                QMessageBox.information(self, "Context Menu", "Windows Explorer context menu installed successfully.")
+                self.add_log_message(f"{timestamp()} [system] Installed Windows context menu")
+            else:
+                QMessageBox.warning(self, "Context Menu", "Failed to install Windows Explorer context menu.")
+                self.add_log_message(f"{timestamp()} [system] Failed to install Windows context menu")
+        except Exception as e:
+            QMessageBox.warning(self, "Context Menu", f"Error installing context menu: {e}")
+            try:
+                self.add_log_message(f"{timestamp()} [system] Error installing context menu: {e}")
+            except Exception:
+                pass
+
+    def remove_context_menu(self):
+        """Remove Windows Explorer context menu integration."""
+        try:
+            ok = remove_windows_context_menu()
+            if ok:
+                QMessageBox.information(self, "Context Menu", "Windows Explorer context menu removed successfully.")
+                self.add_log_message(f"{timestamp()} [system] Removed Windows context menu")
+            else:
+                QMessageBox.warning(self, "Context Menu", "Failed to remove Windows Explorer context menu.")
+                self.add_log_message(f"{timestamp()} [system] Failed to remove Windows context menu")
+        except Exception as e:
+            QMessageBox.warning(self, "Context Menu", f"Error removing context menu: {e}")
+            try:
+                self.add_log_message(f"{timestamp()} [system] Error removing context menu: {e}")
+            except Exception:
+                pass
     
     def manage_templates(self):
         """Open template management dialog"""
@@ -4278,6 +4515,80 @@ class ImxUploadGUI(QMainWindow):
         """Open the help/documentation dialog"""
         dialog = HelpDialog(self)
         dialog.exec()
+
+    def set_theme_mode(self, mode: str):
+        """Switch theme mode and persist. mode in {'system','light','dark'}."""
+        try:
+            mode = mode if mode in ('system','light','dark') else 'system'
+            self.settings.setValue('ui/theme', mode)
+            self.apply_theme(mode)
+            # Update checked menu items if available
+            try:
+                if mode == 'light':
+                    self._theme_action_light.setChecked(True)
+                elif mode == 'dark':
+                    self._theme_action_dark.setChecked(True)
+                else:
+                    self._theme_action_system.setChecked(True)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def apply_theme(self, mode: str):
+        """Apply theme. 'system' uses palette-based inference; 'light'/'dark' set an application stylesheet.
+        Only adjusts high-level palette/stylesheet so existing widgets that consult palette keep working.
+        """
+        try:
+            app = QApplication.instance()
+            if app is None:
+                return
+            if mode == 'dark':
+                # Simple dark palette and base stylesheet
+                palette = app.palette()
+                try:
+                    palette.setColor(palette.ColorRole.Window, QColor(30,30,30))
+                    palette.setColor(palette.ColorRole.WindowText, QColor(230,230,230))
+                    palette.setColor(palette.ColorRole.Base, QColor(25,25,25))
+                    palette.setColor(palette.ColorRole.Text, QColor(230,230,230))
+                    palette.setColor(palette.ColorRole.Button, QColor(45,45,45))
+                    palette.setColor(palette.ColorRole.ButtonText, QColor(230,230,230))
+                    palette.setColor(palette.ColorRole.Highlight, QColor(47,106,160))
+                    palette.setColor(palette.ColorRole.HighlightedText, QColor(255,255,255))
+                except Exception:
+                    pass
+                app.setPalette(palette)
+                app.setStyleSheet("""
+                    QWidget { color: #e6e6e6; }
+                    QToolTip { color: #e6e6e6; background-color: #333333; border: 1px solid #555; }
+                """)
+            elif mode == 'light':
+                palette = app.palette()
+                try:
+                    palette.setColor(palette.ColorRole.Window, QColor(255,255,255))
+                    palette.setColor(palette.ColorRole.WindowText, QColor(33,33,33))
+                    palette.setColor(palette.ColorRole.Base, QColor(255,255,255))
+                    palette.setColor(palette.ColorRole.Text, QColor(33,33,33))
+                    palette.setColor(palette.ColorRole.Button, QColor(245,245,245))
+                    palette.setColor(palette.ColorRole.ButtonText, QColor(33,33,33))
+                    palette.setColor(palette.ColorRole.Highlight, QColor(41,128,185))
+                    palette.setColor(palette.ColorRole.HighlightedText, QColor(255,255,255))
+                except Exception:
+                    pass
+                app.setPalette(palette)
+                app.setStyleSheet("")
+            else:
+                # system: clear stylesheet so platform theme/palette prevail
+                app.setStyleSheet("")
+                # Leave palette as-is (system)
+            self._current_theme_mode = mode
+            # Trigger a light refresh on key widgets
+            try:
+                self.update_queue_display()
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def setup_system_tray(self):
         """Setup system tray icon"""
@@ -4507,7 +4818,14 @@ class ImxUploadGUI(QMainWindow):
             uploaded_text = f"{item.uploaded_images}/{item.total_images}" if item.total_images > 0 else "0/?"
             uploaded_item = QTableWidgetItem(uploaded_text)
             uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            # Pseudo-center with compact font size (no monospacing)
+            try:
+                font = uploaded_item.font()
+                font.setPointSize(8)
+                uploaded_item.setFont(font)
+            except Exception:
+                pass
+            uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             self.gallery_table.setItem(row, 2, uploaded_item)
             
             # Progress bar - always create fresh widget to avoid sorting issues
@@ -4515,11 +4833,8 @@ class ImxUploadGUI(QMainWindow):
             progress_widget.update_progress(item.progress, item.status)
             self.gallery_table.setCellWidget(row, 3, progress_widget)
             
-            # Status - force "Uploading" if item is actually uploading
-            # Status text mapping
-            if item.status == "uploading":
-                status_text = "Uploading"
-            elif item.status == "scanning":
+            # Status mapping (text replaced with icons where applicable)
+            if item.status == "scanning":
                 status_text = "Scanning"
             elif item.status == "incomplete":
                 status_text = "Incomplete"
@@ -4528,23 +4843,70 @@ class ImxUploadGUI(QMainWindow):
             status_item = QTableWidgetItem(status_text)
             status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            try:
+                font = status_item.font()
+                font.setPointSize(8)
+                status_item.setFont(font)
+            except Exception:
+                pass
             
             # Color code status - use stronger color application
             if item.status == "completed":
-                status_item.setBackground(QColor(46, 204, 113))  # Green
-                status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(46, 204, 113))
-                status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
+                # Replace text with icon widget
+                try:
+                    self._load_status_icons_if_needed()
+                    if self._icon_check is not None:
+                        label = QLabel()
+                        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        try:
+                            row_h = self.gallery_table.rowHeight(row)
+                            if row_h and not self._icon_check.isNull():
+                                label.setPixmap(self._icon_check.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                            else:
+                                label.setPixmap(self._icon_check)
+                        except Exception:
+                            label.setPixmap(self._icon_check)
+                        self.gallery_table.setCellWidget(row, 4, label)
+                        status_item = None
+                except Exception:
+                    # Fallback to colored text if icon loading fails
+                    status_item.setBackground(QColor(46, 204, 113))  # Green
+                    status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
+                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(46, 204, 113))
+                    status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
             elif item.status == "failed":
                 status_item.setBackground(QColor(231, 76, 60))  # Red
                 status_item.setForeground(QColor(255, 255, 255))  # White text
                 status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(231, 76, 60))
                 status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(255, 255, 255))
             elif item.status == "uploading":
-                status_item.setBackground(QColor(52, 152, 219))  # Blue
-                status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
-                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
-                status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
+                # Show up-arrow icon instead of text
+                try:
+                    self._load_status_icons_if_needed()
+                    if getattr(self, '_icon_up', None) is None:
+                        self._icon_up = self._load_icon_generic([
+                            ("up.png", "assets/up.png")
+                        ])
+                    if getattr(self, '_icon_up', None) is not None:
+                        label = QLabel()
+                        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        try:
+                            row_h = self.gallery_table.rowHeight(row)
+                            pm = self._icon_up
+                            if row_h and pm and not pm.isNull():
+                                label.setPixmap(pm.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                            else:
+                                label.setPixmap(pm)
+                        except Exception:
+                            label.setPixmap(self._icon_up)
+                        self.gallery_table.setCellWidget(row, 4, label)
+                        status_item = None
+                except Exception:
+                    # Fallback to colored text if icon loading fails
+                    status_item.setBackground(QColor(52, 152, 219))  # Blue
+                    status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
+                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
+                    status_item.setData(Qt.ItemDataRole.ForegroundRole, _dark_fg if not _is_dark_mode else _light_fg)
             elif item.status == "paused":
                 status_item.setBackground(QColor(241, 196, 15))  # Yellow
                 status_item.setForeground(_dark_fg if not _is_dark_mode else _light_fg)
@@ -4569,7 +4931,8 @@ class ImxUploadGUI(QMainWindow):
                 # Default styling for ready items
                 pass
             
-            self.gallery_table.setItem(row, 4, status_item)
+            if status_item is not None:
+                self.gallery_table.setItem(row, 4, status_item)
             
             # Added time
             added_text = ""
@@ -4605,7 +4968,18 @@ class ImxUploadGUI(QMainWindow):
                     size_text = ""
             size_item = QTableWidgetItem(size_text)
             size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            try:
+                font = size_item.font()
+                font.setPointSize(8)
+                size_item.setFont(font)
+            except Exception:
+                pass
+            size_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            try:
+                font = size_item.font()
+                size_item.setFont(font)
+            except Exception:
+                pass
             self.gallery_table.setItem(row, 8, size_item)
 
             # Transfer speed
@@ -4628,10 +5002,17 @@ class ImxUploadGUI(QMainWindow):
                 transfer_text = f"{rate:.1f} KiB/s" if rate > 0 else ""
             xfer_item = QTableWidgetItem(transfer_text)
             xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            try:
+                font = xfer_item.font()
+                font.setPointSize(8)
+                xfer_item.setFont(font)
+            except Exception:
+                pass
+            xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             try:
                 # Active transfers bold and full opacity; completed/failed semi-opaque and not bold
                 font = xfer_item.font()
+                font.setPointSize(8)
                 if item.status == "uploading" and transfer_text:
                     font.setBold(True)
                     xfer_item.setFont(font)
@@ -4640,7 +5021,8 @@ class ImxUploadGUI(QMainWindow):
                 elif item.status in ("completed", "failed") and transfer_text:
                     font.setBold(False)
                     xfer_item.setFont(font)
-                    xfer_item.setForeground(QColor(255, 255, 255, 200) if _is_dark_mode else QColor(0, 0, 0, 160))
+                    # Slightly more opaque for finished items (+0.2 alpha)
+                    xfer_item.setForeground(QColor(255, 255, 255, 230) if _is_dark_mode else QColor(0, 0, 0, 190))
             except Exception:
                 pass
             self.gallery_table.setItem(row, 9, xfer_item)
@@ -4659,6 +5041,12 @@ class ImxUploadGUI(QMainWindow):
                     tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             except Exception:
                 tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            try:
+                font = tmpl_item.font()
+                font.setPointSize(8)
+                tmpl_item.setFont(font)
+            except Exception:
+                pass
             self.gallery_table.setItem(row, 10, tmpl_item)
 
             # Renamed status: prefer icons (check/pending) if available; fallback to text
@@ -4881,10 +5269,6 @@ class ImxUploadGUI(QMainWindow):
                 item = self.queue_manager.items[path]
                 item.total_images = total_images
                 item.uploaded_images = 0
-                # Ensure status is set to uploading
-                # Respect pre-set statuses like 'incomplete' from a soft stop request
-                if item.status not in ["paused", "incomplete"]:
-                    item.status = "uploading"
         
         # Update only the specific row status instead of full table refresh
         # Also ensure settings are disabled while uploads are active
@@ -4903,7 +5287,7 @@ class ImxUploadGUI(QMainWindow):
                 uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.gallery_table.setItem(row, 2, uploaded_item)
                 
-                # Update status cell based on current item status
+                # Update status cell: prefer icon for uploading, text for incomplete
                 current_status = item.status
                 if current_status == "incomplete":
                     status_item = QTableWidgetItem("Incomplete")
@@ -4911,15 +5295,42 @@ class ImxUploadGUI(QMainWindow):
                     status_item.setForeground(QColor(0, 0, 0))
                     status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(241, 196, 15))
                     status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
+                    status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.gallery_table.setItem(row, 4, status_item)
                 else:
-                    status_item = QTableWidgetItem("Uploading")
-                    status_item.setBackground(QColor(52, 152, 219))
-                    status_item.setForeground(QColor(0, 0, 0))
-                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
-                    status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
-                status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.gallery_table.setItem(row, 4, status_item)
+                    # Show up icon for uploading
+                    pm = None
+                    try:
+                        self._load_status_icons_if_needed()
+                        pm = getattr(self, '_icon_up', None)
+                        if pm is None:
+                            pm = self._load_icon_generic([("up.png", "assets/up.png")])
+                            self._icon_up = pm
+                    except Exception:
+                        pm = None
+                    if pm is not None:
+                        label = QLabel()
+                        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        try:
+                            row_h = self.gallery_table.rowHeight(row)
+                            if row_h and not pm.isNull():
+                                label.setPixmap(pm.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                            else:
+                                label.setPixmap(pm)
+                        except Exception:
+                            label.setPixmap(pm)
+                        self.gallery_table.setCellWidget(row, 4, label)
+                    else:
+                        # fallback text
+                        status_item = QTableWidgetItem("Uploading")
+                        status_item.setBackground(QColor(52, 152, 219))
+                        status_item.setForeground(QColor(0, 0, 0))
+                        status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
+                        status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
+                        status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        self.gallery_table.setItem(row, 4, status_item)
                 
                 # Update action buttons
                 action_widget = self.gallery_table.cellWidget(row, 7)
@@ -4945,9 +5356,7 @@ class ImxUploadGUI(QMainWindow):
                 except Exception:
                     pass
 
-                # Ensure status is uploading during progress updates
-                if item.status not in ["completed", "failed", "incomplete"]:
-                    item.status = "uploading"
+                # Do not override status here; worker owns authoritative status
 
                 # Find and update the correct row in the table
                 matched_row = None
@@ -4997,7 +5406,7 @@ class ImxUploadGUI(QMainWindow):
                             pass
                         self.gallery_table.setItem(row, 9, xfer_item)
 
-                        # Show appropriate status if incomplete requested; otherwise show Uploading
+                        # Show appropriate status: icon for uploading, text for incomplete
                         if progress_percent > 0 and progress_percent < 100:
                             if item.status == "incomplete":
                                 status_item = QTableWidgetItem("Incomplete")
@@ -5007,15 +5416,39 @@ class ImxUploadGUI(QMainWindow):
                                 status_item.setForeground(QColor(0, 0, 0))
                                 status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(241, 196, 15))
                                 status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
+                                self.gallery_table.setItem(row, 4, status_item)
                             else:
-                                status_item = QTableWidgetItem("Uploading")
-                                status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                                status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                                status_item.setBackground(QColor(52, 152, 219))  # Blue background
-                                status_item.setForeground(QColor(0, 0, 0))  # Black text
-                                status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
-                                status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
-                            self.gallery_table.setItem(row, 4, status_item)
+                                pm = None
+                                try:
+                                    self._load_status_icons_if_needed()
+                                    pm = getattr(self, '_icon_up', None)
+                                    if pm is None:
+                                        pm = self._load_icon_generic([("up.png", "assets/up.png")])
+                                        self._icon_up = pm
+                                except Exception:
+                                    pm = None
+                                if pm is not None:
+                                    label = QLabel()
+                                    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                                    try:
+                                        row_h = self.gallery_table.rowHeight(row)
+                                        if row_h and not pm.isNull():
+                                            label.setPixmap(pm.scaled(max(row_h-6, 12), max(row_h-6, 12), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                                        else:
+                                            label.setPixmap(pm)
+                                    except Exception:
+                                        label.setPixmap(pm)
+                                    self.gallery_table.setCellWidget(row, 4, label)
+                                else:
+                                    # fallback
+                                    status_item = QTableWidgetItem("Uploading")
+                                    status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                                    status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                                    status_item.setBackground(QColor(52, 152, 219))
+                                    status_item.setForeground(QColor(0, 0, 0))
+                                    status_item.setData(Qt.ItemDataRole.BackgroundRole, QColor(52, 152, 219))
+                                    status_item.setData(Qt.ItemDataRole.ForegroundRole, QColor(0, 0, 0))
+                                    self.gallery_table.setItem(row, 4, status_item)
                         break
 
                 # Update status if it's completed (100%)
@@ -5712,6 +6145,12 @@ class ImxUploadGUI(QMainWindow):
         self.confirm_delete_check.setChecked(confirm_delete)
         # Restore table columns (widths and visibility)
         self.restore_table_settings()
+        # Apply saved theme
+        try:
+            theme = str(self.settings.value('ui/theme', 'system'))
+            self.apply_theme(theme)
+        except Exception:
+            pass
     
     def save_settings(self):
         """Save window settings"""
