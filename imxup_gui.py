@@ -722,7 +722,7 @@ class QueueManager:
         """Save queue state (non-blocking) using SQLite store."""
         queue_data = []
         for item in self.items.values():
-            if item.status in ["ready", "queued", "paused", "completed", "incomplete"]:
+            if item.status in ["ready", "queued", "paused", "completed", "incomplete", "failed"]:
                 queue_data.append({
                     'path': item.path,
                     'name': item.name,
@@ -748,6 +748,7 @@ class QueueManager:
                     'uploaded_bytes': int(getattr(item, 'uploaded_bytes', 0) or 0),
                     'final_kibps': float(getattr(item, 'final_kibps', 0.0) or 0.0),
                     'failed_files': getattr(item, 'failed_files', []),
+                    'error_message': getattr(item, 'error_message', ''),
                 })
         try:
             self.store.bulk_upsert_async(queue_data)
@@ -814,12 +815,15 @@ class QueueManager:
                         failed_files = item_data.get('failed_files', [])
                         if failed_files:
                             item.failed_files = failed_files
+                        error_message = item_data.get('error_message', '')
+                        if error_message:
+                            item.error_message = error_message
                     except Exception:
                         pass
                     self._next_order = max(self._next_order, item.insertion_order + 1)
                     self.items[path] = item
                 else:
-                    print(f"DEBUG: Skipped item (path doesn't exist): {path}")
+                    pass
         
         
     
@@ -956,7 +960,7 @@ class QueueManager:
         return results
 
     def _comprehensive_scan_item(self, path: str):
-        """Comprehensive scan of ALL images to validate them before allowing upload."""
+        """Optimized scan using imghdr for corruption checks and PIL sampling for dimensions."""
         try:
             image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
             files = [f for f in os.listdir(path) if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(path, f))]
@@ -968,31 +972,46 @@ class QueueManager:
                 return
             
             total_size = 0
-            dims: List[tuple[int, int]] = []
             failed_files: List[tuple[str, str]] = []  # (filename, error_message)
             
-            # Scan ALL images comprehensively
-            for f in files:
-                fp = os.path.join(path, f)
-                try:
-                    file_size = os.path.getsize(fp)
-                    total_size += file_size
-                    
-                    # Validate image with PIL - this is the critical validation step
-                    from PIL import Image
-                    with Image.open(fp) as img:
-                        # Force PIL to actually read the image data to catch corruption
-                        img.verify()
-                        # Reopen for dimensions since verify() closes the image
-                        with Image.open(fp) as img2:
-                            w, h = img2.size
-                            dims.append((w, h))
+            # Get scanning configuration from settings
+            scan_config = self._get_scanning_config()
+            use_fast_scan = scan_config.get('fast_scan', True)
+            pil_sampling = scan_config.get('pil_sampling', 2)  # Default to 4 images
+            
+            # Fast corruption check using imghdr for all images
+            if use_fast_scan:
+                import imghdr
+                for f in files:
+                    fp = os.path.join(path, f)
+                    try:
+                        file_size = os.path.getsize(fp)
+                        total_size += file_size
+                        
+                        # Fast corruption check with imghdr
+                        with open(fp, 'rb') as img_file:
+                            if not imghdr.what(img_file):
+                                error_msg = f"Failed corruption check: {f} - not a valid image"
+                                failed_files.append((f, error_msg))
+                                
+                    except Exception as e:
+                        error_msg = f"Failed to validate {f}: {str(e)}"
+                        failed_files.append((f, error_msg))
+            else:
+                # Fallback to PIL for all images (original behavior)
+                for f in files:
+                    fp = os.path.join(path, f)
+                    try:
+                        file_size = os.path.getsize(fp)
+                        total_size += file_size
+                        
+                        from PIL import Image
+                        with Image.open(fp) as img:
+                            img.verify()
                             
-                except Exception as e:
-                    # Record failed files with specific error messages
-                    error_msg = f"Failed to validate {f}: {str(e)}"
-                    failed_files.append((f, error_msg))
-                    # Continue scanning other files to get complete picture
+                    except Exception as e:
+                        error_msg = f"Failed to validate {f}: {str(e)}"
+                        failed_files.append((f, error_msg))
             
             # If any files failed validation, mark gallery as failed
             if failed_files:
@@ -1001,7 +1020,6 @@ class QueueManager:
                         item = self.items[path]
                         item.status = "failed"
                         item.error_message = f"Image validation failed: {len(failed_files)}/{len(files)} images invalid"
-                        # Store detailed failure information for user reference
                         item.failed_files = failed_files
                         item.total_size = total_size
                         item.scan_complete = True
@@ -1009,7 +1027,10 @@ class QueueManager:
                 self._inc_version()
                 return
             
-            # All images validated successfully - calculate statistics
+            # Calculate dimensions using PIL sampling strategy
+            dims = self._calculate_dimensions_with_sampling(path, files, pil_sampling)
+            
+            # Calculate statistics from sampled dimensions
             if dims:
                 avg_w = sum(w for w, _ in dims) / len(dims)
                 avg_h = sum(h for _, h in dims) / len(dims)
@@ -1047,6 +1068,87 @@ class QueueManager:
                     self.items[path].scan_complete = True
             self.save_persistent_queue()
             self._inc_version()
+    
+    def _get_scanning_config(self) -> dict:
+        """Get scanning configuration from settings"""
+        try:
+            # Try to get from parent window's comprehensive settings
+            if hasattr(self, 'parent') and self.parent:
+                # Read from QSettings
+                settings = self.parent.settings
+                fast_scan = settings.value('scanning/fast_scan', True, type=bool)
+                pil_sampling = settings.value('scanning/pil_sampling', 2, type=int)
+                return {
+                    'fast_scan': fast_scan,
+                    'pil_sampling': pil_sampling
+                }
+            else:
+                # Default configuration
+                return {
+                    'fast_scan': True,
+                    'pil_sampling': 2
+                }
+        except Exception:
+            return {
+                'fast_scan': True,
+                'pil_sampling': 2
+            }
+    
+    def _calculate_dimensions_with_sampling(self, path: str, files: List[str], sampling_strategy: int) -> List[tuple[int, int]]:
+        """Calculate image dimensions using PIL sampling strategy"""
+        dims = []
+        
+        if not files:
+            return dims
+        
+        try:
+            from PIL import Image
+            
+            if sampling_strategy == 0:  # 1 image (first only)
+                sample_files = [files[0]]
+            elif sampling_strategy == 1:  # 2 images (first + last)
+                sample_files = [files[0], files[-1]]
+            elif sampling_strategy == 2:  # 4 images (first + 2 middle + last)
+                if len(files) <= 4:
+                    sample_files = files
+                else:
+                    mid1 = len(files) // 3
+                    mid2 = 2 * len(files) // 3
+                    sample_files = [files[0], files[mid1], files[mid2], files[-1]]
+            elif sampling_strategy == 3:  # 8 images (strategic sampling)
+                if len(files) <= 8:
+                    sample_files = files
+                else:
+                    step = len(files) // 8
+                    sample_files = [files[i] for i in range(0, len(files), step)][:8]
+            elif sampling_strategy == 4:  # 16 images (extended sampling)
+                if len(files) <= 16:
+                    sample_files = files
+                else:
+                    step = len(files) // 16
+                    sample_files = [files[i] for i in range(0, len(files), step)][:16]
+            else:  # All images (full PIL scan)
+                sample_files = files
+            
+            # Process sampled files with PIL
+            for f in sample_files:
+                fp = os.path.join(path, f)
+                try:
+                    with Image.open(fp) as img:
+                        w, h = img.size
+                        dims.append((w, h))
+                except Exception:
+                    # If PIL fails on a sampled image, skip it
+                    continue
+                    
+        except ImportError:
+            # PIL not available, return empty dimensions
+            pass
+        except Exception:
+            # Error in sampling, return empty dimensions
+            pass
+        
+        return dims
     
     def start_item(self, path: str) -> bool:
         """Start a specific item in the queue"""
@@ -1140,7 +1242,7 @@ class QueueManager:
             else:
                 # Item status changed, try to get next item
                 return self.get_next_item()
-        except Empty:
+        except queue.Empty:
             return None
     
     def update_item_status(self, path: str, status: str):
@@ -1220,28 +1322,15 @@ class QueueManager:
                     #print(f"DEBUG: Path found, status: {self.items[path].status}")
                     # Only prevent deletion of currently uploading items
                     if self.items[path].status == "uploading":
-                        print(f"DEBUG: Skipping uploading item: {path}")
                         continue
-                    #print(f"DEBUG: Deleting item: {path}")
                     del self.items[path]
                     removed_count += 1
                 else:
-                    print(f"DEBUG: Path not found: {path}")
-            
-            #print(f"DEBUG: Removed count: {removed_count}")
-            print(f"DEBUG: {removed_count} items remaining after deletion: {list(self.items.keys())}")
-            
-            # Verify deletion actually worked
-            for path in paths:
-                if path in self.items:
-                    print(f"ERROR: Item {path} was NOT actually deleted!")
-                else:
-                    print(f"Item {path} deleted")
+                    pass
             
             # Renumber remaining items (don't save persistent queue yet - let GUI handle it)
             if removed_count > 0:
                 self.renumber_insertion_orders()
-                #print(f"DEBUG: Renumbered items after deletion")
         # Purge from SQLite in background
         try:
             self.store._executor.submit(self.store.delete_by_paths, list(paths))
@@ -3474,6 +3563,7 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
         self.queue_manager = QueueManager()
+        self.queue_manager.parent = self  # Give QueueManager access to parent for settings
         self.worker = None
         self.table_progress_widgets = {}
         self.settings = QSettings("ImxUploader", "ImxUploadGUI")
@@ -4174,7 +4264,29 @@ class ImxUploadGUI(QMainWindow):
         # Track central store path (from defaults)
         self.central_store_path_value = defaults.get('central_store_path', None)
         
-
+        # Comprehensive Settings button
+        self.comprehensive_settings_btn = QPushButton("⚙️ Comprehensive Settings")
+        if not self.comprehensive_settings_btn.text().startswith(" "):
+            self.comprehensive_settings_btn.setText(" " + self.comprehensive_settings_btn.text())
+        self.comprehensive_settings_btn.clicked.connect(self.open_comprehensive_settings)
+        self.comprehensive_settings_btn.setMinimumHeight(30)
+        self.comprehensive_settings_btn.setMaximumHeight(34)
+        self.comprehensive_settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9b59b6;
+                color: white;
+                border: 1px solid #8e44ad;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #8e44ad;
+            }
+            QPushButton:pressed {
+                background-color: #7d3c98;
+            }
+        """)
+        settings_layout.addWidget(self.comprehensive_settings_btn, 7, 0, 1, 2)
         
         # Save settings button
         self.save_settings_btn = QPushButton("Save Settings")
@@ -4682,13 +4794,11 @@ class ImxUploadGUI(QMainWindow):
                 pass
     
     def manage_templates(self):
-        """Open template management dialog"""
-        # Get current template from combo box
+        """Open comprehensive settings to templates tab"""
+        self.open_comprehensive_settings(tab_index=2)  # Templates tab
+        # Refresh template combo box after dialog closes
         current_template = self.template_combo.currentText()
-        dialog = TemplateManagerDialog(self, current_template)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Refresh template combo box and keep selection when possible
-            self.refresh_template_combo(preferred=current_template)
+        self.refresh_template_combo(preferred=current_template)
 
     def manage_file_locations(self):
         """Open dialog to manage artifact storage locations and central path."""
@@ -4847,13 +4957,19 @@ class ImxUploadGUI(QMainWindow):
         self.template_combo.blockSignals(False)
     
     def manage_credentials(self):
-        """Open credential management dialog"""
-        dialog = CredentialSetupDialog(self)
+        """Open comprehensive settings to credentials tab"""
+        self.open_comprehensive_settings(tab_index=1)  # Credentials tab
+
+    def open_comprehensive_settings(self, tab_index=0):
+        """Open comprehensive settings dialog to specific tab"""
+        dialog = ComprehensiveSettingsDialog(self)
+        if 0 <= tab_index < dialog.tab_widget.count():
+            dialog.tab_widget.setCurrentIndex(tab_index)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.add_log_message(f"{timestamp()} Credentials updated successfully")
+            self.add_log_message(f"{timestamp()} Comprehensive settings updated successfully")
         else:
-            self.add_log_message(f"{timestamp()} Credential management cancelled")
+            self.add_log_message(f"{timestamp()} Comprehensive settings cancelled")
 
     def open_help_dialog(self):
         """Open the help/documentation dialog"""
@@ -6041,21 +6157,8 @@ class ImxUploadGUI(QMainWindow):
             pass
 
     def open_log_viewer(self):
-        """Open or focus the popout log viewer dialog"""
-        try:
-            if self._log_viewer_dialog is None or not self._log_viewer_dialog.isVisible():
-                # Initialize with current on-disk log if available, otherwise current GUI text
-                try:
-                    initial_text = get_logger().read_current_log(tail_bytes=2 * 1024 * 1024) or self.log_text.toPlainText()
-                except Exception:
-                    initial_text = self.log_text.toPlainText()
-                self._log_viewer_dialog = LogViewerDialog(initial_text, self)
-                self._log_viewer_dialog.show()
-            else:
-                self._log_viewer_dialog.activateWindow()
-                self._log_viewer_dialog.raise_()
-        except Exception:
-            pass
+        """Open comprehensive settings to logs tab"""
+        self.open_comprehensive_settings(tab_index=3)  # Logs tab
     
     def start_single_item(self, path: str):
         """Start a single item"""
@@ -7123,6 +7226,524 @@ class TemplateManagerDialog(QDialog):
                 event.ignore()
         else:
             event.accept()
+
+
+class ComprehensiveSettingsDialog(QDialog):
+    """Comprehensive settings dialog with tabbed interface"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.setup_ui()
+        self.load_settings()
+        
+    def setup_ui(self):
+        """Setup the tabbed settings interface"""
+        self.setWindowTitle("Settings & Preferences")
+        self.setModal(True)
+        self.resize(800, 600)
+        
+        layout = QVBoxLayout(self)
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+        
+        # Create tabs
+        self.setup_general_tab()
+        self.setup_credentials_tab()
+        self.setup_templates_tab()
+        self.setup_logs_tab()
+        self.setup_scanning_tab()
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        self.reset_btn = QPushButton("Reset to Defaults")
+        self.reset_btn.clicked.connect(self.reset_to_defaults)
+        button_layout.addWidget(self.reset_btn)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_btn)
+        
+        self.save_btn = QPushButton("Save & Close")
+        self.save_btn.clicked.connect(self.save_and_close)
+        button_layout.addWidget(self.save_btn)
+        
+        layout.addLayout(button_layout)
+        
+    def setup_general_tab(self):
+        """Setup the General settings tab"""
+        general_widget = QWidget()
+        layout = QVBoxLayout(general_widget)
+        
+        # Load defaults
+        defaults = load_user_defaults()
+        
+        # Upload settings group
+        upload_group = QGroupBox("Upload Settings")
+        upload_layout = QGridLayout(upload_group)
+        
+        # Thumbnail size
+        upload_layout.addWidget(QLabel("Thumbnail Size:"), 0, 0)
+        self.thumbnail_size_combo = QComboBox()
+        self.thumbnail_size_combo.addItems([
+            "100x100", "180x180", "250x250", "300x300", "150x150"
+        ])
+        self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
+        upload_layout.addWidget(self.thumbnail_size_combo, 0, 1)
+        
+        # Thumbnail format
+        upload_layout.addWidget(QLabel("Thumbnail Format:"), 1, 0)
+        self.thumbnail_format_combo = QComboBox()
+        self.thumbnail_format_combo.addItems([
+            "Fixed width", "Proportional", "Square", "Fixed height"
+        ])
+        self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
+        upload_layout.addWidget(self.thumbnail_format_combo, 1, 1)
+        
+        # Max retries
+        upload_layout.addWidget(QLabel("Max Retries:"), 2, 0)
+        self.max_retries_spin = QSpinBox()
+        self.max_retries_spin.setRange(1, 10)
+        self.max_retries_spin.setValue(defaults.get('max_retries', 3))
+        upload_layout.addWidget(self.max_retries_spin, 2, 1)
+        
+        # Concurrent uploads
+        upload_layout.addWidget(QLabel("Concurrent Uploads:"), 3, 0)
+        self.batch_size_spin = QSpinBox()
+        self.batch_size_spin.setRange(1, 25)
+        self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
+        self.batch_size_spin.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
+        upload_layout.addWidget(self.batch_size_spin, 3, 1)
+        
+        # Template selection moved to Templates tab for better integration
+        
+        # General settings group
+        general_group = QGroupBox("General Settings")
+        general_layout = QGridLayout(general_group)
+        
+        # Confirm delete
+        self.confirm_delete_check = QCheckBox("Confirm before deleting")
+        self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
+        general_layout.addWidget(self.confirm_delete_check, 0, 0)
+        
+        # Public gallery
+        self.public_gallery_check = QCheckBox("Make galleries public")
+        self.public_gallery_check.setChecked(defaults.get('public_gallery', 1) == 1)
+        general_layout.addWidget(self.public_gallery_check, 0, 1)
+        
+        # Auto-rename
+        self.auto_rename_check = QCheckBox("Auto-rename galleries")
+        self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
+        general_layout.addWidget(self.auto_rename_check, 1, 0, 1, 2)
+        
+        # Storage options group
+        storage_group = QGroupBox("Storage Options")
+        storage_layout = QGridLayout(storage_group)
+        
+        # Store in uploaded folder
+        self.store_in_uploaded_check = QCheckBox("Save artifacts in .uploaded folder")
+        self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
+        storage_layout.addWidget(self.store_in_uploaded_check, 0, 0, 1, 2)
+        
+        # Store in central location
+        self.store_in_central_check = QCheckBox("Save artifacts in central store")
+        self.store_in_central_check.setChecked(defaults.get('store_in_central', True))
+        storage_layout.addWidget(self.store_in_central_check, 1, 0, 1, 2)
+        
+        # Central store path
+        from imxup import get_central_store_base_path, get_default_central_store_base_path
+        current_path = defaults.get('central_store_path') or get_central_store_base_path()
+        
+        path_label = QLabel("Central store path:")
+        self.path_edit = QLineEdit(current_path)
+        self.path_edit.setReadOnly(True)
+        browse_btn = QPushButton("Browse...")
+        browse_btn.clicked.connect(self.browse_central_store)
+        
+        storage_layout.addWidget(path_label, 2, 0)
+        storage_layout.addWidget(self.path_edit, 2, 1)
+        storage_layout.addWidget(browse_btn, 2, 2)
+        
+        # Enable/disable path controls based on central store checkbox
+        def set_path_controls_enabled(enabled):
+            path_label.setEnabled(enabled)
+            self.path_edit.setEnabled(enabled)
+            browse_btn.setEnabled(enabled)
+        
+        set_path_controls_enabled(self.store_in_central_check.isChecked())
+        self.store_in_central_check.toggled.connect(set_path_controls_enabled)
+        
+        # Theme group
+        theme_group = QGroupBox("Theme")
+        theme_layout = QHBoxLayout(theme_group)
+        
+        theme_label = QLabel("Theme mode:")
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["system", "light", "dark"])
+        
+        # Load current theme from QSettings
+        if self.parent and hasattr(self.parent, 'settings'):
+            current_theme = self.parent.settings.value('ui/theme', 'system')
+            index = self.theme_combo.findText(current_theme)
+            if index >= 0:
+                self.theme_combo.setCurrentIndex(index)
+        
+        theme_layout.addWidget(theme_label)
+        theme_layout.addWidget(self.theme_combo)
+        theme_layout.addStretch()
+        
+        # Add all groups to layout
+        layout.addWidget(upload_group)
+        layout.addWidget(general_group)
+        layout.addWidget(storage_group)
+        layout.addWidget(theme_group)
+        layout.addStretch()
+        
+        self.tab_widget.addTab(general_widget, "General")
+        
+    def setup_credentials_tab(self):
+        """Setup the Credentials tab with integrated credential management"""
+        credentials_widget = QWidget()
+        layout = QVBoxLayout(credentials_widget)
+        
+        # Create and integrate the credential setup dialog
+        self.credential_dialog = CredentialSetupDialog(self)
+        self.credential_dialog.setParent(credentials_widget)
+        self.credential_dialog.setWindowFlags(Qt.WindowType.Widget)  # Make it a child widget
+        self.credential_dialog.setModal(False)  # Not modal when embedded
+        
+        # Add the credential dialog to the layout
+        layout.addWidget(self.credential_dialog)
+        
+        self.tab_widget.addTab(credentials_widget, "Credentials")
+        
+    def setup_templates_tab(self):
+        """Setup the Templates tab with integrated template management and selection"""
+        templates_widget = QWidget()
+        layout = QVBoxLayout(templates_widget)
+        
+        # Template selection section
+        selection_group = QGroupBox("Active Template")
+        selection_layout = QHBoxLayout(selection_group)
+        
+        # Current template display
+        self.current_template_label = QLabel("Current: ")
+        self.current_template_label.setStyleSheet("font-weight: bold;")
+        selection_layout.addWidget(self.current_template_label)
+        
+        # Set as active button
+        self.set_active_btn = QPushButton("Set as Active")
+        self.set_active_btn.setEnabled(False)
+        self.set_active_btn.clicked.connect(self.set_template_as_active)
+        selection_layout.addWidget(self.set_active_btn)
+        
+        selection_layout.addStretch()
+        layout.addWidget(selection_group)
+        
+        # Create and integrate the template manager dialog
+        self.template_dialog = TemplateManagerDialog(self)
+        self.template_dialog.setParent(templates_widget)
+        self.template_dialog.setWindowFlags(Qt.WindowType.Widget)  # Make it a child widget
+        self.template_dialog.setModal(False)  # Not modal when embedded
+        
+        # Connect template selection changes to update our UI
+        self.template_dialog.template_list.itemSelectionChanged.connect(self.on_template_selection_changed)
+        
+        # Add the template dialog to the layout
+        layout.addWidget(self.template_dialog)
+        
+        # Load current template and update display
+        self.load_current_template()
+        self.update_template_list_display()
+        
+        self.tab_widget.addTab(templates_widget, "Templates")
+        
+    def setup_logs_tab(self):
+        """Setup the Logs tab with integrated log viewer"""
+        logs_widget = QWidget()
+        layout = QVBoxLayout(logs_widget)
+        
+        # Create and integrate the log viewer dialog
+        try:
+            # Get initial log text
+            from imxup_logging import get_logger
+            initial_text = get_logger().read_current_log(tail_bytes=2 * 1024 * 1024) or ""
+        except Exception:
+            initial_text = ""
+        
+        self.log_dialog = LogViewerDialog(initial_text, self)
+        self.log_dialog.setParent(logs_widget)
+        self.log_dialog.setWindowFlags(Qt.WindowType.Widget)  # Make it a child widget
+        self.log_dialog.setModal(False)  # Not modal when embedded
+        
+        # Add the log dialog to the layout
+        layout.addWidget(self.log_dialog)
+        
+        self.tab_widget.addTab(logs_widget, "Logs")
+        
+    def setup_scanning_tab(self):
+        """Setup the Image Scanning tab"""
+        scanning_widget = QWidget()
+        layout = QVBoxLayout(scanning_widget)
+        
+        # Info label
+        info_label = QLabel("Configure image scanning behavior for performance optimization.")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Scanning strategy group
+        strategy_group = QGroupBox("Scanning Strategy")
+        strategy_layout = QVBoxLayout(strategy_group)
+        
+        # Fast scanning with imghdr
+        self.fast_scan_check = QCheckBox("Use fast corruption checking (imghdr)")
+        self.fast_scan_check.setChecked(True)  # Default enabled
+        strategy_layout.addWidget(self.fast_scan_check)
+        
+        # PIL sampling
+        self.pil_sampling_label = QLabel("PIL sampling for min/max calculations:")
+        strategy_layout.addWidget(self.pil_sampling_label)
+        
+        self.pil_sampling_combo = QComboBox()
+        self.pil_sampling_combo.addItems([
+            "1 image (first only)",
+            "2 images (first + last)",
+            "4 images (first + 2 middle + last)",
+            "8 images (strategic sampling)",
+            "16 images (extended sampling)",
+            "All images (full PIL scan)"
+        ])
+        self.pil_sampling_combo.setCurrentIndex(2)  # Default to 4 images
+        strategy_layout.addWidget(self.pil_sampling_combo)
+        
+        # Performance info
+        perf_info = QLabel("Fast mode uses imghdr for corruption detection and PIL only on sampled images for dimension calculations.")
+        perf_info.setWordWrap(True)
+        perf_info.setStyleSheet("color: #666; font-style: italic;")
+        strategy_layout.addWidget(perf_info)
+        
+        layout.addWidget(strategy_group)
+        layout.addStretch()
+        self.tab_widget.addTab(scanning_widget, "Image Scanning")
+        
+    def browse_central_store(self):
+        """Browse for central store directory"""
+        from imxup import get_default_central_store_base_path
+        current_path = self.path_edit.text() or get_default_central_store_base_path()
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Central Store Directory", 
+            current_path, 
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if directory:
+            self.path_edit.setText(directory)
+            
+    def load_current_template(self):
+        """Load and display the currently active template"""
+        try:
+            from imxup import load_user_defaults
+            defaults = load_user_defaults()
+            current_template = defaults.get('template_name', 'default')
+            self.current_template_label.setText(f"Current: {current_template}")
+        except Exception as e:
+            self.current_template_label.setText("Current: default")
+            print(f"Failed to load current template: {e}")
+    
+    def on_template_selection_changed(self):
+        """Handle template selection changes in the template manager"""
+        try:
+            current_item = self.template_dialog.template_list.currentItem()
+            if current_item:
+                selected_template = current_item.text()
+                from imxup import load_user_defaults
+                defaults = load_user_defaults()
+                current_active = defaults.get('template_name', 'default')
+                
+                # Enable/disable set as active button based on selection
+                if selected_template != current_active:
+                    self.set_active_btn.setEnabled(True)
+                    self.set_active_btn.setText(f"Set '{selected_template}' as Active")
+                else:
+                    self.set_active_btn.setEnabled(False)
+                    self.set_active_btn.setText("Set as Active")
+            else:
+                self.set_active_btn.setEnabled(False)
+                self.set_active_btn.setText("Set as Active")
+        except Exception as e:
+            print(f"Failed to handle template selection change: {e}")
+    
+    def update_template_list_display(self):
+        """Update the template list to show which template is currently active"""
+        try:
+            from imxup import load_user_defaults
+            defaults = load_user_defaults()
+            current_active = defaults.get('template_name', 'default')
+            
+            # Update all items in the template list to show active status
+            for i in range(self.template_dialog.template_list.count()):
+                item = self.template_dialog.template_list.item(i)
+                template_name = item.text()
+                
+                # Remove any existing "(currently active)" suffix
+                if template_name.endswith(" (currently active)"):
+                    template_name = template_name[:-20]
+                
+                # Add suffix for active template
+                if template_name == current_active:
+                    item.setText(f"{template_name} (currently active)")
+                else:
+                    item.setText(template_name)
+                    
+        except Exception as e:
+            print(f"Failed to update template list display: {e}")
+    
+    def set_template_as_active(self):
+        """Set the selected template as the active template"""
+        try:
+            current_item = self.template_dialog.template_list.currentItem()
+            if current_item:
+                selected_template = current_item.text()
+                
+                # Update the parent's template combo box
+                if self.parent and hasattr(self.parent, 'template_combo'):
+                    # Find the template in the parent's combo box
+                    index = self.parent.template_combo.findText(selected_template)
+                    if index >= 0:
+                        self.parent.template_combo.setCurrentIndex(index)
+                        # Trigger the setting change
+                        self.parent.on_setting_changed()
+                
+                # Update our display
+                self.current_template_label.setText(f"Current: {selected_template}")
+                self.set_active_btn.setEnabled(False)
+                self.set_active_btn.setText("Set as Active")
+                
+                # Update the template list display to show the new active template
+                self.update_template_list_display()
+                
+                # Show success message
+                QMessageBox.information(self, "Template Updated", 
+                    f"'{selected_template}' is now the active template.")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to set template as active: {str(e)}")
+            print(f"Failed to set template as active: {e}")
+    
+    # These methods are no longer needed since dialogs are integrated directly
+            
+    def load_settings(self):
+        """Load current settings"""
+        # Settings are loaded in setup_ui for each tab
+        # Load scanning settings from QSettings
+        self._load_scanning_settings()
+    
+    def _load_scanning_settings(self):
+        """Load scanning settings from QSettings"""
+        try:
+            if self.parent and hasattr(self.parent, 'settings'):
+                # Load fast scan setting
+                fast_scan = self.parent.settings.value('scanning/fast_scan', True, type=bool)
+                self.fast_scan_check.setChecked(fast_scan)
+                
+                # Load PIL sampling strategy
+                sampling_index = self.parent.settings.value('scanning/pil_sampling', 2, type=int)
+                if 0 <= sampling_index < self.pil_sampling_combo.count():
+                    self.pil_sampling_combo.setCurrentIndex(sampling_index)
+                    
+        except Exception as e:
+            print(f"Failed to load scanning settings: {e}")
+        
+    def save_settings(self):
+        """Save all settings"""
+        try:
+            # Save to .ini file via parent
+            if self.parent:
+                # Update parent's settings objects for checkboxes
+                self.parent.confirm_delete_check.setChecked(self.confirm_delete_check.isChecked())
+                self.parent.public_gallery_check.setChecked(self.public_gallery_check.isChecked())
+                self.parent.auto_rename_check.setChecked(self.auto_rename_check.isChecked())
+                self.parent.store_in_uploaded_check.setChecked(self.store_in_uploaded_check.isChecked())
+                self.parent.store_in_central_check.setChecked(self.store_in_central_check.isChecked())
+                
+                # Update parent's settings objects for upload settings
+                self.parent.thumbnail_size_combo.setCurrentIndex(self.thumbnail_size_combo.currentIndex())
+                self.parent.thumbnail_format_combo.setCurrentIndex(self.thumbnail_format_combo.currentIndex())
+                self.parent.max_retries_spin.setValue(self.max_retries_spin.value())
+                self.parent.batch_size_spin.setValue(self.batch_size_spin.value())
+                # Template selection is now handled in the Templates tab
+                
+                # Save via parent
+                self.parent.save_upload_settings()
+                
+                # Save theme
+                if hasattr(self.parent, 'settings'):
+                    self.parent.settings.setValue('ui/theme', self.theme_combo.currentText())
+                    self.parent.apply_theme(self.theme_combo.currentText())
+                
+                # Save scanning settings
+                self._save_scanning_settings()
+                    
+            return True
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save settings: {str(e)}")
+            return False
+    
+    def _save_scanning_settings(self):
+        """Save scanning settings to QSettings"""
+        try:
+            if self.parent and hasattr(self.parent, 'settings'):
+                # Save fast scan setting
+                self.parent.settings.setValue('scanning/fast_scan', self.fast_scan_check.isChecked())
+                
+                # Save PIL sampling strategy
+                sampling_index = self.pil_sampling_combo.currentIndex()
+                self.parent.settings.setValue('scanning/pil_sampling', sampling_index)
+                
+        except Exception as e:
+            print(f"Failed to save scanning settings: {e}")
+            
+    def reset_to_defaults(self):
+        """Reset all settings to defaults"""
+        reply = QMessageBox.question(
+            self, "Reset Settings", 
+            "Are you sure you want to reset all settings to defaults?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Reset upload settings
+            self.thumbnail_size_combo.setCurrentIndex(2)  # 250x250 (default)
+            self.thumbnail_format_combo.setCurrentIndex(1)  # Proportional (default)
+            self.max_retries_spin.setValue(3)  # 3 retries (default)
+            self.batch_size_spin.setValue(4)  # 4 concurrent (default)
+            # Template selection is now handled in the Templates tab
+            
+            # Reset checkboxes
+            self.confirm_delete_check.setChecked(True)
+            self.public_gallery_check.setChecked(True)
+            self.auto_rename_check.setChecked(True)
+            self.store_in_uploaded_check.setChecked(True)
+            self.store_in_central_check.setChecked(True)
+            
+            # Reset theme
+            self.theme_combo.setCurrentText("system")
+            
+            # Reset scanning
+            self.fast_scan_check.setChecked(True)
+            self.pil_sampling_combo.setCurrentIndex(2)
+            
+    def save_and_close(self):
+        """Save settings and close dialog"""
+        if self.save_settings():
+            self.accept()
+        else:
+            # Stay open if save failed
+            pass
+
 
 if __name__ == "__main__":
     main()
