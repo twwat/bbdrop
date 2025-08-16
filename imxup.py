@@ -444,22 +444,30 @@ def _save_credentials(username, password):
     return True
 
 def save_unnamed_gallery(gallery_id, intended_name):
-    """Save unnamed gallery for later renaming"""
-    config = configparser.ConfigParser()
-    config_file = get_config_path()
-    
-    if os.path.exists(config_file):
-        config.read(config_file)
-    
-    if 'UNNAMED_GALLERIES' not in config:
-        config['UNNAMED_GALLERIES'] = {}
-    
-    config['UNNAMED_GALLERIES'][gallery_id] = intended_name
-    
-    with open(config_file, 'w') as f:
-        config.write(f)
-    
-    print(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'")
+    """Save unnamed gallery for later renaming (now uses database for speed)"""
+    try:
+        from imxup_storage import QueueStore
+        store = QueueStore()
+        store.add_unnamed_gallery(gallery_id, intended_name)
+        print(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'")
+    except Exception as e:
+        # Fallback to config file
+        print(f"Database save failed, using config file fallback: {e}")
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+        
+        if os.path.exists(config_file):
+            config.read(config_file)
+        
+        if 'UNNAMED_GALLERIES' not in config:
+            config['UNNAMED_GALLERIES'] = {}
+        
+        config['UNNAMED_GALLERIES'][gallery_id] = intended_name
+        
+        with open(config_file, 'w') as f:
+            config.write(f)
+        
+        print(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'")
 
 def get_default_central_store_base_path():
     """Return the default central store BASE path (parent of galleries/templates)."""
@@ -540,15 +548,21 @@ def check_if_gallery_exists(folder_name):
     return existing_files
 
 def get_unnamed_galleries():
-    """Get list of unnamed galleries"""
-    config = configparser.ConfigParser()
-    config_file = get_config_path()
-    
-    if os.path.exists(config_file):
-        config.read(config_file)
-        if 'UNNAMED_GALLERIES' in config:
-            return dict(config['UNNAMED_GALLERIES'])
-    return {}
+    """Get list of unnamed galleries from database (much faster than config file)"""
+    try:
+        from imxup_storage import QueueStore
+        store = QueueStore()
+        return store.get_unnamed_galleries()
+    except Exception:
+        # Fallback to config file if database fails
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+        
+        if os.path.exists(config_file):
+            config.read(config_file)
+            if 'UNNAMED_GALLERIES' in config:
+                return dict(config['UNNAMED_GALLERIES'])
+        return {}
 
 def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
     """Rename all unnamed galleries using an already logged-in uploader session.
@@ -622,20 +636,29 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
     return success_count
 
 def remove_unnamed_gallery(gallery_id):
-    """Remove gallery from unnamed list after successful renaming"""
-    config = configparser.ConfigParser()
-    config_file = get_config_path()
-    
-    if os.path.exists(config_file):
-        config.read(config_file)
-        
-        if 'UNNAMED_GALLERIES' in config and gallery_id in config['UNNAMED_GALLERIES']:
-            del config['UNNAMED_GALLERIES'][gallery_id]
-            
-            with open(config_file, 'w') as f:
-                config.write(f)
-            
+    """Remove gallery from unnamed list after successful renaming (now uses database)"""
+    try:
+        from imxup_storage import QueueStore
+        store = QueueStore()
+        removed = store.remove_unnamed_gallery(gallery_id)
+        if removed:
             print(f"{timestamp()} Removed {gallery_id} from unnamed galleries list")
+    except Exception as e:
+        # Fallback to config file
+        print(f"Database removal failed, using config file fallback: {e}")
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+        
+        if os.path.exists(config_file):
+            config.read(config_file)
+            
+            if 'UNNAMED_GALLERIES' in config and gallery_id in config['UNNAMED_GALLERIES']:
+                del config['UNNAMED_GALLERIES'][gallery_id]
+                
+                with open(config_file, 'w') as f:
+                    config.write(f)
+                
+                print(f"{timestamp()} Removed {gallery_id} from unnamed galleries list")
 
 from imxup_cookies import get_firefox_cookies, load_cookies_from_file
 

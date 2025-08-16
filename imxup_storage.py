@@ -83,6 +83,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             key TEXT PRIMARY KEY,
             value_text TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS unnamed_galleries (
+            gallery_id TEXT PRIMARY KEY,
+            intended_name TEXT NOT NULL,
+            discovered_ts INTEGER DEFAULT (strftime('%s', 'now'))
+        );
+        CREATE INDEX IF NOT EXISTS unnamed_galleries_ts_idx ON unnamed_galleries(discovered_ts DESC);
         """
     )
     # Run migrations after schema creation
@@ -98,11 +105,69 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         if 'failed_files' not in columns:
             print("Adding failed_files column to galleries table...")
             conn.execute("ALTER TABLE galleries ADD COLUMN failed_files TEXT")
-            print("✓ Added failed_files column")
+            print("+ Added failed_files column")
+            
+        # Migration 2: Move unnamed galleries from config file to database
+        _migrate_unnamed_galleries_to_db(conn)
             
     except Exception as e:
         print(f"Warning: Migration failed: {e}")
         # Continue anyway - the app should still work
+
+
+def _migrate_unnamed_galleries_to_db(conn: sqlite3.Connection) -> None:
+    """Migrate unnamed galleries from config file to database (one-time migration)."""
+    try:
+        # Check if we've already migrated
+        cursor = conn.execute("SELECT COUNT(*) FROM unnamed_galleries")
+        existing_count = cursor.fetchone()[0]
+        
+        if existing_count > 0:
+            # Already migrated
+            return
+            
+        # Try to read from config file
+        import configparser
+        import os
+        
+        # Use the same config path logic as the original function
+        from imxup import get_config_path
+        config_file = get_config_path()
+        
+        if not os.path.exists(config_file):
+            return  # No config file, nothing to migrate
+            
+        config = configparser.ConfigParser()
+        config.read(config_file)
+        
+        if 'UNNAMED_GALLERIES' not in config:
+            return  # No unnamed galleries section
+            
+        unnamed_galleries = dict(config['UNNAMED_GALLERIES'])
+        if not unnamed_galleries:
+            return  # Empty section
+            
+        print(f"Migrating {len(unnamed_galleries)} unnamed galleries from config file to database...")
+        
+        # Insert all unnamed galleries into database
+        for gallery_id, intended_name in unnamed_galleries.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO unnamed_galleries (gallery_id, intended_name) VALUES (?, ?)",
+                (gallery_id, intended_name)
+            )
+        
+        print(f"+ Migrated {len(unnamed_galleries)} unnamed galleries to database")
+        
+        # Optional: Remove from config file after successful migration
+        # (Commented out for safety - users can manually clean up)
+        # if 'UNNAMED_GALLERIES' in config:
+        #     config.remove_section('UNNAMED_GALLERIES')
+        #     with open(config_file, 'w') as f:
+        #         config.write(f)
+        
+    except Exception as e:
+        print(f"Warning: Could not migrate unnamed galleries: {e}")
+        # Continue anyway - not critical for app function
 
 
 class QueueStore:
@@ -428,5 +493,36 @@ class QueueStore:
             conn.execute("DELETE FROM images")
             conn.execute("DELETE FROM galleries")
             conn.execute("DELETE FROM settings WHERE key = 'queue_migrated_v1'")
+
+    # Unnamed Galleries Database Methods
+    def get_unnamed_galleries(self) -> Dict[str, str]:
+        """Get all unnamed galleries from database (much faster than config file)."""
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+            cursor = conn.execute("SELECT gallery_id, intended_name FROM unnamed_galleries ORDER BY discovered_ts DESC")
+            return dict(cursor.fetchall())
+
+    def add_unnamed_gallery(self, gallery_id: str, intended_name: str) -> None:
+        """Add an unnamed gallery to the database."""
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+            conn.execute(
+                "INSERT OR REPLACE INTO unnamed_galleries (gallery_id, intended_name) VALUES (?, ?)",
+                (gallery_id, intended_name)
+            )
+
+    def remove_unnamed_gallery(self, gallery_id: str) -> bool:
+        """Remove an unnamed gallery from the database. Returns True if removed."""
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+            cursor = conn.execute("DELETE FROM unnamed_galleries WHERE gallery_id = ?", (gallery_id,))
+            return cursor.rowcount > 0
+
+    def clear_unnamed_galleries(self) -> int:
+        """Clear all unnamed galleries. Returns count of removed items."""
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+            cursor = conn.execute("DELETE FROM unnamed_galleries")
+            return cursor.rowcount if hasattr(cursor, 'rowcount') else 0
 
 

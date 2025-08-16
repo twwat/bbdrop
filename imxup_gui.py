@@ -650,6 +650,149 @@ class UploadWorker(QThread):
     
 
 
+class CompletionWorker(QThread):
+    """Worker thread for handling gallery completion processing to avoid GUI blocking"""
+    
+    # Signals
+    completion_processed = pyqtSignal(str)  # path - signals when completion processing is done
+    log_message = pyqtSignal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.completion_queue = Queue()
+        self.running = True
+    
+    def stop(self):
+        self.running = False
+        self.completion_queue.put(None)  # Signal to exit
+        
+    def process_completion(self, path: str, results: dict, gui_parent):
+        """Queue a completion for background processing"""
+        self.completion_queue.put((path, results, gui_parent))
+    
+    def run(self):
+        """Process completions in background thread"""
+        while self.running:
+            try:
+                item = self.completion_queue.get(timeout=1.0)
+                if item is None:  # Exit signal
+                    break
+                    
+                path, results, gui_parent = item
+                self._process_completion_background(path, results, gui_parent)
+                self.completion_processed.emit(path)
+                
+            except queue.Empty:
+                continue
+            except Exception as e:
+                self.log_message.emit(f"{timestamp()} Completion processing error: {e}")
+    
+    def _process_completion_background(self, path: str, results: dict, gui_parent):
+        """Do the heavy completion processing in background thread"""
+        try:
+            # Create gallery files with new naming format
+            gallery_id = results.get('gallery_id', '')
+            gallery_name = results.get('gallery_name', os.path.basename(path))
+            
+            if not gallery_id or not gallery_name:
+                return
+                
+            # Import template functions
+            from imxup import generate_bbcode_from_template
+            
+            # Prepare template data (include successes; failed shown separately)
+            all_images_bbcode = ""
+            for image_data in results.get('images', []):
+                all_images_bbcode += image_data.get('bbcode', '') + "  "
+            failed_details = results.get('failed_details', [])
+            failed_summary = ""
+            if failed_details:
+                failed_summary_lines = [f"[b]Failed ({len(failed_details)}):[/b]"]
+                for fname, reason in failed_details[:20]:
+                    failed_summary_lines.append(f"- {fname}: {reason}")
+                if len(failed_details) > 20:
+                    failed_summary_lines.append(f"... and {len(failed_details) - 20} more")
+                failed_summary = "\n" + "\n".join(failed_summary_lines)
+
+            # Calculate statistics (always, not only when failures exist)
+            queue_item = gui_parent.queue_manager.get_item(path)
+            total_size = results.get('total_size', 0) or (queue_item.total_size if queue_item and getattr(queue_item, 'total_size', 0) else 0)
+            try:
+                from imxup import format_binary_size
+                folder_size = format_binary_size(total_size, precision=1)
+            except Exception:
+                folder_size = f"{total_size} B"
+            avg_width = (queue_item.avg_width if queue_item and getattr(queue_item, 'avg_width', 0) else 0) or results.get('avg_width', 0)
+            avg_height = (queue_item.avg_height if queue_item and getattr(queue_item, 'avg_height', 0) else 0) or results.get('avg_height', 0)
+            max_width = (queue_item.max_width if queue_item and getattr(queue_item, 'max_width', 0) else 0) or results.get('max_width', 0)
+            max_height = (queue_item.max_height if queue_item and getattr(queue_item, 'max_height', 0) else 0) or results.get('max_height', 0)
+            min_width = (queue_item.min_width if queue_item and getattr(queue_item, 'min_width', 0) else 0) or results.get('min_width', 0)
+            min_height = (queue_item.min_height if queue_item and getattr(queue_item, 'min_height', 0) else 0) or results.get('min_height', 0)
+
+            # Get most common extension from uploaded images
+            extensions = []
+            for image_data in results.get('images', []):
+                if 'image_url' in image_data:
+                    url = image_data['image_url']
+                    if '.' in url:
+                        ext = url.split('.')[-1].upper()
+                        if ext in ['JPG', 'PNG', 'GIF', 'BMP', 'WEBP']:
+                            extensions.append(ext)
+            extension = max(set(extensions), key=extensions.count) if extensions else "JPG"
+
+            # Prepare template data
+            template_data = {
+                'folder_name': gallery_name,
+                'longest': int(max(max_width, max_height)),
+                'shortest': int(min(min_width, min_height)),
+                'avg_width': int(avg_width),
+                'avg_height': int(avg_height),
+                'extension': extension,
+                'picture_count': len(results.get('images', [])),
+                'folder_size': folder_size,
+                'gallery_link': f"https://imx.to/g/{gallery_id}",
+                'all_images': (all_images_bbcode.strip() + ("\n\n" + failed_summary if failed_summary else "")).strip()
+            }
+            
+            # Get template name from the item
+            item = gui_parent.queue_manager.get_item(path)
+            template_name = item.template_name if item else "default"
+            
+            # Generate bbcode using the item's template
+            bbcode_content = generate_bbcode_from_template(template_name, template_data)
+            
+            # Save artifacts through shared core helper
+            try:
+                from imxup import save_gallery_artifacts
+                written = save_gallery_artifacts(
+                    folder_path=path,
+                    results={
+                        **results,
+                        'started_at': datetime.fromtimestamp(gui_parent.queue_manager.items[path].start_time).strftime('%Y-%m-%d %H:%M:%S') if path in gui_parent.queue_manager.items and gui_parent.queue_manager.items[path].start_time else None,
+                        'thumbnail_size': gui_parent.thumbnail_size_combo.currentIndex() + 1,
+                        'thumbnail_format': gui_parent.thumbnail_format_combo.currentIndex() + 1,
+                        'public_gallery': 1 if gui_parent.public_gallery_check.isChecked() else 0,
+                        'parallel_batch_size': gui_parent.batch_size_spin.value(),
+                    },
+                    template_name=template_name,
+                )
+                try:
+                    parts = []
+                    if written.get('central'):
+                        parts.append(f"central: {os.path.dirname(list(written['central'].values())[0])}")
+                    if written.get('uploaded'):
+                        parts.append(f"folder: {os.path.dirname(list(written['uploaded'].values())[0])}")
+                    if parts:
+                        self.log_message.emit(f"{timestamp()} [fileio] Saved gallery files to {', '.join(parts)}")
+                except Exception:
+                    pass
+            except Exception as e:
+                self.log_message.emit(f"{timestamp()} Artifact save error: {e}")
+                
+        except Exception as e:
+            self.log_message.emit(f"{timestamp()} Background completion processing error: {e}")
+
+
 class QueueManager:
     """Manages the gallery upload queue"""
     
@@ -3566,8 +3709,23 @@ class ImxUploadGUI(QMainWindow):
         self.queue_manager = QueueManager()
         self.queue_manager.parent = self  # Give QueueManager access to parent for settings
         self.worker = None
+        
+        # Initialize completion worker for background processing
+        self.completion_worker = CompletionWorker(self)
+        self.completion_worker.completion_processed.connect(self.on_completion_processed)
+        self.completion_worker.log_message.connect(self.add_log_message)
+        self.completion_worker.start()
         self.table_progress_widgets = {}
         self.settings = QSettings("ImxUploader", "ImxUploadGUI")
+        
+        # Track path-to-row mapping to avoid expensive table rebuilds
+        self.path_to_row = {}  # Maps gallery path to table row number
+        self.row_to_path = {}  # Maps table row number to gallery path
+        
+        # Cache expensive operations to improve responsiveness
+        self._cached_is_dark_mode = False
+        self._theme_cache_time = 0
+        self._format_functions_cached = False
         
         # Enable drag and drop on main window
         self.setAcceptDrops(True)
@@ -3588,8 +3746,8 @@ class ImxUploadGUI(QMainWindow):
         # Start worker thread
         self.start_worker()
         
-        # Initial display update
-        self.update_queue_display()
+        # Initial table build with proper path mapping
+        self._initialize_table_from_queue()
         
         # Ensure table has focus for keyboard shortcuts
         self.gallery_table.setFocus()
@@ -5171,31 +5329,60 @@ class ImxUploadGUI(QMainWindow):
         
         if result == True:
             self.add_log_message(f"{timestamp()} [queue] Added to queue: {os.path.basename(path)}")
+            # Add to table display
+            item = self.queue_manager.get_item(path)
+            if item:
+                self._add_gallery_to_table(item)
         elif result == "duplicate":
-            # Handle duplicate gallery
+            # Handle duplicate gallery - move network call to background
             gallery_name = sanitize_gallery_name(os.path.basename(path))
+            
+            # Show immediate message and defer network check
+            self.add_log_message(f"{timestamp()} [queue] Checking for existing gallery '{gallery_name}'...")
+            QTimer.singleShot(1, lambda: self._check_gallery_exists_background(path, gallery_name, template_name))
+        else:
+            self.add_log_message(f"{timestamp()} [queue] Failed to add: {os.path.basename(path)} (no images or already in queue)")
+    
+    def _check_gallery_exists_background(self, path: str, gallery_name: str, template_name: str):
+        """Check if gallery exists in background and show dialog on main thread"""
+        # This runs in a deferred timer, but the network call should be in a proper thread
+        # For now, we'll do the check but it's still somewhat blocking
+        # TODO: Move to a proper worker thread for complete non-blocking operation
+        try:
             from imxup import check_if_gallery_exists
             existing_files = check_if_gallery_exists(gallery_name)
             
-            message = f"Gallery '{gallery_name}' already exists with {len(existing_files)} files.\n\nContinue with upload anyway?"
-            reply = QMessageBox.question(
-                self,
-                "Gallery Already Exists",
-                message,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                # Force add the item
-                self.queue_manager._force_add_item(path, gallery_name, template_name)
-                self.add_log_message(f"{timestamp()} [queue] Added to queue (user confirmed): {os.path.basename(path)}")
-            else:
-                self.add_log_message(f"{timestamp()} [queue] Skipped: {os.path.basename(path)} (user cancelled)")
-        else:
-            self.add_log_message(f"{timestamp()} [queue] Failed to add: {os.path.basename(path)} (no images or already in queue)")
+            # Use QTimer to ensure dialog shows on main thread
+            QTimer.singleShot(0, lambda: self._show_gallery_exists_dialog(path, gallery_name, template_name, existing_files))
+        except Exception as e:
+            self.add_log_message(f"{timestamp()} [queue] Error checking gallery existence: {e}")
+            # On error, allow the addition
+            QTimer.singleShot(0, lambda: self._force_add_gallery(path, gallery_name, template_name))
+    
+    def _show_gallery_exists_dialog(self, path: str, gallery_name: str, template_name: str, existing_files: list):
+        """Show gallery exists dialog on main thread"""
+        message = f"Gallery '{gallery_name}' already exists with {len(existing_files)} files.\n\nContinue with upload anyway?"
+        reply = QMessageBox.question(
+            self,
+            "Gallery Already Exists",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
         
-        self.update_queue_display()
+        if reply == QMessageBox.StandardButton.Yes:
+            self._force_add_gallery(path, gallery_name, template_name)
+        else:
+            self.add_log_message(f"{timestamp()} [queue] Skipped: {os.path.basename(path)} (user cancelled)")
+    
+    def _force_add_gallery(self, path: str, gallery_name: str, template_name: str):
+        """Force add gallery to queue and update display"""
+        self.queue_manager._force_add_item(path, gallery_name, template_name)
+        self.add_log_message(f"{timestamp()} [queue] Added to queue (user confirmed): {os.path.basename(path)}")
+        # Add to table display
+        item = self.queue_manager.get_item(path)
+        if item:
+            self._add_gallery_to_table(item)
     
     def _add_multiple_folders(self, folder_paths: List[str]):
         """Add multiple folders efficiently using the new method."""
@@ -5227,8 +5414,11 @@ class ImxUploadGUI(QMainWindow):
                 if len(results['errors']) > 5:
                     self.add_log_message(f"{timestamp()} [queue] ... and {len(results['errors']) - 5} more errors")
             
-            # Update display
-            self.update_queue_display()
+            # Add all successfully added items to table
+            for path in results.get('added_paths', []):
+                item = self.queue_manager.get_item(path)
+                if item:
+                    self._add_gallery_to_table(item)
             
         except Exception as e:
             self.add_log_message(f"{timestamp()} [queue] Error adding multiple folders: {str(e)}")
@@ -5245,8 +5435,237 @@ class ImxUploadGUI(QMainWindow):
             self.raise_()
             self.activateWindow()
     
+    def _add_gallery_to_table(self, item: GalleryQueueItem):
+        """Add a new gallery item to the table without rebuilding"""
+        row = self.gallery_table.rowCount()
+        self.gallery_table.setRowCount(row + 1)
+        
+        # Update mappings
+        self.path_to_row[item.path] = row
+        self.row_to_path[row] = item.path
+        
+        # Populate the new row
+        self._populate_table_row(row, item)
+    
+    def _remove_gallery_from_table(self, path: str):
+        """Remove a gallery from the table and update mappings"""
+        if path not in self.path_to_row:
+            return
+            
+        row_to_remove = self.path_to_row[path]
+        self.gallery_table.removeRow(row_to_remove)
+        
+        # Update mappings - shift all rows after the removed one
+        del self.path_to_row[path]
+        del self.row_to_path[row_to_remove]
+        
+        # Shift mappings for all rows after the removed one
+        new_path_to_row = {}
+        new_row_to_path = {}
+        for old_row, path_val in self.row_to_path.items():
+            new_row = old_row if old_row < row_to_remove else old_row - 1
+            new_path_to_row[path_val] = new_row
+            new_row_to_path[new_row] = path_val
+        
+        self.path_to_row = new_path_to_row
+        self.row_to_path = new_row_to_path
+    
+    def _update_specific_gallery_display(self, path: str):
+        """Update a specific gallery's display without full table rebuild"""
+        item = self.queue_manager.get_item(path)
+        if not item:
+            return
+            
+        # If this is a new item, add it to the table
+        if path not in self.path_to_row:
+            self._add_gallery_to_table(item)
+            return
+        
+        # Update existing row
+        row = self.path_to_row[path]
+        if 0 <= row < self.gallery_table.rowCount():
+            self._populate_table_row(row, item)
+    
+    def _get_cached_theme(self):
+        """Get cached theme info to avoid expensive palette calculations"""
+        current_time = time.time()
+        if current_time - self._theme_cache_time > 1.0:  # Cache for 1 second
+            try:
+                pal = self.palette()
+                _bg = pal.window().color()
+                self._cached_is_dark_mode = (0.2126 * _bg.redF() + 0.7152 * _bg.greenF() + 0.0722 * _bg.blueF()) < 0.5
+                self._theme_cache_time = current_time
+            except Exception:
+                pass
+        return self._cached_is_dark_mode
+
+    def _populate_table_row_fast(self, row: int, item: GalleryQueueItem):
+        """Update only essential row data immediately, defer heavy formatting"""
+        # Essential data only - no formatting/styling to avoid blocking
+        
+        # Gallery name and path (critical for functionality)
+        name_item = QTableWidgetItem(item.name or "Unknown")
+        name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        name_item.setData(Qt.ItemDataRole.UserRole, item.path)
+        self.gallery_table.setItem(row, 1, name_item)
+        
+        # Upload progress (critical for status)
+        uploaded_text = f"{item.uploaded_images}/{item.total_images}" if item.total_images > 0 else "0/?"
+        uploaded_item = QTableWidgetItem(uploaded_text)
+        uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.gallery_table.setItem(row, 2, uploaded_item)
+        
+        # Progress bar (critical for visual feedback)
+        progress_widget = self.gallery_table.cellWidget(row, 3)
+        if not isinstance(progress_widget, TableProgressWidget):
+            progress_widget = TableProgressWidget()
+            self.gallery_table.setCellWidget(row, 3, progress_widget)
+        progress_widget.update_progress(item.progress, item.status)
+        
+        # Status icon (critical for status indication)
+        self._set_status_cell_icon(row, item.status)
+        
+        # Defer all other formatting to background
+        QTimer.singleShot(1, lambda: self._populate_table_row_detailed(row, item))
+    
+    def _populate_table_row_detailed(self, row: int, item: GalleryQueueItem):
+        """Complete row formatting in background - non-blocking"""
+        if row >= self.gallery_table.rowCount():
+            return  # Row was removed
+            
+        _is_dark_mode = self._get_cached_theme()
+        
+        # Order number (column 0)
+        order_item = NumericTableWidgetItem(item.insertion_order)
+        order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        order_item.setFont(QFont("Arial", 9))
+        self.gallery_table.setItem(row, 0, order_item)
+        
+        # Apply font styling to uploaded count
+        uploaded_item = self.gallery_table.item(row, 2)
+        if uploaded_item:
+            uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            try:
+                font = uploaded_item.font()
+                font.setPointSize(8)
+                uploaded_item.setFont(font)
+            except Exception:
+                pass
+        
+        # Times and other details
+        # Added time (column 5)
+        if item.added_time:
+            added_dt = datetime.fromtimestamp(item.added_time)
+            added_text = added_dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            added_text = ""
+        added_item = QTableWidgetItem(added_text)
+        added_item.setFlags(added_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        added_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        added_item.setFont(QFont("Arial", 8))
+        self.gallery_table.setItem(row, 5, added_item)
+        
+        # Finished time (column 6)
+        if item.finished_time:
+            finished_dt = datetime.fromtimestamp(item.finished_time)
+            finished_text = finished_dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            finished_text = ""
+        finished_item = QTableWidgetItem(finished_text)
+        finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        finished_item.setFont(QFont("Arial", 8))
+        self.gallery_table.setItem(row, 6, finished_item)
+        
+        # Size and transfer rate (expensive formatting)
+        self._update_size_and_transfer_columns(row, item, _is_dark_mode)
+    
+    def _update_size_and_transfer_columns(self, row: int, item: GalleryQueueItem, _is_dark_mode: bool):
+        """Update size and transfer columns with proper formatting"""
+        # Size (column 8)
+        size_bytes = int(getattr(item, 'total_size', 0) or 0)
+        if not self._format_functions_cached:
+            try:
+                from imxup import format_binary_size, format_binary_rate
+                self._format_binary_size = format_binary_size
+                self._format_binary_rate = format_binary_rate
+                self._format_functions_cached = True
+            except Exception:
+                self._format_binary_size = lambda x, **kwargs: f"{x} B"
+                self._format_binary_rate = lambda x, **kwargs: f"{x:.1f} KiB/s"
+        
+        try:
+            size_text = self._format_binary_size(size_bytes, precision=2)
+        except Exception:
+            size_text = f"{size_bytes} B" if size_bytes else ""
+        size_item = QTableWidgetItem(size_text)
+        size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        try:
+            font = size_item.font()
+            font.setPointSize(8)
+            size_item.setFont(font)
+        except Exception:
+            pass
+        self.gallery_table.setItem(row, 8, size_item)
+        
+        # Transfer rate (column 9)
+        if item.status == "uploading" and hasattr(item, 'current_kibps') and item.current_kibps:
+            try:
+                transfer_text = self._format_binary_rate(float(item.current_kibps), precision=1)
+            except Exception:
+                transfer_text = f"{item.current_kibps:.1f} KiB/s" if item.current_kibps else ""
+        elif hasattr(item, 'final_kibps') and item.final_kibps:
+            try:
+                transfer_text = self._format_binary_rate(float(item.final_kibps), precision=1)
+            except Exception:
+                transfer_text = f"{item.final_kibps:.1f} KiB/s"
+        else:
+            transfer_text = ""
+        
+        xfer_item = QTableWidgetItem(transfer_text)
+        xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        try:
+            font = xfer_item.font()
+            font.setPointSize(8)
+            if item.status == "uploading" and transfer_text:
+                font.setBold(True)
+                xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
+            else:
+                font.setBold(False)
+                if transfer_text:
+                    xfer_item.setForeground(QColor(0, 0, 0, 160))
+            xfer_item.setFont(font)
+        except Exception:
+            pass
+        self.gallery_table.setItem(row, 9, xfer_item)
+    
+    def _populate_table_row(self, row: int, item: GalleryQueueItem):
+        """Main row population - delegates to fast version for responsiveness"""
+        self._populate_table_row_fast(row, item)
+
+    def _initialize_table_from_queue(self):
+        """Initialize table from existing queue items - called once on startup"""
+        # Clear any existing mappings
+        self.path_to_row.clear()
+        self.row_to_path.clear()
+        
+        # Get all items and build table
+        items = self.queue_manager.get_all_items()
+        self.gallery_table.setRowCount(len(items))
+        
+        for row, item in enumerate(items):
+            # Update mappings
+            self.path_to_row[item.path] = row
+            self.row_to_path[row] = item.path
+            
+            # Populate the row
+            self._populate_table_row(row, item)
+
     def update_queue_display(self):
-        """Update the gallery table display"""
+        """Update the gallery table display - DEPRECATED: Use targeted updates instead"""
         items = self.queue_manager.get_all_items()
         # Minimize UI stall for large refreshes
         try:
@@ -5292,12 +5711,8 @@ class ImxUploadGUI(QMainWindow):
         self.gallery_table.setRowCount(len(items))
         
         
-        # Load pending-rename map once for this refresh
-        try:
-            from imxup import get_unnamed_galleries
-            _unnamed_map = get_unnamed_galleries()
-        except Exception:
-            _unnamed_map = {}
+        # Skip expensive network call for renamed galleries - not critical for display
+        _unnamed_map = {}
         
         # Populate the table with current items
         for row, item in enumerate(items):
@@ -5620,12 +6035,8 @@ class ImxUploadGUI(QMainWindow):
                 """
             )
         # Update Stats and Speed box values
-        try:
-            from imxup import get_unnamed_galleries
-            unnamed_count = len(get_unnamed_galleries())
-        except Exception:
-            unnamed_count = 0
-        self.stats_unnamed_value_label.setText(f"{unnamed_count}")
+        # Skip expensive network call for unnamed count - defer to background update
+        QTimer.singleShot(100, self._update_unnamed_count_background)
         # Totals persisted in QSettings
         settings = QSettings("ImxUploader", "Stats")
         total_galleries = settings.value("total_galleries", 0, type=int)
@@ -5720,58 +6131,61 @@ class ImxUploadGUI(QMainWindow):
 
                 # Do not override status here; worker owns authoritative status
 
-                # Find and update the correct row in the table
-                matched_row = None
-                for row in range(self.gallery_table.rowCount()):
-                    name_item = self.gallery_table.item(row, 1)  # Gallery name is now column 1
-                    if name_item and name_item.data(Qt.ItemDataRole.UserRole) == path:
-                        matched_row = row
-                        # Update uploaded count
-                        uploaded_text = f"{completed}/{total}"
-                        uploaded_item = QTableWidgetItem(uploaded_text)
-                        uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                        uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        self.gallery_table.setItem(row, 2, uploaded_item)  # Uploaded is now column 2
+                # Use path mapping to find the correct row instantly
+                matched_row = self.path_to_row.get(path)
+                if matched_row is not None and 0 <= matched_row < self.gallery_table.rowCount():
+                    # Update uploaded count
+                    uploaded_text = f"{completed}/{total}"
+                    uploaded_item = QTableWidgetItem(uploaded_text)
+                    uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.gallery_table.setItem(matched_row, 2, uploaded_item)
 
-                        # Update progress bar
-                        progress_widget = self.gallery_table.cellWidget(row, 3)  # Progress is now column 3
-                        if isinstance(progress_widget, TableProgressWidget):
-                            progress_widget.update_progress(progress_percent, item.status)
-                        else:
-                            # Create new progress widget if missing
-                            progress_widget = TableProgressWidget()
-                            progress_widget.update_progress(progress_percent, item.status)
-                            self.gallery_table.setCellWidget(row, 3, progress_widget)  # Progress is now column 3
+                    # Update progress bar
+                    progress_widget = self.gallery_table.cellWidget(matched_row, 3)
+                    if isinstance(progress_widget, TableProgressWidget):
+                        progress_widget.update_progress(progress_percent, item.status)
+                    else:
+                        # Create new progress widget if missing
+                        progress_widget = TableProgressWidget()
+                        progress_widget.update_progress(progress_percent, item.status)
+                    self.gallery_table.setCellWidget(matched_row, 3, progress_widget)
 
-                        # Update Transfer column (9)
-                        try:
+                    # Update Transfer column (9) - use cached formatting
+                    try:
+                        if not self._format_functions_cached:
                             from imxup import format_binary_rate
-                            rate_text = format_binary_rate(float(getattr(item, 'current_kibps', 0.0) or 0.0), precision=1)
-                            if float(getattr(item, 'current_kibps', 0.0) or 0.0) <= 0:
-                                rate_text = ""
-                        except Exception:
-                            rate = float(getattr(item, 'current_kibps', 0.0) or 0.0)
-                            rate_text = f"{rate:.1f} KiB/s" if rate > 0 else ""
-                        xfer_item = QTableWidgetItem(rate_text)
-                        xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                        xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                        try:
-                            font = xfer_item.font()
-                            if rate_text:
-                                font.setBold(True)
-                                xfer_item.setFont(font)
-                                xfer_item.setForeground(QColor(0, 0, 0, 255))
-                            else:
-                                font.setBold(False)
-                                xfer_item.setFont(font)
-                        except Exception:
-                            pass
-                        self.gallery_table.setItem(row, 9, xfer_item)
+                            self._format_binary_rate = format_binary_rate
+                            self._format_functions_cached = True
+                        
+                        rate = float(getattr(item, 'current_kibps', 0.0) or 0.0)
+                        if rate > 0:
+                            rate_text = self._format_binary_rate(rate, precision=1)
+                        else:
+                            rate_text = ""
+                    except Exception:
+                        rate = float(getattr(item, 'current_kibps', 0.0) or 0.0)
+                        rate_text = f"{rate:.1f} KiB/s" if rate > 0 else ""
+                    xfer_item = QTableWidgetItem(rate_text)
+                    xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+                    try:
+                        font = xfer_item.font()
+                        font.setPointSize(8)
+                        if rate_text:
+                            font.setBold(True)
+                            xfer_item.setFont(font)
+                            xfer_item.setForeground(QColor(0, 0, 0, 255))
+                        else:
+                            font.setBold(False)
+                            xfer_item.setFont(font)
+                    except Exception:
+                        pass
+                    self.gallery_table.setItem(matched_row, 9, xfer_item)
 
-                        # Show icon-only status during in-progress
-                        if 0 < progress_percent < 100:
-                            self._set_status_cell_icon(row, item.status)
-                        break
+                    # Show icon-only status during in-progress
+                    if 0 < progress_percent < 100:
+                        self._set_status_cell_icon(matched_row, item.status)
 
                 # Update status if it's completed (100%)
                 if progress_percent >= 100 and matched_row is not None:
@@ -5810,9 +6224,10 @@ class ImxUploadGUI(QMainWindow):
                         final_text = ""
                     xfer_item = QTableWidgetItem(final_text)
                     xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
                     try:
                         font = xfer_item.font()
+                        font.setPointSize(8)
                         font.setBold(False)
                         xfer_item.setFont(font)
                         if final_text:
@@ -5844,170 +6259,100 @@ class ImxUploadGUI(QMainWindow):
                     return
     
     def on_gallery_completed(self, path: str, results: dict):
-        """Handle gallery completion"""
+        """Handle gallery completion - minimal GUI thread work, everything else deferred"""
+        # ONLY critical GUI updates on the main thread - keep this minimal!
         with QMutexLocker(self.queue_manager.mutex):
             if path in self.queue_manager.items:
                 item = self.queue_manager.items[path]
-                # Sync counts with merged results to avoid inconsistent UI (e.g., 450/520 but 100%)
+                # Essential status update only
                 total = int(results.get('total_images') or 0)
                 success = int(results.get('successful_count') or len(results.get('images', [])))
                 item.total_images = total or item.total_images
                 item.uploaded_images = success
-                # Mark as completed only if all succeeded; otherwise keep failed/incomplete state
-                if success >= (total or success):
-                    item.status = "completed"
-                    item.progress = 100
-                else:
-                    # Partial success: progress proportional
-                    item.status = item.status if item.status in ("failed", "incomplete") else "failed"
-                    item.progress = int((success / max(total, 1)) * 100)
+                item.status = "completed" if success >= (total or success) else "failed"
+                item.progress = 100 if success >= (total or success) else int((success / max(total, 1)) * 100)
                 item.gallery_url = results.get('gallery_url', '')
                 item.gallery_id = results.get('gallery_id', '')
-                item.finished_time = time.time()  # Set completion timestamp
-                # Finalize transfer metrics
+                item.finished_time = time.time()
+                # Quick transfer rate calculation
                 try:
                     elapsed = max(float(item.finished_time or time.time()) - float(item.start_time or item.finished_time), 0.001)
-                    item.final_kibps = (float(results.get('uploaded_size') or getattr(item, 'uploaded_bytes', 0) or 0) / elapsed) / 1024.0
+                    item.final_kibps = (float(results.get('uploaded_size', 0) or 0) / elapsed) / 1024.0
                     item.current_kibps = 0.0
                 except Exception:
                     pass
         
-        # Create gallery files with new naming format
-        gallery_id = results.get('gallery_id', '')
-        gallery_name = results.get('gallery_name', os.path.basename(path))
+        # Delegate heavy file I/O to background thread immediately
+        self.completion_worker.process_completion(path, results, self)
         
-        if gallery_id and gallery_name:
-            # Import template functions
-            from imxup import generate_bbcode_from_template
-            
-        # Prepare template data (include successes; failed shown separately)
-        all_images_bbcode = ""
-        for image_data in results.get('images', []):
-            all_images_bbcode += image_data.get('bbcode', '') + "  "
-        failed_details = results.get('failed_details', [])
-        failed_summary = ""
-        if failed_details:
-            failed_summary_lines = [f"[b]Failed ({len(failed_details)}):[/b]"]
-            for fname, reason in failed_details[:20]:
-                failed_summary_lines.append(f"- {fname}: {reason}")
-            if len(failed_details) > 20:
-                failed_summary_lines.append(f"... and {len(failed_details) - 20} more")
-            failed_summary = "\n" + "\n".join(failed_summary_lines)
-
-                    # Calculate statistics (always, not only when failures exist)
-        queue_item = self.queue_manager.get_item(path)
-        total_size = results.get('total_size', 0) or (queue_item.total_size if queue_item and getattr(queue_item, 'total_size', 0) else 0)
+        # Handle other completion work synchronously to avoid UI race conditions
+        self._handle_completion_immediate(path, results)
+    
+    def _handle_completion_immediate(self, path: str, results: dict):
+        """Handle completion work immediately on GUI thread to maintain UI consistency"""
+        # Quick logging
         try:
-            from imxup import format_binary_size
-            folder_size = format_binary_size(total_size, precision=1)
+            total_size = results.get('total_size', 0)
+            upload_time = results.get('upload_time', 0)
+            successful_count = results.get('successful_count', 0)
+            if not self._format_functions_cached:
+                from imxup import format_binary_size
+                self._format_binary_size = format_binary_size
+                self._format_functions_cached = True
+            total_size_str = self._format_binary_size(total_size, precision=1)
+            self.add_log_message(f"{timestamp()} Uploaded {successful_count} images ({total_size_str}) in {upload_time:.1f}s")
         except Exception:
-            folder_size = f"{total_size} B"
-        avg_width = (queue_item.avg_width if queue_item and getattr(queue_item, 'avg_width', 0) else 0) or results.get('avg_width', 0)
-        avg_height = (queue_item.avg_height if queue_item and getattr(queue_item, 'avg_height', 0) else 0) or results.get('avg_height', 0)
-        max_width = (queue_item.max_width if queue_item and getattr(queue_item, 'max_width', 0) else 0) or results.get('max_width', 0)
-        max_height = (queue_item.max_height if queue_item and getattr(queue_item, 'max_height', 0) else 0) or results.get('max_height', 0)
-        min_width = (queue_item.min_width if queue_item and getattr(queue_item, 'min_width', 0) else 0) or results.get('min_width', 0)
-        min_height = (queue_item.min_height if queue_item and getattr(queue_item, 'min_height', 0) else 0) or results.get('min_height', 0)
-
-        # Get most common extension from uploaded images
-        extensions = []
-        for image_data in results.get('images', []):
-            if 'image_url' in image_data:
-                url = image_data['image_url']
-                if '.' in url:
-                    ext = url.split('.')[-1].upper()
-                    if ext in ['JPG', 'PNG', 'GIF', 'BMP', 'WEBP']:
-                        extensions.append(ext)
-        extension = max(set(extensions), key=extensions.count) if extensions else "JPG"
-
-        if gallery_id and gallery_name:
-            # Prepare template data
-            template_data = {
-                'folder_name': gallery_name,
-                #'width': int(avg_width),
-                #'height': int(avg_height),
-                #'longest': int(max(avg_width, avg_height)),
-                'longest': int(max(max_width, max_height)),
-                'shortest': int(min(min_width, min_height)),
-                'avg_width': int(avg_width),
-                'avg_height': int(avg_height),
-
-                'extension': extension,
-                'picture_count': len(results.get('images', [])),
-                'folder_size': folder_size,
-                'gallery_link': f"https://imx.to/g/{gallery_id}",
-                'all_images': (all_images_bbcode.strip() + ("\n\n" + failed_summary if failed_summary else "")).strip()
-            }
-            
-            # Get template name from the item
-            item = self.queue_manager.get_item(path)
-            template_name = item.template_name if item else "default"
-            
-            # Generate bbcode using the item's template
-            bbcode_content = generate_bbcode_from_template(template_name, template_data)
-            
-            # Save artifacts through shared core helper
-            try:
-                from imxup import save_gallery_artifacts
-                written = save_gallery_artifacts(
-                    folder_path=path,
-                    results={
-                        **results,
-                    'started_at': datetime.fromtimestamp(self.queue_manager.items[path].start_time).strftime('%Y-%m-%d %H:%M:%S') if path in self.queue_manager.items and self.queue_manager.items[path].start_time else None,
-                    'thumbnail_size': self.thumbnail_size_combo.currentIndex() + 1,
-                    'thumbnail_format': self.thumbnail_format_combo.currentIndex() + 1,
-                    'public_gallery': 1 if self.public_gallery_check.isChecked() else 0,
-                        'parallel_batch_size': self.batch_size_spin.value(),
-                    },
-                    template_name=template_name,
-                )
-                try:
-                    parts = []
-                    if written.get('central'):
-                        parts.append(f"central: {os.path.dirname(list(written['central'].values())[0])}")
-                    if written.get('uploaded'):
-                        parts.append(f"folder: {os.path.dirname(list(written['uploaded'].values())[0])}")
-                    if parts:
-                        self.add_log_message(f"{timestamp()} [fileio] Saved gallery files to {', '.join(parts)}")
-                except Exception:
-                    pass
-            except Exception as e:
-                self.add_log_message(f"{timestamp()} Artifact save error: {e}")
+            pass
         
-        # Re-enable settings if no remaining active (queued/uploading) items
+        # Update current transfer speed immediately
+        try:
+            transfer_speed = float(results.get('transfer_speed', 0) or 0)
+            self._current_transfer_kbps = transfer_speed / 1024.0
+        except Exception:
+            pass
+        
+        # Re-enable settings if no remaining active items (defer to avoid blocking)
+        QTimer.singleShot(5, self._check_and_enable_settings)
+
+        # Update display with targeted update instead of full rebuild
+        self._update_specific_gallery_display(path)
+        
+        # Defer only the heavy stats update to avoid blocking
+        QTimer.singleShot(50, lambda: self._update_stats_deferred(results))
+    
+    def _check_and_enable_settings(self):
+        """Check if settings should be enabled - deferred to avoid blocking GUI"""
         try:
             remaining = self.queue_manager.get_all_items()
             any_active = any(i.status in ("queued", "uploading") for i in remaining)
             self.settings_group.setEnabled(not any_active)
         except Exception:
             pass
-
-                    # Update display when status changes
-        self.update_queue_display()
-        
-        gallery_url = results.get('gallery_url', '')
-        total_size = results.get('total_size', 0)
-        upload_time = results.get('upload_time', 0)
-        successful_count = results.get('successful_count', 0)
+    
+    def _update_unnamed_count_background(self):
+        """Update unnamed gallery count in background"""
         try:
-            from imxup import format_binary_size
-            total_size_str = format_binary_size(total_size, precision=1)
+            from imxup import get_unnamed_galleries
+            unnamed_count = len(get_unnamed_galleries())
+            # Update on main thread
+            QTimer.singleShot(0, lambda: self.stats_unnamed_value_label.setText(f"{unnamed_count}"))
         except Exception:
-            total_size_str = f"{total_size} B"
-        self.add_log_message(f"{timestamp()} Uploaded {successful_count} images ({total_size_str}) in {upload_time:.1f}s")
-        # Update cumulative stats
+            # On error, show 0 and don't retry
+            QTimer.singleShot(0, lambda: self.stats_unnamed_value_label.setText("0"))
+    
+    def _update_stats_deferred(self, results: dict):
+        """Update cumulative stats in background"""
         try:
+            successful_count = results.get('successful_count', 0)
             settings = QSettings("ImxUploader", "Stats")
             total_galleries = settings.value("total_galleries", 0, type=int) + 1
             total_images_acc = settings.value("total_images", 0, type=int) + successful_count
-            # Read v2 string key; fall back to legacy numeric, then add this run's uploaded_size
             base_total_str = settings.value("total_size_bytes_v2", "0")
             try:
                 base_total = int(str(base_total_str))
             except Exception:
                 base_total = settings.value("total_size_bytes", 0, type=int)
             total_size_acc = base_total + int(results.get('uploaded_size', 0) or 0)
-            # Current and fastest speeds in KB/s
             transfer_speed = float(results.get('transfer_speed', 0) or 0)
             current_kbps = transfer_speed / 1024.0
             fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
@@ -6015,16 +6360,19 @@ class ImxUploadGUI(QMainWindow):
                 fastest_kbps = current_kbps
             settings.setValue("total_galleries", total_galleries)
             settings.setValue("total_images", total_images_acc)
-            # Store as string to avoid platform int limits
             settings.setValue("total_size_bytes_v2", str(total_size_acc))
             settings.setValue("fastest_kbps", fastest_kbps)
             settings.sync()
-            # Update current speed immediately for Stats box
-            self._current_transfer_kbps = current_kbps
-            # Refresh stats labels
+            # Refresh progress display to show updated stats
             self.update_progress_display()
         except Exception:
             pass
+    
+    def on_completion_processed(self, path: str):
+        """Handle when background completion processing is done"""
+        # Background file generation is complete, nothing specific needed here
+        # but could trigger additional UI updates if needed in the future
+        pass
     
     def on_gallery_exists(self, gallery_name: str, existing_files: list):
         """Handle existing gallery detection"""
@@ -6047,16 +6395,23 @@ class ImxUploadGUI(QMainWindow):
             self.add_log_message(f"{timestamp()} User chose to continue with existing gallery")
 
     def on_gallery_renamed(self, gallery_id: str):
-        """Mark cells for the given gallery_id as renamed (check icon)."""
+        """Mark cells for the given gallery_id as renamed (check icon) - optimized version."""
+        # Defer the expensive operation to avoid blocking GUI
+        QTimer.singleShot(1, lambda: self._handle_gallery_renamed_background(gallery_id))
+    
+    def _handle_gallery_renamed_background(self, gallery_id: str):
+        """Handle gallery renamed in background to avoid blocking"""
         try:
-            items = self.queue_manager.get_all_items()
-            id_to_row = {}
-            for row, item in enumerate(items):
-                if item.gallery_id:
-                    id_to_row[item.gallery_id] = row
-            if gallery_id in id_to_row:
-                row = id_to_row[gallery_id]
-                self._set_renamed_cell_icon(row, True)
+            # Find the gallery by ID using path mapping instead of full traversal
+            found_row = None
+            for path, row in self.path_to_row.items():
+                item = self.queue_manager.get_item(path)
+                if item and item.gallery_id == gallery_id:
+                    found_row = row
+                    break
+            
+            if found_row is not None:
+                self._set_renamed_cell_icon(found_row, True)
         except Exception:
             pass
 
@@ -6317,18 +6672,24 @@ class ImxUploadGUI(QMainWindow):
             count_failed = sum(1 for it in items_snapshot if it.status == "failed")
             self.add_log_message(f"{timestamp()} [queue] Attempting clear: completed={count_completed}, failed={count_failed}")
 
+            # Get paths to remove before clearing them
+            comp_paths = [it.path for it in items_snapshot if it.status in ("completed", "failed")]
+            
             removed_count = self.queue_manager.clear_completed()
             # Fallback: if nothing removed but UI shows completed, try explicit path removal
             if removed_count == 0 and (count_completed or count_failed):
-                comp_paths = [it.path for it in items_snapshot if it.status in ("completed", "failed")]
                 if comp_paths:
                     self.add_log_message(f"{timestamp()} [queue] Retrying clear via explicit path delete for {len(comp_paths)} item(s)")
                     try:
                         removed_count = self.queue_manager.remove_items(comp_paths)
                     except Exception:
                         removed_count = 0
+            
             if removed_count > 0:
-                self.update_queue_display()
+                # Remove items from table using targeted removal
+                for path in comp_paths:
+                    self._remove_gallery_from_table(path)
+                
                 self.add_log_message(f"{timestamp()} [queue] Cleared {removed_count} completed uploads")
                 # Persist in the background
                 self.queue_manager.save_persistent_queue()
@@ -6699,9 +7060,15 @@ class ImxUploadGUI(QMainWindow):
         if self.queue_manager:
             self.queue_manager.shutdown()
         
-        # Always stop worker and server on close
+        # Always stop workers and server on close
         if self.worker:
             self.worker.stop()
+        
+        # Stop completion worker
+        if hasattr(self, 'completion_worker'):
+            self.completion_worker.stop()
+            self.completion_worker.wait(3000)  # Wait up to 3 seconds for shutdown
+            
         self.server.stop()
         
         # Accept the close event to ensure app exits
