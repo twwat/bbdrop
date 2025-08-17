@@ -1,0 +1,20 @@
+/* ImxUp GUI Stylesheet - Valid Qt CSS */
+
+/* ONLY table-related fonts - don't touch anything else */
+
+/* Table headers only */
+QTableWidget QHeaderView::section {
+    font-size: 8pt;
+    font-weight: bold;
+}
+
+/* Progress bars in table only */
+QTableWidget QProgressBar {
+    font-size: 7pt;
+    font-weight: bold;
+}
+
+/* Buttons in table only */
+QTableWidget QPushButton {
+    font-size: 7pt;
+}
