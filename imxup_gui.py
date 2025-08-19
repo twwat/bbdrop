@@ -811,18 +811,20 @@ class UploadWorker(QThread):
             
             print(f"DEBUG: Entering main worker loop")
             while self.running:
-                print(f"DEBUG: Worker loop iteration - checking for items")
                 # Handle requested login retries from GUI
                 try:
                     self._maybe_handle_login_retry()
                 except Exception:
                     pass
                 # Get next item from queue
-                print(f"DEBUG: About to call get_next_item")
+                get_item_start = time.time()
                 item = self.queue_manager.get_next_item()
-                print(f"DEBUG: get_next_item returned: {item}")
+                get_item_duration = time.time() - get_item_start
+                
                 if item is None:
-                    print(f"DEBUG: No item found, sleeping")
+                    # Only log timing if get_next_item took significant time
+                    if get_item_duration > 0.001:
+                        print(f"[TIMING] get_next_item() took {get_item_duration:.6f}s (returned None)")
                     # Periodically emit queue stats even when idle
                     try:
                         self._emit_queue_stats()
@@ -831,13 +833,17 @@ class UploadWorker(QThread):
                     time.sleep(0.1)
                     continue
                 
+                print(f"[TIMING] get_next_item() took {get_item_duration:.6f}s (got item: {item.path})")
                 print(f"DEBUG: Worker got item: {item.path}, status: {item.status}")
                 
                 # Only process items that are queued to upload
                 if item.status == "queued":
                     print(f"DEBUG: Starting upload for {item.path}")
+                    upload_start = time.time()
                     self.current_item = item
                     self.upload_gallery(item)
+                    upload_duration = time.time() - upload_start
+                    print(f"[TIMING] upload_gallery({item.path}) took {upload_duration:.6f}s")
                     print(f"DEBUG: Upload finished for {item.path}")
                 elif item.status == "paused":
                     print(f"DEBUG: Skipping paused item {item.path}")
@@ -921,30 +927,45 @@ class UploadWorker(QThread):
     
     def upload_gallery(self, item: GalleryQueueItem):
         """Upload a single gallery"""
+        method_start = time.time()
+        print(f"[TIMING] upload_gallery({item.path}) method started at {method_start:.6f}")
+        
         try:
             # Clear any previous soft-stop request when starting a new item
             self._soft_stop_requested_for = None
             self.log_message.emit(f"{timestamp()} Starting upload: {item.name or os.path.basename(item.path)}")
             
             # Set status to uploading and update display (single source of truth here)
+            status_update_start = time.time()
             self.queue_manager.update_item_status(item.path, "uploading")
             item.start_time = time.time()
+            status_update_duration = time.time() - status_update_start
+            print(f"[TIMING] Status update to 'uploading' took {status_update_duration:.6f}s")
             
             # Emit signal to update display immediately
+            signal_start = time.time()
             self.gallery_started.emit(item.path, item.total_images or 0)
             # Also emit queue stats since states changed
             try:
                 self._emit_queue_stats(force=True)
             except Exception:
                 pass
+            signal_duration = time.time() - signal_start
+            print(f"[TIMING] Signal emissions took {signal_duration:.6f}s")
+            
             # If soft stop already requested by the time we start, reflect status to incomplete in UI
             if getattr(self, '_soft_stop_requested_for', None) == item.path:
                 self.queue_manager.update_item_status(item.path, "incomplete")
             
             # Get default settings
+            defaults_start = time.time()
             defaults = load_user_defaults()
+            defaults_duration = time.time() - defaults_start
+            print(f"[TIMING] load_user_defaults() took {defaults_duration:.6f}s")
             
             # Upload with progress tracking
+            upload_start = time.time()
+            print(f"[TIMING] About to call uploader.upload_folder() at {upload_start:.6f}")
             results = self.uploader.upload_folder(
                 item.path,
                 gallery_name=item.name,
@@ -955,6 +976,8 @@ class UploadWorker(QThread):
                 parallel_batch_size=defaults.get('parallel_batch_size', 4),
                 template_name=item.template_name
             )
+            upload_duration = time.time() - upload_start
+            print(f"[TIMING] uploader.upload_folder() took {upload_duration:.6f}s")
             # Defer artifact writing to on_gallery_completed where UI context is available
             
             # Check if item was paused during upload
@@ -1316,11 +1339,25 @@ class QueueManager(QObject):
         with QMutexLocker(self.mutex):
             return self._version
     
-    def save_persistent_queue(self):
-        """Save queue state (non-blocking) using SQLite store."""
+    def save_persistent_queue(self, specific_paths=None):
+        """Save queue state using SQLite store.
+        
+        Args:
+            specific_paths: Optional list of paths to save. If None, saves all items.
+        """
+        if specific_paths:
+            # Filter to only the specified items
+            items_to_save = [item for item in self.items.values() if item.path in specific_paths]
+            print(f"DEBUG: save_persistent_queue saving {len(items_to_save)} specific items", flush=True)
+        else:
+            # Save all items (existing behavior for shutdown/full save)
+            items_to_save = list(self.items.values())
+            print(f"DEBUG: save_persistent_queue saving ALL {len(items_to_save)} items", flush=True)
+            
         queue_data = []
-        for item in self.items.values():
+        for item in items_to_save:
             if item.status in ["ready", "queued", "paused", "completed", "incomplete", "failed"]:
+                print(f"DEBUG: Saving item {item.path} with tab_name='{item.tab_name}'", flush=True)
                 queue_data.append({
                     'path': item.path,
                     'name': item.name,
@@ -1334,7 +1371,7 @@ class QueueManager(QObject):
                     'insertion_order': item.insertion_order,
                     'added_time': item.added_time,
                     'finished_time': item.finished_time,
-                    'tab_name': item.tab_name,
+                    'tab_name': item.tab_name,  # Include tab assignment
                     # Intentionally omit heavy per-image lists from GUI thread snapshot
                     'total_size': int(getattr(item, 'total_size', 0) or 0),
                     'avg_width': float(getattr(item, 'avg_width', 0.0) or 0.0),
@@ -1356,7 +1393,9 @@ class QueueManager(QObject):
     
     def _save_single_item(self, item):
         """Save a single item without iterating through all items"""
+        save_start = time.time()
         try:
+            data_prep_start = time.time()
             item_data = {
                 'path': item.path,
                 'name': item.name,
@@ -1370,7 +1409,7 @@ class QueueManager(QObject):
                 'insertion_order': item.insertion_order,
                 'added_time': item.added_time,
                 'finished_time': item.finished_time,
-                'tab_name': item.tab_name,
+                'tab_name': item.tab_name,  # Include tab assignment
                 'total_size': int(getattr(item, 'total_size', 0) or 0),
                 'avg_width': float(getattr(item, 'avg_width', 0.0) or 0.0),
                 'avg_height': float(getattr(item, 'avg_height', 0.0) or 0.0),
@@ -1384,8 +1423,17 @@ class QueueManager(QObject):
                 'failed_files': getattr(item, 'failed_files', []),
                 'error_message': getattr(item, 'error_message', ''),
             }
+            data_prep_duration = time.time() - data_prep_start
+            
+            db_save_start = time.time()
             self.store.bulk_upsert_async([item_data])
+            db_save_duration = time.time() - db_save_start
+            
+            total_duration = time.time() - save_start
+            print(f"[TIMING] _save_single_item({item.path}): data_prep={data_prep_duration:.6f}s, db_save={db_save_duration:.6f}s, total={total_duration:.6f}s")
         except Exception:
+            total_duration = time.time() - save_start
+            print(f"[TIMING] _save_single_item({item.path}) failed in {total_duration:.6f}s")
             pass
     
     def load_persistent_queue(self):
@@ -1400,8 +1448,10 @@ class QueueManager(QObject):
         try:
             future = self.store._executor.submit(_load_queue_background)
             queue_data = future.result(timeout=2.0)  # 2 second timeout to avoid infinite blocking
+            print(f"DEBUG: Loaded {len(queue_data)} items from database", flush=True)
         except Exception:
             queue_data = []
+            print("DEBUG: Failed to load queue data from database", flush=True)
         if queue_data:
             for item_data in queue_data:
                 path = item_data.get('path', '')
@@ -1409,6 +1459,8 @@ class QueueManager(QObject):
                 # For completed items, don't check path existence
                 if status == "completed" or (os.path.exists(path) and os.path.isdir(path)):
                     if status == "completed":
+                        loaded_tab_name = item_data.get('tab_name', 'Main')
+                        print(f"DEBUG: Loading completed item {path} with tab_name='{loaded_tab_name}'", flush=True)
                         item = GalleryQueueItem(
                             path=path,
                             name=item_data.get('name'),
@@ -1420,12 +1472,14 @@ class QueueManager(QObject):
                             total_images=item_data.get('total_images', 0),
                             template_name=item_data.get('template_name', load_user_defaults().get('template_name', 'default')),
                             insertion_order=item_data.get('insertion_order', self._next_order),
-                            tab_name=item_data.get('tab_name', 'Main'),
+                            tab_name=loaded_tab_name,
                             added_time=item_data.get('added_time'),
                             finished_time=item_data.get('finished_time')
                         )
                     else:
                         load_status = "ready" if status in ["queued", "uploading"] else status
+                        loaded_tab_name = item_data.get('tab_name', 'Main')
+                        print(f"DEBUG: Loading non-completed item {path} with tab_name='{loaded_tab_name}'", flush=True)
                         item = GalleryQueueItem(
                             path=path,
                             name=item_data.get('name'),
@@ -1434,7 +1488,7 @@ class QueueManager(QObject):
                             template_name=item_data.get('template_name', load_user_defaults().get('template_name', 'default')),
                             insertion_order=item_data.get('insertion_order', self._next_order),
                             added_time=item_data.get('added_time'),
-                            tab_name=item_data.get('tab_name', 'Main')
+                            tab_name=loaded_tab_name
                         )
                     # Restore optional fields
                     try:
@@ -1465,6 +1519,7 @@ class QueueManager(QObject):
                         pass
                     self._next_order = max(self._next_order, item.insertion_order + 1)
                     self.items[path] = item
+                    print(f"DEBUG: Added item to queue: {path} with final tab_name='{item.tab_name}'", flush=True)
                 else:
                     pass
         
@@ -1838,25 +1893,54 @@ class QueueManager(QObject):
     
     def start_item(self, path: str) -> bool:
         """Start a specific item in the queue"""
+        start_time = time.time()
+        print(f"[TIMING] start_item({path}) started at {start_time:.6f}")
         print(f"DEBUG: start_item called for {path}")
+        
+        mutex_start = time.time()
         with QMutexLocker(self.mutex):
+            mutex_duration = time.time() - mutex_start
+            print(f"[TIMING] Mutex acquisition took {mutex_duration:.6f}s")
+            
             if path in self.items:
                 print(f"DEBUG: Item exists, status: {self.items[path].status}")
                 if self.items[path].status in ["ready", "paused", "incomplete"]:
                     print(f"DEBUG: Setting status to queued")
+                    
+                    status_start = time.time()
                     self.set_item_status(path, "queued")
+                    status_duration = time.time() - status_start
+                    print(f"[TIMING] set_item_status took {status_duration:.6f}s")
+                    
                     print(f"DEBUG: Putting item in queue")
+                    queue_start = time.time()
                     self.queue.put(self.items[path])
+                    queue_duration = time.time() - queue_start
+                    print(f"[TIMING] queue.put took {queue_duration:.6f}s")
+                    
                     print(f"DEBUG: Saving item")
+                    save_start = time.time()
                     self._save_single_item(self.items[path])
+                    save_duration = time.time() - save_start
+                    print(f"[TIMING] _save_single_item took {save_duration:.6f}s")
+                    
                     print(f"DEBUG: Incrementing version")
+                    version_start = time.time()
                     self._inc_version()
+                    version_duration = time.time() - version_start
+                    print(f"[TIMING] _inc_version took {version_duration:.6f}s")
+                    
                     print(f"DEBUG: start_item successful")
+                    total_duration = time.time() - start_time
+                    print(f"[TIMING] start_item({path}) completed successfully in {total_duration:.6f}s")
                     return True
                 else:
                     print(f"DEBUG: Item status not startable: {self.items[path].status}")
             else:
                 print(f"DEBUG: Item not found in queue")
+            
+            total_duration = time.time() - start_time
+            print(f"[TIMING] start_item({path}) failed in {total_duration:.6f}s")
             return False
     
     def pause_item(self, path: str) -> bool:
@@ -1983,20 +2067,29 @@ class QueueManager(QObject):
     
     def get_next_item(self) -> Optional[GalleryQueueItem]:
         """Get the next queued item"""
-        print(f"DEBUG: get_next_item called")
+        start_time = time.time()
         try:
+            queue_get_start = time.time()
             item = self.queue.get_nowait()
+            queue_get_duration = time.time() - queue_get_start
+            
             print(f"DEBUG: Dequeued item: {item.path}, status: {item.status}")
             # Check if item is still in the right status
             if item.path in self.items and self.items[item.path].status in ["queued", "uploading"]:
                 print(f"DEBUG: Item status valid, returning item")
+                total_duration = time.time() - start_time
+                print(f"[TIMING] get_next_item() successful: queue_get={queue_get_duration:.6f}s, total={total_duration:.6f}s")
                 return item
             else:
                 # Item status changed, try to get next item
                 print(f"DEBUG: Item status changed, trying again. Current status: {self.items.get(item.path, 'NOT_FOUND')}")
+                total_duration = time.time() - start_time
+                print(f"[TIMING] get_next_item() status changed, recursing after {total_duration:.6f}s")
                 return self.get_next_item()
         except queue.Empty:
-            print(f"DEBUG: Queue is empty")
+            total_duration = time.time() - start_time
+            if total_duration > 0.001:  # Only log if took significant time
+                print(f"[TIMING] get_next_item() queue empty in {total_duration:.6f}s")
             return None
     
     def update_item_status(self, path: str, status: str):
@@ -2007,9 +2100,9 @@ class QueueManager(QObject):
                 self.items[path].status = status
                 # Update status counters
                 self._update_status_count(old_status, status)
-                # Persist and bump version so GUI refreshes promptly
+                # Persist single item change efficiently
                 try:
-                    self.save_persistent_queue()
+                    self.save_persistent_queue([path])
                 finally:
                     self._inc_version()
                 
@@ -2019,8 +2112,12 @@ class QueueManager(QObject):
     
     def get_all_items(self) -> List[GalleryQueueItem]:
         """Get all items, sorted by insertion order"""
+        start_time = time.time()
         with QMutexLocker(self.mutex):
             items = sorted(self.items.values(), key=lambda x: x.insertion_order)
+            duration = time.time() - start_time
+            if duration > 0.001:  # Only log if takes significant time
+                print(f"[TIMING] get_all_items() took {duration:.6f}s for {len(items)} items")
             #print(f"DEBUG: get_all_items returning {len(items)} items: {[item.path for item in items]}")
             return items
     
@@ -2138,7 +2235,8 @@ class DropEnabledTabBar(QTabBar):
             # Find the tab at drop position
             drop_index = self.tabAt(event.position().toPoint())
             if drop_index >= 0:
-                tab_name = self.tabText(drop_index)
+                tab_text = self.tabText(drop_index)
+                tab_name = tab_text.split(' (')[0] if ' (' in tab_text else tab_text
                 
                 # Extract gallery paths from mime data
                 gallery_data = event.mimeData().data("application/x-imxup-galleries")
@@ -2193,6 +2291,7 @@ class TabbedGalleryWidget(QWidget):
     tab_renamed = pyqtSignal(str, str)  # old_name, new_name
     tab_deleted = pyqtSignal(str)  # tab_name
     tab_created = pyqtSignal(str)  # tab_name
+    galleries_dropped = pyqtSignal(str, list)  # tab_name, gallery_paths
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2268,8 +2367,11 @@ class TabbedGalleryWidget(QWidget):
         """Setup signal connections"""
         self.tab_bar.currentChanged.connect(self._on_tab_changed)
         self.tab_bar.tabBarDoubleClicked.connect(self._on_tab_double_clicked)
-        self.tab_bar.galleries_dropped.connect(self._on_galleries_dropped)
+        # Connect tab bar signal to parent's handler (will be connected by parent)
         self.new_tab_btn.clicked.connect(self._add_new_tab)
+        
+        # Connect tab bar drag-drop signal to own handler for GUI updates
+        self.tab_bar.galleries_dropped.connect(self._on_galleries_dropped)
         
         # Context menu for tabs
         self.tab_bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -2344,19 +2446,18 @@ class TabbedGalleryWidget(QWidget):
         # Performance monitoring
         switch_start_time = time.time()
         
-        tab_name = self.tab_bar.tabText(index)
+        tab_text = self.tab_bar.tabText(index)
+        tab_name = tab_text.split(' (')[0] if ' (' in tab_text else tab_text
         old_tab = self.current_tab
         
-        # Extract base tab name (remove count if present)
-        base_tab_name = tab_name.split(' (')[0] if ' (' in tab_name else tab_name
-        self.current_tab = base_tab_name
+        self.current_tab = tab_name
         
         # Invalidate update queue visibility cache when switching tabs
         update_queue = getattr(self.gallery_table, '_update_queue', None)
         if update_queue and hasattr(update_queue, 'invalidate_visibility_cache'):
             update_queue.invalidate_visibility_cache()
         
-        self._apply_filter(base_tab_name)
+        self._apply_filter(tab_name)
         self.tab_changed.emit(tab_name)
         
         # Update performance metrics
@@ -2374,19 +2475,32 @@ class TabbedGalleryWidget(QWidget):
     
     def _on_galleries_dropped(self, tab_name, gallery_paths):
         """Handle galleries being dropped on a tab"""
+        print(f"DEBUG: _on_galleries_dropped called with tab_name='{tab_name}', {len(gallery_paths)} paths", flush=True)
         if not self.tab_manager or not gallery_paths:
+            print(f"DEBUG: Early return - tab_manager={bool(self.tab_manager)}, gallery_paths={len(gallery_paths) if gallery_paths else 0}", flush=True)
             return
         
         try:
-            # Move galleries to the target tab
+            # Move galleries to the target tab (tab_name is already clean from dropEvent)
             moved_count = self.tab_manager.move_galleries_to_tab(gallery_paths, tab_name)
+            print(f"DEBUG: move_galleries_to_tab returned moved_count={moved_count}", flush=True)
             
             # Update queue manager's in-memory items to match database
+            print(f"DEBUG: moved_count={moved_count}, has_queue_manager={hasattr(self, 'queue_manager')}, has_tab_manager={bool(self.tab_manager)}")
             if moved_count > 0 and hasattr(self, 'queue_manager') and self.tab_manager:
+                updated_count = 0
                 for path in gallery_paths:
                     item = self.queue_manager.get_item(path)
                     if item:
+                        old_tab = item.tab_name
                         item.tab_name = tab_name
+                        updated_count += 1
+                        print(f"DEBUG: Drag-drop updated item {path} tab: '{old_tab}' -> '{tab_name}'", flush=True)
+                        # Verify the change stuck
+                        print(f"DEBUG: Verification - item.tab_name is now '{item.tab_name}'", flush=True)
+                    else:
+                        print(f"DEBUG: No item found for path: {path}", flush=True)
+                print(f"DEBUG: Updated {updated_count} in-memory items out of {len(gallery_paths)} paths")
                 
                 # Don't call save_persistent_queue() here - database is already updated
                 # and is the source of truth. QueueManager loads from database on startup.
@@ -2404,7 +2518,7 @@ class TabbedGalleryWidget(QWidget):
                 
                 # Optional: Show feedback message
                 gallery_word = "gallery" if moved_count == 1 else "galleries"
-                print(f"Moved {moved_count} {gallery_word} to '{tab_name}' tab")
+                print(f"DEBUG: DRAG-DROP PATH - Moved {moved_count} {gallery_word} to '{tab_name}' tab")
                 
         except Exception as e:
             print(f"Error moving galleries to tab '{tab_name}': {e}")
@@ -2772,7 +2886,8 @@ class TabbedGalleryWidget(QWidget):
             self._show_general_tab_menu(position)
             return
         
-        tab_name = self.tab_bar.tabText(index)
+        tab_text = self.tab_bar.tabText(index)
+        tab_name = tab_text.split(' (')[0] if ' (' in tab_text else tab_text
         self._show_specific_tab_menu(position, index, tab_name)
     
     def _show_general_tab_menu(self, position):
@@ -3149,6 +3264,7 @@ class TabbedGalleryWidget(QWidget):
     
     def _update_tab_tooltips(self):
         """Update tooltips and tab text with gallery counts for all tabs"""
+        print(f"DEBUG: _update_tab_tooltips called", flush=True)
         for i in range(self.tab_bar.count()):
             current_text = self.tab_bar.tabText(i)
             # Extract base tab name (remove count if present)
@@ -3168,11 +3284,15 @@ class TabbedGalleryWidget(QWidget):
                 if self.tab_manager and base_name != "All Tabs":
                     galleries = self.tab_manager.load_tab_galleries(base_name)
                     gallery_count = len(galleries)
+                    print(f"DEBUG: Tab '{base_name}' load_tab_galleries returned {gallery_count} galleries", flush=True)
                     # Count active uploads (simplified status check)
                     active_count = sum(1 for g in galleries if g.get('status') in ['uploading', 'pending'])
                 
                 # Update tab text with count
-                self.tab_bar.setTabText(i, f"{base_name} ({gallery_count})")
+                old_text = self.tab_bar.tabText(i)
+                new_text = f"{base_name} ({gallery_count})"
+                self.tab_bar.setTabText(i, new_text)
+                print(f"DEBUG: Updated tab {i} text: '{old_text}' -> '{new_text}'", flush=True)
                 
                 status_text = ""
                 if active_count > 0:
@@ -3919,27 +4039,55 @@ class GalleryTableWidget(QTableWidget):
         if tabbed_widget and hasattr(tabbed_widget, 'tab_manager') and tabbed_widget.tab_manager:
             try:
                 moved_count = tabbed_widget.tab_manager.move_galleries_to_tab(gallery_paths, target_tab)
+                print(f"DEBUG: Right-click move_galleries_to_tab returned moved_count={moved_count}", flush=True)
                 
                 # Update queue manager's in-memory items to match database
-                if moved_count > 0 and hasattr(tabbed_widget, 'queue_manager') and tabbed_widget.tab_manager:
+                print(f"DEBUG: Checking conditions - moved_count={moved_count}, has_queue_manager={hasattr(tabbed_widget, 'queue_manager')}, has_tab_manager={bool(tabbed_widget.tab_manager)}", flush=True)
+                
+                # Find the widget with queue_manager
+                queue_widget = tabbed_widget
+                while queue_widget and not hasattr(queue_widget, 'queue_manager'):
+                    queue_widget = queue_widget.parent()
+                
+                print(f"DEBUG: Found queue_widget={bool(queue_widget)}, has_queue_manager={hasattr(queue_widget, 'queue_manager') if queue_widget else False}", flush=True)
+                
+                if moved_count > 0 and queue_widget and hasattr(queue_widget, 'queue_manager') and tabbed_widget.tab_manager:
                     # Get the tab_id for the target tab
                     tab_info = tabbed_widget.tab_manager.get_tab_by_name(target_tab)
                     tab_id = tab_info.id if tab_info else 1
                     
                     for path in gallery_paths:
-                        item = tabbed_widget.queue_manager.get_item(path)
+                        item = queue_widget.queue_manager.get_item(path)
                         if item:
+                            old_tab = item.tab_name
                             item.tab_name = target_tab
                             item.tab_id = tab_id
+                            print(f"DEBUG: Right-click updated item {path} tab: '{old_tab}' -> '{target_tab}'", flush=True)
+                            # Verify the change stuck
+                            print(f"DEBUG: Verification - item.tab_name is now '{item.tab_name}'", flush=True)
                 
                 # Invalidate caches and refresh display
                 if moved_count > 0:
+                    print(f"DEBUG: RIGHT-CLICK calling invalidate_tab_cache() on {type(tabbed_widget).__name__}", flush=True)
+                    
+                    # Check database counts BEFORE cache invalidation
+                    main_count_before = len(tabbed_widget.tab_manager.load_tab_galleries('Main'))
+                    target_count_before = len(tabbed_widget.tab_manager.load_tab_galleries(target_tab))
+                    print(f"DEBUG: RIGHT-CLICK BEFORE invalidate - Main={main_count_before}, {target_tab}={target_count_before}", flush=True)
+                    
                     tabbed_widget.tab_manager.invalidate_tab_cache()
+                    
+                    # Check database counts AFTER cache invalidation
+                    main_count_after = len(tabbed_widget.tab_manager.load_tab_galleries('Main'))
+                    target_count_after = len(tabbed_widget.tab_manager.load_tab_galleries(target_tab))
+                    print(f"DEBUG: RIGHT-CLICK AFTER invalidate - Main={main_count_after}, {target_tab}={target_count_after}", flush=True)
+                    
+                    print(f"DEBUG: RIGHT-CLICK calling refresh_filter() on {type(tabbed_widget).__name__}", flush=True)
                     tabbed_widget.refresh_filter()
                     
                     # Show feedback message
                     gallery_word = "gallery" if moved_count == 1 else "galleries"
-                    print(f"Moved {moved_count} {gallery_word} to '{target_tab}' tab")
+                    print(f"DEBUG: RIGHT-CLICK PATH - Moved {moved_count} {gallery_word} to '{target_tab}' tab")
                     
             except Exception as e:
                 print(f"Error moving galleries to tab '{target_tab}': {e}")
@@ -5986,8 +6134,9 @@ class ImxUploadGUI(QMainWindow):
             self.gallery_table.tab_changed.connect(self.refresh_filter)
         
         # Connect gallery move signal to handle tab assignments
-        if hasattr(self.gallery_table, 'galleries_dropped'):
-            self.gallery_table.galleries_dropped.connect(self.on_galleries_moved_to_tab)
+        # Connect tab bar drag-drop signal directly to our handler
+        if hasattr(self.gallery_table, 'tab_bar') and hasattr(self.gallery_table.tab_bar, 'galleries_dropped'):
+            self.gallery_table.tab_bar.galleries_dropped.connect(self.on_galleries_moved_to_tab)
         
         # Set reference to update queue in tabbed widget for cache invalidation
         if hasattr(self.gallery_table, '_update_queue'):
@@ -6064,10 +6213,11 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
     
-    def on_galleries_moved_to_tab(self, gallery_paths, new_tab_name):
-        """Handle galleries being moved to a different tab"""
+    def on_galleries_moved_to_tab(self, new_tab_name, gallery_paths):
+        """Handle galleries being moved to a different tab - DATABASE ALREADY UPDATED BY DRAG-DROP HANDLER"""
+        print(f"DEBUG: on_galleries_moved_to_tab called with {len(gallery_paths)} paths to '{new_tab_name}' - database already updated", flush=True)
         try:
-            # Update the queue manager's in-memory items to match database
+            # Update the MAIN WINDOW queue manager's in-memory items to match database
             if hasattr(self, 'queue_manager') and hasattr(self, 'tab_manager'):
                 tab_info = self.tab_manager.get_tab_by_name(new_tab_name)
                 tab_id = tab_info.id if tab_info else 1
@@ -6075,12 +6225,19 @@ class ImxUploadGUI(QMainWindow):
                 for path in gallery_paths:
                     item = self.queue_manager.get_item(path)
                     if item:
+                        old_tab = item.tab_name
                         item.tab_name = new_tab_name
                         item.tab_id = tab_id
+                        print(f"DEBUG: Drag-drop updated MAIN WINDOW item {path} tab: '{old_tab}' -> '{new_tab_name}'", flush=True)
             
-            # Refresh the filter to show the updated tab assignments
-            self.refresh_filter()
-            
+            # Invalidate cache and refresh MAIN WINDOW display
+            if hasattr(self, 'tab_manager'):
+                print(f"DEBUG: DRAG-DROP invalidating MAIN WINDOW cache and refreshing display", flush=True)
+                self.tab_manager.invalidate_tab_cache()
+                if hasattr(self, 'gallery_table') and hasattr(self.gallery_table, '_update_tab_tooltips'):
+                    self.gallery_table._update_tab_tooltips()
+                    print(f"DEBUG: DRAG-DROP updated main window tab tooltips", flush=True)
+                
         except Exception as e:
             print(f"Error handling gallery move to tab '{new_tab_name}': {e}")
     
@@ -9458,15 +9615,34 @@ class ImxUploadGUI(QMainWindow):
     
     def start_all_uploads(self):
         """Start all ready uploads"""
+        start_time = time.time()
+        print(f"[TIMING] start_all_uploads() started at {start_time:.6f}")
+        
+        get_items_start = time.time()
         items = self.queue_manager.get_all_items()
+        get_items_duration = time.time() - get_items_start
+        print(f"[TIMING] get_all_items() took {get_items_duration:.6f}s")
+        
         started_count = 0
         started_paths = []
+        item_processing_start = time.time()
+        
         for item in items:
             if item.status in ("ready", "paused", "incomplete"):
+                start_item_begin = time.time()
                 if self.queue_manager.start_item(item.path):
+                    start_item_duration = time.time() - start_item_begin
+                    print(f"[TIMING] start_item({item.path}) took {start_item_duration:.6f}s")
                     started_count += 1
                     started_paths.append(item.path)
+                else:
+                    start_item_duration = time.time() - start_item_begin
+                    print(f"[TIMING] start_item({item.path}) failed in {start_item_duration:.6f}s")
         
+        item_processing_duration = time.time() - item_processing_start
+        print(f"[TIMING] Processing all items took {item_processing_duration:.6f}s")
+        
+        ui_update_start = time.time()
         if started_count > 0:
             self.add_log_message(f"{timestamp()} Started {started_count} uploads")
             # Update all affected items individually instead of rebuilding table
@@ -9476,6 +9652,12 @@ class ImxUploadGUI(QMainWindow):
             QTimer.singleShot(0, self._update_button_counts)
         else:
             self.add_log_message(f"{timestamp()} No items to start")
+        
+        ui_update_duration = time.time() - ui_update_start
+        print(f"[TIMING] UI updates took {ui_update_duration:.6f}s")
+        
+        total_duration = time.time() - start_time
+        print(f"[TIMING] start_all_uploads() completed in {total_duration:.6f}s total")
     
     def pause_all_uploads(self):
         """Reset all queued items back to ready (acts like Cancel for queued)"""
@@ -9944,8 +10126,17 @@ class ImxUploadGUI(QMainWindow):
         # Save queue state
         self.queue_manager.save_persistent_queue()
         
-        # Shutdown scan worker gracefully
+        # DEBUG: Check item tab_name values before shutdown
         if self.queue_manager:
+            print(f"DEBUG: Before shutdown, checking a few items' tab_name values:", flush=True)
+            count = 0
+            for path, item in self.queue_manager.items.items():
+                if count < 5:  # Check first 5 items
+                    print(f"DEBUG: Item {path} has tab_name='{item.tab_name}'", flush=True)
+                    count += 1
+                else:
+                    break
+            
             self.queue_manager.shutdown()
         
         # Always stop workers and server on close

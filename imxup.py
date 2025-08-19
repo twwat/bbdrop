@@ -957,9 +957,20 @@ class ImxToUploader:
                 use_cookies = True
             if use_cookies:
                 try:
+                    import time
+                    login_start = time.time()
+                    print(f"{timestamp()} DEBUG: Starting cookie-based login process...")
                     print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
+                    
+                    cookies_start = time.time()
                     firefox_cookies = get_firefox_cookies("imx.to")
+                    firefox_time = time.time() - cookies_start
+                    print(f"{timestamp()} DEBUG: Firefox cookies took {firefox_time:.3f}s")
+                    
+                    file_start = time.time()
                     file_cookies = load_cookies_from_file("cookies.txt")
+                    file_time = time.time() - file_start
+                    print(f"{timestamp()} DEBUG: File cookies took {file_time:.3f}s")
                     all_cookies = {}
                     if firefox_cookies:
                         print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
@@ -1403,11 +1414,13 @@ class ImxToUploader:
             dict: Contains gallery URL and individual image URLs
         """
         start_time = time.time()
+        print(f"[TIMING] upload_folder({folder_path}) started at {start_time:.6f}")
         
         if not os.path.exists(folder_path):
             raise FileNotFoundError(f"Folder not found: {folder_path}")
         
         # Get all image files in folder and calculate total size
+        scan_start = time.time()
         image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
         image_files = []
         total_size = 0
@@ -1431,6 +1444,9 @@ class ImxToUploader:
                 except Exception:
                     image_dimensions.append((0, 0))  # Error reading image
         
+        scan_duration = time.time() - scan_start
+        print(f"[TIMING] File scanning and PIL processing took {scan_duration:.6f}s for {len(image_files)} files")
+        
         if not image_files:
             raise ValueError(f"No image files found in {folder_path}")
         
@@ -1445,7 +1461,11 @@ class ImxToUploader:
             print(f"{timestamp()} Sanitized gallery name: '{original_name}' -> '{gallery_name}'")
         
         # Check if gallery already exists
+        check_start = time.time()
         existing_files = check_if_gallery_exists(gallery_name)
+        check_duration = time.time() - check_start
+        print(f"[TIMING] Gallery existence check took {check_duration:.6f}s")
+        
         if existing_files:
             print(f"{timestamp()} Found existing gallery files for '{gallery_name}':")
             for file_path in existing_files:
@@ -1457,7 +1477,10 @@ class ImxToUploader:
                 return None
         
         # Create gallery (skip login since it's already done). If creation fails, fall back to API-only
+        create_start = time.time()
         gallery_id = self.create_gallery_with_name(gallery_name, public_gallery, skip_login=True)
+        create_duration = time.time() - create_start
+        print(f"[TIMING] Gallery creation took {create_duration:.6f}s")
         initial_completed = 0
         initial_uploaded_size = 0
         preseed_images = []

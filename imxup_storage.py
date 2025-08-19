@@ -378,6 +378,7 @@ class QueueStore:
         insertion_order = int(item.get('insertion_order', 0) or 0)
         failed_files = json.dumps(item.get('failed_files', []))
         tab_name = item.get('tab_name', 'Main')
+        print(f"DEBUG: _upsert_gallery_row called with tab_name='{tab_name}' for path='{item.get('path', 'unknown')}'", flush=True)
         
         # Get tab_id for the tab_name
         cursor = conn.execute("SELECT id FROM tabs WHERE name = ? AND is_active = 1", (tab_name,))
@@ -386,9 +387,14 @@ class QueueStore:
         
         # If tab doesn't exist, default to Main tab
         if tab_id is None:
+            print(f"DEBUG: Tab lookup failed for '{tab_name}', checking available tabs...")
+            cursor = conn.execute("SELECT name, is_active FROM tabs ORDER BY name")
+            all_tabs = cursor.fetchall()
+            print(f"DEBUG: Available tabs: {all_tabs}")
             cursor = conn.execute("SELECT id FROM tabs WHERE name = 'Main' AND is_active = 1")
             row = cursor.fetchone()
             tab_id = row[0] if row else 1  # Fallback to ID 1
+            print(f"DEBUG: Falling back to Main tab (id={tab_id}) from original tab '{tab_name}'")
             tab_name = 'Main'
 
         # Check if tab_id column exists

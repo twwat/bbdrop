@@ -10,6 +10,11 @@ import sqlite3
 import platform
 from datetime import datetime
 
+# Cookie cache to avoid repeated Firefox database access
+_firefox_cookie_cache = {}
+_firefox_cache_time = 0
+_cache_duration = 300  # Cache for 5 minutes
+
 
 def _timestamp() -> str:
     return datetime.now().strftime("%H:%M:%S")
@@ -19,6 +24,18 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
     """Extract cookies from Firefox browser for the given domain.
     Returns a dict of name -> { value, domain, path, secure }.
     """
+    import time
+    global _firefox_cookie_cache, _firefox_cache_time
+    
+    start_time = time.time()
+    print(f"{_timestamp()} DEBUG: get_firefox_cookies() started")
+    
+    # Check cache first
+    if _firefox_cookie_cache and (time.time() - _firefox_cache_time) < _cache_duration:
+        elapsed = time.time() - start_time
+        print(f"{_timestamp()} DEBUG: Using cached Firefox cookies (took {elapsed:.3f}s)")
+        return _firefox_cookie_cache.copy()
+    
     try:
         if platform.system() == "Windows":
             firefox_dir = os.path.join(os.environ.get('APPDATA', ''), 'Mozilla', 'Firefox', 'Profiles')
@@ -26,7 +43,8 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             firefox_dir = os.path.join(os.path.expanduser("~"), '.mozilla', 'firefox')
 
         if not os.path.exists(firefox_dir):
-            print(f"{_timestamp()} Firefox profiles directory not found: {firefox_dir}")
+            elapsed = time.time() - start_time
+            print(f"{_timestamp()} DEBUG: Firefox profiles directory not found: {firefox_dir} (took {elapsed:.3f}s)")
             return {}
 
         profiles = [d for d in os.listdir(firefox_dir) if d.endswith('.default-release')]
@@ -43,8 +61,15 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             return {}
 
         cookies = {}
-        conn = sqlite3.connect(cookie_file)
+        print(f"{_timestamp()} DEBUG: About to connect to SQLite database: {cookie_file}")
+        sqlite_start = time.time()
+        # Set a 1-second timeout to prevent long waits on locked Firefox databases
+        conn = sqlite3.connect(cookie_file, timeout=1.0)
+        sqlite_connect_time = time.time() - sqlite_start
+        print(f"{_timestamp()} DEBUG: SQLite connect took {sqlite_connect_time:.3f}s")
+        
         cursor = conn.cursor()
+        query_start = time.time()
         cursor.execute(
             """
             SELECT name, value, host, path, expiry, isSecure
@@ -53,6 +78,8 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             """,
             (f'%{domain}%',),
         )
+        query_time = time.time() - query_start
+        print(f"{_timestamp()} DEBUG: SQLite query took {query_time:.3f}s")
         for row in cursor.fetchall():
             name, value, host, path, _expiry, secure = row
             cookies[name] = {
@@ -62,9 +89,20 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
                 'secure': bool(secure),
             }
         conn.close()
+        
+        # Update cache
+        _firefox_cookie_cache = cookies.copy()
+        _firefox_cache_time = time.time()
+        
+        elapsed = time.time() - start_time
+        print(f"{_timestamp()} DEBUG: get_firefox_cookies() completed in {elapsed:.3f}s, found {len(cookies)} cookies (cached)")
         return cookies
     except Exception as e:
-        print(f"{_timestamp()} Error extracting Firefox cookies: {e}")
+        elapsed = time.time() - start_time
+        print(f"{_timestamp()} Error extracting Firefox cookies: {e} (took {elapsed:.3f}s)")
+        # Cache empty result to avoid repeated failures
+        _firefox_cookie_cache = {}
+        _firefox_cache_time = time.time()
         return {}
 
 
