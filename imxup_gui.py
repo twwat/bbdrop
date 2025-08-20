@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Tuple
+from contextlib import contextmanager
 import weakref
 
 from PyQt6.QtWidgets import (
@@ -1255,6 +1256,10 @@ class QueueManager(QObject):
         self._next_order = 0  # Track insertion order
         self._version = 0  # Bumped on any change for cheap UI polling
         
+        # Batch mode for deferred database saves
+        self._batch_mode = False
+        self._batched_changes = set()
+        
         # Status counters for efficient button updates
         self._status_counts = {
             "ready": 0,
@@ -1339,12 +1344,33 @@ class QueueManager(QObject):
         with QMutexLocker(self.mutex):
             return self._version
     
+    @contextmanager
+    def batch_updates(self):
+        """Context manager for batching database updates"""
+        old_batch_mode = self._batch_mode
+        self._batch_mode = True
+        self._batched_changes.clear()
+        try:
+            yield
+        finally:
+            # Flush all batched changes in a single transaction
+            if self._batched_changes:
+                self.save_persistent_queue(list(self._batched_changes))
+            self._batch_mode = old_batch_mode
+            self._batched_changes.clear()
+    
     def save_persistent_queue(self, specific_paths=None):
         """Save queue state using SQLite store.
         
         Args:
             specific_paths: Optional list of paths to save. If None, saves all items.
         """
+        # If in batch mode, collect the paths instead of saving immediately
+        if self._batch_mode and specific_paths:
+            self._batched_changes.update(specific_paths)
+            print(f"DEBUG: Batching {len(specific_paths)} items for deferred save, total batched: {len(self._batched_changes)}", flush=True)
+            return
+            
         if specific_paths:
             # Filter to only the specified items
             items_to_save = [item for item in self.items.values() if item.path in specific_paths]
@@ -4133,9 +4159,11 @@ class GalleryTableWidget(QTableWidget):
         if not widget:
             return
         started = 0
-        for path in paths_in_order:
-            if widget.queue_manager.start_item(path):
-                started += 1
+        # Use batch context to group all database saves into a single transaction
+        with widget.queue_manager.batch_updates():
+            for path in paths_in_order:
+                if widget.queue_manager.start_item(path):
+                    started += 1
         if started:
             if hasattr(widget, 'add_log_message'):
                 timestamp_func = getattr(widget, '_timestamp', lambda: time.strftime("%H:%M:%S"))
@@ -9627,17 +9655,19 @@ class ImxUploadGUI(QMainWindow):
         started_paths = []
         item_processing_start = time.time()
         
-        for item in items:
-            if item.status in ("ready", "paused", "incomplete"):
-                start_item_begin = time.time()
-                if self.queue_manager.start_item(item.path):
-                    start_item_duration = time.time() - start_item_begin
-                    print(f"[TIMING] start_item({item.path}) took {start_item_duration:.6f}s")
-                    started_count += 1
-                    started_paths.append(item.path)
-                else:
-                    start_item_duration = time.time() - start_item_begin
-                    print(f"[TIMING] start_item({item.path}) failed in {start_item_duration:.6f}s")
+        # Use batch context to group all database saves into a single transaction
+        with self.queue_manager.batch_updates():
+            for item in items:
+                if item.status in ("ready", "paused", "incomplete"):
+                    start_item_begin = time.time()
+                    if self.queue_manager.start_item(item.path):
+                        start_item_duration = time.time() - start_item_begin
+                        print(f"[TIMING] start_item({item.path}) took {start_item_duration:.6f}s")
+                        started_count += 1
+                        started_paths.append(item.path)
+                    else:
+                        start_item_duration = time.time() - start_item_begin
+                        print(f"[TIMING] start_item({item.path}) failed in {start_item_duration:.6f}s")
         
         item_processing_duration = time.time() - item_processing_start
         print(f"[TIMING] Processing all items took {item_processing_duration:.6f}s")
