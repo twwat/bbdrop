@@ -31,8 +31,16 @@ class ComprehensiveSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
+        
+        # Track dirty state per tab
+        self.tab_dirty_states = {}
+        self.current_tab_index = 0
+        
         self.setup_ui()
         self.load_settings()
+        
+        # Connect tab change signal to check for unsaved changes
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
         
     def setup_ui(self):
         """Setup the tabbed settings interface"""
@@ -65,10 +73,15 @@ class ComprehensiveSettingsDialog(QDialog):
         
         button_layout.addStretch()
         
-        # Standard button order: OK, Cancel
+        # Standard button order: OK, Apply, Cancel
         self.ok_btn = QPushButton("OK")
         self.ok_btn.clicked.connect(self.save_and_close)
         button_layout.addWidget(self.ok_btn)
+        
+        self.apply_btn = QPushButton("Apply")
+        self.apply_btn.clicked.connect(self.apply_current_tab)
+        self.apply_btn.setEnabled(False)  # Initially disabled
+        button_layout.addWidget(self.apply_btn)
         
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.clicked.connect(self.on_cancel_clicked)
@@ -202,6 +215,19 @@ class ComprehensiveSettingsDialog(QDialog):
         layout.addWidget(storage_group)
         layout.addWidget(theme_group)
         layout.addStretch()
+        
+        # Connect change signals to mark tab as dirty
+        self.thumbnail_size_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.thumbnail_format_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.max_retries_spin.valueChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.batch_size_spin.valueChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.confirm_delete_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.public_gallery_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.auto_rename_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.store_in_uploaded_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.store_in_central_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.path_edit.textChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.theme_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(0))
         
         self.tab_widget.addTab(general_widget, "General")
         
@@ -984,6 +1010,11 @@ class ComprehensiveSettingsDialog(QDialog):
         
         layout.addWidget(strategy_group)
         layout.addStretch()
+        
+        # Connect change signals to mark tab as dirty (tab index 5 for scanning)
+        self.fast_scan_check.toggled.connect(lambda: self.mark_tab_dirty(5))
+        self.pil_sampling_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(5))
+        
         self.tab_widget.addTab(scanning_widget, "Image Scanning")
         
     def browse_central_store(self):
@@ -1172,16 +1203,136 @@ class ComprehensiveSettingsDialog(QDialog):
             
     def save_and_close(self):
         """Save settings and close dialog"""
-        if self.save_settings():
-            self.accept()
-        else:
-            # Stay open if save failed
-            pass
+        # Check for unsaved changes in current tab first
+        if self.has_unsaved_changes():
+            # Save current tab
+            if not self.save_current_tab():
+                return  # Failed to save, stay open
+            self.mark_tab_clean()
+        
+        # Check all other tabs for unsaved changes
+        unsaved_tabs = []
+        for i in range(self.tab_widget.count()):
+            if i != self.current_tab_index and self.tab_dirty_states.get(i, False):
+                unsaved_tabs.append((i, self.tab_widget.tabText(i)))
+        
+        if unsaved_tabs:
+            # Ask user about unsaved changes in other tabs
+            tab_names = ", ".join([name for _, name in unsaved_tabs])
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Question)
+            msg_box.setWindowTitle("Unsaved Changes")
+            msg_box.setText(f"You have unsaved changes in other tabs: {tab_names}")
+            msg_box.setInformativeText("Do you want to save all changes before closing?")
+            
+            save_all_btn = msg_box.addButton("Save All", QMessageBox.ButtonRole.AcceptRole)
+            discard_btn = msg_box.addButton("Discard All", QMessageBox.ButtonRole.DestructiveRole)
+            cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+            
+            msg_box.setDefaultButton(save_all_btn)
+            result = msg_box.exec()
+            
+            if msg_box.clickedButton() == save_all_btn:
+                # Save all dirty tabs
+                for tab_index, _ in unsaved_tabs:
+                    old_index = self.current_tab_index
+                    self.current_tab_index = tab_index
+                    if not self.save_current_tab():
+                        self.current_tab_index = old_index
+                        return  # Failed to save, stay open
+                    self.mark_tab_clean(tab_index)
+                    self.current_tab_index = old_index
+            elif msg_box.clickedButton() == cancel_btn:
+                return  # Cancel, stay open
+            # Discard - just continue to close
+        
+        self.accept()
     
     def on_tab_changed(self, new_index):
-        """Handle tab change - simplified approach"""
-        # For now, we only check on dialog close/cancel
-        pass
+        """Handle tab change - check for unsaved changes first"""
+        if hasattr(self, 'current_tab_index') and self.current_tab_index != new_index:
+            if self.has_unsaved_changes(self.current_tab_index):
+                # Block the tab change and ask user about unsaved changes
+                self.tab_widget.blockSignals(True)
+                self.tab_widget.setCurrentIndex(self.current_tab_index)
+                self.tab_widget.blockSignals(False)
+                
+                self._ask_about_unsaved_changes(
+                    lambda: self._change_to_tab(new_index),
+                    lambda: None  # Stay on current tab
+                )
+                return
+        
+        # No unsaved changes or same tab, proceed with change
+        self.current_tab_index = new_index
+        self._update_apply_button()
+    
+    def _change_to_tab(self, new_index):
+        """Actually change to the new tab after handling unsaved changes"""
+        self.current_tab_index = new_index
+        self.tab_widget.blockSignals(True)
+        self.tab_widget.setCurrentIndex(new_index)
+        self.tab_widget.blockSignals(False)
+        self._update_apply_button()
+    
+    def has_unsaved_changes(self, tab_index=None):
+        """Check if the specified tab (or current tab) has unsaved changes"""
+        if tab_index is None:
+            tab_index = self.tab_widget.currentIndex()
+        
+        return self.tab_dirty_states.get(tab_index, False)
+    
+    def mark_tab_dirty(self, tab_index=None):
+        """Mark a tab as having unsaved changes"""
+        if tab_index is None:
+            tab_index = self.tab_widget.currentIndex()
+        
+        self.tab_dirty_states[tab_index] = True
+        self._update_apply_button()
+    
+    def mark_tab_clean(self, tab_index=None):
+        """Mark a tab as having no unsaved changes"""
+        if tab_index is None:
+            tab_index = self.tab_widget.currentIndex()
+        
+        self.tab_dirty_states[tab_index] = False
+        self._update_apply_button()
+    
+    def _update_apply_button(self):
+        """Update Apply button state based on current tab's dirty state"""
+        if hasattr(self, 'apply_btn'):
+            self.apply_btn.setEnabled(self.has_unsaved_changes())
+    
+    def apply_current_tab(self):
+        """Apply changes for the current tab only"""
+        current_index = self.tab_widget.currentIndex()
+        tab_name = self.tab_widget.tabText(current_index)
+        
+        if self.save_current_tab():
+            self.mark_tab_clean(current_index)
+            # Show brief success message in status or log
+            print(f"Applied changes for {tab_name} tab")
+    
+    def save_current_tab(self):
+        """Save only the current tab's settings"""
+        current_index = self.tab_widget.currentIndex()
+        
+        try:
+            if current_index == 0:  # General tab
+                return self._save_general_tab()
+            elif current_index == 1:  # Upload tab  
+                return self._save_upload_tab()
+            elif current_index == 2:  # Templates tab
+                return self._save_templates_tab()
+            elif current_index == 3:  # Scanning tab
+                return self._save_scanning_tab()
+            elif current_index == 4:  # Tabs tab
+                return self._save_tabs_tab()
+            else:
+                return True
+        except Exception as e:
+            print(f"Error saving tab {current_index}: {e}")
+            return False
     
     def on_cancel_clicked(self):
         """Handle cancel button click - check for unsaved changes first"""
@@ -1215,13 +1366,257 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def closeEvent(self, event):
         """Handle dialog closing with unsaved changes check"""
-        # Check if Templates tab has unsaved changes
+        # Check for unsaved changes in any tab
+        has_unsaved = False
+        for i in range(self.tab_widget.count()):
+            if self.tab_dirty_states.get(i, False):
+                has_unsaved = True
+                break
+        
+        # Also check if Templates tab has unsaved changes (legacy check)
         if hasattr(self, 'template_dialog') and self.template_dialog.unsaved_changes:
-            self._check_unsaved_changes_before_close(lambda: self.accept())
-            event.ignore()  # Ignore for now, will be handled by callback
+            has_unsaved = True
+        
+        if has_unsaved:
+            # Use the same logic as save_and_close but for close
+            event.ignore()  # Prevent immediate close
+            self._handle_close_with_unsaved_changes()
         else:
             # No unsaved changes, proceed with normal close
             event.accept()
+    
+    def _handle_close_with_unsaved_changes(self):
+        """Handle close with unsaved changes - reuse save_and_close logic"""
+        # Check for unsaved changes in current tab first
+        if self.has_unsaved_changes():
+            # Save current tab
+            if not self.save_current_tab():
+                return  # Failed to save, stay open
+            self.mark_tab_clean()
+        
+        # Check all other tabs for unsaved changes
+        unsaved_tabs = []
+        for i in range(self.tab_widget.count()):
+            if i != self.current_tab_index and self.tab_dirty_states.get(i, False):
+                unsaved_tabs.append((i, self.tab_widget.tabText(i)))
+        
+        if unsaved_tabs:
+            # Ask user about unsaved changes in other tabs
+            tab_names = ", ".join([name for _, name in unsaved_tabs])
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Question)
+            msg_box.setWindowTitle("Unsaved Changes")
+            msg_box.setText(f"You have unsaved changes in other tabs: {tab_names}")
+            msg_box.setInformativeText("Do you want to save all changes before closing?")
+            
+            save_all_btn = msg_box.addButton("Save All", QMessageBox.ButtonRole.AcceptRole)
+            discard_btn = msg_box.addButton("Discard All", QMessageBox.ButtonRole.DestructiveRole)
+            cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+            
+            msg_box.setDefaultButton(save_all_btn)
+            msg_box.finished.connect(lambda result: self._handle_close_unsaved_result(result, msg_box.clickedButton(), save_all_btn, discard_btn, cancel_btn))
+            msg_box.open()
+        else:
+            # No other unsaved tabs, proceed with close
+            self.accept()
+    
+    def _handle_close_unsaved_result(self, result, clicked_button, save_all_btn, discard_btn, cancel_btn):
+        """Handle result of close unsaved changes dialog"""
+        if clicked_button == save_all_btn:
+            # Save all dirty tabs
+            unsaved_tabs = []
+            for i in range(self.tab_widget.count()):
+                if i != self.current_tab_index and self.tab_dirty_states.get(i, False):
+                    unsaved_tabs.append((i, self.tab_widget.tabText(i)))
+            
+            for tab_index, _ in unsaved_tabs:
+                old_index = self.current_tab_index
+                self.current_tab_index = tab_index
+                if not self.save_current_tab():
+                    self.current_tab_index = old_index
+                    return  # Failed to save, stay open
+                self.mark_tab_clean(tab_index)
+                self.current_tab_index = old_index
+            
+            # All saved successfully, close
+            self.accept()
+        elif clicked_button == discard_btn:
+            # Discard all changes and close
+            self.accept()
+        # Cancel - do nothing, stay open
+    
+    def _ask_about_unsaved_changes(self, save_callback, cancel_callback):
+        """Ask user about unsaved changes with save/discard/cancel options"""
+        current_index = self.tab_widget.currentIndex()
+        tab_name = self.tab_widget.tabText(current_index)
+        
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        msg_box.setWindowTitle("Unsaved Changes")
+        msg_box.setText(f"You have unsaved changes in the '{tab_name}' tab.")
+        msg_box.setInformativeText("Do you want to save your changes before switching tabs?")
+        
+        save_btn = msg_box.addButton("Save", QMessageBox.ButtonRole.AcceptRole)
+        discard_btn = msg_box.addButton("Discard", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        
+        msg_box.setDefaultButton(save_btn)
+        
+        # Use exec() for blocking dialog instead of open() with signals
+        result = msg_box.exec()
+        clicked_button = msg_box.clickedButton()
+        
+        if clicked_button == save_btn:
+            # Save current tab first, then proceed
+            if self.save_current_tab():
+                self.mark_tab_clean()
+                save_callback()
+        elif clicked_button == discard_btn:
+            # Discard changes by reloading the tab and proceed
+            self._reload_current_tab()
+            self.mark_tab_clean()
+            save_callback()
+        # Cancel button - do nothing, stay on current tab
+    
+    def _reload_current_tab(self):
+        """Reload current tab's form values from saved settings (discard changes)"""
+        current_index = self.tab_widget.currentIndex()
+        
+        if current_index == 0:  # General tab
+            self._reload_general_tab()
+        elif current_index == 5:  # Scanning tab  
+            self._reload_scanning_tab()
+        # Other tabs don't have form controls that need reloading
+    
+    def _reload_general_tab(self):
+        """Reload General tab form values from saved settings"""
+        defaults = load_user_defaults()
+        
+        # Reload upload settings
+        self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
+        self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
+        self.max_retries_spin.setValue(defaults.get('max_retries', 3))
+        self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
+        
+        # Reload general settings
+        self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
+        self.public_gallery_check.setChecked(defaults.get('public_gallery', 1) == 1)
+        self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
+        
+        # Reload storage settings
+        self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
+        self.store_in_central_check.setChecked(defaults.get('store_in_central', True))
+        
+        from imxup import get_central_store_base_path
+        current_path = defaults.get('central_store_path') or get_central_store_base_path()
+        self.path_edit.setText(current_path)
+        
+        # Reload theme
+        if self.parent and hasattr(self.parent, 'settings'):
+            current_theme = self.parent.settings.value('ui/theme', 'system')
+            index = self.theme_combo.findText(current_theme)
+            if index >= 0:
+                self.theme_combo.setCurrentIndex(index)
+    
+    def _reload_scanning_tab(self):
+        """Reload Scanning tab form values from saved settings"""
+        # Reload scanning settings from QSettings
+        if self.parent and hasattr(self.parent, 'settings'):
+            fast_scan = self.parent.settings.value('scanning/fast_scan', True, type=bool)
+            self.fast_scan_check.setChecked(fast_scan)
+            
+            sampling_index = self.parent.settings.value('scanning/pil_sampling_index', 2, type=int)
+            if 0 <= sampling_index < self.pil_sampling_combo.count():
+                self.pil_sampling_combo.setCurrentIndex(sampling_index)
+    
+    def _save_general_tab(self):
+        """Save General tab settings only"""
+        try:
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+            
+            if os.path.exists(config_file):
+                config.read(config_file)
+            
+            if 'UPLOAD' not in config:
+                config.add_section('UPLOAD')
+                
+            # Save thumbnail settings
+            config.set('UPLOAD', 'thumbnail_size', str(self.thumbnail_size_combo.currentIndex() + 1))
+            config.set('UPLOAD', 'thumbnail_format', str(self.thumbnail_format_combo.currentIndex() + 1))
+            config.set('UPLOAD', 'max_retries', str(self.max_retries_spin.value()))
+            config.set('UPLOAD', 'parallel_batch_size', str(self.batch_size_spin.value()))
+            
+            with open(config_file, 'w') as f:
+                config.write(f)
+            
+            return True
+        except Exception as e:
+            print(f"Error saving general settings: {e}")
+            return False
+    
+    def _save_upload_tab(self):
+        """Save Upload/Credentials tab settings only"""
+        try:
+            # Credentials are saved through their individual button handlers
+            # This tab doesn't have bulk settings to save
+            return True
+        except Exception as e:
+            print(f"Error saving upload settings: {e}")
+            return False
+    
+    def _save_templates_tab(self):
+        """Save Templates tab settings only"""
+        try:
+            if hasattr(self, 'template_dialog') and self.template_dialog.unsaved_changes:
+                return self.template_dialog.save_template()
+            return True
+        except Exception as e:
+            print(f"Error saving template settings: {e}")
+            return False
+    
+    def _save_scanning_tab(self):
+        """Save Scanning tab settings only"""
+        try:
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+            
+            if os.path.exists(config_file):
+                config.read(config_file)
+            
+            if 'SCANNING' not in config:
+                config.add_section('SCANNING')
+            
+            # Save scanning settings
+            config.set('SCANNING', 'fast_scanning', str(self.fast_scanning_cb.isChecked()))
+            config.set('SCANNING', 'pil_sample_count', str(self.pil_sample_spin.value()))
+            
+            with open(config_file, 'w') as f:
+                config.write(f)
+            
+            return True
+        except Exception as e:
+            print(f"Error saving scanning settings: {e}")
+            return False
+    
+    def _save_tabs_tab(self):
+        """Save Tabs tab settings only"""
+        try:
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+            
+            if os.path.exists(config_file):
+                config.read(config_file)
+            
+            if 'TABS' not in config:
+                config.add_section('TABS')
+            
+            # Save tab manager settings (if any specific settings exist)
+            # This tab is mostly for viewing/managing tabs, not configuration
+            return True
+        except Exception as e:
+            print(f"Error saving tab settings: {e}")
+            return False
 
 
 # Import the dialog classes that will be moved to imxup_dialogs.py

@@ -6146,17 +6146,23 @@ class ImxUploadGUI(QMainWindow):
         self.server.start()
         
         if self.splash:
-            self.splash.set_status("GUI")
+            self.splash.set_status("user interface")
         self.setup_ui()
+        if self.splash:
+            self.splash.set_status("menu bar")
         self.setup_menu_bar()
+        if self.splash:
+            self.splash.set_status("system tray")
         self.setup_system_tray()
+        if self.splash:
+            self.splash.set_status("saved settings")
         self.restore_settings()
         
         # Easter egg - quick gremlin flash
         if self.splash:
             self.splash.set_status("gremlins")
             QApplication.processEvents()
-            time.sleep(0.05)  # Very brief
+            time.sleep(0.01)  # Very brief
         
         # Initialize table update queue after table creation
         self._table_update_queue = TableUpdateQueue(self.gallery_table, self.path_to_row)
@@ -10155,7 +10161,7 @@ def main():
     # Show splash screen immediately
     splash = SplashScreen()
     splash.show()
-    splash.update_status("Initializing...")
+    splash.update_status("Initializing")
     
     # Handle command line arguments
     folders_to_add = []

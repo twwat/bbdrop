@@ -17,11 +17,19 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(480, 350)
-        pixmap.fill(QColor(45, 52, 64))  # Dark blue-gray background
+        pixmap = QPixmap(550, 360)
+        pixmap.fill(QColor(248, 237, 255))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
-        
-        self.status_text = "Initializing"
+        self.init_action_words = [
+            "initializing", "activating actuators", "establishing alibi", "connecting to skynet",
+            "fabricating evidence", "concocting plan", "devising exit strategy", "improvising",
+            "conspiring", "mobilizing", "arousing", "linking to mothership", "replicating replicants",
+            "configuring", "populating microverse", "instantiating", "kicking", "Smashing",
+            "rebooting", "stabilizing mood", "normalizing", "approximating", "recombinating",
+            "extrapolating", "inseminating", "obliterating", "annihilating",
+            "observifying", "calibrating", "accelerating", "optimizing", "flipping tables",
+            "exorcising", "wiping back to front"]
+        self.status_text = random.choice(self.init_action_words).title()
         self.progress_dots = ""
         
         # Random action words and objects
@@ -50,7 +58,7 @@ class SplashScreen(QSplashScreen):
             from imxup import __version__
             self.version = f"v{__version__}"
         except:
-            self.version = "v1.0"
+            self.version = "Version 69"
         
         # Auto-cycling timer for random status updates
         self.random_timer = QTimer()
@@ -65,41 +73,54 @@ class SplashScreen(QSplashScreen):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Draw solid border
-        painter.setPen(QColor(200, 200, 200))
+        painter.setPen(QColor(154, 126, 111))
         painter.drawRect(0, 0, self.width() - 1, self.height() - 1)
         
         # Draw title at top
-        painter.setPen(QColor(255, 255, 255))
-        title_font = QFont("Arial", 16, QFont.Weight.Bold)
+        painter.setPen(QColor(82, 92, 235))
+        title_font = QFont("Arial", 24, QFont.Weight.Bold)
         painter.setFont(title_font)
-        title_text = "IMX.to Gallery Uploader"
+        title_text = "IMXupper"
         title_rect = painter.fontMetrics().boundingRect(title_text)
         title_x = (self.width() - title_rect.width()) // 2
-        painter.drawText(title_x, 40, title_text)
+        painter.drawText(title_x, 60, title_text)
         
         # Draw version
-        version_font = QFont("Arial", 11)
+        version_font = QFont("Courier", 16, QFont.Weight.Bold)
         painter.setFont(version_font)
-        painter.setPen(QColor(180, 180, 180))
+        painter.setPen(QColor(41, 95, 152))
         version_rect = painter.fontMetrics().boundingRect(self.version)
         version_x = (self.width() - version_rect.width()) // 2
-        painter.drawText(version_x, 60, self.version)
+        painter.drawText(version_x, 95, self.version)
+        
+        copyright_text = "Copyright © 2025 twat"
+        copyright_font = QFont("Courier", 12, QFont.Weight.Bold)
+        painter.setFont(copyright_font)
+        painter.setPen(QColor(21, 21, 21))
+        copyright_rect = painter.fontMetrics().boundingRect(copyright_text)
+        copyright_x = (self.width() - copyright_rect.width()) // 2
+        painter.drawText(copyright_x, 118, copyright_text)
         
         # Draw copyright and license info
-        painter.setPen(QColor(150, 150, 150))
-        license_font = QFont("Arial", 8)
+        painter.setPen(QColor(21, 21, 21))
+        license_font = QFont("Courier", 11, QFont.Weight.Bold)
         painter.setFont(license_font)
         
         license_lines = [
-            "Copyright © 2025 by twat",
             "",
             "Licensed under the Apache License, Version 2.0",
             "",
-            "THIS SOFTWARE IS DISTRIBUTED ON AN \"AS IS\" BASIS, WITHOUT",
-            "WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED."
+            "Unless required by applicable law or agreed to in writing,",
+            "software distributed under the license is on an \"as is\"",
+            "basis without warranties or conditions of any kind,"
+            "either express or implied. Also, no fat chicks.",
+            "",
+            "The \"IMX.to\" name and logo are property of IMX.to.",
+            "Use of their image hosting service is subject to",
+            "their terms, conditions and privacy policy."
         ]
         
-        y_pos = 90
+        y_pos = 130
         for line in license_lines:
             if line:
                 line_rect = painter.fontMetrics().boundingRect(line)
@@ -108,23 +129,23 @@ class SplashScreen(QSplashScreen):
             y_pos += 12
         
         # Draw status text at bottom
-        painter.setPen(QColor(255, 255, 255))
-        status_font = QFont("Courier", 11)
+        painter.setPen(QColor(21, 21, 21))
+        status_font = QFont("Courier", 12)
         painter.setFont(status_font)
         
         status_rect = painter.fontMetrics().boundingRect(self.status_text)
         status_x = (self.width() - status_rect.width()) // 2
-        painter.drawText(status_x, self.height() - 45, self.status_text)
+        painter.drawText(status_x, self.height() - 25, self.status_text)
         
         # Draw progress dots in fixed position (left-aligned within centered area)
-        dots_font = QFont("Courier", 11)
+        dots_font = QFont("Courier", 18, QFont.Weight.Bold)
         painter.setFont(dots_font)
-        painter.setPen(QColor(180, 180, 180))
+        painter.setPen(QColor(82, 92, 235))
         
         # Create a fixed-width area for dots (centered, but dots are left-aligned within it)
-        dots_area_width = 50
+        dots_area_width = 120
         dots_area_x = (self.width() - dots_area_width) // 2
-        painter.drawText(dots_area_x, self.height() - 25, self.progress_dots)
+        painter.drawText(dots_area_x, self.height() - 50, self.progress_dots)
         
         painter.end()
     
@@ -159,7 +180,7 @@ class SplashScreen(QSplashScreen):
         self.random_timer.stop()
         action = random.choice(self.action_words).title()
         self.status_text = f"{action} {text}"
-        self.progress_dots += "."
+        self.progress_dots += "•"
         self.repaint()
         QApplication.processEvents()
     
