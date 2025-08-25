@@ -50,6 +50,7 @@ from src.gui.splash_screen import SplashScreen
 
 
 from src.core.engine import UploadEngine
+from src.core.constants import IMAGE_EXTENSIONS
 from src.storage.database import QueueStore
 from src.utils.logging import get_logger
 from src.gui.settings_dialog import ComprehensiveSettingsDialog
@@ -6978,6 +6979,7 @@ class ImxUploadGUI(QMainWindow):
         size_item_existing = self.gallery_table.item(row, 8)
         if (item.scan_complete and hasattr(item, 'total_size') and item.total_size > 0 and 
             (not size_item_existing or not size_item_existing.text().strip())):
+            _is_dark_mode = self._get_cached_theme()
             self._update_size_and_transfer_columns(row, item, _is_dark_mode)
     
     def _update_size_and_transfer_columns(self, row: int, item: GalleryQueueItem, _is_dark_mode: bool):

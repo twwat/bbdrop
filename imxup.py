@@ -7,7 +7,7 @@ Upload image folders to imx.to as galleries
 import os
 import requests
 import json
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 import argparse
 import sys
 from pathlib import Path
@@ -34,7 +34,7 @@ import glob
 import winreg
 
 # Load environment variables
-load_dotenv()
+#load_dotenv()
 
 # Application version
 __version__ = "0.2.4"
@@ -909,8 +909,8 @@ class ImxToUploader:
         self.username, self.password, self.api_key = self._get_credentials()
         
         # Fallback to environment variable for API key if not in config
-        if not self.api_key:
-            self.api_key = os.getenv('IMX_API')
+        #if not self.api_key:
+        #    self.api_key = os.getenv('IMX_API')
         
         # Check if we have either username/password or API key
         has_credentials = (self.username and self.password) or self.api_key
