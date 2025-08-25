@@ -6,6 +6,8 @@ Handles background upload and completion tasks.
 import os
 import time
 import traceback
+import queue
+from queue import Queue
 from typing import Dict, Any, Optional, Set
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
 
@@ -14,211 +16,214 @@ from imxup import rename_all_unnamed_with_session, get_central_storage_path
 from imxup_core import UploadEngine
 from imxup_constants import (
     QUEUE_STATE_UPLOADING, QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED,
-    QUEUE_STATE_INCOMPLETE, QUEUE_STATE_PAUSED, DEFAULT_PARALLEL_BATCH_SIZE,
-    DEFAULT_THUMBNAIL_SIZE, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_PUBLIC_GALLERY,
-    MAX_RETRIES
+    QUEUE_STATE_PAUSED, QUEUE_STATE_READY
 )
-from imxup_exceptions import UploadError, WorkerError
 
 
 class UploadWorker(QThread):
-    """Worker thread for uploading galleries"""
+    """Worker thread for handling gallery uploads"""
     
     # Signals
-    progress_updated = pyqtSignal(str, int, int, int, str)  # path, completed, total, progress%, current_image
+    progress_updated = pyqtSignal(str, int, int, int, str)  # path, completed, total, percent, current_image
     gallery_started = pyqtSignal(str, int)  # path, total_images
     gallery_completed = pyqtSignal(str, dict)  # path, results
-    gallery_failed = pyqtSignal(str, str)  # path, error_message
-    gallery_exists = pyqtSignal(str, list)  # gallery_name, existing_files
-    gallery_renamed = pyqtSignal(str)  # gallery_id
+    gallery_failed = pyqtSignal(str, str)  # path, error
+    gallery_exists = pyqtSignal(str, str)  # path, gallery_url
+    gallery_renamed = pyqtSignal(str, str)  # gallery_id, new_name
     log_message = pyqtSignal(str)
-    bandwidth_updated = pyqtSignal(float)  # current KB/s across active uploads
-    queue_stats = pyqtSignal(dict)  # aggregate status stats for GUI updates
+    bandwidth_updated = pyqtSignal(float)  # Current upload speed in KB/s
+    queue_stats = pyqtSignal(dict)  # Queue statistics
     
     def __init__(self, queue_manager):
         super().__init__()
         self.queue_manager = queue_manager
         self.uploader = None
-        self.running = False
-        self.paused = False
+        self.current_item = None
         self.mutex = QMutex()
-        self.upload_engine = None
-        self.current_gallery_path = None
+        self.running = True
+        self.paused = False
         self._stop_current = False
-        self._uploaded_images: Set[str] = set()
-        self._bandwidth_tracker = BandwidthTracker()
-    
-    def initialize_uploader(self):
-        """Initialize the uploader instance"""
-        try:
-            self.uploader = ImxToUploader()
-            self.upload_engine = UploadEngine(self.uploader)
-            return True
-        except Exception as e:
-            self.log_message.emit(f"Failed to initialize uploader: {e}")
-            return False
+        self._soft_stop_requested_for = None
+        
+        # Bandwidth tracking
+        self._bw_last_emit = 0
+        self._stats_last_emit = 0
+        
+        # Auto-rename preference
+        self.auto_rename_enabled = False
     
     def run(self):
         """Main worker thread loop"""
-        self.running = True
+        # Create uploader instance in the thread
+        from imxup_network import GUIImxToUploader
+        self.uploader = GUIImxToUploader(self)
         
-        if not self.initialize_uploader():
-            return
+        # Initialize session
+        self._init_session()
         
         while self.running:
-            if self.paused:
-                self.msleep(100)
-                continue
-            
-            # Get next item from queue
-            item = self.queue_manager.get_next_queued_item()
-            if not item:
-                # Auto-rename check when idle
-                self._check_auto_rename()
-                self.msleep(1000)
-                continue
-            
-            self.current_gallery_path = item.path
-            self._stop_current = False
-            self._uploaded_images.clear()
-            
-            # Update status to uploading
-            self.queue_manager.update_item_status(item.path, QUEUE_STATE_UPLOADING)
-            
-            # Start upload
-            self._upload_gallery(item)
-            
-            self.current_gallery_path = None
+            try:
+                # Check for pause
+                with QMutexLocker(self.mutex):
+                    if self.paused:
+                        time.sleep(0.1)
+                        continue
+                
+                # Get next item from queue
+                item = self._get_next_item()
+                if not item:
+                    # Try auto-rename if enabled
+                    if self.auto_rename_enabled:
+                        self._try_auto_rename()
+                    time.sleep(0.5)
+                    continue
+                
+                # Set current item
+                with QMutexLocker(self.mutex):
+                    self.current_item = item
+                    self._stop_current = False
+                    self._soft_stop_requested_for = None
+                
+                # Update status to uploading
+                self.queue_manager.update_item_status(item.path, QUEUE_STATE_UPLOADING)
+                
+                # Perform upload
+                self._upload_gallery(item)
+                
+                # Clear current item
+                with QMutexLocker(self.mutex):
+                    self.current_item = None
+                    
+            except Exception as e:
+                self.log_message.emit(f"Worker error: {e}")
+                traceback.print_exc()
+    
+    def _init_session(self):
+        """Initialize uploader session"""
+        try:
+            success = self.uploader.init_session()
+            if success:
+                self.log_message.emit("Session initialized successfully")
+            else:
+                self.log_message.emit("Failed to initialize session")
+        except Exception as e:
+            self.log_message.emit(f"Session initialization error: {e}")
+    
+    def _get_next_item(self):
+        """Get next item from queue"""
+        items = self.queue_manager.get_all_items()
+        
+        # Find first ready or paused item (paused can be resumed)
+        for item in items:
+            if item.status in [QUEUE_STATE_READY, "queued"]:
+                return item
+        
+        # Check for incomplete uploads to resume
+        for item in items:
+            if item.status == "incomplete":
+                return item
+        
+        return None
     
     def _upload_gallery(self, item):
-        """Upload a single gallery"""
+        """Upload a gallery"""
         try:
-            # Emit start signal
-            self.gallery_started.emit(item.path, item.total_images)
+            # Check if gallery exists
+            if item.gallery_id:
+                gallery_url = f"https://imx.to/g/{item.gallery_id}"
+                if self._check_gallery_exists(gallery_url):
+                    self.gallery_exists.emit(item.path, gallery_url)
+                    self.queue_manager.update_item_status(item.path, QUEUE_STATE_COMPLETED)
+                    return
             
-            # Configure upload parameters
-            config = self._get_upload_config()
+            # Start upload
+            item.start_time = time.time()
+            item.uploaded_files = set()
+            item.uploaded_images_data = []
+            item.uploaded_bytes = 0
             
-            # Progress callback
-            def on_progress(completed, total, percent, current_image):
-                if not self._stop_current:
-                    self.progress_updated.emit(item.path, completed, total, percent, current_image)
-                    self._update_bandwidth_stats(completed, total)
-            
-            # Log callback
-            def on_log(message):
-                self.log_message.emit(message)
-            
-            # Soft stop callback
-            def should_stop():
-                return self._stop_current or not self.running
-            
-            # Image uploaded callback for resume support
-            def on_image_uploaded(filename, data, size_bytes):
-                self._uploaded_images.add(filename)
-                self._bandwidth_tracker.add_transfer(size_bytes)
-            
-            # Run upload
-            results = self.upload_engine.run(
+            # Perform upload using uploader
+            results = self.uploader.upload_folder(
                 folder_path=item.path,
                 gallery_name=item.name,
-                thumbnail_size=config['thumbnail_size'],
-                thumbnail_format=config['thumbnail_format'],
-                max_retries=config['max_retries'],
-                public_gallery=config['public_gallery'],
-                parallel_batch_size=config['parallel_batch_size'],
-                template_name=item.template_name,
-                already_uploaded=self._uploaded_images if item.status == QUEUE_STATE_INCOMPLETE else None,
-                on_progress=on_progress,
-                on_log=on_log,
-                should_soft_stop=should_stop,
-                on_image_uploaded=on_image_uploaded
+                template_name=item.template_name
             )
+            
+            # Check if stopped
+            with QMutexLocker(self.mutex):
+                if self._stop_current:
+                    self.queue_manager.update_item_status(item.path, "incomplete")
+                    return
             
             # Handle results
-            if self._stop_current:
-                # Gallery was stopped
-                self.queue_manager.update_item_status(item.path, QUEUE_STATE_PAUSED)
-            elif results.get('failed_count', 0) > 0:
-                # Partial failure
-                self.queue_manager.update_item_status(item.path, QUEUE_STATE_INCOMPLETE)
-                self.gallery_failed.emit(item.path, f"Failed to upload {results['failed_count']} images")
-            else:
-                # Success
-                self.queue_manager.update_item_status(item.path, QUEUE_STATE_COMPLETED)
+            if results and results.get('gallery_id'):
+                item.gallery_id = results['gallery_id']
+                item.gallery_url = f"https://imx.to/g/{results['gallery_id']}"
+                item.uploaded_images = results.get('successful_count', 0)
+                item.finished_time = time.time()
+                
+                # Calculate final transfer rate
+                if item.start_time:
+                    elapsed = item.finished_time - item.start_time
+                    if elapsed > 0 and item.uploaded_bytes > 0:
+                        item.final_kibps = (item.uploaded_bytes / elapsed) / 1024.0
+                
                 self.gallery_completed.emit(item.path, results)
-                
-                # Save artifacts
-                self._save_artifacts(item, results)
+                self.queue_manager.update_item_status(item.path, QUEUE_STATE_COMPLETED)
+            else:
+                error_msg = results.get('error', 'Unknown error') if results else 'Upload failed'
+                self.gallery_failed.emit(item.path, error_msg)
+                self.queue_manager.update_item_status(item.path, QUEUE_STATE_FAILED)
                 
         except Exception as e:
-            error_msg = f"Upload failed: {str(e)}"
-            self.log_message.emit(f"Error uploading {item.path}: {error_msg}")
-            self.queue_manager.update_item_status(item.path, QUEUE_STATE_FAILED)
+            error_msg = str(e)
             self.gallery_failed.emit(item.path, error_msg)
+            self.queue_manager.update_item_status(item.path, QUEUE_STATE_FAILED)
+            self.log_message.emit(f"Upload error for {item.path}: {error_msg}")
     
-    def _get_upload_config(self) -> Dict[str, Any]:
-        """Get upload configuration from settings"""
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
-        
-        return {
-            'thumbnail_size': settings.value("upload/thumbnail_size", DEFAULT_THUMBNAIL_SIZE, type=int),
-            'thumbnail_format': settings.value("upload/thumbnail_format", DEFAULT_THUMBNAIL_FORMAT, type=int),
-            'max_retries': settings.value("upload/max_retries", MAX_RETRIES, type=int),
-            'public_gallery': settings.value("upload/public_gallery", DEFAULT_PUBLIC_GALLERY, type=int),
-            'parallel_batch_size': settings.value("upload/parallel_batch_size", DEFAULT_PARALLEL_BATCH_SIZE, type=int)
-        }
-    
-    def _save_artifacts(self, item, results):
-        """Save gallery artifacts (JSON and BBCode)"""
+    def _check_gallery_exists(self, gallery_url: str) -> bool:
+        """Check if a gallery already exists"""
         try:
-            central_path = get_central_storage_path()
-            
-            # Generate BBCode
-            bbcode = generate_bbcode_from_template(item.template_name, results)
-            
-            # Save artifacts
-            save_gallery_artifacts(
-                central_path, 
-                results['gallery_name'],
-                results['gallery_id'],
-                results,
-                bbcode
-            )
-            
-            self.log_message.emit(f"Artifacts saved for gallery: {results['gallery_name']}")
-            
+            import requests
+            response = requests.head(gallery_url, timeout=5)
+            return response.status_code == 200
+        except:
+            return False
+    
+    def _try_auto_rename(self):
+        """Try to auto-rename unnamed galleries"""
+        try:
+            if self.uploader and self.uploader.session:
+                renamed = rename_all_unnamed_with_session(self.uploader.session)
+                if renamed:
+                    for gallery_id, new_name in renamed:
+                        self.gallery_renamed.emit(gallery_id, new_name)
+                        self.log_message.emit(f"Gallery {gallery_id} renamed to: {new_name}")
         except Exception as e:
-            self.log_message.emit(f"Failed to save artifacts: {e}")
+            self.log_message.emit(f"Auto-rename error: {e}")
     
-    def _check_auto_rename(self):
-        """Check for galleries that need renaming"""
+    def _emit_queue_stats(self):
+        """Emit queue statistics"""
         try:
-            if self.uploader:
-                renamed_count = rename_all_unnamed_with_session(self.uploader)
-                if renamed_count > 0:
-                    self.log_message.emit(f"Auto-renamed {renamed_count} galleries")
-        except Exception:
-            pass
-    
-    def _update_bandwidth_stats(self, completed, total):
-        """Update bandwidth statistics"""
-        try:
-            current_rate = self._bandwidth_tracker.get_current_rate()
-            self.bandwidth_updated.emit(current_rate)
-            
-            # Emit queue statistics
-            stats = self.queue_manager.get_queue_stats()
+            stats = self.queue_manager.get_statistics()
             self.queue_stats.emit(stats)
-            
-        except Exception:
+        except:
             pass
     
-    def stop_current_upload(self):
-        """Stop the current upload gracefully"""
+    def request_soft_stop(self, gallery_path: str):
+        """Request a soft stop for the current upload"""
         with QMutexLocker(self.mutex):
-            self._stop_current = True
+            if self.current_item and self.current_item.path == gallery_path:
+                self._soft_stop_requested_for = gallery_path
+    
+    def request_retry_login(self, credentials_only: bool = False):
+        """Request a login retry"""
+        if self.uploader:
+            try:
+                self.uploader.retry_login(credentials_only)
+                self.log_message.emit("Login retry requested")
+            except Exception as e:
+                self.log_message.emit(f"Login retry failed: {e}")
     
     def pause(self):
         """Pause the worker"""
@@ -239,123 +244,118 @@ class UploadWorker(QThread):
 
 
 class CompletionWorker(QThread):
-    """Worker thread for completing gallery processing tasks"""
+    """Worker thread for handling gallery completion processing to avoid GUI blocking"""
     
     # Signals
+    completion_processed = pyqtSignal(str)  # path - signals when completion processing is done
     log_message = pyqtSignal(str)
-    gallery_renamed = pyqtSignal(str, str)  # gallery_id, new_name
-    processing_complete = pyqtSignal(str)  # gallery_path
     
-    def __init__(self, uploader: ImxToUploader):
-        super().__init__()
-        self.uploader = uploader
-        self.tasks = []
-        self.mutex = QMutex()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.completion_queue = Queue()
+        self.running = True
     
-    def add_task(self, task_type: str, **kwargs):
-        """Add a task to the completion queue"""
-        with QMutexLocker(self.mutex):
-            self.tasks.append({
-                'type': task_type,
-                'params': kwargs
-            })
+    def stop(self):
+        self.running = False
+        self.completion_queue.put(None)  # Signal to exit
+        
+    def process_completion(self, path: str, results: dict, gui_parent):
+        """Queue a completion for background processing"""
+        self.completion_queue.put((path, results, gui_parent))
     
     def run(self):
-        """Process completion tasks"""
-        while self.tasks:
-            with QMutexLocker(self.mutex):
-                if not self.tasks:
-                    break
-                task = self.tasks.pop(0)
-            
+        """Process completions in background thread"""
+        while self.running:
             try:
-                if task['type'] == 'rename':
-                    self._rename_gallery(**task['params'])
-                elif task['type'] == 'visibility':
-                    self._set_visibility(**task['params'])
-                elif task['type'] == 'cleanup':
-                    self._cleanup_gallery(**task['params'])
+                item = self.completion_queue.get(timeout=1.0)
+                if item is None:  # Exit signal
+                    break
+                    
+                path, results, gui_parent = item
+                self._process_completion_background(path, results, gui_parent)
+                self.completion_processed.emit(path)
+                
+            except queue.Empty:
+                continue
+            except Exception as e:
+                from imxup import timestamp
+                self.log_message.emit(f"{timestamp()} Completion processing error: {e}")
+    
+    def _process_completion_background(self, path: str, results: dict, gui_parent):
+        """Do the heavy completion processing in background thread"""
+        try:
+            from imxup import timestamp, save_unnamed_gallery, get_unnamed_galleries, check_gallery_renamed
+            from datetime import datetime
+            
+            # Create gallery files with new naming format
+            gallery_id = results.get('gallery_id', '')
+            gallery_name = results.get('gallery_name', os.path.basename(path))
+            
+            if not gallery_id or not gallery_name:
+                return
+            
+            # Only track for renaming if gallery is actually unnamed
+            try:
+                # Check if gallery is already renamed
+                is_renamed = check_gallery_renamed(gallery_id)
+                if not is_renamed:
+                    # Check if already in unnamed tracking
+                    existing_unnamed = get_unnamed_galleries()
+                    if gallery_id not in [g['gallery_id'] for g in existing_unnamed]:
+                        save_unnamed_gallery(gallery_id, gallery_name)
+                        self.log_message.emit(f"{timestamp()} [rename] Tracking gallery for auto-rename: {gallery_name}")
+            except Exception:
+                pass
+                
+            # Generate BBCode and save artifacts - simplified version
+            try:
+                # Get template name from the item
+                item = gui_parent.queue_manager.get_item(path)
+                template_name = item.template_name if item else "default"
+                
+                # Save artifacts
+                written = save_gallery_artifacts(
+                    folder_path=path,
+                    results=results,
+                    template_name=template_name,
+                )
+                
+                if written:
+                    self.log_message.emit(f"{timestamp()} [fileio] Saved gallery files")
                     
             except Exception as e:
-                self.log_message.emit(f"Completion task failed: {e}")
-    
-    def _rename_gallery(self, gallery_id: str, new_name: str):
-        """Rename a gallery"""
-        try:
-            success = self.uploader.rename_gallery_with_session(gallery_id, new_name)
-            if success:
-                self.gallery_renamed.emit(gallery_id, new_name)
-                self.log_message.emit(f"Gallery {gallery_id} renamed to: {new_name}")
-            else:
-                self.log_message.emit(f"Failed to rename gallery {gallery_id}")
+                self.log_message.emit(f"{timestamp()} Artifact save error: {e}")
+                
         except Exception as e:
-            self.log_message.emit(f"Rename error: {e}")
-    
-    def _set_visibility(self, gallery_id: str, public: bool):
-        """Set gallery visibility"""
-        try:
-            visibility = 1 if public else 0
-            success = self.uploader.set_gallery_visibility(gallery_id, visibility)
-            if success:
-                status = "public" if public else "private"
-                self.log_message.emit(f"Gallery {gallery_id} set to {status}")
-            else:
-                self.log_message.emit(f"Failed to update visibility for {gallery_id}")
-        except Exception as e:
-            self.log_message.emit(f"Visibility update error: {e}")
-    
-    def _cleanup_gallery(self, gallery_path: str):
-        """Cleanup gallery resources"""
-        try:
-            # Perform any cleanup needed
-            self.processing_complete.emit(gallery_path)
-        except Exception as e:
-            self.log_message.emit(f"Cleanup error: {e}")
+            from imxup import timestamp
+            self.log_message.emit(f"{timestamp()} Background completion processing error: {e}")
 
 
 class BandwidthTracker:
-    """Track upload bandwidth statistics"""
+    """Track upload bandwidth with sliding window"""
     
     def __init__(self, window_size: int = 10):
         self.window_size = window_size
-        self.transfers = []  # List of (timestamp, bytes) tuples
+        self.samples = []
         self.mutex = QMutex()
     
-    def add_transfer(self, size_bytes: int):
-        """Add a transfer to the tracker"""
+    def add_sample(self, bytes_uploaded: int, time_elapsed: float):
+        """Add a bandwidth sample"""
         with QMutexLocker(self.mutex):
-            current_time = time.time()
-            self.transfers.append((current_time, size_bytes))
-            
-            # Clean old entries
-            cutoff_time = current_time - self.window_size
-            self.transfers = [(t, b) for t, b in self.transfers if t > cutoff_time]
+            if time_elapsed > 0:
+                kbps = (bytes_uploaded / time_elapsed) / 1024.0
+                self.samples.append(kbps)
+                if len(self.samples) > self.window_size:
+                    self.samples.pop(0)
     
-    def get_current_rate(self) -> float:
-        """Get current transfer rate in KB/s"""
+    def get_average_kbps(self) -> float:
+        """Get average bandwidth in KB/s"""
         with QMutexLocker(self.mutex):
-            if len(self.transfers) < 2:
-                return 0.0
-            
-            current_time = time.time()
-            cutoff_time = current_time - self.window_size
-            
-            # Filter recent transfers
-            recent = [(t, b) for t, b in self.transfers if t > cutoff_time]
-            
-            if not recent:
-                return 0.0
-            
-            # Calculate rate
-            total_bytes = sum(b for _, b in recent)
-            time_span = current_time - recent[0][0]
-            
-            if time_span > 0:
-                return (total_bytes / time_span) / 1024.0  # KB/s
-            
+            if self.samples:
+                return sum(self.samples) / len(self.samples)
             return 0.0
     
     def reset(self):
-        """Reset the tracker"""
+        """Reset bandwidth tracking"""
         with QMutexLocker(self.mutex):
-            self.transfers.clear()
+            self.samples.clear()

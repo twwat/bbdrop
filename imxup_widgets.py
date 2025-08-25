@@ -55,6 +55,60 @@ class TableProgressWidget(QWidget):
     def get_progress(self) -> int:
         """Get current progress value"""
         return self.progress
+    
+    def update_progress(self, value: int, status: str = ""):
+        """Update progress value with status-based styling"""
+        self.progress_bar.setValue(value)
+        
+        # Color code by status
+        if status == "completed":
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #67C58F;
+                    border-radius: 3px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #67C58F;
+                    border-radius: 2px;
+                }
+            """)
+        elif status == "failed":
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #e74c3c;
+                    border-radius: 3px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #e74c3c;
+                    border-radius: 2px;
+                }
+            """)
+        elif status == "uploading":
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #48a2de;
+                    border-radius: 3px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #48a2de;
+                    border-radius: 2px;
+                }
+            """)
+        else:
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #ccc;
+                    border-radius: 3px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #f0f0f0;
+                    border-radius: 2px;
+                }
+            """)
 
 
 class ActionButtonWidget(QWidget):

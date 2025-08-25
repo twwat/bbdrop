@@ -56,23 +56,377 @@ from imxup_settings import ComprehensiveSettingsDialog
 from imxup_tab_manager import TabManager
 from imxup_auto_archive import AutoArchiveEngine
 
-# Import widget classes from module - starting with just TableProgressWidget
-from imxup_widgets import TableProgressWidget
-
-# Import queue manager classes - adding one at a time
-from imxup_queue_manager import GalleryQueueItem, QueueManager
-
-# Import background task classes one at a time
-from imxup_background_tasks import (
-    BackgroundTaskSignals, BackgroundTask, ProgressUpdateBatcher,
-    IconCache, TableRowUpdateTask, TableUpdateQueue
-)
-
-# Import network classes
-from imxup_network import GUIImxToUploader
-
 # Single instance communication port
 COMMUNICATION_PORT = 27849
+
+# Background task handling classes
+class BackgroundTaskSignals(QObject):
+    """Signals for background tasks"""
+    finished = pyqtSignal(object)  # result
+    error = pyqtSignal(str)  # error message
+
+class BackgroundTask(QRunnable):
+    """Generic background task runner"""
+    def __init__(self, func: Callable, *args, **kwargs):
+        super().__init__()
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = BackgroundTaskSignals()
+        
+    def run(self):
+        try:
+            result = self.func(*self.args, **self.kwargs)
+            self.signals.finished.emit(result)
+        except Exception as e:
+            self.signals.error.emit(str(e))
+
+class ProgressUpdateBatcher:
+    """Batches and throttles progress updates to prevent GUI blocking"""
+    def __init__(self, update_callback: Callable, batch_interval: float = 0.05):
+        self._callback = update_callback
+        self._batch_interval = batch_interval
+        self._pending_updates = {}
+        self._last_batch_time = 0
+        self._timer = QTimer()
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._process_batch)
+        
+    def add_update(self, path: str, completed: int, total: int, progress_percent: int, current_image: str):
+        """Add a progress update to the batch"""
+        self._pending_updates[path] = {
+            'completed': completed,
+            'total': total,
+            'progress_percent': progress_percent,
+            'current_image': current_image,
+            'timestamp': time.time()
+        }
+        
+        # Schedule batch processing if not already scheduled
+        current_time = time.time()
+        if not self._timer.isActive():
+            # If enough time has passed, process immediately
+            if current_time - self._last_batch_time >= self._batch_interval:
+                self._process_batch()
+            else:
+                # Schedule for later
+                remaining_time = int((self._batch_interval - (current_time - self._last_batch_time)) * 1000)
+                self._timer.start(max(remaining_time, 10))  # Minimum 10ms
+    
+    def _process_batch(self):
+        """Process all pending updates"""
+        if not self._pending_updates:
+            return
+            
+        updates_to_process = self._pending_updates.copy()
+        self._pending_updates.clear()
+        self._last_batch_time = time.time()
+        
+        # Process updates on main thread
+        for path, update_data in updates_to_process.items():
+            self._callback(
+                path,
+                update_data['completed'],
+                update_data['total'],
+                update_data['progress_percent'],
+                update_data['current_image']
+            )
+
+class IconCache:
+    """Thread-safe icon cache to prevent blocking icon loads"""
+    def __init__(self):
+        self._cache = {}
+        self._mutex = QMutex()
+        
+    def get_icon_data(self, status: str, load_func: Callable):
+        """Get cached icon data or load if not cached"""
+        with QMutexLocker(self._mutex):
+            if status not in self._cache:
+                try:
+                    result = load_func()
+                    self._cache[status] = result
+                except Exception:
+                    # Cache None on error to avoid repeated failures
+                    self._cache[status] = None
+            return self._cache[status]
+            
+    def clear(self):
+        """Clear the cache"""
+        with QMutexLocker(self._mutex):
+            self._cache.clear()
+
+class TableRowUpdateTask:
+    """Represents a table row update task"""
+    def __init__(self, row: int, item, update_type: str = 'full'):
+        self.row = row
+        self.item = item
+        self.update_type = update_type
+        self.timestamp = time.time()
+        
+class TableUpdateQueue:
+    """Manages table update operations in a non-blocking way with tabbed interface optimizations"""
+    def __init__(self, table_widget, path_to_row_map):
+        # Handle both GalleryTableWidget and TabbedGalleryWidget
+        if hasattr(table_widget, 'gallery_table'):
+            # TabbedGalleryWidget - use the internal table
+            self._table = weakref.ref(table_widget.gallery_table)
+            self._tabbed_widget = weakref.ref(table_widget)
+        else:
+            # GalleryTableWidget - use directly
+            self._table = weakref.ref(table_widget)
+            self._tabbed_widget = None
+        self._path_to_row = path_to_row_map
+        self._pending_updates = {}
+        self._processing = False
+        self._timer = QTimer()
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._process_updates)
+        
+        # Performance optimizations for tabbed interface
+        self._visibility_cache = {}  # Cache row visibility state to avoid repeated isRowHidden() calls
+        self._cache_invalidation_counter = 0  # Counter to invalidate cache periodically
+        self._visible_rows_cache = set()  # Cache of currently visible rows
+        self._last_cache_update = 0  # Timestamp of last cache update
+        
+    def queue_update(self, path: str, item, update_type: str = 'progress'):
+        """Queue a table update with pre-filtering for hidden rows"""
+        if path not in self._path_to_row:
+            return
+            
+        row = self._path_to_row[path]
+        
+        # Performance optimization: skip queuing updates for hidden rows
+        if self._tabbed_widget and self._is_row_likely_hidden(row):
+            return
+            
+        self._pending_updates[path] = TableRowUpdateTask(row, item, update_type)
+        
+        if not self._processing and not self._timer.isActive():
+            self._timer.start(16)  # ~60fps update rate
+            
+    def _is_row_likely_hidden(self, row: int) -> bool:
+        """Fast check if row is likely hidden using cached visibility data"""
+        current_time = time.time()
+        
+        # Update cache periodically or if invalidated
+        if (current_time - self._last_cache_update > 0.1 or  # 100ms cache lifetime
+            self._cache_invalidation_counter > 50):  # Invalidate after 50 operations
+            self._update_visibility_cache()
+            
+        return row not in self._visible_rows_cache
+        
+    def _update_visibility_cache(self):
+        """Update the visibility cache efficiently"""
+        table = self._table()
+        if not table:
+            return
+            
+        start_time = time.time()
+        self._visible_rows_cache.clear()
+        
+        # Batch check visible rows with time budget
+        TIME_BUDGET = 0.008  # 8ms budget for cache update
+        row_count = min(table.rowCount(), 2000)  # Cap at 2000 rows for performance
+        
+        for row in range(row_count):
+            if time.time() - start_time > TIME_BUDGET:
+                break
+            if not table.isRowHidden(row):
+                self._visible_rows_cache.add(row)
+                
+        self._last_cache_update = time.time()
+        self._cache_invalidation_counter = 0
+        
+    def invalidate_visibility_cache(self):
+        """Force invalidation of visibility cache when tabs change"""
+        self._cache_invalidation_counter = 1000  # Force cache update on next check
+        self._visible_rows_cache.clear()
+            
+    def _process_updates(self):
+        """Process pending table updates"""
+        table = self._table()
+        if not table or not self._pending_updates:
+            return
+            
+        self._processing = True
+        start_time = time.time()
+        
+        # Process updates with time budget
+        TIME_BUDGET = 0.012  # 12ms budget for 60fps
+        updates_processed = 0
+        
+        for path, task in list(self._pending_updates.items()):
+            if time.time() - start_time > TIME_BUDGET:
+                break
+            
+            # Skip updates for hidden rows in tabbed mode for performance
+            if self._tabbed_widget and task.row < table.rowCount():
+                if table.isRowHidden(task.row):
+                    del self._pending_updates[path]
+                    continue
+                
+            if task.update_type == 'progress':
+                self._update_progress_only(table, task)
+            else:
+                self._update_full_row(table, task)
+                
+            del self._pending_updates[path]
+            updates_processed += 1
+            
+        self._processing = False
+        
+        # If there are still pending updates, schedule another batch
+        if self._pending_updates:
+            self._timer.start(16)
+            
+    def _update_progress_only(self, table, task):
+        """Update only progress-related cells - minimal operations"""
+        if task.row >= table.rowCount():
+            return
+            
+        try:
+            # Update count (column 2) - create new item if needed
+            uploaded_text = f"{task.item.uploaded_images}/{task.item.total_images}"
+            count_item = table.item(task.row, 2)
+            if count_item:
+                count_item.setText(uploaded_text)
+            else:
+                # Create new item if none exists with proper font size
+                new_item = QTableWidgetItem(uploaded_text)
+                new_item.setFlags(new_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                new_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                try:
+                    font = new_item.font()
+                    font.setPointSize(8)
+                    new_item.setFont(font)
+                except Exception:
+                    pass
+                table.setItem(task.row, 2, new_item)
+            
+            # Update progress bar (column 3)
+            progress_widget = table.cellWidget(task.row, 3)
+            if isinstance(progress_widget, TableProgressWidget):
+                progress_widget.update_progress(task.item.progress, task.item.status)
+            elif progress_widget is None:
+                # Create progress widget if missing
+                new_widget = TableProgressWidget()
+                new_widget.update_progress(task.item.progress, task.item.status)
+                table.setCellWidget(task.row, 3, new_widget)
+                
+            # Update size column (8) if missing and data available
+            size_item = table.item(task.row, 8)
+            if size_item is None and hasattr(task.item, 'total_size') and task.item.total_size > 0:
+                # Get main GUI reference for formatting functions
+                main_gui = None
+                for obj in [table.parent()]:
+                    if hasattr(obj, '_format_binary_size'):
+                        main_gui = obj
+                        break
+                        
+                if main_gui:
+                    try:
+                        size_text = main_gui._format_binary_size(task.item.total_size, precision=2)
+                    except Exception:
+                        size_text = f"{task.item.total_size} B" if task.item.total_size else ""
+                    
+                    new_size_item = QTableWidgetItem(size_text)
+                    new_size_item.setFlags(new_size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    new_size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    try:
+                        font = new_size_item.font()
+                        font.setPointSize(8)
+                        new_size_item.setFont(font)
+                    except Exception:
+                        pass
+                    table.setItem(task.row, 8, new_size_item)
+                    
+            # Update transfer column (9) - always update for uploading items to show current speed
+            xfer_item = table.item(task.row, 9)
+            should_update_transfer = (xfer_item is None or 
+                                    (task.item.status == "uploading" and hasattr(task.item, 'current_kibps')))
+            
+            if should_update_transfer:
+                # Get main GUI reference for formatting functions
+                main_gui = None
+                for obj in [table.parent()]:
+                    if hasattr(obj, '_format_binary_rate'):
+                        main_gui = obj
+                        break
+                        
+                transfer_text = ""
+                if task.item.status == "uploading" and hasattr(task.item, 'current_kibps') and task.item.current_kibps:
+                    if main_gui:
+                        try:
+                            transfer_text = main_gui._format_binary_rate(float(task.item.current_kibps), precision=1)
+                        except Exception:
+                            transfer_text = self._format_rate_consistent(task.item.current_kibps) if task.item.current_kibps else ""
+                elif hasattr(task.item, 'final_kibps') and task.item.final_kibps:
+                    if main_gui:
+                        try:
+                            transfer_text = main_gui._format_binary_rate(float(task.item.final_kibps), precision=1)
+                        except Exception:
+                            transfer_text = self._format_rate_consistent(task.item.final_kibps)
+                            
+                if xfer_item:
+                    # Update existing item
+                    xfer_item.setText(transfer_text)
+                    # Update styling for active uploads
+                    if task.item.status == "uploading" and transfer_text:
+                        try:
+                            font = xfer_item.font()
+                            font.setBold(True)
+                            xfer_item.setFont(font)
+                            # Use appropriate color for theme
+                            _is_dark_mode = False
+                            try:
+                                if hasattr(main_gui, 'palette'):
+                                    pal = main_gui.palette()
+                                    bg = pal.window().color()
+                                    _is_dark_mode = (0.2126 * bg.redF() + 0.7152 * bg.greenF() + 0.0722 * bg.blueF()) < 0.5
+                            except Exception:
+                                pass
+                            from PyQt6.QtGui import QColor
+                            xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
+                        except Exception:
+                            pass
+                else:
+                    # Create new item
+                    new_xfer_item = QTableWidgetItem(transfer_text)
+                    new_xfer_item.setFlags(new_xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    new_xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+                    try:
+                        font = new_xfer_item.font()
+                        font.setPointSize(8)
+                        if task.item.status == "uploading" and transfer_text:
+                            font.setBold(True)
+                        new_xfer_item.setFont(font)
+                    except Exception:
+                        pass
+                    table.setItem(task.row, 9, new_xfer_item)
+                
+        except Exception:
+            pass
+            
+    def _update_full_row(self, table, task):
+        """Update full row with all details - time-budgeted"""
+        if task.row >= table.rowCount():
+            return
+            
+        try:
+            # Get the main GUI reference through weak ref
+            main_gui = None
+            for obj in [table.parent()]:
+                if hasattr(obj, '_populate_table_row_detailed'):
+                    main_gui = obj
+                    break
+                    
+            if main_gui:
+                # Delegate to the main GUI's detailed update method
+                # This will run in background thread automatically
+                main_gui._populate_table_row_detailed(task.row, task.item)
+                
+        except Exception:
+            pass
 
 def check_stored_credentials():
     """Check if credentials are stored"""
@@ -106,7 +460,242 @@ def api_key_is_set() -> bool:
             return bool(encrypted_api_key)
     return False
 
+@dataclass
+class GalleryQueueItem:
+    """Represents a gallery in the upload queue"""
+    path: str
+    name: Optional[str] = None
+    status: str = "ready"  # ready, queued, uploading, completed, failed, paused, incomplete
+    progress: int = 0
+    total_images: int = 0
+    uploaded_images: int = 0
+    current_image: str = ""
+    gallery_url: str = ""
+    gallery_id: str = ""
+    error_message: str = ""
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    insertion_order: int = 0  # For maintaining insertion order
+    added_time: Optional[float] = None  # When item was added to queue
+    finished_time: Optional[float] = None  # When item was completed
+    template_name: str = "default"  # Template to use for bbcode generation
+    # Pre-scan metadata
+    total_size: int = 0
+    avg_width: float = 0.0
+    avg_height: float = 0.0
+    max_width: float = 0.0
+    max_height: float = 0.0
+    min_width: float = 0.0
+    min_height: float = 0.0
+    scan_complete: bool = False
+    # Failed validation details
+    failed_files: list = field(default_factory=list)  # List of (filename, error_message) tuples
+    # Resume support
+    uploaded_files: set = field(default_factory=set)
+    uploaded_images_data: list = field(default_factory=list)
+    uploaded_bytes: int = 0
+    # Runtime transfer metrics (set by worker thread)
+    current_kibps: float = 0.0  # live speed while uploading (KiB/s)
+    final_kibps: float = 0.0    # average speed after completion (KiB/s)
+    # Tab organization
+    tab_name: str = "Main"      # Which tab this gallery belongs to
     
+class GUIImxToUploader(ImxToUploader):
+    """Custom uploader for GUI that doesn't block on user input"""
+    
+    def __init__(self, worker_thread=None):
+        super().__init__()
+        self.gui_mode = True
+        self.worker_thread = worker_thread
+    
+    def upload_folder(self, folder_path, gallery_name=None, thumbnail_size=3, thumbnail_format=2, max_retries=3, public_gallery=1, parallel_batch_size=4, template_name="default"):
+        """GUI-friendly upload delegating to the shared UploadEngine."""
+        # Non-blocking signals and resume support
+        current_item = self.worker_thread.current_item if self.worker_thread else None
+        already_uploaded = set(getattr(current_item, 'uploaded_files', set())) if current_item else set()
+
+        # Emit start with original total
+        try:
+            image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
+            # Match Windows Explorer order for total determination (stable across views)
+            def _natural_key(n: str):
+                import re as _re
+                parts = _re.split(r"(\d+)", n)
+                out = []
+                for p in parts:
+                    out.append(int(p) if p.isdigit() else p.lower())
+                return tuple(out)
+            def _explorer_sort(names):
+                if sys.platform != 'win32':
+                    return sorted(names, key=_natural_key)
+                try:
+                    _cmp = ctypes.windll.shlwapi.StrCmpLogicalW
+                    _cmp.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+                    _cmp.restype = ctypes.c_int
+                    return sorted(names, key=cmp_to_key(lambda a, b: _cmp(a, b)))
+                except Exception:
+                    return sorted(names, key=_natural_key)
+            names = [
+                f for f in os.listdir(folder_path)
+                if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
+            ]
+            original_total = len(_explorer_sort(names))
+            if self.worker_thread:
+                self.worker_thread.gallery_started.emit(folder_path, original_total)
+        except Exception:
+            pass
+
+        # Sanitize name like CLI
+        if not gallery_name:
+            gallery_name = os.path.basename(folder_path)
+        original_name = gallery_name
+        gallery_name = sanitize_gallery_name(gallery_name)
+        if original_name != gallery_name and self.worker_thread:
+            self.worker_thread.log_message.emit(f"{timestamp()} Sanitized gallery name: '{original_name}' -> '{gallery_name}'")
+        
+        engine = UploadEngine(self)
+
+        def on_progress(completed: int, total: int, percent: int, current_image: str):
+            if not self.worker_thread:
+                return
+            self.worker_thread.progress_updated.emit(folder_path, completed, total, percent, current_image)
+            # Throttled bandwidth: approximate from uploaded_bytes
+            try:
+                now_ts = time.time()
+                if now_ts - self.worker_thread._bw_last_emit >= 0.1:
+                    total_bytes = 0
+                    max_elapsed = 0.0
+                    for it in self.worker_thread.queue_manager.get_all_items():
+                        if it.status == "uploading" and it.start_time:
+                            total_bytes += getattr(it, 'uploaded_bytes', 0)
+                            max_elapsed = max(max_elapsed, now_ts - it.start_time)
+                    if max_elapsed > 0:
+                        kbps = (total_bytes / max_elapsed) / 1024.0
+                        self.worker_thread.bandwidth_updated.emit(kbps)
+                        self.worker_thread._bw_last_emit = now_ts
+                # Also update this item's instantaneous rate for the Transfer column
+                try:
+                    if self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
+                        elapsed = max(now_ts - float(self.worker_thread.current_item.start_time or now_ts), 0.001)
+                        self.worker_thread.current_item.current_kibps = (float(getattr(self.worker_thread.current_item, 'uploaded_bytes', 0) or 0) / elapsed) / 1024.0
+                except Exception:
+                    pass
+                if now_ts - self.worker_thread._stats_last_emit >= 0.5:
+                    self.worker_thread._emit_queue_stats()
+                    self.worker_thread._stats_last_emit = now_ts
+            except Exception:
+                pass
+                    
+        def on_log(message: str):
+            if self.worker_thread:
+                # Pass through categorized messages from engine
+                self.worker_thread.log_message.emit(f"{timestamp()} {message}")
+
+        def should_soft_stop() -> bool:
+            if self.worker_thread and self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
+                return getattr(self.worker_thread, '_soft_stop_requested_for', None) == folder_path
+            return False
+
+        def on_image_uploaded(fname: str, data: Dict[str, Any], size_bytes: int):
+            if self.worker_thread and self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
+                try:
+                    self.worker_thread.current_item.uploaded_files.add(fname)
+                    self.worker_thread.current_item.uploaded_images_data.append((fname, data))
+                    self.worker_thread.current_item.uploaded_bytes += int(size_bytes or 0)
+                except Exception:
+                    pass
+
+        results = engine.run(
+            folder_path=folder_path,
+            gallery_name=gallery_name,
+            thumbnail_size=thumbnail_size,
+            thumbnail_format=thumbnail_format,
+            max_retries=max_retries,
+            public_gallery=public_gallery,
+            parallel_batch_size=parallel_batch_size,
+            template_name=template_name,
+            already_uploaded=already_uploaded,
+            on_progress=on_progress,
+            on_log=on_log,
+            should_soft_stop=should_soft_stop,
+            on_image_uploaded=on_image_uploaded,
+        )
+        # Merge previously uploaded images (from earlier partial runs) with this run's results
+        try:
+            if self.worker_thread and self.worker_thread.current_item and self.worker_thread.current_item.path == folder_path:
+                item = self.worker_thread.current_item
+                # Build ordering map based on Explorer order (match engine)
+                image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
+                def _natural_key(n: str):
+                    import re as _re
+                    parts = _re.split(r"(\d+)", n)
+                    out = []
+                    for p in parts:
+                        out.append(int(p) if p.isdigit() else p.lower())
+                    return tuple(out)
+                def _explorer_sort(names):
+                    if sys.platform != 'win32':
+                        return sorted(names, key=_natural_key)
+                    try:
+                        _cmp = ctypes.windll.shlwapi.StrCmpLogicalW
+                        _cmp.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+                        _cmp.restype = ctypes.c_int
+                        return sorted(names, key=cmp_to_key(lambda a, b: _cmp(a, b)))
+                    except Exception:
+                        return sorted(names, key=_natural_key)
+                all_image_files = _explorer_sort([
+                    f for f in os.listdir(folder_path)
+                    if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
+                ])
+                file_position = {fname: idx for idx, fname in enumerate(all_image_files)}
+                # Collect enriched image data from accumulated uploads across runs
+                combined_by_name = {}
+                for fname, data in getattr(item, 'uploaded_images_data', []):
+                    try:
+                        base, ext = os.path.splitext(fname)
+                        fname_norm = base + ext.lower()
+                    except Exception:
+                        fname_norm = fname
+                    enriched = dict(data)
+                    # Ensure required fields present
+                    enriched.setdefault('original_filename', fname_norm)
+                    # Best-effort thumb_url (mirrors engine)
+                    if not enriched.get('thumb_url') and enriched.get('image_url'):
+                        try:
+                            parts = enriched.get('image_url').split('/i/')
+                            if len(parts) == 2 and parts[1]:
+                                img_id = parts[1].split('/')[0]
+                                _, ext2 = os.path.splitext(fname_norm)
+                                ext_use = (ext2.lower() or '.jpg') if ext2 else '.jpg'
+                                enriched['thumb_url'] = f"https://imx.to/u/t/{img_id}{ext_use}"
+                        except Exception:
+                            pass
+                    # Size bytes
+                    try:
+                        enriched.setdefault('size_bytes', os.path.getsize(os.path.join(folder_path, fname)))
+                    except Exception:
+                        enriched.setdefault('size_bytes', 0)
+                    combined_by_name[fname] = enriched
+                # Order by original folder order (Explorer sort)
+                ordered = sorted(combined_by_name.items(), key=lambda kv: file_position.get(kv[0], 10**9))
+                merged_images = [data for _fname, data in ordered]
+                if merged_images:
+                    # Replace images in results so downstream BBCode includes all
+                    results = dict(results)  # shallow copy
+                    results['images'] = merged_images
+                    results['successful_count'] = len(merged_images)
+                    # Uploaded size across all merged images
+                    try:
+                        results['uploaded_size'] = sum(int(img.get('size_bytes') or 0) for img in merged_images)
+                    except Exception:
+                        pass
+                    # Ensure total_images reflects full set
+                    results['total_images'] = len(all_image_files)
+        except Exception:
+            pass
+
+        return results
+
 class UploadWorker(QThread):
     """Worker thread for uploading galleries"""
     
@@ -648,6 +1237,988 @@ class CompletionWorker(QThread):
                 
         except Exception as e:
             self.log_message.emit(f"{timestamp()} Background completion processing error: {e}")
+
+
+class QueueManager(QObject):
+    """Manages the gallery upload queue"""
+    
+    # Signals
+    status_changed = pyqtSignal(str, str, str)  # gallery_path, old_status, new_status
+    queue_loaded = pyqtSignal()  # Emitted when queue data is loaded from persistent storage
+    
+    def __init__(self):
+        super().__init__()
+        self.items: Dict[str, GalleryQueueItem] = {}
+        self.queue = Queue()
+        self.mutex = QMutex()
+        self.settings = QSettings("ImxUploader", "QueueManager")
+        # SQLite-backed store for durable state
+        self.store = QueueStore()
+        self._next_order = 0  # Track insertion order
+        self._version = 0  # Bumped on any change for cheap UI polling
+        
+        # Batch mode for deferred database saves
+        self._batch_mode = False
+        self._batched_changes = set()
+        
+        # Status counters for efficient button updates
+        self._status_counts = {
+            "ready": 0,
+            "paused": 0, 
+            "incomplete": 0,
+            "scanning": 0,
+            "uploading": 0,
+            "queued": 0,
+            "completed": 0,
+            "failed": 0,
+            "validating": 0
+        }
+        
+        # Single sequential worker for processing galleries
+        self._scan_worker = None
+        self._scan_queue = Queue()
+        self._scan_worker_running = False
+        
+        # One-time migration from legacy QSettings into SQLite, then load from DB
+        try:
+            self.store.migrate_from_qsettings_if_needed(self.settings)
+        except Exception:
+            pass
+        self.load_persistent_queue()
+        
+        # Start the single scan worker
+        self._start_scan_worker()
+
+    def _start_scan_worker(self):
+        """Start the single sequential scan worker thread."""
+        if not self._scan_worker_running:
+            self._scan_worker_running = True
+            self._scan_worker = threading.Thread(target=self._sequential_scan_worker, daemon=True)
+            self._scan_worker.start()
+
+    def _sequential_scan_worker(self):
+        """Single worker that processes galleries sequentially to avoid disk I/O bottlenecks."""
+        while self._scan_worker_running:
+            try:
+                # Get next item to scan (blocking)
+                path = self._scan_queue.get(timeout=1.0)
+                if path is None:  # Shutdown signal
+                    break
+                
+                # Process this gallery
+                self._comprehensive_scan_item(path)
+                
+                # Mark task as done
+                self._scan_queue.task_done()
+                
+            except queue.Empty:
+                # No items to process, continue loop
+                continue
+            except Exception as e:
+                # Log the error properly instead of just printing
+                error_msg = f"Scan worker error processing {os.path.basename(path) if path else 'unknown'}: {str(e)}"
+                print(error_msg)  # Keep print for debugging
+                
+                # Also set the item as failed in the queue if it exists
+                try:
+                    with QMutexLocker(self.mutex):
+                        if path and path in self.items:
+                            self.items[path].status = "failed"
+                            self.items[path].error_message = f"Scan worker error: {str(e)}"
+                            self.items[path].scan_complete = True
+                    self.save_persistent_queue()
+                    self._inc_version()
+                except Exception:
+                    pass
+                
+                # Mark task as done even on error to prevent blocking
+                try:
+                    self._scan_queue.task_done()
+                except:
+                    pass
+                continue
+
+    def _inc_version(self):
+        self._version += 1
+
+    def get_version(self) -> int:
+        with QMutexLocker(self.mutex):
+            return self._version
+    
+    @contextmanager
+    def batch_updates(self):
+        """Context manager for batching database updates"""
+        old_batch_mode = self._batch_mode
+        self._batch_mode = True
+        self._batched_changes.clear()
+        try:
+            yield
+        finally:
+            # Flush all batched changes in a single transaction
+            if self._batched_changes:
+                self.save_persistent_queue(list(self._batched_changes))
+            self._batch_mode = old_batch_mode
+            self._batched_changes.clear()
+    
+    def save_persistent_queue(self, specific_paths=None):
+        """Save queue state using SQLite store.
+        
+        Args:
+            specific_paths: Optional list of paths to save. If None, saves all items.
+        """
+        # If in batch mode, collect the paths instead of saving immediately
+        if self._batch_mode and specific_paths:
+            self._batched_changes.update(specific_paths)
+            print(f"DEBUG: Batching {len(specific_paths)} items for deferred save, total batched: {len(self._batched_changes)}", flush=True)
+            return
+            
+        if specific_paths:
+            # Filter to only the specified items
+            items_to_save = [item for item in self.items.values() if item.path in specific_paths]
+            print(f"DEBUG: save_persistent_queue saving {len(items_to_save)} specific items", flush=True)
+        else:
+            # Save all items (existing behavior for shutdown/full save)
+            items_to_save = list(self.items.values())
+            print(f"DEBUG: save_persistent_queue saving ALL {len(items_to_save)} items", flush=True)
+            
+        queue_data = []
+        for item in items_to_save:
+            if item.status in ["ready", "queued", "paused", "completed", "incomplete", "failed"]:
+                print(f"DEBUG: Saving item {item.path} with tab_name='{item.tab_name}'", flush=True)
+                queue_data.append({
+                    'path': item.path,
+                    'name': item.name,
+                    'status': item.status,
+                    'gallery_url': item.gallery_url,
+                    'gallery_id': item.gallery_id,
+                    'progress': item.progress,
+                    'uploaded_images': item.uploaded_images,
+                    'total_images': item.total_images,
+                    'template_name': item.template_name,
+                    'insertion_order': item.insertion_order,
+                    'added_time': item.added_time,
+                    'finished_time': item.finished_time,
+                    'tab_name': item.tab_name,  # Include tab assignment
+                    # Intentionally omit heavy per-image lists from GUI thread snapshot
+                    'total_size': int(getattr(item, 'total_size', 0) or 0),
+                    'avg_width': float(getattr(item, 'avg_width', 0.0) or 0.0),
+                    'avg_height': float(getattr(item, 'avg_height', 0.0) or 0.0),
+                    'max_width': float(getattr(item, 'max_width', 0.0) or 0.0),
+                    'max_height': float(getattr(item, 'max_height', 0.0) or 0.0),
+                    'min_width': float(getattr(item, 'min_width', 0.0) or 0.0),
+                    'min_height': float(getattr(item, 'min_height', 0.0) or 0.0),
+                    'scan_complete': bool(getattr(item, 'scan_complete', False)),
+                    'uploaded_bytes': int(getattr(item, 'uploaded_bytes', 0) or 0),
+                    'final_kibps': float(getattr(item, 'final_kibps', 0.0) or 0.0),
+                    'failed_files': getattr(item, 'failed_files', []),
+                    'error_message': getattr(item, 'error_message', ''),
+                })
+        try:
+            self.store.bulk_upsert_async(queue_data)
+        except Exception:
+            pass
+    
+    def _save_single_item(self, item):
+        """Save a single item without iterating through all items"""
+        save_start = time.time()
+        try:
+            data_prep_start = time.time()
+            item_data = {
+                'path': item.path,
+                'name': item.name,
+                'status': item.status,
+                'gallery_url': item.gallery_url,
+                'gallery_id': item.gallery_id,
+                'progress': item.progress,
+                'uploaded_images': item.uploaded_images,
+                'total_images': item.total_images,
+                'template_name': item.template_name,
+                'insertion_order': item.insertion_order,
+                'added_time': item.added_time,
+                'finished_time': item.finished_time,
+                'tab_name': item.tab_name,  # Include tab assignment
+                'total_size': int(getattr(item, 'total_size', 0) or 0),
+                'avg_width': float(getattr(item, 'avg_width', 0.0) or 0.0),
+                'avg_height': float(getattr(item, 'avg_height', 0.0) or 0.0),
+                'max_width': float(getattr(item, 'max_width', 0.0) or 0.0),
+                'max_height': float(getattr(item, 'max_height', 0.0) or 0.0),
+                'min_width': float(getattr(item, 'min_width', 0.0) or 0.0),
+                'min_height': float(getattr(item, 'min_height', 0.0) or 0.0),
+                'scan_complete': bool(getattr(item, 'scan_complete', False)),
+                'uploaded_bytes': int(getattr(item, 'uploaded_bytes', 0) or 0),
+                'final_kibps': float(getattr(item, 'final_kibps', 0.0) or 0.0),
+                'failed_files': getattr(item, 'failed_files', []),
+                'error_message': getattr(item, 'error_message', ''),
+            }
+            data_prep_duration = time.time() - data_prep_start
+            
+            db_save_start = time.time()
+            self.store.bulk_upsert_async([item_data])
+            db_save_duration = time.time() - db_save_start
+            
+            total_duration = time.time() - save_start
+            print(f"[TIMING] _save_single_item({item.path}): data_prep={data_prep_duration:.6f}s, db_save={db_save_duration:.6f}s, total={total_duration:.6f}s")
+        except Exception:
+            total_duration = time.time() - save_start
+            print(f"[TIMING] _save_single_item({item.path}) failed in {total_duration:.6f}s")
+            pass
+    
+    def load_persistent_queue(self):
+        """Load queue state from SQLite store (post-migration) - SYNC but fast."""
+        def _load_queue_background():
+            try:
+                return self.store.load_all_items()
+            except Exception:
+                return []
+        
+        # Execute database load in background
+        try:
+            future = self.store._executor.submit(_load_queue_background)
+            queue_data = future.result(timeout=2.0)  # 2 second timeout to avoid infinite blocking
+            print(f"DEBUG: Loaded {len(queue_data)} items from database", flush=True)
+        except Exception:
+            queue_data = []
+            print("DEBUG: Failed to load queue data from database", flush=True)
+        if queue_data:
+            for item_data in queue_data:
+                path = item_data.get('path', '')
+                status = item_data.get('status', 'ready')
+                # For completed items, don't check path existence
+                if status == "completed" or (os.path.exists(path) and os.path.isdir(path)):
+                    if status == "completed":
+                        loaded_tab_name = item_data.get('tab_name', 'Main')
+                        item = GalleryQueueItem(
+                            path=path,
+                            name=item_data.get('name'),
+                            status=status,
+                            gallery_url=item_data.get('gallery_url', ''),
+                            gallery_id=item_data.get('gallery_id', ''),
+                            progress=item_data.get('progress', 100),
+                            uploaded_images=item_data.get('uploaded_images', 0),
+                            total_images=item_data.get('total_images', 0),
+                            template_name=item_data.get('template_name', load_user_defaults().get('template_name', 'default')),
+                            insertion_order=item_data.get('insertion_order', self._next_order),
+                            tab_name=loaded_tab_name,
+                            added_time=item_data.get('added_time'),
+                            finished_time=item_data.get('finished_time')
+                        )
+                    else:
+                        load_status = "ready" if status in ["queued", "uploading"] else status
+                        loaded_tab_name = item_data.get('tab_name', 'Main')
+                        item = GalleryQueueItem(
+                            path=path,
+                            name=item_data.get('name'),
+                            status=load_status,
+                            total_images=int(item_data.get('total_images', 0) or 0),
+                            template_name=item_data.get('template_name', load_user_defaults().get('template_name', 'default')),
+                            insertion_order=item_data.get('insertion_order', self._next_order),
+                            added_time=item_data.get('added_time'),
+                            tab_name=loaded_tab_name
+                        )
+                    # Restore optional fields
+                    try:
+                        item.total_size = int(item_data.get('total_size', 0) or 0)
+                        item.avg_width = float(item_data.get('avg_width', 0.0) or 0.0)
+                        item.avg_height = float(item_data.get('avg_height', 0.0) or 0.0)
+                        item.max_width = float(item_data.get('max_width', 0.0) or 0.0)
+                        item.max_height = float(item_data.get('max_height', 0.0) or 0.0)
+                        item.min_width = float(item_data.get('min_width', 0.0) or 0.0)
+                        item.min_height = float(item_data.get('min_height', 0.0) or 0.0)
+                        item.scan_complete = bool(item_data.get('scan_complete', False))
+                        item.uploaded_bytes = int(item_data.get('uploaded_bytes', 0) or 0)
+                        item.final_kibps = float(item_data.get('final_kibps', 0.0) or 0.0)
+                        # uploaded_files may be a list (from store)
+                        uploaded_files = set(item_data.get('uploaded_files', []))
+                        if uploaded_files:
+                            item.uploaded_files = uploaded_files
+                        uploaded_images_data = item_data.get('uploaded_images_data', [])
+                        if uploaded_images_data:
+                            item.uploaded_images_data = uploaded_images_data
+                        failed_files = item_data.get('failed_files', [])
+                        if failed_files:
+                            item.failed_files = failed_files
+                        error_message = item_data.get('error_message', '')
+                        if error_message:
+                            item.error_message = error_message
+                    except Exception:
+                        pass
+                    self._next_order = max(self._next_order, item.insertion_order + 1)
+                    self.items[path] = item
+                else:
+                    pass
+        
+        # Initialize status counters after loading all items
+        self._rebuild_status_counts()
+        
+        # Emit signal to notify that queue data is loaded
+        self.queue_loaded.emit()
+    
+    def clear_persistent_queue(self):
+        """Clear persistent queue storage (for testing)"""
+        self.settings.remove("queue_items")
+        self.settings.sync()
+        
+        
+    def add_item(self, path: str, name: Optional[str] = None, template_name: str = "default") -> bool:
+        """Add a gallery to the queue - NON-BLOCKING version"""
+        with QMutexLocker(self.mutex):
+            if path in self.items:
+                return False  # Already exists
+                
+            # Create item immediately in validating state - no blocking I/O on GUI thread
+            gallery_name = name or sanitize_gallery_name(os.path.basename(path))
+            item = GalleryQueueItem(
+                path=path,
+                name=gallery_name,
+                status="validating",  # New status to indicate validation in progress
+                total_images=0,  # Will be filled by background validation
+                insertion_order=self._next_order,
+                added_time=time.time(),
+                template_name=template_name,
+                scan_complete=False
+            )
+            self._next_order += 1
+            
+            self.items[path] = item
+            # Update status counters for new item
+            self._update_status_count("", "validating")
+            self.save_persistent_queue()
+            self._inc_version()
+        
+        # Add to scan queue for background validation and scanning
+        self._scan_queue.put(path)
+        return True
+    
+    def add_multiple_items(self, paths: List[str], template_name: str = "default") -> dict:
+        """Add multiple galleries efficiently, avoiding UI blocking."""
+        results = {
+            'added': 0,
+            'duplicates': 0,
+            'failed': 0,
+            'errors': [],
+            'added_paths': []  # Track successfully added paths for table updates
+        }
+        
+        # First pass: validate and create items (fast, non-blocking)
+        items_to_scan = []
+        with QMutexLocker(self.mutex):
+            for path in paths:
+                try:
+                    if path in self.items:
+                        results['duplicates'] += 1
+                        continue
+                        
+                    # Validate path
+                    if not os.path.exists(path) or not os.path.isdir(path):
+                        results['failed'] += 1
+                        results['errors'].append(f"Path not found: {path}")
+                        continue
+                        
+                    # Quick image count check
+                    image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
+                    image_files = [f for f in os.listdir(path) 
+                                 if f.lower().endswith(image_extensions) and 
+                                 os.path.isfile(os.path.join(path, f))]
+                    
+                    if not image_files:
+                        results['failed'] += 1
+                        results['errors'].append(f"No images found: {path}")
+                        continue
+                    
+                    # Check for existing gallery files
+                    gallery_name = sanitize_gallery_name(os.path.basename(path))
+                    from imxup import check_if_gallery_exists
+                    existing_files = check_if_gallery_exists(gallery_name)
+                    
+                    if existing_files:
+                        results['duplicates'] += 1
+                        continue
+                    
+                    # Create item
+                    item = GalleryQueueItem(
+                        path=path,
+                        name=gallery_name,
+                        status="scanning",
+                        total_images=len(image_files),
+                        insertion_order=self._next_order,
+                        added_time=time.time(),
+                        template_name=template_name,
+                        scan_complete=False
+                    )
+                    self._next_order += 1
+                    
+                    self.items[path] = item
+                    items_to_scan.append(path)
+                    results['added'] += 1
+                    results['added_paths'].append(path)  # Track for table updates
+                    
+                except Exception as e:
+                    results['failed'] += 1
+                    results['errors'].append(f"Error processing {path}: {str(e)}")
+        
+        # Save all items at once
+        if items_to_scan:
+            self.save_persistent_queue()
+            self._inc_version()
+            
+            # Add all items to scan queue for sequential processing
+            for path in items_to_scan:
+                self._scan_queue.put(path)
+        
+        return results
+
+    def _comprehensive_scan_item(self, path: str):
+        """Optimized scan with validation first, then corruption checks and PIL sampling for dimensions."""
+        try:
+            # FIRST: Basic validation (for items added with "validating" status)
+            if not os.path.exists(path) or not os.path.isdir(path):
+                with QMutexLocker(self.mutex):
+                    if path in self.items:
+                        self.items[path].status = "failed"
+                        self.items[path].error_message = "Path does not exist or is not a directory"
+                        self.items[path].scan_complete = True
+                print(f"Gallery scan failed - path does not exist: {path}")
+                return
+            
+            # Check for images and count them
+            image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
+            files = [f for f in os.listdir(path) if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(path, f))]
+            if not files:
+                with QMutexLocker(self.mutex):
+                    if path in self.items:
+                        self.items[path].status = "failed"
+                        self.items[path].error_message = "No images found during scan"
+                        self.items[path].scan_complete = True
+                print(f"Gallery scan failed - no images found: {path}")
+                return
+            
+            # Check for existing gallery files (moved from add_item)
+            with QMutexLocker(self.mutex):
+                if path in self.items:
+                    item = self.items[path]
+                    gallery_name = item.name
+                    # Use cached function to avoid blocking import
+                    if hasattr(self, '_check_if_gallery_exists'):
+                        existing_files = self._check_if_gallery_exists(gallery_name)
+                    else:
+                        # Fallback if not cached
+                        try:
+                            from imxup import check_if_gallery_exists
+                            existing_files = check_if_gallery_exists(gallery_name)
+                        except Exception:
+                            existing_files = []
+                    
+                    if existing_files:
+                        item.status = "failed"
+                        item.error_message = f"Gallery '{gallery_name}' already exists"
+                        item.scan_complete = True
+                        print(f"Gallery scan failed - already exists: {gallery_name} at {path}")
+                        return
+                    
+                    # Update total images count now that we have validated
+                    item.total_images = len(files)
+                    item.status = "scanning"  # Change from "validating" to "scanning"
+            
+            total_size = 0
+            failed_files: List[tuple[str, str]] = []  # (filename, error_message)
+            
+            # Get scanning configuration from settings
+            scan_config = self._get_scanning_config()
+            use_fast_scan = scan_config.get('fast_scan', True)
+            pil_sampling = scan_config.get('pil_sampling', 2)  # Default to 4 images
+            
+            # Fast corruption check using imghdr for all images
+            if use_fast_scan:
+                import imghdr
+                processed_count = 0
+                for f in files:
+                    fp = os.path.join(path, f)
+                    try:
+                        file_size = os.path.getsize(fp)
+                        total_size += file_size
+                        
+                        # Fast corruption check with imghdr
+                        with open(fp, 'rb') as img_file:
+                            if not imghdr.what(img_file):
+                                error_msg = f"Failed corruption check: {f} - not a valid image"
+                                failed_files.append((f, error_msg))
+                                
+                    except Exception as e:
+                        error_msg = f"Failed to validate {f}: {str(e)}"
+                        failed_files.append((f, error_msg))
+                    
+                    # Yield to prevent GUI blocking after every 10 files
+                    processed_count += 1
+                    if processed_count % 10 == 0:
+                        time.sleep(0.001)  # 1ms yield
+            else:
+                # Fallback to PIL for all images (original behavior)
+                processed_count = 0
+                for f in files:
+                    fp = os.path.join(path, f)
+                    try:
+                        file_size = os.path.getsize(fp)
+                        total_size += file_size
+                        
+                        from PIL import Image
+                        with Image.open(fp) as img:
+                            img.verify()
+                            
+                    except Exception as e:
+                        error_msg = f"Failed to validate {f}: {str(e)}"
+                        failed_files.append((f, error_msg))
+                    
+                    # Yield to prevent GUI blocking after every 5 files (PIL is slower)
+                    processed_count += 1
+                    if processed_count % 5 == 0:
+                        time.sleep(0.002)  # 2ms yield for PIL operations
+            
+            # If any files failed validation, mark gallery as failed
+            if failed_files:
+                with QMutexLocker(self.mutex):
+                    if path in self.items:
+                        item = self.items[path]
+                        item.status = "failed"
+                        item.error_message = f"Image validation failed: {len(failed_files)}/{len(files)} images invalid"
+                        item.failed_files = failed_files
+                        item.total_size = total_size
+                        item.scan_complete = True
+                print(f"Gallery scan failed - image validation failed: {len(failed_files)}/{len(files)} invalid in {path}")
+                self.save_persistent_queue()
+                self._inc_version()
+                return
+            
+            # Calculate dimensions using PIL sampling strategy
+            dims = self._calculate_dimensions_with_sampling(path, files, pil_sampling)
+            
+            # Calculate statistics from sampled dimensions
+            if dims:
+                avg_w = sum(w for w, _ in dims) / len(dims)
+                avg_h = sum(h for _, h in dims) / len(dims)
+                max_w = max(w for w, _ in dims)
+                max_h = max(h for _, h in dims)
+                min_w = min(w for w, _ in dims)
+                min_h = min(h for _, h in dims)
+            else:
+                avg_w = avg_h = max_w = max_h = min_w = min_h = 0.0
+            
+            with QMutexLocker(self.mutex):
+                if path in self.items:
+                    item = self.items[path]
+                    item.total_size = total_size
+                    item.avg_width = avg_w
+                    item.avg_height = avg_h
+                    item.max_width = max_w
+                    item.max_height = max_h
+                    item.min_width = min_w
+                    item.min_height = min_h
+                    item.scan_complete = True
+                    # Scan complete
+                    # Only flip to ready if not already moved forward
+                    if item.status == "scanning":
+                        item.status = "ready"
+            
+            # Persist update
+            self.save_persistent_queue()
+            self._inc_version()
+            
+        except Exception as e:
+            with QMutexLocker(self.mutex):
+                if path in self.items:
+                    self.items[path].status = "failed"
+                    self.items[path].error_message = f"Scan error: {str(e)}"
+                    self.items[path].scan_complete = True
+                print(f"Gallery scan failed - exception during scan: {path} - {str(e)}")
+                import traceback
+                traceback.print_exc()
+            self.save_persistent_queue()
+            self._inc_version()
+    
+    def _get_scanning_config(self) -> dict:
+        """Get scanning configuration from settings"""
+        try:
+            # Try to get from parent window's comprehensive settings
+            if hasattr(self, 'parent') and self.parent:
+                # Read from QSettings
+                settings = self.parent.settings
+                fast_scan = settings.value('scanning/fast_scan', True, type=bool)
+                pil_sampling = settings.value('scanning/pil_sampling', 2, type=int)
+                return {
+                    'fast_scan': fast_scan,
+                    'pil_sampling': pil_sampling
+                }
+            else:
+                # Default configuration
+                return {
+                    'fast_scan': True,
+                    'pil_sampling': 2
+                }
+        except Exception:
+            return {
+                'fast_scan': True,
+                'pil_sampling': 2
+            }
+    
+    def _calculate_dimensions_with_sampling(self, path: str, files: List[str], sampling_strategy: int) -> List[tuple[int, int]]:
+        """Calculate image dimensions using PIL sampling strategy"""
+        dims = []
+        
+        if not files:
+            return dims
+        
+        try:
+            from PIL import Image
+            
+            if sampling_strategy == 0:  # 1 image (first only)
+                sample_files = [files[0]]
+            elif sampling_strategy == 1:  # 2 images (first + last)
+                sample_files = [files[0], files[-1]]
+            elif sampling_strategy == 2:  # 4 images (first + 2 middle + last)
+                if len(files) <= 4:
+                    sample_files = files
+                else:
+                    mid1 = len(files) // 3
+                    mid2 = 2 * len(files) // 3
+                    sample_files = [files[0], files[mid1], files[mid2], files[-1]]
+            elif sampling_strategy == 3:  # 8 images (strategic sampling)
+                if len(files) <= 8:
+                    sample_files = files
+                else:
+                    step = len(files) // 8
+                    sample_files = [files[i] for i in range(0, len(files), step)][:8]
+            elif sampling_strategy == 4:  # 16 images (extended sampling)
+                if len(files) <= 16:
+                    sample_files = files
+                else:
+                    step = len(files) // 16
+                    sample_files = [files[i] for i in range(0, len(files), step)][:16]
+            else:  # All images (full PIL scan)
+                sample_files = files
+            
+            # Process sampled files with PIL
+            for f in sample_files:
+                fp = os.path.join(path, f)
+                try:
+                    with Image.open(fp) as img:
+                        w, h = img.size
+                        dims.append((w, h))
+                except Exception:
+                    # If PIL fails on a sampled image, skip it
+                    continue
+                    
+        except ImportError:
+            # PIL not available, return empty dimensions
+            pass
+        except Exception:
+            # Error in sampling, return empty dimensions
+            pass
+        
+        return dims
+    
+    def start_item(self, path: str) -> bool:
+        """Start a specific item in the queue"""
+        start_time = time.time()
+        print(f"[TIMING] start_item({path}) started at {start_time:.6f}")
+        print(f"DEBUG: start_item called for {path}")
+        
+        mutex_start = time.time()
+        with QMutexLocker(self.mutex):
+            mutex_duration = time.time() - mutex_start
+            print(f"[TIMING] Mutex acquisition took {mutex_duration:.6f}s")
+            
+            if path in self.items:
+                print(f"DEBUG: Item exists, status: {self.items[path].status}")
+                if self.items[path].status in ["ready", "paused", "incomplete"]:
+                    print(f"DEBUG: Setting status to queued")
+                    
+                    status_start = time.time()
+                    self.set_item_status(path, "queued")
+                    status_duration = time.time() - status_start
+                    print(f"[TIMING] set_item_status took {status_duration:.6f}s")
+                    
+                    print(f"DEBUG: Putting item in queue")
+                    queue_start = time.time()
+                    self.queue.put(self.items[path])
+                    queue_duration = time.time() - queue_start
+                    print(f"[TIMING] queue.put took {queue_duration:.6f}s")
+                    
+                    print(f"DEBUG: Saving item")
+                    save_start = time.time()
+                    self._save_single_item(self.items[path])
+                    save_duration = time.time() - save_start
+                    print(f"[TIMING] _save_single_item took {save_duration:.6f}s")
+                    
+                    print(f"DEBUG: Incrementing version")
+                    version_start = time.time()
+                    self._inc_version()
+                    version_duration = time.time() - version_start
+                    print(f"[TIMING] _inc_version took {version_duration:.6f}s")
+                    
+                    print(f"DEBUG: start_item successful")
+                    total_duration = time.time() - start_time
+                    print(f"[TIMING] start_item({path}) completed successfully in {total_duration:.6f}s")
+                    return True
+                else:
+                    print(f"DEBUG: Item status not startable: {self.items[path].status}")
+            else:
+                print(f"DEBUG: Item not found in queue")
+            
+            total_duration = time.time() - start_time
+            print(f"[TIMING] start_item({path}) failed in {total_duration:.6f}s")
+            return False
+    
+    def pause_item(self, path: str) -> bool:
+        """Pause a specific item"""
+        with QMutexLocker(self.mutex):
+            if path in self.items and self.items[path].status == "uploading":
+                self.set_item_status(path, "paused")
+                self.save_persistent_queue()
+                self._inc_version()
+                return True
+            return False
+    
+    def remove_item(self, path: str) -> bool:
+        """Remove a gallery from the queue"""
+        with QMutexLocker(self.mutex):
+            if path in self.items:
+                # Only prevent deletion of currently uploading items
+                if self.items[path].status == "uploading":
+                    return False
+                # Update counter for removed item
+                old_status = self.items[path].status
+                self._update_status_count(old_status, "")
+                del self.items[path]
+                self.renumber_insertion_orders()
+                self._inc_version()
+                
+                # Delete from database to prevent reloading
+                try:
+                    self.store._executor.submit(self.store.delete_by_paths, [path])
+                except Exception:
+                    pass
+                
+                return True
+            return False
+    
+    def _force_add_item(self, path: str, name: str, template_name: str = "default"):
+        """Force add an item (for duplicate handling)"""
+        with QMutexLocker(self.mutex):
+            # Check for images and count them
+            image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
+            image_files = []
+            for f in os.listdir(path):
+                if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(path, f)):
+                    image_files.append(f)
+            
+            if not image_files:
+                return False
+                
+            item = GalleryQueueItem(
+                path=path,
+                name=name,
+                status="scanning",  # Start as scanning for consistency
+                total_images=len(image_files),  # Set the total count immediately
+                insertion_order=self._next_order,
+                added_time=time.time(),  # Current timestamp
+                template_name=template_name,
+                scan_complete=False
+            )
+            self._next_order += 1
+            
+            self.items[path] = item
+            self.save_persistent_queue()
+            self._inc_version()
+            
+            # Add to scan queue for comprehensive scanning
+            self._scan_queue.put(path)
+            
+            return True
+    
+    def get_scan_queue_status(self) -> dict:
+        """Get status of the scan queue for monitoring."""
+        return {
+            'queue_size': self._scan_queue.qsize(),
+            'worker_running': self._scan_worker_running,
+            'items_pending_scan': sum(1 for item in self.items.values() if item.status == "scanning")
+        }
+    
+    def shutdown(self):
+        """Shutdown the scan worker gracefully."""
+        self._scan_worker_running = False
+        # Send shutdown signal to worker
+        try:
+            self._scan_queue.put(None, timeout=1.0)
+        except:
+            pass
+        # Wait for worker to finish
+        if self._scan_worker and self._scan_worker.is_alive():
+            self._scan_worker.join(timeout=2.0)
+    
+    def _rebuild_status_counts(self):
+        """Rebuild status counts from scratch (for initialization/recovery)"""
+        self._status_counts = {
+            "ready": 0,
+            "paused": 0, 
+            "incomplete": 0,
+            "scanning": 0,
+            "uploading": 0,
+            "queued": 0,
+            "completed": 0,
+            "failed": 0,
+            "validating": 0
+        }
+        for item in self.items.values():
+            if item.status in self._status_counts:
+                self._status_counts[item.status] += 1
+    
+    def _update_status_count(self, old_status: str, new_status: str):
+        """Update status counters when an item changes status"""
+        if old_status in self._status_counts:
+            self._status_counts[old_status] -= 1
+        if new_status in self._status_counts:
+            self._status_counts[new_status] += 1
+    
+    def get_status_counts(self) -> dict:
+        """Get current status counts for efficient button updates"""
+        return self._status_counts.copy()
+    
+    def set_item_status(self, path: str, new_status: str):
+        """Set item status with counter tracking (for internal use)"""
+        if path in self.items:
+            old_status = self.items[path].status
+            self.items[path].status = new_status
+            self._update_status_count(old_status, new_status)
+    
+    def get_next_item(self) -> Optional[GalleryQueueItem]:
+        """Get the next queued item"""
+        start_time = time.time()
+        try:
+            queue_get_start = time.time()
+            item = self.queue.get_nowait()
+            queue_get_duration = time.time() - queue_get_start
+            
+            print(f"DEBUG: Dequeued item: {item.path}, status: {item.status}")
+            # Check if item is still in the right status
+            if item.path in self.items and self.items[item.path].status in ["queued", "uploading"]:
+                print(f"DEBUG: Item status valid, returning item")
+                total_duration = time.time() - start_time
+                print(f"[TIMING] get_next_item() successful: queue_get={queue_get_duration:.6f}s, total={total_duration:.6f}s")
+                return item
+            else:
+                # Item status changed, try to get next item
+                print(f"DEBUG: Item status changed, trying again. Current status: {self.items.get(item.path, 'NOT_FOUND')}")
+                total_duration = time.time() - start_time
+                print(f"[TIMING] get_next_item() status changed, recursing after {total_duration:.6f}s")
+                return self.get_next_item()
+        except queue.Empty:
+            total_duration = time.time() - start_time
+            if total_duration > 0.001:  # Only log if took significant time
+                print(f"[TIMING] get_next_item() queue empty in {total_duration:.6f}s")
+            return None
+    
+    def update_item_status(self, path: str, status: str):
+        """Update item status"""
+        with QMutexLocker(self.mutex):
+            if path in self.items:
+                old_status = self.items[path].status
+                self.items[path].status = status
+                # Update status counters
+                self._update_status_count(old_status, status)
+                # Persist single item change efficiently
+                try:
+                    self.save_persistent_queue([path])
+                finally:
+                    self._inc_version()
+                
+                # Emit status change signal for auto-archive monitoring
+                if old_status != status:
+                    self.status_changed.emit(path, old_status, status)
+    
+    def get_all_items(self) -> List[GalleryQueueItem]:
+        """Get all items, sorted by insertion order"""
+        start_time = time.time()
+        with QMutexLocker(self.mutex):
+            items = sorted(self.items.values(), key=lambda x: x.insertion_order)
+            duration = time.time() - start_time
+            if duration > 0.001:  # Only log if takes significant time
+                print(f"[TIMING] get_all_items() took {duration:.6f}s for {len(items)} items")
+            #print(f"DEBUG: get_all_items returning {len(items)} items: {[item.path for item in items]}")
+            return items
+    
+    def get_item(self, path: str) -> Optional[GalleryQueueItem]:
+        """Get a specific item by path"""
+        with QMutexLocker(self.mutex):
+            return self.items.get(path)
+    
+    def renumber_insertion_orders(self):
+        """Renumber insertion orders to be sequential (1, 2, 3, ...)"""
+        with QMutexLocker(self.mutex):
+            self._renumber_insertion_orders_locked()
+
+    def _renumber_insertion_orders_locked(self):
+        """Internal: caller must hold self.mutex. Renumber and persist order."""
+        # Sort items by current insertion order to maintain relative order
+        sorted_items = sorted(self.items.values(), key=lambda x: x.insertion_order)
+        # Renumber starting from 1
+        for i, item in enumerate(sorted_items, 1):
+            item.insertion_order = i
+        # Update the next order counter
+        self._next_order = len(self.items) + 1
+        # Persist ordering asynchronously
+        try:
+            ordered_paths = [it.path for it in sorted_items]
+            self.store._executor.submit(self.store.update_insertion_orders, ordered_paths)
+        except Exception:
+            pass
+    
+    def clear_completed(self):
+        """Remove completed items"""
+        with QMutexLocker(self.mutex):
+            to_remove = [
+                path for path, item in self.items.items() 
+                if item.status in ["completed", "failed"]
+            ]
+            for path in to_remove:
+                del self.items[path]
+            
+            # Renumber remaining items (don't save persistent queue yet)
+            if to_remove:
+                self._renumber_insertion_orders_locked()
+        # Purge from SQLite in background (by status is simple and safe)
+        try:
+            self.store._executor.submit(self.store.delete_by_status, ["completed", "failed"])
+        except Exception:
+            pass
+        return len(to_remove)
+    
+    def remove_items(self, paths: List[str]) -> int:
+        """Remove specific items from the queue"""
+        with QMutexLocker(self.mutex):
+            removed_count = 0
+            #print(f"DEBUG: remove_items called with paths: {paths}")
+            #print(f"DEBUG: Current items: {list(self.items.keys())}")
+            
+            for path in paths:
+                #print(f"DEBUG: Checking path: {path}")
+                if path in self.items:
+                    #print(f"DEBUG: Path found, status: {self.items[path].status}")
+                    # Only prevent deletion of currently uploading items
+                    if self.items[path].status == "uploading":
+                        continue
+                    del self.items[path]
+                    removed_count += 1
+                else:
+                    pass
+            
+            # Renumber remaining items (don't save persistent queue yet - let GUI handle it)
+            if removed_count > 0:
+                self.renumber_insertion_orders()
+        # Purge from SQLite in background
+        try:
+            self.store._executor.submit(self.store.delete_by_paths, list(paths))
+        except Exception:
+            pass
+        return removed_count
 
 
 class DropEnabledTabBar(QTabBar):
@@ -4331,6 +5902,104 @@ class LogViewerDialog(QDialog):
                 self.log_view.ensureCursorVisible()
         except Exception:
             pass
+
+class TableProgressWidget(QWidget):
+    """Progress bar widget for table cells - properly centered and sized"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins
+        layout.setSpacing(0)  # No spacing between elements
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setMinimumHeight(17)  # +1px height
+        self.progress_bar.setMaximumHeight(19)  # +1px height
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the text
+        
+        # Style for better text visibility and proper sizing
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                text-align: center;
+                font-size: 11px;
+                font-weight: bold;
+                margin: 0px;
+                padding: 0px;
+            }
+            QProgressBar::chunk {
+                border-radius: 2px;
+            }
+        """)
+        
+        # Make progress bar fill the entire cell
+        layout.addWidget(self.progress_bar, 1)  # Stretch factor of 1
+        
+    def update_progress(self, value: int, status: str = ""):
+        self.progress_bar.setValue(value)
+        
+        # Color code by status with better styling
+        if status == "completed":
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #67C58F;
+                    border-radius: 3px;
+                    text-align: center;
+                    font-size: 11px;
+                    font-weight: bold;
+                }
+                QProgressBar::chunk {
+                    background-color: #67C58F;
+                    border-radius: 2px;
+                }
+            """)
+        elif status == "failed":
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #e74c3c;
+                    border-radius: 3px;
+                    text-align: center;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QProgressBar::chunk {
+                    background-color: #e74c3c;
+                    border-radius: 2px;
+                }
+            """)
+        elif status == "uploading":
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #48a2de;
+                    border-radius: 3px;
+                    text-align: center;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QProgressBar::chunk {
+                    background-color: #48a2de;
+                    border-radius: 2px;
+                }
+            """)
+        else:
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #ccc;
+                    border-radius: 3px;
+                    text-align: center;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QProgressBar::chunk {
+                    background-color: #f0f0f0;
+                    border-radius: 2px;
+                }
+            """)
 
 class NumericTableWidgetItem(QTableWidgetItem):
     """Table widget item that sorts numerically based on an integer value."""
