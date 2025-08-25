@@ -17,7 +17,7 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(550, 360)
+        pixmap = QPixmap(460, 300)
         pixmap.fill(QColor(248, 237, 255))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         self.init_action_words = [
@@ -56,7 +56,7 @@ class SplashScreen(QSplashScreen):
         # Get version info
         try:
             from imxup import __version__
-            self.version = f"v{__version__}"
+            self.version = f"{__version__}"
         except:
             self.version = "Version 69"
         
@@ -83,50 +83,51 @@ class SplashScreen(QSplashScreen):
         title_text = "IMXupper"
         title_rect = painter.fontMetrics().boundingRect(title_text)
         title_x = (self.width() - title_rect.width()) // 2
-        painter.drawText(title_x, 60, title_text)
+        painter.drawText(title_x, 40, title_text)
         
         # Draw version
-        version_font = QFont("Courier", 16, QFont.Weight.Bold)
+        version_font = QFont("Courier", 12, QFont.Weight.Bold)
         painter.setFont(version_font)
-        painter.setPen(QColor(41, 95, 152))
+        painter.setPen(QColor(82, 92, 235))
         version_rect = painter.fontMetrics().boundingRect(self.version)
         version_x = (self.width() - version_rect.width()) // 2
-        painter.drawText(version_x, 95, self.version)
+        painter.drawText(version_x, 65, self.version)
         
         copyright_text = "Copyright © 2025 twat"
-        copyright_font = QFont("Courier", 12, QFont.Weight.Bold)
+        copyright_font = QFont("Courier", 10)
         painter.setFont(copyright_font)
-        painter.setPen(QColor(21, 21, 21))
+        painter.setPen(QColor(13, 13, 13))
         copyright_rect = painter.fontMetrics().boundingRect(copyright_text)
         copyright_x = (self.width() - copyright_rect.width()) // 2
-        painter.drawText(copyright_x, 118, copyright_text)
+        painter.drawText(copyright_x, 95, copyright_text)
         
         # Draw copyright and license info
-        painter.setPen(QColor(21, 21, 21))
-        license_font = QFont("Courier", 11, QFont.Weight.Bold)
+        painter.setPen(QColor(25, 25, 25))
+        license_font = QFont("Courier New", 8)
         painter.setFont(license_font)
         
         license_lines = [
             "",
             "Licensed under the Apache License, Version 2.0",
             "",
-            "Unless required by applicable law or agreed to in writing,",
-            "software distributed under the license is on an \"as is\"",
-            "basis without warranties or conditions of any kind,"
-            "either express or implied. Also, no fat chicks.",
+            "Software distributed under the license is on an \"as is\"",
+            "basis without warranties or conditions of any kind.",
+            "",
+            "Not affiliated with, or endorsed by IMX.to in any way.",
             "",
             "The \"IMX.to\" name and logo are property of IMX.to.",
-            "Use of their image hosting service is subject to",
-            "their terms, conditions and privacy policy."
+            "Use of this software to interact with their service",
+            "is subject to their terms and privacy policy.",
+            ""           
         ]
         
-        y_pos = 130
+        y_pos = 115
         for line in license_lines:
             if line:
                 line_rect = painter.fontMetrics().boundingRect(line)
                 line_x = (self.width() - line_rect.width()) // 2
                 painter.drawText(line_x, y_pos, line)
-            y_pos += 12
+            y_pos += 11
         
         # Draw status text at bottom
         painter.setPen(QColor(21, 21, 21))
@@ -135,7 +136,7 @@ class SplashScreen(QSplashScreen):
         
         status_rect = painter.fontMetrics().boundingRect(self.status_text)
         status_x = (self.width() - status_rect.width()) // 2
-        painter.drawText(status_x, self.height() - 25, self.status_text)
+        painter.drawText(status_x, self.height() - 16, self.status_text)
         
         # Draw progress dots in fixed position (left-aligned within centered area)
         dots_font = QFont("Courier", 18, QFont.Weight.Bold)
@@ -145,7 +146,7 @@ class SplashScreen(QSplashScreen):
         # Create a fixed-width area for dots (centered, but dots are left-aligned within it)
         dots_area_width = 120
         dots_area_x = (self.width() - dots_area_width) // 2
-        painter.drawText(dots_area_x, self.height() - 50, self.progress_dots)
+        painter.drawText(dots_area_x, self.height() - 40, self.progress_dots)
         
         painter.end()
     

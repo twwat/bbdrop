@@ -1550,6 +1550,13 @@ class ComprehensiveSettingsDialog(QDialog):
             with open(config_file, 'w') as f:
                 config.write(f)
             
+            # Update parent GUI controls
+            if self.parent:
+                self.parent.thumbnail_size_combo.setCurrentIndex(self.thumbnail_size_combo.currentIndex())
+                self.parent.thumbnail_format_combo.setCurrentIndex(self.thumbnail_format_combo.currentIndex())
+                self.parent.max_retries_spin.setValue(self.max_retries_spin.value())
+                self.parent.batch_size_spin.setValue(self.batch_size_spin.value())
+            
             return True
         except Exception as e:
             print(f"Error saving general settings: {e}")
