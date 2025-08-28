@@ -17,7 +17,7 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(560, 420)  # Increased height for logo
+        pixmap = QPixmap(520, 400)  # Increased height for logo
         pixmap.fill(QColor(29, 22, 22))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
@@ -79,7 +79,7 @@ class SplashScreen(QSplashScreen):
     def setWindowShape(self):
         """Set the window to have rounded corners"""
         path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), 20, 20)
+        path.addRoundedRect(QRectF(self.rect()), 60, 60)
         region = QRegion(path.toFillPolygon().toPolygon())
         self.setMask(region)
     
@@ -91,14 +91,14 @@ class SplashScreen(QSplashScreen):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Draw rounded border with 2px thickness, 20px radius
-        painter.setPen(QPen(QColor(207, 69, 2), 2))
-        painter.drawRoundedRect(2, 2, self.width() - 4, self.height() - 4, 20, 20)
+        painter.setPen(QPen(QColor(207, 69, 2), 3))
+        painter.drawRoundedRect(2, 2, self.width() - 3, self.height() - 3, 60, 60)
         
         # Draw logo at top if available
         y_offset = 16
         if self.logo_pixmap and not self.logo_pixmap.isNull():
             # Scale logo to fit nicely at top
-            logo_height = 140
+            logo_height = 130
             logo_scaled = self.logo_pixmap.scaledToHeight(logo_height, Qt.TransformationMode.SmoothTransformation)
             logo_x = (self.width() - logo_scaled.width()) // 2
             painter.drawPixmap(logo_x, y_offset, logo_scaled)
@@ -120,8 +120,8 @@ class SplashScreen(QSplashScreen):
         painter.setPen(QColor(207, 69, 2))
         version_rect = painter.fontMetrics().boundingRect(self.version)
         version_x = (self.width() - version_rect.width()) // 2
-        painter.drawText(version_x, y_offset + 20, self.version)
-        y_offset += 32
+        painter.drawText(version_x, y_offset + 13, self.version)
+        y_offset += 33
         
         copyright_text = "Copyright © 2025 twat"
         copyright_font = QFont("Courier", 11)
@@ -130,11 +130,11 @@ class SplashScreen(QSplashScreen):
         copyright_rect = painter.fontMetrics().boundingRect(copyright_text)
         copyright_x = (self.width() - copyright_rect.width()) // 2
         painter.drawText(copyright_x, y_offset + 20, copyright_text)
-        y_offset += 33
+        y_offset += 46
         
         # Draw copyright and license info
-        painter.setPen(QColor(200, 196, 177))
-        license_font = QFont("Courier", 10)
+        painter.setPen(QColor(231, 216, 206))
+        license_font = QFont("Courier", 9)
         painter.setFont(license_font)
         
         license_lines = [
@@ -155,26 +155,29 @@ class SplashScreen(QSplashScreen):
                 line_rect = painter.fontMetrics().boundingRect(line)
                 line_x = (self.width() - line_rect.width()) // 2
                 painter.drawText(line_x, y_pos, line)
-            y_pos += 16
+            if line == "":
+                y_pos += 12
+            else:
+                y_pos += 15
         
         # Draw status text at bottom
-        painter.setPen(QColor(200, 196, 177))
-        status_font = QFont("Courier", 11)
+        painter.setPen(QColor(207, 69, 2))
+        status_font = QFont("Courier", 11, QFont.Weight.Bold)
         painter.setFont(status_font)
         
         status_rect = painter.fontMetrics().boundingRect(self.status_text)
         status_x = (self.width() - status_rect.width()) // 2
-        painter.drawText(status_x, self.height() - 50, self.status_text)
+        painter.drawText(status_x, self.height() - 38, self.status_text)
         
         # Draw progress dots in fixed position (left-aligned within centered area)
-        dots_font = QFont("Courier", 17)
+        dots_font = QFont("Courier", 16)
         painter.setFont(dots_font)
-        painter.setPen(QColor(227, 69, 69))
+        painter.setPen(QColor(224, 221, 219))
         
         # Create a fixed-width area for dots (centered, but dots are left-aligned within it)
-        dots_area_width = 220
+        dots_area_width = 200
         dots_area_x = (self.width() - dots_area_width) // 2
-        painter.drawText(dots_area_x, self.height() - 17, self.progress_dots)
+        painter.drawText(dots_area_x, self.height() - 12, self.progress_dots)
         
         painter.end()
     
