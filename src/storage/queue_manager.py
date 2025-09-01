@@ -92,6 +92,9 @@ class QueueManager(QObject):
         self._batch_mode = False
         self._batched_changes = set()
         
+        # Guard against overlapping saves
+        self._pending_save_timer = None
+        
         # Status counters for efficient updates
         self._status_counts = {
             QUEUE_STATE_READY: 0,
@@ -179,8 +182,9 @@ class QueueManager(QObject):
                 
                 item.total_images = len(files)
                 print(f"DEBUG: Set total_images={len(files)} for {path}")
+                print(f"DEBUG: Before status change to scanning - tab_name='{item.tab_name}'")
                 item.status = "scanning"
-                print(f"DEBUG: Changed status to scanning for {path}")
+                print(f"DEBUG: Changed status to scanning for {path}, tab_name still='{item.tab_name}'")
             
             # Scan images
             scan_result = self._scan_images(path, files)
@@ -197,6 +201,7 @@ class QueueManager(QObject):
             with QMutexLocker(self.mutex):
                 if path in self.items:
                     item = self.items[path]
+                    print(f"DEBUG: Before scan update - item tab_name = '{item.tab_name}'")
                     item.total_size = scan_result['total_size']
                     item.avg_width = scan_result['avg_width']
                     item.avg_height = scan_result['avg_height']
@@ -208,17 +213,35 @@ class QueueManager(QObject):
                     
                     if item.status == "scanning":
                         print(f"DEBUG: Scan complete, updating status to ready for {path}")
+                        print(f"DEBUG: Item tab_name is still: '{item.tab_name}'")
                         old_status = item.status
                         item.status = QUEUE_STATE_READY
                         print(f"DEBUG: Status changed from {old_status} to {QUEUE_STATE_READY}")
+                        print(f"DEBUG: After status change - item tab_name = '{item.tab_name}'")
+                        
+                        # CRITICAL: Save immediately now that status is "ready" (no longer "validating")
+                        # This ensures the gallery is saved to the correct tab in the database
+                        print(f"DEBUG: SAVING TO DATABASE NOW - status is ready, tab_name='{item.tab_name}'")
+                        
                         # Emit signal directly (we're already in mutex lock)
                         print(f"DEBUG: EMITTING status_changed signal for {path}")
                         self.status_changed.emit(path, old_status, QUEUE_STATE_READY)
                         print(f"DEBUG: status_changed signal emitted")
             
-            # Defer database save to avoid blocking
+            # Save to database immediately now that scan is complete and status is "ready"
             from PyQt6.QtCore import QTimer
-            QTimer.singleShot(50, lambda: self.save_persistent_queue([path]))
+            print(f"DEBUG: Scheduling IMMEDIATE save for {path} with tab_name='{item.tab_name}'")
+            # Capture the path in a closure-safe way
+            saved_path = path
+            # Save and then refresh the filter to show the item in the correct tab
+            def save_and_refresh():
+                print(f"DEBUG: Executing save_and_refresh for {saved_path}")
+                self.save_persistent_queue([saved_path])
+                print(f"DEBUG: Saved {saved_path} to database, emitting refresh signal")
+                # Emit a signal to refresh the tab filter after save
+                from PyQt6.QtCore import QTimer as QT2
+                QT2.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
+            QTimer.singleShot(0, save_and_refresh)
             self._inc_version()
             
         except Exception as e:
@@ -333,7 +356,7 @@ class QueueManager(QObject):
                 if failed_files:
                     item.failed_files = failed_files
         
-        QTimer.singleShot(100, lambda: self.save_persistent_queue([path]))
+        self._schedule_debounced_save([path])
         self._inc_version()
     
     def mark_scan_failed(self, path: str, error: str):
@@ -349,7 +372,7 @@ class QueueManager(QObject):
                 from imxup import timestamp
                 print(f"{timestamp()} [SCAN_FAILED] {item.name or os.path.basename(path)}: {error}")
         
-        QTimer.singleShot(100, lambda: self.save_persistent_queue([path]))
+        self._schedule_debounced_save([path])
         self._inc_version()
     
     def mark_upload_failed(self, path: str, error: str, failed_files: list = None):
@@ -370,7 +393,7 @@ class QueueManager(QObject):
                     log_msg += f" ({len(failed_files)} files failed)"
                 print(log_msg)
         
-        QTimer.singleShot(100, lambda: self.save_persistent_queue([path]))
+        self._schedule_debounced_save([path])
         self._inc_version()
     
     def retry_failed_upload(self, path: str):
@@ -419,7 +442,7 @@ class QueueManager(QObject):
                     if hasattr(self, 'status_changed'):
                         QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, item.status))
         
-        QTimer.singleShot(100, lambda: self.save_persistent_queue([path]))
+        self._schedule_debounced_save([path])
         self._inc_version()
     
     def rescan_gallery_additive(self, path: str):
@@ -494,7 +517,7 @@ class QueueManager(QObject):
                 except Exception as e:
                     self.mark_scan_failed(path, f"Additive rescan error: {e}")
         
-        QTimer.singleShot(50, lambda: self.save_persistent_queue([path]))
+        self._schedule_debounced_save([path])
         self._inc_version()
     
     def reset_gallery_complete(self, path: str):
@@ -570,7 +593,7 @@ class QueueManager(QObject):
                         from imxup import timestamp
                         print(f"{timestamp()} [RESCAN] {item.name or os.path.basename(path)}: Marked ready for validation")
                 
-                QTimer.singleShot(50, lambda: self.save_persistent_queue([path]))
+                self._schedule_debounced_save([path])
                 self._inc_version()
         except Exception as e:
             self.mark_scan_failed(path, f"Rescan queue error: {e}")
@@ -589,6 +612,19 @@ class QueueManager(QObject):
     def _inc_version(self):
         """Increment version for change tracking"""
         self._version += 1
+    
+    def _schedule_debounced_save(self, paths: List[str]):
+        """Schedule a debounced save to prevent overlapping database operations"""
+        # Cancel any pending save
+        if self._pending_save_timer:
+            self._pending_save_timer.stop()
+        
+        # Create new timer for debounced save
+        from PyQt6.QtCore import QTimer
+        self._pending_save_timer = QTimer()
+        self._pending_save_timer.setSingleShot(True)
+        self._pending_save_timer.timeout.connect(lambda: self.save_persistent_queue(paths))
+        self._pending_save_timer.start(100)  # 100ms debounce
     
     def get_version(self) -> int:
         """Get current version"""
@@ -667,7 +703,8 @@ class QueueManager(QObject):
             print(f"DEBUG: Building queue data for {len(items)} items")
             for item in items:
                 if item.status in [QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
-                                  QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED]:
+                                  QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
+                                  "scanning", QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED]:
                     queue_data.append(self._item_to_dict(item))
             print(f"DEBUG: Built queue data with {len(queue_data)} items to save")
             
@@ -681,6 +718,7 @@ class QueueManager(QObject):
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
         """Convert item to dictionary for storage"""
+        print(f"DEBUG: _item_to_dict converting {item.path} with tab_name='{item.tab_name}'")
         return {
             'path': item.path,
             'name': item.name,
@@ -786,9 +824,9 @@ class QueueManager(QObject):
         
         return item
     
-    def add_item(self, path: str, name: str = None, template_name: str = "default") -> bool:
+    def add_item(self, path: str, name: str = None, template_name: str = "default", tab_name: str = "Main") -> bool:
         """Add gallery to queue"""
-        print(f"DEBUG: QueueManager.add_item called with path={path}")
+        print(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}")
         with QMutexLocker(self.mutex):
             if path in self.items:
                 return False
@@ -796,14 +834,15 @@ class QueueManager(QObject):
             print(f"DEBUG: Sanitizing gallery name for {path}")
             gallery_name = name or sanitize_gallery_name(os.path.basename(path))
             print(f"DEBUG: Gallery name: {gallery_name}")
-            print(f"DEBUG: Creating GalleryQueueItem...")
+            print(f"DEBUG: Creating GalleryQueueItem with tab_name={tab_name}...")
             item = GalleryQueueItem(
                 path=path,
                 name=gallery_name,
                 status="validating",
                 insertion_order=self._next_order,
                 added_time=time.time(),
-                template_name=template_name
+                template_name=template_name,
+                tab_name=tab_name
             )
             print(f"DEBUG: GalleryQueueItem created successfully")
             self._next_order += 1
@@ -814,7 +853,7 @@ class QueueManager(QObject):
             print(f"DEBUG: Scheduling deferred database save...")
             # Use QTimer to defer database save to prevent blocking GUI thread
             from PyQt6.QtCore import QTimer
-            QTimer.singleShot(100, lambda: self.save_persistent_queue([path]))
+            self._schedule_debounced_save([path])
             print(f"DEBUG: Incrementing version...")
             self._inc_version()
             print(f"DEBUG: Version incremented")
@@ -838,7 +877,7 @@ class QueueManager(QObject):
             item.status = QUEUE_STATE_QUEUED
             self._update_status_count(old_status, QUEUE_STATE_QUEUED)
             self.queue.put(item)
-            QTimer.singleShot(100, lambda: self.save_persistent_queue([path]))
+            self._schedule_debounced_save([path])
             self._inc_version()
             return True
     
@@ -865,7 +904,14 @@ class QueueManager(QObject):
                     self.items[path].progress = 100
                     
                 self._update_status_count(old_status, status)
-                QTimer.singleShot(100, lambda: self.save_persistent_queue([path]))
+                
+                # Only schedule save if not in batch mode
+                if not self._batch_mode:
+                    self._schedule_debounced_save([path])
+                else:
+                    # In batch mode, just add to batched changes
+                    self._batched_changes.add(path)
+                    
                 self._inc_version()
                 
                 if old_status != status:

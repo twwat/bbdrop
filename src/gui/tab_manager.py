@@ -463,6 +463,43 @@ class TabManager(QObject):
     
     # ----------------------------- Gallery Operations -----------------------------
     
+    def assign_gallery_to_tab(self, gallery_path: str, tab_name: str) -> bool:
+        """
+        Assign a single gallery to a specific tab.
+        
+        Args:
+            gallery_path: Path to the gallery to assign
+            tab_name: Name of the target tab
+            
+        Returns:
+            True if assignment was successful, False otherwise
+        """
+        print(f"DEBUG: TabManager.assign_gallery_to_tab called with path={gallery_path}, tab_name={tab_name}")
+        
+        # Get tab info to validate tab exists
+        tab_info = self.get_tab_by_name(tab_name)
+        if not tab_info:
+            print(f"Warning: Tab '{tab_name}' not found for gallery assignment")
+            return False
+        
+        print(f"DEBUG: Tab '{tab_name}' found with id={tab_info.id}")
+        
+        # Move the single gallery to the tab
+        print(f"DEBUG: Calling _store.move_galleries_to_tab with [{gallery_path}] to '{tab_name}'")
+        moved_count = self._store.move_galleries_to_tab([gallery_path], tab_name)
+        success = moved_count > 0
+        
+        print(f"DEBUG: move_galleries_to_tab returned moved_count={moved_count}, success={success}")
+        
+        if success:
+            # Invalidate cache for the target tab to ensure fresh data
+            self.invalidate_tab_cache(tab_name)
+            # Also invalidate cache for all tabs to ensure counts are updated
+            self.invalidate_tab_cache()
+            print(f"DEBUG: Cache invalidated for tab assignment")
+        
+        return success
+    
     def move_galleries_to_tab(self, gallery_paths: List[str], new_tab_name: str) -> int:
         """
         Move galleries to different tab.
@@ -477,21 +514,10 @@ class TabManager(QObject):
         return self._store.move_galleries_to_tab(gallery_paths, new_tab_name)
     
     def load_tab_galleries(self, tab_name: str) -> List[Dict[str, Any]]:
-        """Load galleries for specific tab with intelligent caching"""
-        current_time = time.time()
-        
-        # Check if we have fresh cached data
-        if (tab_name in self._gallery_cache and 
-            tab_name in self._cache_timestamps and
-            current_time - self._cache_timestamps[tab_name] < self._cache_ttl):
-            return self._gallery_cache[tab_name]
-        
-        # Load from database
+        """Load galleries for specific tab - CACHING DISABLED FOR DEBUGGING"""
+        # CACHING DISABLED - always load fresh from database
         galleries = self._store.load_items_by_tab(tab_name)
-        
-        # Update cache with memory management
-        self._update_gallery_cache(tab_name, galleries, current_time)
-        
+        print(f"DEBUG: TabManager loaded {len(galleries)} galleries for tab '{tab_name}' directly from DB (NO CACHE)")
         return galleries
         
     def _update_gallery_cache(self, tab_name: str, galleries: List[Dict[str, Any]], timestamp: float) -> None:

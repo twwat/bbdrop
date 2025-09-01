@@ -1172,6 +1172,7 @@ class TabbedGalleryWidget(QWidget):
         
         start_time = time.time()
         row_count = self.gallery_table.rowCount()
+        print(f"DEBUG _apply_filter: rowCount() returned {row_count}")
         
         if row_count == 0:
             print("Debug: Table is empty, no filtering needed")
@@ -1225,8 +1226,33 @@ class TabbedGalleryWidget(QWidget):
                     # Special "All Tabs" shows all galleries
                     should_show = True
                 else:
-                    # All tabs (including Main) show only their assigned galleries
+                    # Check if in database OR in queue manager with matching tab
                     should_show = path in tab_paths_set
+                    if not should_show:
+                        # Try to get queue_manager from parent window
+                        parent_window = self.window()
+                        print(f"DEBUG _apply_filter: Checking for unsaved item, path={path}, tab_name={tab_name}")
+                        print(f"DEBUG _apply_filter: parent_window type = {type(parent_window).__name__}")
+                        print(f"DEBUG _apply_filter: hasattr(parent_window, 'queue_manager') = {hasattr(parent_window, 'queue_manager')}")
+                        
+                        if hasattr(parent_window, 'queue_manager'):
+                            # Also check in-memory items that haven't been saved yet
+                            qm = parent_window.queue_manager
+                            print(f"DEBUG _apply_filter: queue_manager exists, type = {type(qm).__name__}")
+                            print(f"DEBUG _apply_filter: queue_manager has {len(qm.items)} items")
+                            
+                            item = qm.get_item(path)
+                            print(f"DEBUG _apply_filter: get_item({path}) returned: {item}")
+                            if item:
+                                print(f"DEBUG _apply_filter: item.tab_name = '{item.tab_name}', comparing to '{tab_name}'")
+                                print(f"DEBUG _apply_filter: item.status = '{item.status}'")
+                                if item.tab_name == tab_name:
+                                    should_show = True
+                                    print(f"DEBUG _apply_filter: MATCH! Showing item in filter")
+                                else:
+                                    print(f"DEBUG _apply_filter: Tab name mismatch: '{item.tab_name}' != '{tab_name}'")
+                        else:
+                            print(f"DEBUG _apply_filter: parent_window has no queue_manager attribute")
                     
                 visibility_map[row] = should_show
                 self.gallery_table.setRowHidden(row, not should_show)
@@ -1281,7 +1307,7 @@ class TabbedGalleryWidget(QWidget):
                 self.gallery_table.setRowHidden(row, True)
                 
     def _get_cached_tab_paths(self, tab_name):
-        """Get cached tab paths or load and cache them"""
+        """Get tab paths - CACHING DISABLED FOR DEBUGGING"""
         # Special case for "All Tabs" - return empty set to show all
         if tab_name == "All Tabs":
             return set()
@@ -1289,27 +1315,16 @@ class TabbedGalleryWidget(QWidget):
         if not self.tab_manager:
             print("Warning: No tab manager available for loading tab galleries")
             return set()
-            
-        cache_key = f"{tab_name}_{self._cache_version}"
-        current_time = time.time()
         
-        # Check if we have fresh cached paths
-        if (cache_key in self._path_to_tab_cache and 
-            tab_name in self._filter_cache_timestamps and
-            current_time - self._filter_cache_timestamps[tab_name] < self._cache_ttl):
-            return self._path_to_tab_cache[cache_key]
-        
-        # Load and cache tab galleries
+        # CACHING DISABLED - always load fresh from database
         try:
             tab_galleries = self.tab_manager.load_tab_galleries(tab_name)
             tab_paths_set = {gallery.get('path') for gallery in tab_galleries if gallery.get('path')}
-            print(f"Debug: Loaded {len(tab_paths_set)} galleries for tab '{tab_name}'")
+            print(f"Debug: Loaded {len(tab_paths_set)} galleries for tab '{tab_name}' (NO CACHE)")
         except Exception as e:
             print(f"Error loading galleries for tab '{tab_name}': {e}")
             tab_paths_set = set()
         
-        # Cache the result
-        self._path_to_tab_cache[cache_key] = tab_paths_set
         return tab_paths_set
         
     def _continue_filter_with_cache(self, start_row, total_rows, tab_name, tab_paths_set, cache_key, visibility_map):
@@ -2114,8 +2129,8 @@ class GalleryTableWidget(QTableWidget):
             "size", "transfer", "template", "title"
         ])
         
-        # Set larger icon size for Status column icons (default is usually 16x16)
-        self.setIconSize(QSize(20, 20))
+        # Set icon size for Status column icons
+        self.setIconSize(QSize(16, 16))
         try:
             # Left-align the 'gallery name' header specifically
             hn = self.horizontalHeaderItem(1)
@@ -2186,7 +2201,7 @@ class GalleryTableWidget(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(28)  # Slightly shorter rows
+        self.verticalHeader().setDefaultSectionSize(24)  # Slightly shorter rows
         
         # Column visibility is managed by window settings; defaults applied in restore_table_settings
 
@@ -2908,8 +2923,11 @@ class GalleryTableWidget(QTableWidget):
         while widget and not hasattr(widget, 'cancel_single_item'):
             widget = widget.parent()
         if widget and hasattr(widget, 'cancel_single_item'):
-            for path in queued_paths:
-                widget.cancel_single_item(path)
+            # Use batch processing for multiple cancellations to prevent GUI hang
+            if len(queued_paths) > 1:
+                widget.cancel_multiple_items(queued_paths)
+            else:
+                widget.cancel_single_item(queued_paths[0])
     
     def retry_selected_via_menu(self, failed_paths):
         """Retry failed uploads for selected items"""
@@ -5699,6 +5717,13 @@ class ImxUploadGUI(QMainWindow):
         """Handle individual queue item status changes"""
         print(f"DEBUG: GUI received status change signal: {path} from {old_status} to {new_status}")
         
+        # When an item goes from scanning to ready, just update tab counts
+        if old_status == "scanning" and new_status == "ready":
+            print(f"DEBUG: Item completed scanning, updating tab counts")
+            # Just update the tab counts, don't refresh the filter which hides items
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(150, lambda: self.gallery_table._update_tab_tooltips() if hasattr(self.gallery_table, '_update_tab_tooltips') else None)
+        
         # Debug the item data before updating table
         item = self.queue_manager.get_item(path)
         if item:
@@ -5834,19 +5859,10 @@ class ImxUploadGUI(QMainWindow):
         
         # Proceed with adding
         template_name = self.template_combo.currentText()
-        result = self.queue_manager.add_item(path, template_name=template_name)
-        
-        # Set the item to current active tab after creation
-        if result == True:
-            current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
-            item = self.queue_manager.get_item(path)
-            if item and current_tab != "Main":
-                # Get tab info for proper tab_id assignment
-                tab_info = self.tab_manager.get_tab_by_name(current_tab)
-                if tab_info:
-                    item.tab_name = current_tab
-                    item.tab_id = tab_info.id
-                    self.queue_manager._save_single_item(item)
+        # Get current tab BEFORE adding item
+        current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
+        print(f"DEBUG: Single folder - adding to tab: {current_tab}")
+        result = self.queue_manager.add_item(path, template_name=template_name, tab_name=current_tab)
         
         if result == True:
             self.add_log_message(f"{timestamp()} [queue] Added to queue: {os.path.basename(path)}")
@@ -5854,8 +5870,9 @@ class ImxUploadGUI(QMainWindow):
             item = self.queue_manager.get_item(path)
             if item:
                 self._add_gallery_to_table(item)
-                # Force immediate table refresh to ensure visibility
+                # Force immediate table refresh to ensure visibility and update tab counts
                 QTimer.singleShot(50, self._update_scanned_rows)
+                QTimer.singleShot(100, lambda: self._update_tab_tooltips() if hasattr(self, '_update_tab_tooltips') else None)
         else:
             self.add_log_message(f"{timestamp()} [queue] Failed to add: {os.path.basename(path)} (no images found)")
     
@@ -5972,6 +5989,7 @@ class ImxUploadGUI(QMainWindow):
     def _add_multiple_folders_with_duplicate_detection(self, folder_paths: List[str]):
         """Add multiple folders with duplicate detection dialogs"""
         from src.gui.dialogs.duplicate_detection_dialogs import show_duplicate_detection_dialogs
+        from imxup import timestamp
         
         try:
             # Show duplicate detection dialogs and get processed lists
@@ -5986,18 +6004,21 @@ class ImxUploadGUI(QMainWindow):
             if folders_to_add_normally:
                 print(f"DEBUG: Adding {len(folders_to_add_normally)} folders normally")
                 template_name = self.template_combo.currentText()
+                # Get current tab BEFORE adding items
+                current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
+                print(f"DEBUG: Multiple folders - adding to tab: {current_tab}")
                 
                 for folder_path in folders_to_add_normally:
                     try:
-                        result = self.queue_manager.add_item(folder_path, template_name=template_name)
+                        result = self.queue_manager.add_item(folder_path, template_name=template_name, tab_name=current_tab)
                         if result:
-                            # Set to current active tab
-                            current_tab = getattr(self.gallery_table, 'current_tab', "Main")
-                            if current_tab != "Main":
-                                try:
-                                    self.tab_manager.assign_gallery_to_tab(folder_path, current_tab)
-                                except Exception as e:
-                                    print(f"DEBUG: Failed to assign {folder_path} to tab {current_tab}: {e}")
+                            # Get the created item and immediately add to table display
+                            item = self.queue_manager.get_item(folder_path)
+                            if item:
+                                # Add to table display immediately (like single folder does)
+                                self._add_gallery_to_table(item)
+                            
+                            self.add_log_message(f"{timestamp()} [queue] Added to queue: {os.path.basename(folder_path)}")
                     except Exception as e:
                         print(f"DEBUG: Error adding folder {folder_path}: {e}")
                         self.add_log_message(f"Error adding {os.path.basename(folder_path)}: {e}")
@@ -6006,22 +6027,25 @@ class ImxUploadGUI(QMainWindow):
             if folders_to_replace_in_queue:
                 print(f"DEBUG: Replacing {len(folders_to_replace_in_queue)} folders in queue")
                 template_name = self.template_combo.currentText()
+                # Get current tab for replacements too
+                if 'current_tab' not in locals():
+                    current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
+                    print(f"DEBUG: Multiple folders replacement - adding to tab: {current_tab}")
                 
                 for folder_path in folders_to_replace_in_queue:
                     try:
-                        # Remove existing item
+                        # Remove existing item from both queue and table
                         self.queue_manager.remove_item(folder_path)
+                        self._remove_gallery_from_table(folder_path)
                         
-                        # Add new item
-                        result = self.queue_manager.add_item(folder_path, template_name=template_name)
+                        # Add new item with correct tab
+                        result = self.queue_manager.add_item(folder_path, template_name=template_name, tab_name=current_tab)
                         if result:
-                            # Set to current active tab
-                            current_tab = getattr(self.gallery_table, 'current_tab', "Main")
-                            if current_tab != "Main":
-                                try:
-                                    self.tab_manager.assign_gallery_to_tab(folder_path, current_tab)
-                                except Exception as e:
-                                    print(f"DEBUG: Failed to assign {folder_path} to tab {current_tab}: {e}")
+                            # Get the created item and immediately add to table display
+                            item = self.queue_manager.get_item(folder_path)
+                            if item:
+                                # Add to table display immediately
+                                self._add_gallery_to_table(item)
                         
                         self.add_log_message(f"Replaced {os.path.basename(folder_path)} in queue")
                     except Exception as e:
@@ -6032,8 +6056,9 @@ class ImxUploadGUI(QMainWindow):
             total_processed = len(folders_to_add_normally) + len(folders_to_replace_in_queue)
             if total_processed > 0:
                 self.add_log_message(f"Added {total_processed} galleries to queue")
-                # Trigger table refresh
+                # Trigger table refresh and update tab counts/tooltips
                 QTimer.singleShot(50, self._update_scanned_rows)
+                QTimer.singleShot(100, lambda: self._update_tab_tooltips() if hasattr(self, '_update_tab_tooltips') else None)
             
         except Exception as e:
             print(f"DEBUG: Error in duplicate detection: {e}")
@@ -6052,8 +6077,11 @@ class ImxUploadGUI(QMainWindow):
     
     def _add_gallery_to_table(self, item: GalleryQueueItem):
         """Add a new gallery item to the table without rebuilding"""
+        print(f"DEBUG: _add_gallery_to_table called for {item.path} with tab_name={item.tab_name}")
+        
         row = self.gallery_table.rowCount()
         self.gallery_table.setRowCount(row + 1)
+        print(f"DEBUG: Adding gallery to table at row {row}")
         
         # Update mappings
         self.path_to_row[item.path] = row
@@ -6064,6 +6092,20 @@ class ImxUploadGUI(QMainWindow):
         
         # Populate the new row
         self._populate_table_row(row, item)
+        
+        # Make sure the row is visible if it belongs to the current tab
+        current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else None
+        if current_tab and (current_tab == "All Tabs" or item.tab_name == current_tab):
+            self.gallery_table.setRowHidden(row, False)
+            print(f"DEBUG: Row {row} set visible for current tab {current_tab}")
+        else:
+            self.gallery_table.setRowHidden(row, True)
+            print(f"DEBUG: Row {row} hidden - item tab {item.tab_name} != current tab {current_tab}")
+        
+        # Invalidate TabManager's cache for this tab so it reloads from database
+        if hasattr(self.gallery_table, 'tab_manager') and item.tab_name:
+            self.gallery_table.tab_manager.invalidate_tab_cache(item.tab_name)
+            print(f"DEBUG: Invalidated TabManager cache for tab {item.tab_name}")
     
     def _remove_gallery_from_table(self, path: str):
         """Remove a gallery from the table and update mappings"""
@@ -7601,6 +7643,42 @@ class ImxUploadGUI(QMainWindow):
                 self._update_specific_gallery_display(path)
                 # Force immediate button count and progress update
                 self._update_counts_and_progress()
+    
+    def cancel_multiple_items(self, paths: list):
+        """Cancel multiple queued items using batch processing to prevent GUI hang"""
+        if not paths:
+            return
+        
+        canceled_paths = []
+        
+        # Use batch mode to group all database operations
+        with self.queue_manager.batch_updates():
+            for path in paths:
+                if path in self.queue_manager.items:
+                    item = self.queue_manager.items[path]
+                    if item.status == "queued":
+                        self.queue_manager.update_item_status(path, "ready")
+                        canceled_paths.append(path)
+        
+        # Log batch operation
+        if canceled_paths:
+            self.add_log_message(f"{timestamp()} [queue] Canceled {len(canceled_paths)} queued item(s)")
+            
+            # Update UI for all affected items
+            for path in canceled_paths:
+                # Update action widgets
+                if path in self.path_to_row:
+                    row = self.path_to_row[path]
+                    if 0 <= row < self.gallery_table.rowCount():
+                        action_widget = self.gallery_table.cellWidget(row, 7)
+                        if isinstance(action_widget, ActionButtonWidget):
+                            action_widget.update_buttons("ready")
+                
+                # Update display for each item
+                self._update_specific_gallery_display(path)
+            
+            # Single update for button counts and progress
+            self._update_counts_and_progress()
     
     def start_upload_for_item(self, path: str):
         """Start upload for a specific item"""

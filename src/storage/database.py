@@ -48,7 +48,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY,
             path TEXT NOT NULL UNIQUE,
             name TEXT,
-            status TEXT NOT NULL CHECK (status IN ('scanning','ready','queued','uploading','paused','incomplete','completed','failed')),
+            status TEXT NOT NULL CHECK (status IN ('validating','scanning','ready','queued','uploading','paused','incomplete','completed','failed')),
             added_ts INTEGER NOT NULL,
             finished_ts INTEGER,
             template TEXT,
@@ -379,7 +379,7 @@ class QueueStore:
         insertion_order = int(item.get('insertion_order', 0) or 0)
         failed_files = json.dumps(item.get('failed_files', []))
         tab_name = item.get('tab_name', 'Main')
-        #print(f"DEBUG: _upsert_gallery_row called with tab_name='{tab_name}' for path='{item.get('path', 'unknown')}'", flush=True)
+        print(f"DEBUG: _upsert_gallery_row called with tab_name='{tab_name}' for path='{path}' status='{status}'", flush=True)
         
         # Get tab_id for the tab_name
         cursor = conn.execute("SELECT id FROM tabs WHERE name = ? AND is_active = 1", (tab_name,))
@@ -389,14 +389,16 @@ class QueueStore:
         # If tab doesn't exist, default to Main tab
         if tab_id is None:
             print(f"DEBUG: Tab lookup failed for '{tab_name}', checking available tabs...")
-            cursor = conn.execute("SELECT name, is_active FROM tabs ORDER BY name")
+            cursor = conn.execute("SELECT id, name, is_active FROM tabs ORDER BY name")
             all_tabs = cursor.fetchall()
-            print(f"DEBUG: Available tabs: {all_tabs}")
+            print(f"DEBUG: Available tabs in database: {all_tabs}")
             cursor = conn.execute("SELECT id FROM tabs WHERE name = 'Main' AND is_active = 1")
             row = cursor.fetchone()
             tab_id = row[0] if row else 1  # Fallback to ID 1
-            print(f"DEBUG: Falling back to Main tab (id={tab_id}) from original tab '{tab_name}'")
+            print(f"DEBUG: FALLBACK - Changing tab from '{tab_name}' to 'Main' (id={tab_id}) for {path}")
             tab_name = 'Main'
+        else:
+            print(f"DEBUG: Successfully found tab '{tab_name}' with id={tab_id} for {path}")
 
         # Check if tab_id column exists
         cursor = conn.execute("PRAGMA table_info(galleries)")
@@ -468,13 +470,16 @@ class QueueStore:
             )
 
     def bulk_upsert(self, items: Iterable[Dict[str, Any]]) -> None:
+        items_list = list(items)  # Convert to list to avoid consuming iterator
+        print(f"DEBUG: bulk_upsert called with {len(items_list)} items")
         try:
             with _connect(self.db_path) as conn:
                 _ensure_schema(conn)
                 conn.execute("BEGIN")
                 try:
-                    for it in items:
+                    for it in items_list:
                         try:
+                            print(f"DEBUG: Processing item: path={it.get('path')}, tab_name={it.get('tab_name', 'Main')}, status={it.get('status')}")
                             self._upsert_gallery_row(conn, it)
                             # Optionally persist per-image resume info when provided
                             uploaded_files = it.get('uploaded_files') or []

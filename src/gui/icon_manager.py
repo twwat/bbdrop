@@ -27,6 +27,7 @@ class IconManager:
         'status_scan_failed':   ['status_scan_failed-light.png','status_scan_failed-dark.png'],
         'status_upload_failed': ['status_error-light.png',      'status_error-dark.png'],
         'status_scanning':      ['status_scanning-light.png',   'status_scanning-dark.png'],
+        'status_validating':    ['status_validating-light.png', 'status_validating-dark.png'],
                         
         # Action button icons    Light icon                      Dark icon
         'action_start':         ['action_start-light.png',      'action_start-dark.png'],
@@ -39,7 +40,7 @@ class IconManager:
         # UI element icons
         'templates':            ['templates-light.png',         'templates-dark.png'],
         'credentials':          ['credentials-light.png',       'credentials-dark.png'],
-        'main_window':          'imxup.png',
+        'main_window':          ['imxup.png', 'imxup.png'],
         'app_icon':             'imxup.ico',
         # Alternative sizes (optional)
         'check_small':          'check16.png',
