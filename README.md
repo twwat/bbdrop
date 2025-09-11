@@ -65,9 +65,9 @@ The default template is:
 
 ### Creating Custom Templates
 
-Create a file in `~/imxup_galleries` with a name starting with `.template`, for example:
-- `.template My Template.txt`
-- `.template Detailed Format.txt`
+Create a file in `~/.imxup` with a name ending with `.template.txt`, for example:
+- `My Template.template.txt`
+- `Detailed Format.template.txt`
 
 Example template:
 ```
