@@ -8,7 +8,7 @@ without duplication.
 
 from __future__ import annotations
 
-import os
+import os, shutil
 import time
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
@@ -38,6 +38,15 @@ class UploadEngine:
     def __init__(self, uploader: Any, rename_worker: Any = None):
         self.uploader = uploader
         self.rename_worker = rename_worker
+    
+    def _is_gallery_unnamed(self, gallery_id: str) -> bool:
+        """Check if gallery is in the unnamed galleries list."""
+        try:
+            from imxup import get_unnamed_galleries  # type: ignore
+            unnamed_galleries = get_unnamed_galleries()
+            return gallery_id in unnamed_galleries
+        except Exception:
+            return False
 
     def run(
         self,
@@ -119,7 +128,7 @@ class UploadEngine:
         try:
             from imxup import sanitize_gallery_name  # type: ignore
             original_name = gallery_name
-            gallery_name = sanitize_gallery_name(gallery_name)
+            # No sanitization - only rename worker should sanitize
             if on_log and original_name != gallery_name:
                 on_log(f"Sanitized gallery name: '{original_name}' -> '{gallery_name}'")
         except Exception:
@@ -179,7 +188,7 @@ class UploadEngine:
                 except Exception:
                     pass
         # Queue gallery rename for background processing to avoid blocking uploads
-        if gallery_name:
+        if gallery_name and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
             try:
                 last_method = getattr(self.uploader, 'last_login_method', None)
             except Exception:
@@ -437,7 +446,7 @@ class UploadEngine:
 
         results.update({
             'gallery_id': gallery_id,
-            'gallery_name': gallery_name,
+            'gallery_name': original_name,
             'upload_time': upload_time,
             'total_size': total_size,
             'uploaded_size': uploaded_size,

@@ -845,8 +845,8 @@ class QueueManager(QObject):
             if path in self.items:
                 return False
             
-            print(f"DEBUG: Sanitizing gallery name for {path}")
-            gallery_name = name or sanitize_gallery_name(os.path.basename(path))
+            print(f"DEBUG: Using original folder name for {path}")
+            gallery_name = name or os.path.basename(path)
             print(f"DEBUG: Gallery name: {gallery_name}")
             print(f"DEBUG: Creating GalleryQueueItem with tab_name={tab_name}...")
             item = GalleryQueueItem(
@@ -913,10 +913,10 @@ class QueueManager(QObject):
                 # Update in-memory item
                 old_value = getattr(self.items[path], field_name, '')
                 setattr(self.items[path], field_name, value)
-                
+
                 # Update in database
                 self.store.update_item_custom_field(path, field_name, value)
-                
+
                 self._inc_version()
                 return True
         return False
@@ -978,7 +978,20 @@ class QueueManager(QObject):
         """Get specific item"""
         with QMutexLocker(self.mutex):
             return self.items.get(path)
-    
+
+    def update_gallery_name(self, path: str, new_name: str) -> bool:
+        """Update gallery display name"""
+        with QMutexLocker(self.mutex):
+            if path not in self.items:
+                return False
+
+            old_name = self.items[path].name
+            self.items[path].name = new_name
+            self._schedule_debounced_save([path])
+
+            self._inc_version()
+            return True
+
     def _rebuild_status_counts(self):
         """Rebuild status counters"""
         self._status_counts.clear()

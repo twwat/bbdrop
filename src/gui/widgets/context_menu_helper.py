@@ -107,6 +107,10 @@ class GalleryContextMenuHelper(QObject):
         if len(selected_paths) == 1:
             manage_files_action = menu.addAction("Manage Files...")
             manage_files_action.triggered.connect(lambda: self._delegate_to_main_window('manage_gallery_files', selected_paths[0]))
+
+            # Rename Gallery (single selection only)
+            rename_action = menu.addAction("✏️ Rename Gallery")
+            rename_action.triggered.connect(lambda: self._delegate_to_main_window('rename_gallery', selected_paths[0]))
     
     def _add_status_operations(self, menu, selected_paths):
         """Add retry/rescan/reset actions"""
@@ -150,9 +154,21 @@ class GalleryContextMenuHelper(QObject):
         # Copy BBCode and open links for completed items
         completed_paths = self._get_paths_by_status(selected_paths, "completed")
         if completed_paths:
+            # View BBCode (single selection only)
+            if len(completed_paths) == 1:
+                view_bbcode_action = menu.addAction("View BBCode")
+                view_bbcode_action.triggered.connect(lambda: self._delegate_to_main_window('handle_view_button', completed_paths[0]))
+
             copy_action = menu.addAction("Copy BBCode")
             copy_action.triggered.connect(lambda: self._delegate_to_main_window('copy_bbcode_via_menu_multi', completed_paths))
-            
+
+            # Regenerate BBCode
+            regenerate_action = menu.addAction("Regenerate BBCode")
+            if len(completed_paths) == 1:
+                regenerate_action.triggered.connect(lambda: self._delegate_to_main_window('regenerate_bbcode_for_gallery', completed_paths[0]))
+            else:
+                regenerate_action.triggered.connect(lambda: self._delegate_to_main_window('regenerate_bbcode_for_gallery_multi', completed_paths))
+
             open_link_action = menu.addAction("Open Gallery Link")
             open_link_action.triggered.connect(lambda: self._delegate_to_main_window('open_gallery_links_via_menu', completed_paths))
     
@@ -171,7 +187,7 @@ class GalleryContextMenuHelper(QObject):
         # Create "Move to" submenu with tabs other than the current one and excluding "All Tabs"
         other_tabs = [tab for tab in available_tabs if tab != current_tab and tab != "All Tabs"]
         if other_tabs:
-            move_menu = menu.addMenu("Move to...")
+            move_menu = menu.addMenu("Move to tab...")
             for tab_name in other_tabs:
                 move_action = move_menu.addAction(tab_name)
                 move_action.triggered.connect(
@@ -332,9 +348,8 @@ class GalleryContextMenuHelper(QObject):
                 except Exception as e:
                     print(f"Error updating template for {gallery_path}: {e}")
             
-            # Update table display for visible items using existing method
-            for gallery_path in gallery_paths:
-                self.main_window._update_specific_gallery_display(gallery_path)
+            # Update table display for visible items
+            self._update_table_display(gallery_paths, template_name)
             
             # Add log message
             if updated_count > 0:
@@ -350,3 +365,31 @@ class GalleryContextMenuHelper(QObject):
         except Exception as e:
             print(f"Error in batch template update: {e}")
     
+    def _update_table_display(self, gallery_paths: list, template_name: str):
+        """Update table display for galleries with new template"""
+        if not self.main_window:
+            return
+            
+        try:
+            # Get table reference (handle both tabbed and direct table)
+            if hasattr(self.main_window.gallery_table, 'gallery_table'):
+                table = self.main_window.gallery_table.gallery_table
+            else:
+                table = self.main_window.gallery_table
+                
+            if not table:
+                return
+                
+            # Update visible rows where gallery path matches
+            for row in range(table.rowCount()):
+                name_item = table.item(row, 1)  # Gallery name column
+                if name_item:
+                    gallery_path = name_item.data(table.UserRole)
+                    if gallery_path in gallery_paths:
+                        # Update template column (column 10)
+                        template_item = table.item(row, 10)
+                        if template_item:
+                            template_item.setText(template_name)
+                            
+        except Exception as e:
+            print(f"Error updating table display: {e}")

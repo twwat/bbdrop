@@ -74,11 +74,7 @@ class GUIImxToUploader(ImxToUploader):
         if not gallery_name:
             gallery_name = os.path.basename(folder_path)
         original_name = gallery_name
-        gallery_name = sanitize_gallery_name(gallery_name)
-        if original_name != gallery_name and self.worker_thread:
-            self.worker_thread.log_message.emit(
-                f"{timestamp()} Sanitized gallery name: '{original_name}' -> '{gallery_name}'"
-            )
+        # No sanitization - only rename worker should sanitize
         
         # Get RenameWorker from worker thread if available
         rename_worker = None

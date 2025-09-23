@@ -6,7 +6,8 @@ Provides interface for creating, editing, and managing BBCode templates
 import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QListWidget,
-    QPushButton, QLabel, QPlainTextEdit, QMessageBox, QInputDialog
+    QPushButton, QLabel, QPlainTextEdit, QMessageBox, QInputDialog,
+    QWidget, QGridLayout
 )
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 from PyQt6.QtCore import Qt
@@ -99,44 +100,7 @@ class TemplateManagerDialog(QDialog):
         
         # Template editor section
         editor_group = QGroupBox("Template Editor")
-        editor_layout = QVBoxLayout(editor_group)
-        
-        # Placeholder buttons
-        placeholder_layout = QHBoxLayout()
-        placeholder_layout.addWidget(QLabel("Insert Placeholders:"))
-        
-        placeholders = [
-            ("#folderName#", "Gallery Name"),
-            ("#width#", "Width"),
-            ("#height#", "Height"),
-            ("#longest#", "Longest Side"),
-            ("#extension#", "Extension"),
-            ("#pictureCount#", "Picture Count"),
-            ("#folderSize#", "Folder Size"),
-            ("#galleryLink#", "Gallery Link"),
-            ("#allImages#", "All Images"),
-            ("#custom1#", "Custom 1"),
-            ("#custom2#", "Custom 2"),
-            ("#custom3#", "Custom 3"),
-            ("#custom4#", "Custom 4")
-        ]
-        
-        for placeholder, label in placeholders:
-            btn = QPushButton(label)
-            if not btn.text().startswith(" "):
-                btn.setText(" " + btn.text())
-            btn.setToolTip(f"Insert {placeholder}")
-            btn.clicked.connect(lambda checked, p=placeholder: self.insert_placeholder(p))
-            btn.setStyleSheet("""
-                QPushButton {
-                    padding: 2px 6px;
-                    min-width: 80px;
-                    max-height: 24px;
-                }
-            """)
-            placeholder_layout.addWidget(btn)
-        
-        editor_layout.addLayout(placeholder_layout)
+        editor_layout = QHBoxLayout(editor_group)
         
         # Template content editor with syntax highlighting
         self.template_editor = QPlainTextEdit()
@@ -147,6 +111,66 @@ class TemplateManagerDialog(QDialog):
         self.highlighter = PlaceholderHighlighter(self.template_editor.document())
         
         editor_layout.addWidget(self.template_editor)
+        
+        # Placeholder buttons on right side in two columns
+        placeholder_widget = QWidget()
+        placeholder_widget.setFixedWidth(180)
+        placeholder_main_layout = QVBoxLayout(placeholder_widget)
+        placeholder_main_layout.setContentsMargins(8, 0, 0, 0)
+        
+        # Label
+        placeholder_label = QLabel("Insert Placeholders:")
+        placeholder_label.setStyleSheet("font-weight: bold; margin-bottom: 5px;")
+        placeholder_main_layout.addWidget(placeholder_label)
+        
+        # Grid layout for buttons in 2 columns
+        placeholder_grid = QGridLayout()
+        placeholder_grid.setSpacing(3)
+        
+        placeholders = [
+            ("#folderName#", "Gallery Name"),
+            ("#allImages#", "All Images"),
+            ("#height#", "Height"),
+            ("#pictureCount#", "Picture Count"),
+            ("#width#", "Width"),
+            ("#folderSize#", "Folder Size"),
+            ("#longest#", "Longest Side"),
+            ("#custom1#", "Custom 1"),
+            ("#galleryLink#", "Gallery Link"),
+            ("#custom2#", "Custom 2"),
+            ("#extension#", "Extension"),
+            ("#custom3#", "Custom 3"),
+            ("", ""),  # Empty slot for alignment
+            ("#custom4#", "Custom 4")
+        ]
+        
+        row = 0
+        col = 0
+        for placeholder, label in placeholders:
+            if placeholder:  # Skip empty placeholders
+                btn = QPushButton(label)
+                btn.setToolTip(f"Insert {placeholder}")
+                btn.clicked.connect(lambda checked, p=placeholder: self.insert_placeholder(p))
+                btn.setStyleSheet("""
+                    QPushButton {
+                        padding: 2px 4px;
+                        min-width: 75px;
+                        max-width: 85px;
+                        max-height: 20px;
+                        font-size: 10px;
+                    }
+                """)
+                placeholder_grid.addWidget(btn, row, col)
+            
+            col += 1
+            if col >= 2:
+                col = 0
+                row += 1
+        
+        placeholder_main_layout.addLayout(placeholder_grid)
+        placeholder_main_layout.addStretch()
+        
+        editor_layout.addWidget(placeholder_widget)
         
         layout.addWidget(editor_group)
         
@@ -217,7 +241,7 @@ class TemplateManagerDialog(QDialog):
                     content = self.template_editor.toPlainText()
                     from imxup import get_template_path
                     template_path = get_template_path()
-                    template_file = os.path.join(template_path, f".template {self.current_template_name}.txt")
+                    template_file = os.path.join(template_path, f"{self.current_template_name}.template.txt")
                     
                     try:
                         with open(template_file, 'w', encoding='utf-8') as f:
@@ -352,8 +376,8 @@ class TemplateManagerDialog(QDialog):
             # Rename the template file
             from imxup import get_template_path
             template_path = get_template_path()
-            old_file = os.path.join(template_path, f".template {old_name}.txt")
-            new_file = os.path.join(template_path, f".template {new_name}.txt")
+            old_file = os.path.join(template_path, f"{old_name}.template.txt")
+            new_file = os.path.join(template_path, f"{new_name}.template.txt")
             
             try:
                 os.rename(old_file, new_file)
@@ -400,7 +424,7 @@ class TemplateManagerDialog(QDialog):
             # Delete the template file
             from imxup import get_template_path
             template_path = get_template_path()
-            template_file = os.path.join(template_path, f".template {template_name}.txt")
+            template_file = os.path.join(template_path, f"{template_name}.template.txt")
             
             try:
                 os.remove(template_file)
@@ -425,7 +449,7 @@ class TemplateManagerDialog(QDialog):
         # Save the template file
         from imxup import get_template_path
         template_path = get_template_path()
-        template_file = os.path.join(template_path, f".template {template_name}.txt")
+        template_file = os.path.join(template_path, f"{template_name}.template.txt")
         
         try:
             with open(template_file, 'w', encoding='utf-8') as f:
@@ -457,7 +481,7 @@ class TemplateManagerDialog(QDialog):
                     # Save the template file
                     from imxup import get_template_path
                     template_path = get_template_path()
-                    template_file = os.path.join(template_path, f".template {template_name}.txt")
+                    template_file = os.path.join(template_path, f"{template_name}.template.txt")
                     
                     try:
                         with open(template_file, 'w', encoding='utf-8') as f:

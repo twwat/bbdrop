@@ -212,7 +212,6 @@ def _initialize_default_tabs(conn: sqlite3.Connection) -> None:
         # Default system tabs with proper ordering
         default_tabs = [
             ('Main', 'system', 0, None),
-            ('Archive', 'system', 1000, '#666666'),  # Gray hint for archived items
         ]
         
         # Insert default tabs
@@ -1400,7 +1399,7 @@ class QueueStore:
         if not new_tab_name or not new_tab_name.strip():
             raise ValueError("new_tab_name cannot be empty")
         
-        # Strip count from tab name (e.g., "Archive (0)" -> "Archive")
+        # Strip count from tab name (e.g., "Main (0)" -> "Main")
         import re
         clean_tab_name = re.sub(r'\s*\(\d+\)$', '', new_tab_name.strip())
             
@@ -1486,8 +1485,8 @@ class QueueStore:
 
     def initialize_default_tabs(self) -> None:
         """Initialize default system tabs if they don't exist.
-        
-        This creates the default 'Main' and 'Archive' system tabs with proper ordering.
+
+        This creates the default 'Main' system tab with proper ordering.
         Safe to call multiple times - will not create duplicates.
         """
         with _connect(self.db_path) as conn:

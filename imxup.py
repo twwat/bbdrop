@@ -28,8 +28,6 @@ import getpass
 #import tempfile
 import json
 #import zipfile
-
-
 #import urllib.request
 import platform
 import sqlite3
@@ -37,17 +35,11 @@ import sqlite3
 import glob
 import winreg
 
-# Load environment variables
-#load_dotenv()
-
-# Application version
-__version__ = "0.3.6"
+__version__ = "0.3.7"  # Application version number
 
 def timestamp():
     """Return current timestamp for logging"""
     return datetime.now().strftime("%H:%M:%S")
-
-
 
 def get_config_path() -> str:
     """Return the canonical path to the application's config file (~/.imxup/imxup.ini)."""
@@ -502,12 +494,12 @@ def build_gallery_filenames(gallery_name, gallery_id):
     """Return standardized filenames for gallery artifacts.
     - JSON filename: {Gallery Name}_{GalleryID}.json
     - BBCode filename: {Gallery Name}_{GalleryID}_bbcode.txt
-    Returns (safe_gallery_name, json_filename, bbcode_filename).
+    Returns (gallery_name, json_filename, bbcode_filename).
     """
-    safe_gallery_name = sanitize_gallery_name(gallery_name)
-    json_filename = f"{safe_gallery_name}_{gallery_id}.json"
-    bbcode_filename = f"{safe_gallery_name}_{gallery_id}_bbcode.txt"
-    return safe_gallery_name, json_filename, bbcode_filename
+    # Use gallery name directly - no sanitization for filenames
+    json_filename = f"{gallery_name}_{gallery_id}.json"
+    bbcode_filename = f"{gallery_name}_{gallery_id}_bbcode.txt"
+    return gallery_name, json_filename, bbcode_filename
 
 def check_if_gallery_exists(folder_name):
     """Check if gallery files already exist for this folder"""
@@ -741,6 +733,7 @@ def save_gallery_artifacts(
     template_name: str = "default",
     store_in_uploaded: Optional[bool] = None,
     store_in_central: Optional[bool] = None,
+    custom_fields: Optional[dict] = None,
 ) -> dict:
     """Save BBCode and JSON artifacts for a completed gallery.
 
@@ -749,6 +742,7 @@ def save_gallery_artifacts(
     - results: the results dict returned by upload_folder (must contain keys used below)
     - template_name: which template to use for full bbcode generation
     - store_in_uploaded/store_in_central: overrides for storage locations. When None, read defaults
+    - custom_fields: optional dict with custom1, custom2, custom3, custom4 values
 
     Returns: dict with paths written: { 'uploaded': {'bbcode': str, 'json': str}, 'central': {...}}
     """
@@ -805,6 +799,10 @@ def save_gallery_artifacts(
         'folder_size': f"{total_size / (1024*1024):.1f} MB",
         'gallery_link': f"https://imx.to/g/{gallery_id}",
         'all_images': all_images_bbcode,
+        'custom1': (custom_fields or {}).get('custom1', ''),
+        'custom2': (custom_fields or {}).get('custom2', ''),
+        'custom3': (custom_fields or {}).get('custom3', ''),
+        'custom4': (custom_fields or {}).get('custom4', '')
     }
     bbcode_content = generate_bbcode_from_template(template_name, template_data)
 
@@ -1156,7 +1154,7 @@ class ImxToUploader:
                 
                 # Check if login was successful
                 if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-                    print(f"{timestamp()} Successfully logged in with username/password")
+                    print(f"{timestamp()} Successfully logged in")
                     try:
                         self.last_login_method = "credentials"
                     except Exception:
@@ -1489,11 +1487,8 @@ class ImxToUploader:
         if not gallery_name:
             gallery_name = os.path.basename(folder_path)
         
-        # Sanitize gallery name
+        # Keep original gallery name - sanitization only happens in rename worker
         original_name = gallery_name
-        gallery_name = sanitize_gallery_name(gallery_name)
-        if original_name != gallery_name:
-            print(f"{timestamp()} Sanitized gallery name: '{original_name}' -> '{gallery_name}'")
         
         # Check if gallery already exists
         check_start = time.time()
@@ -1682,9 +1677,10 @@ class ImxToUploader:
         min_height = min(h for w, h in successful_dimensions) if successful_dimensions else 0
         
         # Add statistics to results
+        print(f"DEBUG RESULTS: Returning original_name='{original_name}' as gallery_name, actual upload name was='{gallery_name}'")
         results.update({
             'gallery_id': gallery_id,
-            'gallery_name': gallery_name,
+            'gallery_name': original_name,
             'upload_time': upload_time,
             'total_size': total_size,
             'uploaded_size': uploaded_size,
@@ -1729,8 +1725,9 @@ class ImxToUploader:
         extension = max(set(extensions), key=extensions.count) if extensions else "JPG"
         
         # Prepare template data
+        print(f"DEBUG TEMPLATE: original_name='{original_name}', gallery_name='{gallery_name}'")
         template_data = {
-            'folder_name': gallery_name,
+            'folder_name': original_name,
             'width': int(avg_width),
             'height': int(avg_height),
             'longest': int(max(avg_width, avg_height)),
@@ -1744,11 +1741,12 @@ class ImxToUploader:
         # Generate bbcode using specified template and save artifacts centrally
         bbcode_content = generate_bbcode_from_template(template_name, template_data)
         try:
+            print(f"DEBUG ARTIFACTS: About to save artifacts with original_name='{original_name}', upload_name='{gallery_name}'")
             save_gallery_artifacts(
                 folder_path=folder_path,
                 results={
                     'gallery_id': gallery_id,
-                    'gallery_name': gallery_name,
+                    'gallery_name': original_name,
                     'images': results['images'],
                     'total_size': total_size,
                     'successful_count': results.get('successful_count', 0),

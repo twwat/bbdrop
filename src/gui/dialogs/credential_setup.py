@@ -28,14 +28,19 @@ class CredentialSetupDialog(QDialog):
         
         layout = QVBoxLayout(self)
 
-        # Theme-aware colors
-        try:
-            pal = self.palette()
-            bg = pal.window().color()
-            # Simple luminance check
-            is_dark = (0.2126 * bg.redF() + 0.7152 * bg.greenF() + 0.0722 * bg.blueF()) < 0.5
-        except Exception:
-            is_dark = False
+        # Theme-aware colors - get from parent if available
+        is_dark = False
+        if hasattr(parent, '_current_theme_mode'):
+            is_dark = parent._current_theme_mode == 'dark'
+        elif hasattr(parent, '_get_cached_theme'):
+            is_dark = parent._get_cached_theme()
+
+        # Status label colors for inline styling
+        self.success_color = "#1e7e34" if is_dark else "#27ae60"
+        self.error_color = "#a71d2a" if is_dark else "#c0392b"
+        self.muted_color = "#aaa" if is_dark else "#666"
+
+        # Legacy colors (keep for backward compatibility)
         self._muted_color = "#aaaaaa" if is_dark else "#666666"
         self._text_color = "#dddddd" if is_dark else "#333333"
         self._panel_bg = "#2e2e2e" if is_dark else "#f0f8ff"
@@ -43,18 +48,14 @@ class CredentialSetupDialog(QDialog):
         
         # Info text
         info_text = QLabel(
-            "IMX.to Gallery Uploader credentials:\n\n"
-            "• API Key: Required for uploading files\n"
-            "• Username/Password: Required for naming galleries\n\n"
-            "Without username/password, all galleries will be named 'untitled gallery'\n\n"
-            "Credentials are stored in your home directory, encrypted with AES-128-CBC via Fernet using system's hostname/username as the encryption key.\n\n"
-            "This means:\n"
-            "• They cannot be recovered if forgotten (you'll have to reset on imx.to)\n"
-            "• The encrypted data won't work on other computers\n"
-            "• Credentials are obfuscated from other users on this system\n\n"
-            "Get your API key from: https://imx.to/user/api"
-            
-            
+            "<b>IMX.to authorization:</b><br><br>"
+            "<b>API Key:</b> <u>Required</u> for uploading files<br>"
+            "• Get your API key from <a style=\"color:#0078d4\" href=\"https://imx.to/user/api\">https://imx.to/user/api</a>)<br><br>"
+            "<b>Username/Password <u>or</u> cookies:</b> Required for renaming galleries<br>"
+            "• Without this, all galleries will be named \"untitled gallery\"<br><br>"
+            "Credentials are stored in your home directory, encrypted with <b>AES-128-CBC via Fernet</b> using system's hostname/username as the encryption key. This means:<br><br>"
+            "• The encrypted data won't work on other computers<br>"
+            "• Credentials are obfuscated from other users on this system<br><br>"
         )
         info_text.setWordWrap(True)
         info_text.setProperty("class", "info-panel")
@@ -68,9 +69,10 @@ class CredentialSetupDialog(QDialog):
         
         # Username status
         username_status_layout = QHBoxLayout()
-        username_status_layout.addWidget(QLabel("Username: "))
+        username_status_layout.addWidget(QLabel("<b>Username</b>: "))
         self.username_status_label = QLabel("NOT SET")
         self.username_status_label.setProperty("class", "status-muted")
+        self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         username_status_layout.addWidget(self.username_status_label)
         username_status_layout.addStretch()
         self.username_change_btn = QPushButton("Set")
@@ -87,9 +89,10 @@ class CredentialSetupDialog(QDialog):
         
         # Password status
         password_status_layout = QHBoxLayout()
-        password_status_layout.addWidget(QLabel("Password: "))
+        password_status_layout.addWidget(QLabel("<b>Password</b>: "))
         self.password_status_label = QLabel("NOT SET")
         self.password_status_label.setProperty("class", "status-muted")
+        self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         password_status_layout.addWidget(self.password_status_label)
         password_status_layout.addStretch()
         self.password_change_btn = QPushButton("Set")
@@ -106,9 +109,10 @@ class CredentialSetupDialog(QDialog):
         
         # API Key status
         api_key_status_layout = QHBoxLayout()
-        api_key_status_layout.addWidget(QLabel("API Key: "))
+        api_key_status_layout.addWidget(QLabel("<b>API Key</b>: "))
         self.api_key_status_label = QLabel("NOT SET")
         self.api_key_status_label.setProperty("class", "status-muted")
+        self.api_key_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         api_key_status_layout.addWidget(self.api_key_status_label)
         api_key_status_layout.addStretch()
         self.api_key_change_btn = QPushButton("Set")
@@ -125,9 +129,10 @@ class CredentialSetupDialog(QDialog):
 
         # Firefox cookies toggle status
         cookies_status_layout = QHBoxLayout()
-        cookies_status_layout.addWidget(QLabel("Firefox cookies: "))
+        cookies_status_layout.addWidget(QLabel("<b>Firefox cookies</b>: "))
         self.cookies_status_label = QLabel("Unknown")
         self.cookies_status_label.setProperty("class", "status-muted")
+        self.cookies_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         cookies_status_layout.addWidget(self.cookies_status_label)
         cookies_status_layout.addStretch()
         self.cookies_enable_btn = QPushButton("Enable")
@@ -195,6 +200,7 @@ class CredentialSetupDialog(QDialog):
                 if username:
                     self.username_status_label.setText(username)
                     self.username_status_label.setProperty("class", "status-success")
+                    self.username_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
                     self.username_status_label.style().polish(self.username_status_label)
                     # Buttons: Change/Unset
                     try:
@@ -208,6 +214,7 @@ class CredentialSetupDialog(QDialog):
                 else:
                     self.username_status_label.setText("NOT SET")
                     self.username_status_label.setProperty("class", "status-muted")
+                    self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
                     self.username_status_label.style().polish(self.username_status_label)
                     try:
                         txt = " Set"
@@ -221,6 +228,7 @@ class CredentialSetupDialog(QDialog):
                 if password:
                     self.password_status_label.setText("********")
                     self.password_status_label.setProperty("class", "status-success")
+                    self.password_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
                     self.password_status_label.style().polish(self.password_status_label)
                     try:
                         txt = " Change"
@@ -233,6 +241,7 @@ class CredentialSetupDialog(QDialog):
                 else:
                     self.password_status_label.setText("NOT SET")
                     self.password_status_label.setProperty("class", "status-muted")
+                    self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
                     self.password_status_label.style().polish(self.password_status_label)
                     try:
                         txt = " Set"
@@ -252,6 +261,7 @@ class CredentialSetupDialog(QDialog):
                             masked_key = api_key[:4] + "*" * 20 + api_key[-4:]
                             self.api_key_status_label.setText(masked_key)
                             self.api_key_status_label.setProperty("class", "status-success")
+                            self.api_key_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
                             self.api_key_status_label.style().polish(self.api_key_status_label)
                             try:
                                 txt = " Change"
@@ -264,6 +274,7 @@ class CredentialSetupDialog(QDialog):
                         else:
                             self.api_key_status_label.setText("SET")
                             self.api_key_status_label.setProperty("class", "status-success")
+                            self.api_key_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
                             self.api_key_status_label.style().polish(self.api_key_status_label)
                             try:
                                 txt = " Change"
@@ -276,6 +287,7 @@ class CredentialSetupDialog(QDialog):
                     except:
                         self.api_key_status_label.setText("SET")
                         self.api_key_status_label.setProperty("class", "status-success")
+                        self.api_key_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
                         self.api_key_status_label.style().polish(self.api_key_status_label)
                         try:
                             txt = " Change"
@@ -288,6 +300,7 @@ class CredentialSetupDialog(QDialog):
                 else:
                     self.api_key_status_label.setText("NOT SET")
                     self.api_key_status_label.setProperty("class", "status-muted")
+                    self.api_key_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
                     self.api_key_status_label.style().polish(self.api_key_status_label)
                      # When not set, offer Set and disable Unset
                     try:
@@ -305,10 +318,12 @@ class CredentialSetupDialog(QDialog):
                 if cookies_enabled:
                     self.cookies_status_label.setText("Enabled")
                     self.cookies_status_label.setProperty("class", "status-success")
+                    self.cookies_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
                     self.cookies_status_label.style().polish(self.cookies_status_label)
                 else:
                     self.cookies_status_label.setText("Disabled")
                     self.cookies_status_label.setProperty("class", "status-error")
+                    self.cookies_status_label.setStyleSheet(f"color: {self.error_color}; font-weight: bold;")
                     self.cookies_status_label.style().polish(self.cookies_status_label)
                 # Toggle button states
                 self.cookies_enable_btn.setEnabled(not cookies_enabled)
@@ -317,6 +332,7 @@ class CredentialSetupDialog(QDialog):
             # Defaults if no file
             self.cookies_status_label.setText("Enabled")
             self.cookies_status_label.setProperty("class", "status-success")
+            self.cookies_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
             self.cookies_status_label.style().polish(self.cookies_status_label)
             self.cookies_enable_btn.setEnabled(False)
             self.cookies_disable_btn.setEnabled(True)

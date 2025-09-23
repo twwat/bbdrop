@@ -17,7 +17,7 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(560, 430)  # Increased height for logo
+        pixmap = QPixmap(550, 400)  # Increased height for logo
         pixmap.fill(QColor(29, 22, 22))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
@@ -139,21 +139,18 @@ class SplashScreen(QSplashScreen):
         apache_rect = painter.fontMetrics().boundingRect(apache_text)
         apache_x = (self.width() - apache_rect.width()) // 2
         painter.drawText(apache_x, y_offset + 20, apache_text)
-        y_offset += 60
+        y_offset += 58
         
         # Draw copyright and license info
-        painter.setPen(QColor(219, 219, 219))
+        painter.setPen(QColor(212, 188, 188))
         license_font = QFont("Courier", 9)
         painter.setFont(license_font)
         
         license_lines = [
-            "Distributed on an \"as is\" basis without warranties or",
-            "conditions of any kind, express or implied.",
+            "Software distributed under the License is distributed on an",
+            "\"as is\" basis without warranties/conditions of any kind.",
             "",
-            "",
-            "Use of the software to interact with IMX.to is subject",
-            "to their terms of use and privacy policy. We are",
-            "not affiliated with them in any way."
+            "Not affiliated with, or endorsed by IMX.to in any way."
         ]
 
         y_pos = y_offset
@@ -163,12 +160,12 @@ class SplashScreen(QSplashScreen):
                 line_x = (self.width() - line_rect.width()) // 2
                 painter.drawText(line_x, y_pos, line)
             if line == "":
-                y_pos += 7
+                y_pos += 15
             else:
                 y_pos += 15
         
         # Draw status text at bottom
-        painter.setPen(QColor(239, 70, 73))
+        painter.setPen(QColor(210, 133, 133))
         status_font = QFont("Courier", 10, QFont.Weight.Bold)
         painter.setFont(status_font)
         
@@ -177,9 +174,9 @@ class SplashScreen(QSplashScreen):
         painter.drawText(status_x, self.height() - 38, self.status_text)
         
         # Draw progress dots in fixed position (left-aligned within centered area)
-        dots_font = QFont("Courier", 14)
+        dots_font = QFont("Courier", 15)
         painter.setFont(dots_font)
-        painter.setPen(QColor(170, 185, 207))
+        painter.setPen(QColor(150, 150, 227))
         
         # Create a fixed-width area for dots (centered, but dots are left-aligned within it)
         dots_area_width = 280

@@ -4,14 +4,14 @@ Tab Manager for coordinating between database tab definitions and user preferenc
 
 Responsibilities:
 - Coordinate between QueueStore (tab definitions) and QSettings (user preferences)  
-- Manage tab visibility, ordering, and auto-archive preferences
+- Manage tab visibility and ordering preferences
 - Provide unified API for tab operations with preference persistence
 - Handle orphaned preferences cleanup and graceful fallbacks
 - Support multiple user profiles sharing same database
 
 Architecture Principles:
 - Database: Tab definitions, gallery assignments (shared across users)
-- QSettings: User-specific preferences (last active tab, visibility, auto-archive)
+- QSettings: User-specific preferences (last active tab, visibility, ordering)
 - Single source of truth: TabManager coordinates both sources
 - Performance: Preferences loaded once at startup, updated incrementally
 - Graceful degradation: Missing preferences use sensible defaults
@@ -32,16 +32,11 @@ class TabPreferences:
     """User-specific tab preferences"""
     last_active_tab: str = "Main"
     hidden_tabs: Set[str] = None
-    auto_archive_enabled: bool = False
-    auto_archive_days: int = 30
-    auto_archive_statuses: Set[str] = None
     custom_display_order: Dict[str, int] = None  # Tab name -> preferred order
     
     def __post_init__(self):
         if self.hidden_tabs is None:
             self.hidden_tabs = set()
-        if self.auto_archive_statuses is None:
-            self.auto_archive_statuses = {"completed", "failed"}
         if self.custom_display_order is None:
             self.custom_display_order = {}
 
@@ -68,14 +63,13 @@ class TabManager(QObject):
     Manages tab definitions and user preferences with proper separation of concerns.
     
     Database (QueueStore): Shared tab definitions, gallery assignments
-    QSettings: User-specific preferences (visibility, ordering, auto-archive)
+    QSettings: User-specific preferences (visibility, ordering)
     
     Signals:
         tab_created(tab_info): New tab created
         tab_updated(tab_info): Tab definition or preferences updated  
         tab_deleted(tab_name, reassign_to): Tab deleted and galleries reassigned
         tabs_reordered(): Tab display order changed
-        auto_archive_triggered(gallery_paths): Galleries auto-archived
     """
     
     # Signals
@@ -83,7 +77,6 @@ class TabManager(QObject):
     tab_updated = pyqtSignal(object)  # TabInfo  
     tab_deleted = pyqtSignal(str, str)  # (deleted_tab_name, reassign_to)
     tabs_reordered = pyqtSignal()
-    auto_archive_triggered = pyqtSignal(list)  # List[str] gallery paths
     
     def __init__(self, queue_store: QueueStore, settings_org: str = "ImxUploader", settings_app: str = "TabManager"):
         """
@@ -131,29 +124,6 @@ class TabManager(QObject):
             self._preferences.last_active_tab = tab_name
             self._settings.setValue("preferences/last_active_tab", tab_name)
     
-    @property
-    def auto_archive_enabled(self) -> bool:
-        """Get auto-archive enabled state"""
-        return self._preferences.auto_archive_enabled
-    
-    @auto_archive_enabled.setter
-    def auto_archive_enabled(self, enabled: bool) -> None:
-        """Set auto-archive enabled state and persist"""
-        if enabled != self._preferences.auto_archive_enabled:
-            self._preferences.auto_archive_enabled = enabled
-            self._settings.setValue("preferences/auto_archive_enabled", enabled)
-    
-    @property
-    def auto_archive_days(self) -> int:
-        """Get auto-archive days threshold"""
-        return self._preferences.auto_archive_days
-    
-    @auto_archive_days.setter
-    def auto_archive_days(self, days: int) -> None:
-        """Set auto-archive days threshold and persist"""
-        if days > 0 and days != self._preferences.auto_archive_days:
-            self._preferences.auto_archive_days = days
-            self._settings.setValue("preferences/auto_archive_days", days)
     
     # ----------------------------- Tab Information -----------------------------
     
@@ -383,83 +353,6 @@ class TabManager(QObject):
         self._settings.remove("preferences/custom_tab_order")
         self.tabs_reordered.emit()
     
-    # ----------------------------- Auto-Archive -----------------------------
-    
-    def set_auto_archive_config(self, enabled: bool, days: int, statuses: Set[str]) -> None:
-        """
-        Configure auto-archive settings.
-        
-        Args:
-            enabled: Whether auto-archive is enabled
-            days: Days threshold for auto-archiving
-            statuses: Gallery statuses to auto-archive
-        """
-        self.auto_archive_enabled = enabled
-        self.auto_archive_days = days
-        self._preferences.auto_archive_statuses = statuses.copy()
-        
-        # Persist statuses
-        self._settings.setValue("preferences/auto_archive_statuses", list(statuses))
-    
-    def get_auto_archive_config(self) -> Tuple[bool, int, Set[str]]:
-        """Get current auto-archive configuration"""
-        return (
-            self._preferences.auto_archive_enabled,
-            self._preferences.auto_archive_days, 
-            self._preferences.auto_archive_statuses.copy()
-        )
-    
-    def check_auto_archive_candidates(self) -> List[str]:
-        """
-        Find galleries that should be auto-archived.
-        
-        Returns:
-            List of gallery paths that meet auto-archive criteria
-        """
-        if not self._preferences.auto_archive_enabled:
-            return []
-        
-        # Get galleries from all tabs except Archive
-        all_items = self._store.load_all_items()
-        current_time = int(time.time())
-        days_threshold = self._preferences.auto_archive_days * 24 * 3600  # Convert to seconds
-        
-        candidates = []
-        for item in all_items:
-            # Skip if already in Archive tab
-            if item.get('tab_name', 'Main') == 'Archive':
-                continue
-                
-            # Check status criteria
-            status = item.get('status', '')
-            if status not in self._preferences.auto_archive_statuses:
-                continue
-                
-            # Check time criteria (use finished_time if available, otherwise added_time)
-            check_time = item.get('finished_time') or item.get('added_time', 0)
-            if check_time and (current_time - check_time) >= days_threshold:
-                candidates.append(item['path'])
-        
-        return candidates
-    
-    def execute_auto_archive(self) -> int:
-        """
-        Execute auto-archive operation.
-        
-        Returns:
-            Number of galleries moved to Archive
-        """
-        candidates = self.check_auto_archive_candidates()
-        if not candidates:
-            return 0
-        
-        # Move galleries to Archive tab
-        moved_count = self._store.move_galleries_to_tab(candidates, 'Archive')
-        
-        if moved_count > 0:
-            self.auto_archive_triggered.emit(candidates[:moved_count])
-        
-        return moved_count
     
     # ----------------------------- Gallery Operations -----------------------------
     
@@ -576,16 +469,6 @@ class TabManager(QObject):
         hidden_list = self._settings.value("preferences/hidden_tabs", [], type=list)
         self._preferences.hidden_tabs = set(hidden_list) if hidden_list else set()
         
-        # Auto-archive settings
-        self._preferences.auto_archive_enabled = self._settings.value(
-            "preferences/auto_archive_enabled", False, type=bool
-        )
-        self._preferences.auto_archive_days = self._settings.value(
-            "preferences/auto_archive_days", 30, type=int
-        )
-        status_list = self._settings.value("preferences/auto_archive_statuses", 
-                                          ["completed", "failed"], type=list)
-        self._preferences.auto_archive_statuses = set(status_list) if status_list else {"completed", "failed"}
         
         # Custom tab ordering
         order_items = self._settings.value("preferences/custom_tab_order", [], type=list)
