@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
-    QTabWidget, QPushButton, QCheckBox, QComboBox, QSpinBox,
+    QTabWidget, QPushButton, QCheckBox, QComboBox, QSpinBox, QSlider,
     QLabel, QGroupBox, QLineEdit, QMessageBox, QFileDialog,
     QListWidget, QListWidgetItem, QPlainTextEdit, QInputDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
@@ -139,74 +139,118 @@ class ComprehensiveSettingsDialog(QDialog):
         upload_group = QGroupBox("Upload Settings")
         upload_layout = QGridLayout(upload_group)
         
+        # Max retries
+        upload_layout.addWidget(QLabel("<b>Max Retries</b>:"), 0, 0)
+        retries_widget = QWidget()
+        retries_layout = QHBoxLayout(retries_widget)
+        retries_layout.setContentsMargins(0, 0, 0, 0)
+        self.max_retries_slider = QSlider(Qt.Orientation.Horizontal)
+        self.max_retries_slider.setRange(1, 5)
+        self.max_retries_slider.setValue(defaults.get('max_retries', 3))
+        self.max_retries_value = QLabel(str(defaults.get('max_retries', 3)))
+        self.max_retries_value.setMinimumWidth(20)
+        retries_layout.addWidget(self.max_retries_slider)
+        retries_layout.addWidget(self.max_retries_value)
+        self.max_retries_slider.valueChanged.connect(lambda v: self.max_retries_value.setText(str(v)))
+        upload_layout.addWidget(retries_widget, 0, 1)
+        
+        # Concurrent uploads
+        upload_layout.addWidget(QLabel("<b>Concurrent Upload</b>s:"), 1, 0)
+        concurrent_widget = QWidget()
+        concurrent_layout = QHBoxLayout(concurrent_widget)
+        concurrent_layout.setContentsMargins(0, 0, 0, 0)
+        self.batch_size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.batch_size_slider.setRange(1, 50)
+        self.batch_size_slider.setValue(defaults.get('parallel_batch_size', 4))
+        self.batch_size_slider.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
+        self.batch_size_value = QLabel(str(defaults.get('parallel_batch_size', 4)))
+        self.batch_size_value.setMinimumWidth(20)
+        concurrent_layout.addWidget(self.batch_size_slider)
+        concurrent_layout.addWidget(self.batch_size_value)
+        self.batch_size_slider.valueChanged.connect(lambda v: self.batch_size_value.setText(str(v)))
+        upload_layout.addWidget(concurrent_widget, 1, 1)
+        
+        # Upload timeouts
+        upload_layout.addWidget(QLabel("<b>Connect Timeout (s)</b>:"), 2, 0)
+        connect_timeout_widget = QWidget()
+        connect_timeout_layout = QHBoxLayout(connect_timeout_widget)
+        connect_timeout_layout.setContentsMargins(0, 0, 0, 0)
+        self.connect_timeout_slider = QSlider(Qt.Orientation.Horizontal)
+        self.connect_timeout_slider.setRange(30, 300)
+        self.connect_timeout_slider.setValue(defaults.get('upload_connect_timeout', 30))
+        self.connect_timeout_slider.setToolTip("Maximum time to wait for server connection. Increase if you have slow internet.")
+        self.connect_timeout_value = QLabel(str(defaults.get('upload_connect_timeout', 30)))
+        self.connect_timeout_value.setMinimumWidth(30)
+        connect_timeout_layout.addWidget(self.connect_timeout_slider)
+        connect_timeout_layout.addWidget(self.connect_timeout_value)
+        self.connect_timeout_slider.valueChanged.connect(lambda v: self.connect_timeout_value.setText(str(v)))
+        upload_layout.addWidget(connect_timeout_widget, 2, 1)
+        
+        upload_layout.addWidget(QLabel("<b>Read Timeout (s)</b>:"), 3, 0)
+        read_timeout_widget = QWidget()
+        read_timeout_layout = QHBoxLayout(read_timeout_widget)
+        read_timeout_layout.setContentsMargins(0, 0, 0, 0)
+        self.read_timeout_slider = QSlider(Qt.Orientation.Horizontal)
+        self.read_timeout_slider.setRange(30, 300)
+        self.read_timeout_slider.setValue(defaults.get('upload_read_timeout', 120))
+        self.read_timeout_slider.setToolTip("Maximum time to wait for server response. Increase for large images or slow servers.")
+        self.read_timeout_value = QLabel(str(defaults.get('upload_read_timeout', 120)))
+        self.read_timeout_value.setMinimumWidth(30)
+        read_timeout_layout.addWidget(self.read_timeout_slider)
+        read_timeout_layout.addWidget(self.read_timeout_value)
+        self.read_timeout_slider.valueChanged.connect(lambda v: self.read_timeout_value.setText(str(v)))
+        upload_layout.addWidget(read_timeout_widget, 3, 1)
+        
+        # Thumbnail settings
+        thumb_group = QGroupBox("Thumbnail Settings")
+        thumb_layout = QGridLayout(thumb_group)
+        
         # Thumbnail size
-        upload_layout.addWidget(QLabel("Thumbnail Size:"), 0, 0)
+        thumb_layout.addWidget(QLabel("<b>Thumbnail Dimensions</b>:"), 0, 0)
         self.thumbnail_size_combo = QComboBox()
         self.thumbnail_size_combo.addItems([
             "100x100", "180x180", "250x250", "300x300", "150x150"
         ])
         self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
-        upload_layout.addWidget(self.thumbnail_size_combo, 0, 1)
+        thumb_layout.addWidget(self.thumbnail_size_combo, 0, 1)
         
         # Thumbnail format
-        upload_layout.addWidget(QLabel("Thumbnail Format:"), 1, 0)
+        thumb_layout.addWidget(QLabel("<b>Thumbnail Format</b>:"), 1, 0)
         self.thumbnail_format_combo = QComboBox()
         self.thumbnail_format_combo.addItems([
             "Fixed width", "Proportional", "Square", "Fixed height"
         ])
         self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
-        upload_layout.addWidget(self.thumbnail_format_combo, 1, 1)
+        thumb_layout.addWidget(self.thumbnail_format_combo, 1, 1)
         
-        # Max retries
-        upload_layout.addWidget(QLabel("Max Retries:"), 2, 0)
-        self.max_retries_spin = QSpinBox()
-        self.max_retries_spin.setRange(1, 10)
-        self.max_retries_spin.setValue(defaults.get('max_retries', 3))
-        upload_layout.addWidget(self.max_retries_spin, 2, 1)
         
-        # Concurrent uploads
-        upload_layout.addWidget(QLabel("Concurrent Uploads:"), 3, 0)
-        self.batch_size_spin = QSpinBox()
-        self.batch_size_spin.setRange(1, 25)
-        self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
-        self.batch_size_spin.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
-        upload_layout.addWidget(self.batch_size_spin, 3, 1)
-        
-        # Upload timeouts
-        upload_layout.addWidget(QLabel("Connect Timeout (s):"), 4, 0)
-        self.connect_timeout_spin = QSpinBox()
-        self.connect_timeout_spin.setRange(5, 300)
-        self.connect_timeout_spin.setValue(defaults.get('upload_connect_timeout', 30))
-        self.connect_timeout_spin.setToolTip("Maximum time to wait for server connection. Increase if you have slow internet.")
-        upload_layout.addWidget(self.connect_timeout_spin, 4, 1)
-        
-        upload_layout.addWidget(QLabel("Read Timeout (s):"), 5, 0)
-        self.read_timeout_spin = QSpinBox()
-        self.read_timeout_spin.setRange(10, 600)
-        self.read_timeout_spin.setValue(defaults.get('upload_read_timeout', 120))
-        self.read_timeout_spin.setToolTip("Maximum time to wait for server response. Increase for large images or slow servers.")
-        upload_layout.addWidget(self.read_timeout_spin, 5, 1)
         
         # General settings group
         general_group = QGroupBox("General Settings")
         general_layout = QGridLayout(general_group)
         
         # Confirm delete
-        self.confirm_delete_check = QCheckBox("Confirm before deleting")
+        self.confirm_delete_check = QCheckBox("Confirm when removing galleries")
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
         general_layout.addWidget(self.confirm_delete_check, 0, 0)
         
         # Auto-rename
         self.auto_rename_check = QCheckBox("Auto-rename galleries")
         self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
-        general_layout.addWidget(self.auto_rename_check, 0, 1)
+        general_layout.addWidget(self.auto_rename_check, 1, 0)
+
+        # Auto-regenerate BBCode
+        self.auto_regenerate_bbcode_check = QCheckBox("Auto-regenerate BBCode when data changes")
+        self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
+        self.auto_regenerate_bbcode_check.setToolTip("Automatically regenerate BBCode when template, gallery name, or custom fields change")
+        general_layout.addWidget(self.auto_regenerate_bbcode_check, 2, 0)
         
         # Storage options group
         storage_group = QGroupBox("Storage Options")
         storage_layout = QGridLayout(storage_group)
         
         # Store in uploaded folder
-        self.store_in_uploaded_check = QCheckBox("Save artifacts in .uploaded folder")
+        self.store_in_uploaded_check = QCheckBox("Save artifacts in '.uploaded' folder")
         self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
         storage_layout.addWidget(self.store_in_uploaded_check, 0, 0, 1, 3)
         
@@ -216,7 +260,7 @@ class ComprehensiveSettingsDialog(QDialog):
         storage_layout.addWidget(self.store_in_central_check, 1, 0, 1, 3)
         
         # Data location section
-        location_label = QLabel("Data location:")
+        location_label = QLabel("<b>Data location</b>:")
         storage_layout.addWidget(location_label, 2, 0, 1, 3)
         
         # Import path functions
@@ -230,7 +274,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Radio buttons for location selection
         self.home_radio = QRadioButton(f"Home folder: {home_path}")
-        self.portable_radio = QRadioButton(f"Portable install: {portable_path}")
+        self.portable_radio = QRadioButton(f"App folder (portable): {portable_path}")
         self.custom_radio = QRadioButton("Custom location:")
         
         # Determine which radio to check based on current path
@@ -272,7 +316,7 @@ class ComprehensiveSettingsDialog(QDialog):
         update_custom_path_controls()
         
         # Theme & Display group
-        theme_group = QGroupBox("Theme and Display")
+        theme_group = QGroupBox("Theme / Appearance")
         theme_layout = QGridLayout(theme_group)
         
         # Theme setting
@@ -287,7 +331,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.theme_combo.setCurrentIndex(index)
         
         # Add theme controls
-        theme_label = QLabel("Theme mode:")
+        theme_label = QLabel("<b>Theme mode</b>:")
         theme_layout.addWidget(theme_label, 0, 0)
         theme_layout.addWidget(self.theme_combo, 0, 1)
         
@@ -305,7 +349,7 @@ class ComprehensiveSettingsDialog(QDialog):
             self.font_size_spin.setValue(9)
         
         # Add font size controls
-        font_label = QLabel("Font size:")
+        font_label = QLabel("<b>Text size</b>:")
         theme_layout.addWidget(font_label, 1, 0)
         theme_layout.addWidget(self.font_size_spin, 1, 1)
         
@@ -316,13 +360,14 @@ class ComprehensiveSettingsDialog(QDialog):
         # Add all groups to layout in 2x2 grid with 40/60 split
         grid_layout = QGridLayout()
         grid_layout.addWidget(upload_group, 0, 0)      # Top left
-        grid_layout.addWidget(general_group, 0, 1)     # Top right
-        grid_layout.addWidget(theme_group, 1, 0)       # Bottom left
-        grid_layout.addWidget(storage_group, 1, 1)     # Bottom right
+        grid_layout.addWidget(general_group, 0, 1)     # Top Right
+        grid_layout.addWidget(thumb_group, 1, 0)       # Bottom left
+        grid_layout.addWidget(theme_group, 1, 1)       # Bottom right
+        grid_layout.addWidget(storage_group, 2, 0)
         
         # Set column stretch factors for 40/60 split
-        grid_layout.setColumnStretch(0, 40)  # Left column gets 40%
-        grid_layout.setColumnStretch(1, 60)  # Right column gets 60%
+        grid_layout.setColumnStretch(0, 50)  # Left column 50%
+        grid_layout.setColumnStretch(1, 50)  # Right column 50%
         
         layout.addLayout(grid_layout)
         layout.addStretch()
@@ -330,12 +375,13 @@ class ComprehensiveSettingsDialog(QDialog):
         # Connect change signals to mark tab as dirty
         self.thumbnail_size_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(0))
         self.thumbnail_format_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(0))
-        self.max_retries_spin.valueChanged.connect(lambda: self.mark_tab_dirty(0))
-        self.batch_size_spin.valueChanged.connect(lambda: self.mark_tab_dirty(0))
-        self.connect_timeout_spin.valueChanged.connect(lambda: self.mark_tab_dirty(0))
-        self.read_timeout_spin.valueChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.max_retries_slider.valueChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.batch_size_slider.valueChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.connect_timeout_slider.valueChanged.connect(lambda: self.mark_tab_dirty(0))
+        self.read_timeout_slider.valueChanged.connect(lambda: self.mark_tab_dirty(0))
         self.confirm_delete_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.auto_rename_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.auto_regenerate_bbcode_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.store_in_uploaded_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.store_in_central_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.home_radio.toggled.connect(lambda: self.mark_tab_dirty(0))
@@ -1148,8 +1194,6 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Update parent's settings objects for upload settings
                 self.parent.thumbnail_size_combo.setCurrentIndex(self.thumbnail_size_combo.currentIndex())
                 self.parent.thumbnail_format_combo.setCurrentIndex(self.thumbnail_format_combo.currentIndex())
-                self.parent.max_retries_spin.setValue(self.max_retries_spin.value())
-                self.parent.batch_size_spin.setValue(self.batch_size_spin.value())
                 # Template selection is now handled in the Templates tab
                 
                 # Save via parent
@@ -1240,10 +1284,10 @@ class ComprehensiveSettingsDialog(QDialog):
             # Reset upload settings
             self.thumbnail_size_combo.setCurrentIndex(2)  # 250x250 (default)
             self.thumbnail_format_combo.setCurrentIndex(1)  # Proportional (default)
-            self.max_retries_spin.setValue(3)  # 3 retries (default)
-            self.batch_size_spin.setValue(4)  # 4 concurrent (default)
-            self.connect_timeout_spin.setValue(30)  # 30 seconds (default)
-            self.read_timeout_spin.setValue(120)  # 120 seconds (default)
+            self.max_retries_slider.setValue(3)  # 3 retries (default)
+            self.batch_size_slider.setValue(4)  # 4 concurrent (default)
+            self.connect_timeout_slider.setValue(30)  # 30 seconds (default)
+            self.read_timeout_slider.setValue(120)  # 120 seconds (default)
             # Template selection is now handled in the Templates tab
             
             # Reset checkboxes
@@ -1563,10 +1607,10 @@ class ComprehensiveSettingsDialog(QDialog):
         # Reload upload settings
         self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
         self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
-        self.max_retries_spin.setValue(defaults.get('max_retries', 3))
-        self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
-        self.connect_timeout_spin.setValue(defaults.get('upload_connect_timeout', 30))
-        self.read_timeout_spin.setValue(defaults.get('upload_read_timeout', 120))
+        self.max_retries_slider.setValue(defaults.get('max_retries', 3))
+        self.batch_size_slider.setValue(defaults.get('parallel_batch_size', 4))
+        self.connect_timeout_slider.setValue(defaults.get('upload_connect_timeout', 30))
+        self.read_timeout_slider.setValue(defaults.get('upload_read_timeout', 120))
         
         # Reload general settings
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
@@ -1621,16 +1665,17 @@ class ComprehensiveSettingsDialog(QDialog):
             # Save thumbnail settings
             config.set('DEFAULTS', 'thumbnail_size', str(self.thumbnail_size_combo.currentIndex() + 1))
             config.set('DEFAULTS', 'thumbnail_format', str(self.thumbnail_format_combo.currentIndex() + 1))
-            config.set('DEFAULTS', 'max_retries', str(self.max_retries_spin.value()))
-            config.set('DEFAULTS', 'parallel_batch_size', str(self.batch_size_spin.value()))
-            
+            config.set('DEFAULTS', 'max_retries', str(self.max_retries_slider.value()))
+            config.set('DEFAULTS', 'parallel_batch_size', str(self.batch_size_slider.value()))
+
             # Save timeout settings
-            config.set('DEFAULTS', 'upload_connect_timeout', str(self.connect_timeout_spin.value()))
-            config.set('DEFAULTS', 'upload_read_timeout', str(self.read_timeout_spin.value()))
+            config.set('DEFAULTS', 'upload_connect_timeout', str(self.connect_timeout_slider.value()))
+            config.set('DEFAULTS', 'upload_read_timeout', str(self.read_timeout_slider.value()))
             
             # Save general settings
             config.set('DEFAULTS', 'confirm_delete', str(self.confirm_delete_check.isChecked()))
             config.set('DEFAULTS', 'auto_rename', str(self.auto_rename_check.isChecked()))
+            config.set('DEFAULTS', 'auto_regenerate_bbcode', str(self.auto_regenerate_bbcode_check.isChecked()))
             config.set('DEFAULTS', 'store_in_uploaded', str(self.store_in_uploaded_check.isChecked()))
             config.set('DEFAULTS', 'store_in_central', str(self.store_in_central_check.isChecked()))
             
@@ -1708,8 +1753,6 @@ class ComprehensiveSettingsDialog(QDialog):
             if self.parent:
                 self.parent.thumbnail_size_combo.setCurrentIndex(self.thumbnail_size_combo.currentIndex())
                 self.parent.thumbnail_format_combo.setCurrentIndex(self.thumbnail_format_combo.currentIndex())
-                self.parent.max_retries_spin.setValue(self.max_retries_spin.value())
-                self.parent.batch_size_spin.setValue(self.batch_size_spin.value())
                 
                 # Update storage settings (only those that exist in parent)
                 if hasattr(self.parent, 'confirm_delete_check'):

@@ -175,11 +175,6 @@ class CredentialSetupDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        self.close_btn = QPushButton("Close")
-        if not self.close_btn.text().startswith(" "):
-            self.close_btn.setText(" " + self.close_btn.text())
-        self.close_btn.clicked.connect(self.validate_and_close)
-        button_layout.addWidget(self.close_btn)
         
         layout.addLayout(button_layout)
         

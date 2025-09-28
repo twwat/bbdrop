@@ -8,12 +8,9 @@ import os
 import requests
 from requests.adapters import HTTPAdapter
 import json
-#from dotenv import load_dotenv
 import argparse
 import sys
 from pathlib import Path
-#import re
-#import asyncio
 
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,14 +21,8 @@ from src.utils.format_utils import format_binary_size, format_binary_rate
 import configparser
 import hashlib
 import getpass
-#import subprocess
-#import tempfile
-import json
-#import zipfile
-#import urllib.request
 import platform
 import sqlite3
-#import shutil
 import glob
 import winreg
 
@@ -115,7 +106,7 @@ def migrate_legacy_storage() -> None:
                 if os.path.isdir(legacy_dir) and not os.listdir(legacy_dir):
                     os.rmdir(legacy_dir)
                     print(f"{timestamp()} Removed empty legacy folder '{legacy_dir}'")
-            except Exception:
+            except Exception as e:
                 pass
 
         # 2) Migrate config file from legacy path to new path
@@ -169,36 +160,6 @@ def create_windows_context_menu():
                 pythonw_exe = python_exe  # fallback to python.exe if pythonw not present
         
         # Create registry entries for command line upload (background right-click)
-        #key_path_bg = r"Directory\Background\shell\UploadToImx"
-        #key_bg = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path_bg)
-        #winreg.SetValue(key_bg, "", winreg.REG_SZ, "Upload to imx.to")
-        #command_key_bg = winreg.CreateKey(key_bg, "command")
-        #winreg.SetValue(command_key_bg, "", winreg.REG_SZ, f'"{python_cli_exe}" "{cli_script}" "%V"')
-        #winreg.CloseKey(command_key_bg)
-        #winreg.CloseKey(key_bg)
-
-        # Create registry entries for GUI mode (background right-click)
-        gui_key_path_bg = r"Directory\Background\shell\UploadToImxGUI"
-        gui_key_bg = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_bg)
-        winreg.SetValue(gui_key_bg, "", winreg.REG_SZ, "IMX Uploader")
-        gui_command_key_bg = winreg.CreateKey(gui_key_bg, "command")
-        winreg.SetValue(gui_command_key_bg, "", winreg.REG_SZ, f'"{pythonw_exe}" "{gui_script}" "%V"')
-        winreg.CloseKey(gui_command_key_bg) # Close the command key
-        winreg.CloseKey(gui_key_bg)
-
-        # Create entries for right-click on folders (selected items)
-        #key_path_dir = r"Directory\shell\UploadToImx"
-        #key_dir = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path_dir)
-        #winreg.SetValue(key_dir, "", winreg.REG_SZ, "IMX Uploader")
-        # Enable multi-select model (Explorer passes all selections to %V)
-        #try:
-        #    winreg.SetValueEx(key_dir, "MultiSelectModel", 0, winreg.REG_SZ, "Document")
-        #except Exception:
-        #    pass
-        #command_key_dir = winreg.CreateKey(key_dir, "command")
-        #winreg.SetValue(command_key_dir, "", winreg.REG_SZ, f'"{python_cli_exe}" "{cli_script}" "%V"')
-        #winreg.CloseKey(command_key_dir)
-        #winreg.CloseKey(key_dir)
 
         gui_key_path_dir = r"Directory\shell\UploadToImxGUI"
         gui_key_dir = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_dir)
@@ -328,7 +289,8 @@ def decrypt_password(encrypted_password):
         key = get_encryption_key()
         f = Fernet(key)
         return f.decrypt(encrypted_password.encode()).decode()
-    except:
+    except Exception as e:
+        print(f"{timestamp()} Warning: Failed to decrypt password: {e}")
         return None
 
 def load_user_defaults():

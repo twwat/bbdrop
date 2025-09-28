@@ -42,6 +42,7 @@ class IconManager:
         'renamed_false':        ['renamed_false-light.png',     'renamed_false-dark.png'],
         
         # UI element icons
+        'settings':             ['settings-light.png',          'settings-dark.png'],
         'templates':            ['templates-light.png',         'templates-dark.png'],
         'credentials':          ['credentials-light.png',       'credentials-dark.png'],
         'main_window':          ['imxup.png', 'imxup.png'],

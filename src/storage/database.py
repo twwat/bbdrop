@@ -1271,10 +1271,6 @@ class QueueStore:
                 # Verify the update by reading back the value
                 verification_cursor = conn.execute(f"SELECT {field_name} FROM galleries WHERE path = ?", (path,))
                 result = verification_cursor.fetchone()
-                if result:
-                    print(f"DEBUG DB: Verification read: {field_name} = '{result[0]}'")
-                else:
-                    print(f"DEBUG DB: No gallery found with path '{path}'")
                 
                 return rows_affected > 0
             except Exception as e:

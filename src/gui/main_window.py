@@ -743,7 +743,7 @@ class CompletionWorker(QThread):
                         'started_at': datetime.fromtimestamp(gui_parent.queue_manager.items[path].start_time).strftime('%Y-%m-%d %H:%M:%S') if path in gui_parent.queue_manager.items and gui_parent.queue_manager.items[path].start_time else None,
                         'thumbnail_size': gui_parent.thumbnail_size_combo.currentIndex() + 1,
                         'thumbnail_format': gui_parent.thumbnail_format_combo.currentIndex() + 1,
-                        'parallel_batch_size': gui_parent.batch_size_spin.value(),
+                        'parallel_batch_size': load_user_defaults().get('parallel_batch_size', 4),
                     },
                     template_name=template_name,
                     custom_fields=custom_fields
@@ -2360,8 +2360,6 @@ class GalleryTableWidget(QTableWidget):
         from PyQt6.QtGui import QPainter, QFont, QFontMetrics
         
         # Calculate pixmap size
-        font = QFont(self.font())
-        font.setPointSize(9)
         metrics = QFontMetrics(font)
         
         if len(gallery_names) == 1:
@@ -2382,7 +2380,6 @@ class GalleryTableWidget(QTableWidget):
         
         # Draw text
         painter = QPainter(pixmap)
-        painter.setFont(font)
         painter.setPen(Qt.GlobalColor.white)
         painter.drawText(10, text_height + 2, text)
         painter.end()
@@ -2617,6 +2614,17 @@ class GalleryTableWidget(QTableWidget):
                     parent_window._update_specific_gallery_display(path)
                 # Log the change
                 parent_window.add_log_message(f"{timestamp()} Renamed gallery to: {new_name}")
+
+                # Auto-regenerate BBCode (setting checked inside function)
+                try:
+                    parent_window.regenerate_bbcode_for_gallery(path)
+                    # Only log if regeneration actually happened (could check if enabled first)
+                    from imxup import load_user_defaults
+                    defaults = load_user_defaults()
+                    if defaults.get('auto_regenerate_bbcode', True):
+                        parent_window.add_log_message(f"{timestamp()} BBCode regenerated for renamed gallery: {new_name}")
+                except Exception as e:
+                    print(f"Error auto-regenerating BBCode for renamed gallery {path}: {e}")
 
     def dragEnterEvent(self, event):
         """Handle drag enter events"""
@@ -4436,20 +4444,20 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             pass
         
-        settings_layout.setVerticalSpacing(3)
+        settings_layout.setVerticalSpacing(5)
         settings_layout.setHorizontalSpacing(10)
         
         # Set fixed row heights to prevent shifting when save button appears
         settings_layout.setRowMinimumHeight(0, 28)  # Thumbnail Size row
         settings_layout.setRowMinimumHeight(1, 28)  # Thumbnail Format row  
-        settings_layout.setRowMinimumHeight(2, 28)  # Max Retries row
-        settings_layout.setRowMinimumHeight(3, 28)  # Concurrent Uploads row
-        settings_layout.setRowMinimumHeight(4, 28)  # BBCode Template row
-        settings_layout.setRowMinimumHeight(5, 28)  # Checkboxes row
-        settings_layout.setRowMinimumHeight(6, 5)   # Small spacer before save button
-        # Row 7 is the Save Settings button - let it appear/disappear freely
-        # Row 8 is Comprehensive Settings
-        # Row 9 is Templates/Credentials
+        #settings_layout.setRowMinimumHeight(2, 28)  # Max Retries row
+        #settings_layout.setRowMinimumHeight(3, 28)  # Concurrent Uploads row
+        settings_layout.setRowMinimumHeight(2, 28)  # BBCode Template row
+        settings_layout.setRowMinimumHeight(3, 28)  # Checkboxes row
+        settings_layout.setRowMinimumHeight(4, 3)   # Small spacer before save button
+        # Row 5 is the Save Settings button - let it appear/disappear freely
+        # Row 6 is Comprehensive Settings
+        # Row 7 is Templates/Credentials
         
         # Add stretch to bottom so extra space goes there instead of compressing rows
         settings_layout.setRowStretch(10, 1)
@@ -4478,24 +4486,24 @@ class ImxUploadGUI(QMainWindow):
         settings_layout.addWidget(self.thumbnail_format_combo, 1, 1)
         
         # Max retries
-        settings_layout.addWidget(QLabel("<b>Max Retries</b>:"), 2, 0)
-        self.max_retries_spin = QSpinBox()
-        self.max_retries_spin.setRange(1, 10)
-        self.max_retries_spin.setValue(defaults.get('max_retries', 3))
-        self.max_retries_spin.valueChanged.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.max_retries_spin, 2, 1)
+        #settings_layout.addWidget(QLabel("<b>Max Retries</b>:"), 2, 0)
+        #self.max_retries_spin = QSpinBox()
+        #self.max_retries_spin.setRange(1, 10)
+        #self.max_retries_spin.setValue(defaults.get('max_retries', 3))
+        #self.max_retries_spin.valueChanged.connect(self.on_setting_changed)
+        #settings_layout.addWidget(self.max_retries_spin, 2, 1)
         
         # Parallel upload batch size
-        settings_layout.addWidget(QLabel("<b>Concurrent Uploads</b>:"), 3, 0)
-        self.batch_size_spin = QSpinBox()
-        self.batch_size_spin.setRange(1, 50)
-        self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
-        self.batch_size_spin.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
-        self.batch_size_spin.valueChanged.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.batch_size_spin, 3, 1)
+        #settings_layout.addWidget(QLabel("<b>Concurrent Uploads</b>:"), 3, 0)
+        #self.batch_size_spin = QSpinBox()
+        #self.batch_size_spin.setRange(1, 50)
+        #self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
+        #self.batch_size_spin.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
+        #self.batch_size_spin.valueChanged.connect(self.on_setting_changed)
+        #settings_layout.addWidget(self.batch_size_spin, 3, 1)
         
         # Template selection
-        settings_layout.addWidget(QLabel("<b>BBCode Template</b>:"), 4, 0)
+        settings_layout.addWidget(QLabel("<b>BBCode Template</b>:"), 2, 0)
         self.template_combo = QComboBox()
         self.template_combo.setToolTip("Template to use for generating bbcode files")
         # Load available templates
@@ -4509,7 +4517,7 @@ class ImxUploadGUI(QMainWindow):
         if template_index >= 0:
             self.template_combo.setCurrentIndex(template_index)
         self.template_combo.currentIndexChanged.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.template_combo, 4, 1)
+        settings_layout.addWidget(self.template_combo, 2, 1)
 
         # Watch template directory for changes and refresh dropdown automatically
         try:
@@ -4526,14 +4534,14 @@ class ImxUploadGUI(QMainWindow):
         self.confirm_delete_check = QCheckBox("Confirm before deleting")
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))  # Load from defaults
         self.confirm_delete_check.toggled.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.confirm_delete_check, 5, 1)
+        settings_layout.addWidget(self.confirm_delete_check, 3, 1)
 
         # Auto-rename unnamed galleries after successful login
         self.auto_rename_check = QCheckBox("Auto-rename galleries")
         # Default enabled
         self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
         self.auto_rename_check.toggled.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.auto_rename_check, 5, 0)
+        settings_layout.addWidget(self.auto_rename_check, 3, 0)
 
         # Artifact storage location options (moved to dialog; keep hidden for persistence wiring)
         self.store_in_uploaded_check = QCheckBox("Save artifacts in .uploaded folder")
@@ -4550,31 +4558,32 @@ class ImxUploadGUI(QMainWindow):
         self.central_store_path_value = defaults.get('central_store_path', None)
         
         # Comprehensive Settings button
-        self.comprehensive_settings_btn = QPushButton("⚙️ Comprehensive Settings")
+        self.comprehensive_settings_btn = QPushButton("Comprehensive Settings") # ⚙️ 
         if not self.comprehensive_settings_btn.text().startswith(" "):
             self.comprehensive_settings_btn.setText(" " + self.comprehensive_settings_btn.text())
         self.comprehensive_settings_btn.clicked.connect(self.open_comprehensive_settings)
         self.comprehensive_settings_btn.setMinimumHeight(30)
         self.comprehensive_settings_btn.setMaximumHeight(34)
         self.comprehensive_settings_btn.setProperty("class", "comprehensive-settings")
-        settings_layout.addWidget(self.comprehensive_settings_btn, 8, 0, 1, 2)
+        settings_layout.addWidget(self.comprehensive_settings_btn, 6, 0, 1, 2)
         
         # Save settings button
         self.save_settings_btn = QPushButton("Save Settings")
         if not self.save_settings_btn.text().startswith(" "):
             self.save_settings_btn.setText(" " + self.save_settings_btn.text())
         self.save_settings_btn.clicked.connect(self.save_upload_settings)
-        self.save_settings_btn.setProperty("class", "settings-btn")
+        self.save_settings_btn.setProperty("class", "save-settings-btn")
         self.save_settings_btn.setEnabled(False)  # Initially disabled
         self.save_settings_btn.setVisible(False)  # Initially hidden
 
-        settings_layout.addWidget(self.save_settings_btn, 7, 0, 1, 2)
+        settings_layout.addWidget(self.save_settings_btn, 5, 0, 1, 2)
 
         # Manage templates and credentials buttons (same row)
         self.manage_templates_btn = QPushButton("Templates")
         self.manage_credentials_btn = QPushButton("Credentials")
         
         # Add icons if available
+    
         try:
             icon_mgr = get_icon_manager()
             if icon_mgr:
@@ -4588,9 +4597,14 @@ class ImxUploadGUI(QMainWindow):
                 if not credentials_icon.isNull():
                     self.manage_credentials_btn.setIcon(credentials_icon)
                     self.manage_credentials_btn.setIconSize(QSize(16, 16))
+                    
+                settings_icon = icon_mgr.get_icon('settings', self.style(), is_dark_theme)
+                if not settings_icon.isNull():
+                    self.comprehensive_settings_btn.setIcon(settings_icon)
+                    self.comprehensive_settings_btn.setIconSize(QSize(18, 18))
+                
         except Exception:
-            pass
-        
+            pass       
         self.manage_templates_btn.clicked.connect(self.manage_templates)
         self.manage_credentials_btn.clicked.connect(self.manage_credentials)
         
@@ -4613,10 +4627,6 @@ class ImxUploadGUI(QMainWindow):
         # No minimum height - let it shrink as needed
         # Slightly larger font with reduced letter spacing
         _log_font = QFont("Consolas")
-        try:
-            _log_font.setPointSizeF(8.5)
-        except Exception:
-            _log_font.setPointSize(9)
         try:
             _log_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 98.0)
         except Exception:
@@ -5323,36 +5333,28 @@ class ImxUploadGUI(QMainWindow):
         try:
             # Update application-wide font sizes
             self._current_font_size = font_size
-            
-            # Update table font sizes without overriding the original stylesheet
+
+            # Update table font sizes - set on the actual table widget
             if hasattr(self, 'gallery_table') and hasattr(self.gallery_table, 'gallery_table'):
-                table = self.gallery_table.gallery_table
-                
+                table = self.gallery_table.gallery_table  # This is the actual QTableWidget
                 table_font_size = max(font_size - 1, 6)  # Table 1pt smaller, minimum 6pt
-                name_font_size = font_size  # Name column same as base
-                header_font_size = table_font_size  # Headers same as table content
-                
-                # Just update existing table items without changing stylesheet
-                for row in range(table.rowCount()):
-                    for col in range(table.columnCount()):
-                        item = table.item(row, col)
-                        if item:
-                            font = item.font()
-                            if col == 1:  # Name column gets base font size
-                                font.setPointSize(name_font_size)
-                            else:  # Other columns get smaller font
-                                font.setPointSize(table_font_size)
-                            item.setFont(font)
-                
-                # Update header fonts
-                header = table.horizontalHeader()
+                header_font_size = max(font_size - 2, 6)  # Headers even smaller
+
+                # Set font directly on the table widget - this affects all items
+                table_font = QFont()
+                table_font.setPointSize(table_font_size)
+                table.setFont(table_font)
+
+                # Set smaller font on each header item
+                header_font = QFont()
+                header_font.setPointSize(header_font_size)
+
+                # Use the actual table (table = self.gallery_table.gallery_table)
                 for col in range(table.columnCount()):
                     header_item = table.horizontalHeaderItem(col)
                     if header_item:
-                        font = header_item.font()
-                        font.setPointSize(header_font_size)
-                        header_item.setFont(font)
-            
+                        header_item.setFont(header_font)
+
             # Update log text font
             if hasattr(self, 'log_text'):
                 log_font = QFont("Consolas")
@@ -5363,48 +5365,11 @@ class ImxUploadGUI(QMainWindow):
                 except Exception:
                     pass
                 self.log_text.setFont(log_font)
-            
-            # Update stats and other labels
-            if hasattr(self, 'stats_label'):
-                stats_font = self.stats_label.font()
-                stats_font.setPointSize(font_size)
-                self.stats_label.setFont(stats_font)
-            
-            # Update button fonts (controls area)
-            button_font_size = font_size
-            for widget in self.findChildren(QPushButton):
-                try:
-                    font = widget.font()
-                    font.setPointSize(button_font_size)
-                    widget.setFont(font)
-                except Exception:
-                    pass
-            
-            # Update combo box fonts
-            for widget in self.findChildren(QComboBox):
-                try:
-                    font = widget.font()
-                    font.setPointSize(font_size)
-                    widget.setFont(font)
-                except Exception:
-                    pass
-            
-            # Update label fonts
-            for widget in self.findChildren(QLabel):
-                try:
-                    font = widget.font()
-                    font.setPointSize(font_size)
-                    widget.setFont(font)
-                except Exception:
-                    pass
-            
+
             # Save the current font size
             if hasattr(self, 'settings'):
                 self.settings.setValue('ui/font_size', font_size)
-            
-            # Force refresh
-            self.update()
-            
+
             print(f"Applied font size: {font_size}pt")
             
         except Exception as e:
@@ -6063,7 +6028,6 @@ class ImxUploadGUI(QMainWindow):
             return
         
         # Get current font sizes
-        table_font_size, name_font_size = self._get_table_font_sizes()
             
         # If this is a new item, add it to the table
         if path not in self.path_to_row:
@@ -6136,10 +6100,6 @@ class ImxUploadGUI(QMainWindow):
         order_item = NumericTableWidgetItem(item.insertion_order)
         order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        table_font_size, name_font_size = self._get_table_font_sizes()
-        font = order_item.font()
-        font.setPointSize(table_font_size)
-        order_item.setFont(font)
         self.gallery_table.setItem(row, 0, order_item)
         
         # Gallery name and path
@@ -6147,10 +6107,6 @@ class ImxUploadGUI(QMainWindow):
         name_item = QTableWidgetItem(display_name)
         name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         name_item.setData(Qt.ItemDataRole.UserRole, item.path)
-        # Gallery name column gets font size 9 (1pt larger than others)
-        font = name_item.font()
-        font.setPointSize(name_font_size)
-        name_item.setFont(font)
         self.gallery_table.setItem(row, 1, name_item)
         
         # Upload progress - start blank until images are counted
@@ -6162,9 +6118,6 @@ class ImxUploadGUI(QMainWindow):
             uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             # PyQt is retarded, manually set font
-            font = uploaded_item.font()
-            font.setPointSize(table_font_size)
-            uploaded_item.setFont(font)
             self.gallery_table.setItem(row, 2, uploaded_item)
         else:
                         print(f"DEBUG: No uploaded column set because total_images={total_images} <= 0")
@@ -6187,9 +6140,6 @@ class ImxUploadGUI(QMainWindow):
         added_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         if added_tooltip:
             added_item.setToolTip(added_tooltip)
-        font = added_item.font()
-        font.setPointSize(table_font_size)
-        added_item.setFont(font)
         self.gallery_table.setItem(row, 5, added_item)
         
         # Finished time
@@ -6199,9 +6149,6 @@ class ImxUploadGUI(QMainWindow):
         finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         if finished_tooltip:
             finished_item.setToolTip(finished_tooltip)
-        font = finished_item.font()
-        font.setPointSize(table_font_size)
-        finished_item.setFont(font)
         self.gallery_table.setItem(row, 6, finished_item)
         
         # Size column with consistent binary formatting
@@ -6213,9 +6160,6 @@ class ImxUploadGUI(QMainWindow):
         size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         # PyQt is retarded, manually set font
-        font = size_item.font()
-        font.setPointSize(table_font_size)
-        size_item.setFont(font)
         self.gallery_table.setItem(row, 8, size_item)
         
         # Transfer speed column
@@ -6235,15 +6179,10 @@ class ImxUploadGUI(QMainWindow):
         xfer_item = QTableWidgetItem(transfer_text)
         xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-        font = xfer_item.font()
-        font.setPointSize(table_font_size)
         if item.status == "uploading" and transfer_text:
-            font.setBold(True)
             xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
         elif item.status in ("completed", "failed") and transfer_text:
-            font.setBold(False)
             xfer_item.setForeground(QColor(255, 255, 255, 230) if _is_dark_mode else QColor(0, 0, 0, 190))
-        xfer_item.setFont(font)
         self.gallery_table.setItem(row, 9, xfer_item)
         
         # Template name
@@ -6260,9 +6199,6 @@ class ImxUploadGUI(QMainWindow):
                 tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         except Exception:
             tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        font = tmpl_item.font()
-        font.setPointSize(table_font_size)
-        tmpl_item.setFont(font)
         self.gallery_table.setItem(row, 10, tmpl_item)
         
         # Renamed status: Set icon based on whether gallery has been renamed
@@ -6283,9 +6219,6 @@ class ImxUploadGUI(QMainWindow):
                 # Make custom columns editable
                 custom_item.setFlags(custom_item.flags() | Qt.ItemFlag.ItemIsEditable)
                 custom_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                font = custom_item.font()
-                font.setPointSize(table_font_size)
-                custom_item.setFont(font)
                 self.gallery_table.setItem(row, col_idx, custom_item)
         finally:
             # Restore original signal state
@@ -6338,15 +6271,11 @@ class ImxUploadGUI(QMainWindow):
                 
             try:
                 # Get current font sizes
-                table_font_size, name_font_size = self._get_table_font_sizes()
                 # Order number (column 0) - quick operation
                 order_item = NumericTableWidgetItem(formatted_data['order'])
                 order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 # Apply font size
-                font = order_item.font()
-                font.setPointSize(table_font_size)
-                order_item.setFont(font)
                 self.gallery_table.setItem(row, 0, order_item)
                 
                 # Added time (column 5)
@@ -6356,9 +6285,6 @@ class ImxUploadGUI(QMainWindow):
                 if formatted_data['added_tooltip']:
                     added_item.setToolTip(formatted_data['added_tooltip'])
                 # Apply font size
-                font = added_item.font()
-                font.setPointSize(table_font_size)
-                added_item.setFont(font)
                 self.gallery_table.setItem(row, 5, added_item)
                 
                 # Finished time (column 6)
@@ -6367,12 +6293,6 @@ class ImxUploadGUI(QMainWindow):
                 finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if formatted_data['finished_tooltip']:
                     finished_item.setToolTip(formatted_data['finished_tooltip'])
-                try:
-                    font = finished_item.font()
-                    font.setPointSize(table_font_size)
-                    finished_item.setFont(font)
-                except Exception:
-                    pass
                 self.gallery_table.setItem(row, 6, finished_item)
                 
                 # Apply minimal styling to uploaded count
@@ -6417,12 +6337,6 @@ class ImxUploadGUI(QMainWindow):
         size_item = QTableWidgetItem(size_text)
         size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        try:
-            font = size_item.font()
-            font.setPointSize(8)
-            size_item.setFont(font)
-        except Exception:
-            pass
         self.gallery_table.setItem(row, 8, size_item)
         
         # Transfer rate (column 9)
@@ -6443,16 +6357,11 @@ class ImxUploadGUI(QMainWindow):
         xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
         try:
-            font = xfer_item.font()
-            font.setPointSize(8)
             if item.status == "uploading" and transfer_text:
-                font.setBold(True)
                 xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
             else:
-                font.setBold(False)
                 if transfer_text:
                     xfer_item.setForeground(QColor(0, 0, 0, 160))
-            xfer_item.setFont(font)
         except Exception:
             pass
         self.gallery_table.setItem(row, 9, xfer_item)
@@ -6595,34 +6504,18 @@ class ImxUploadGUI(QMainWindow):
             order_item = NumericTableWidgetItem(item.insertion_order)
             order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            table_font_size, name_font_size = self._get_table_font_sizes()
-            order_item.setFont(QFont("Arial", table_font_size))
             self.gallery_table.setItem(row, 0, order_item)
             
             # Gallery name
             name_item = QTableWidgetItem(item.name or "Unknown")
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             name_item.setData(Qt.ItemDataRole.UserRole, item.path)
-            # Gallery name column gets font size 9 (1px larger than others)
-            try:
-                font = name_item.font()
-                font.setPointSize(name_font_size)
-                name_item.setFont(font)
-            except Exception:
-                pass
             self.gallery_table.setItem(row, 1, name_item)
             
             # Uploaded count
             uploaded_text = f"{item.uploaded_images}/{item.total_images}" if item.total_images > 0 else "0/?"
             uploaded_item = QTableWidgetItem(uploaded_text)
             uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            # Pseudo-center with compact font size (no monospacing)
-            try:
-                font = uploaded_item.font()
-                font.setPointSize(table_font_size)
-                uploaded_item.setFont(font)
-            except Exception:
-                pass
             uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             self.gallery_table.setItem(row, 2, uploaded_item)
             
@@ -6640,7 +6533,6 @@ class ImxUploadGUI(QMainWindow):
             added_item = QTableWidgetItem(added_text)
             added_item.setFlags(added_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             added_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            added_item.setFont(QFont("Arial", table_font_size))  # Smaller font
             if added_tooltip:
                 added_item.setToolTip(added_tooltip)
             self.gallery_table.setItem(row, 5, added_item)
@@ -6652,11 +6544,6 @@ class ImxUploadGUI(QMainWindow):
             finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if finished_tooltip:
                 finished_item.setToolTip(finished_tooltip)
-            try:
-                font = finished_item.font()
-                font.setPointSize(table_font_size)
-                finished_item.setFont(font)
-            except Exception:
                 pass
             self.gallery_table.setItem(row, 6, finished_item)
             
@@ -6674,12 +6561,6 @@ class ImxUploadGUI(QMainWindow):
                 size_item = QTableWidgetItem(size_text)
                 size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)  # Consistent with other method
-                try:
-                    font = size_item.font()
-                    font.setPointSize(table_font_size)
-                    size_item.setFont(font)
-                except Exception:
-                    pass
                 self.gallery_table.setItem(row, 8, size_item)
 
             # Transfer speed
@@ -6702,25 +6583,13 @@ class ImxUploadGUI(QMainWindow):
                 transfer_text = self._format_rate_consistent(rate) if rate > 0 else ""
             xfer_item = QTableWidgetItem(transfer_text)
             xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            try:
-                font = xfer_item.font()
-                font.setPointSize(table_font_size)
-                xfer_item.setFont(font)
-            except Exception:
-                pass
             xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             try:
                 # Active transfers bold and full opacity; completed/failed semi-opaque and not bold
-                font = xfer_item.font()
-                font.setPointSize(table_font_size)
                 if item.status == "uploading" and transfer_text:
-                    font.setBold(True)
-                    xfer_item.setFont(font)
                     # Highlight active transfer in blue-ish to match header accent, keep contrast in both themes
                     xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
                 elif item.status in ("completed", "failed") and transfer_text:
-                    font.setBold(False)
-                    xfer_item.setFont(font)
                     # Slightly more opaque for finished items (+0.2 alpha)
                     xfer_item.setForeground(QColor(255, 255, 255, 230) if _is_dark_mode else QColor(0, 0, 0, 190))
             except Exception:
@@ -6741,11 +6610,6 @@ class ImxUploadGUI(QMainWindow):
                     tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             except Exception:
                 tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            try:
-                font = tmpl_item.font()
-                font.setPointSize(table_font_size)
-                tmpl_item.setFont(font)
-            except Exception:
                 pass
             self.gallery_table.setItem(row, 10, tmpl_item)
 
@@ -7075,14 +6939,10 @@ class ImxUploadGUI(QMainWindow):
                 
             # Update essential columns directly since table update queue may not work
             # Upload progress column (column 2)
-            table_font_size, name_font_size = self._get_table_font_sizes()
             uploaded_text = f"{completed}/{total}" if total > 0 else "0/?"
             uploaded_item = QTableWidgetItem(uploaded_text)
             uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-            font = uploaded_item.font()
-            font.setPointSize(table_font_size)
-            uploaded_item.setFont(font)
             self.gallery_table.setItem(matched_row, 2, uploaded_item)
             
             # Progress bar (column 3)
@@ -7109,10 +6969,6 @@ class ImxUploadGUI(QMainWindow):
                 xfer_item = QTableWidgetItem(transfer_text)
                 xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-                font = xfer_item.font()
-                font.setPointSize(table_font_size)
-                font.setBold(True)
-                xfer_item.setFont(font)
                 # Use live transfer color
                 _is_dark_mode = self._get_cached_theme()
                 xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
@@ -7146,11 +7002,6 @@ class ImxUploadGUI(QMainWindow):
                 finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if finished_tooltip:
                     finished_item.setToolTip(finished_tooltip)
-                try:
-                    font = finished_item.font()
-                    font.setPointSize(table_font_size)
-                    finished_item.setFont(font)
-                except Exception:
                     pass
                 self.gallery_table.setItem(matched_row, 6, finished_item)
 
@@ -7174,10 +7025,6 @@ class ImxUploadGUI(QMainWindow):
                 xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
                 try:
-                    font = xfer_item.font()
-                    font.setPointSize(table_font_size)
-                    font.setBold(False)
-                    xfer_item.setFont(font)
                     if final_text:
                         xfer_item.setForeground(QColor(0, 0, 0, 160))
                 except Exception:
@@ -8117,8 +7964,11 @@ class ImxUploadGUI(QMainWindow):
             # Get current values
             thumbnail_size = self.thumbnail_size_combo.currentIndex() + 1
             thumbnail_format = self.thumbnail_format_combo.currentIndex() + 1
-            max_retries = self.max_retries_spin.value()
-            parallel_batch_size = self.batch_size_spin.value()
+            # Max retries and batch size are now only in comprehensive settings
+            from imxup import load_user_defaults
+            defaults = load_user_defaults()
+            max_retries = defaults.get('max_retries', 3)
+            parallel_batch_size = defaults.get('parallel_batch_size', 4)
             template_name = self.template_combo.currentText()
             confirm_delete = self.confirm_delete_check.isChecked()
             auto_rename = self.auto_rename_check.isChecked()
@@ -8369,8 +8219,12 @@ class ImxUploadGUI(QMainWindow):
             except:
                 pass
 
-    def regenerate_bbcode_for_gallery(self, gallery_path: str):
+    def regenerate_bbcode_for_gallery(self, gallery_path: str, force: bool = False):
         """Regenerate BBCode for a gallery using its current template"""
+        # Check if auto-regeneration is enabled (unless forced)
+        if not force and not self._should_auto_regenerate_bbcode(gallery_path):
+            return
+
         # Get the current template for this gallery
         item = self.queue_manager.get_item(gallery_path)
         if item and item.template_name:
@@ -8415,7 +8269,7 @@ class ImxUploadGUI(QMainWindow):
                 else:
                     template_name = "default"
 
-                # Call the existing regeneration method
+                # Call the existing regeneration method (force=True since this is explicit user action)
                 widget.regenerate_gallery_bbcode(path, template_name)
                 success_count += 1
                 #print(f"DEBUG: Successfully regenerated BBCode for {path}")
@@ -8537,6 +8391,21 @@ class ImxUploadGUI(QMainWindow):
             
         except Exception as e:
             print(f"Error handling table item change: {e}")
+
+    def _should_auto_regenerate_bbcode(self, path: str) -> bool:
+        """Check if BBCode should be auto-regenerated for a gallery"""
+        # Check if auto-regeneration is enabled
+        from imxup import load_user_defaults
+        defaults = load_user_defaults()
+        if not defaults.get('auto_regenerate_bbcode', True):
+            return False
+
+        # Check if gallery is completed
+        item = self.queue_manager.get_item(path)
+        if not item or item.status != "completed":
+            return False
+
+        return True
 
 def check_single_instance(folder_path=None):
     """Check if another instance is running and send folder if needed"""

@@ -17,7 +17,7 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(550, 400)  # Increased height for logo
+        pixmap = QPixmap(620, 380)  # Increased height for logo
         pixmap.fill(QColor(29, 22, 22))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
@@ -147,10 +147,10 @@ class SplashScreen(QSplashScreen):
         painter.setFont(license_font)
         
         license_lines = [
-            "Software distributed under the License is distributed on an",
-            "\"as is\" basis without warranties/conditions of any kind.",
+            "Software distributed under the license is on an \"as is\"",
+            "basis, without warranties or conditions of any kind.",
             "",
-            "Not affiliated with, or endorsed by IMX.to in any way."
+            "Third-party software; not affiliated with IMX.to."
         ]
 
         y_pos = y_offset
@@ -179,7 +179,7 @@ class SplashScreen(QSplashScreen):
         painter.setPen(QColor(150, 150, 227))
         
         # Create a fixed-width area for dots (centered, but dots are left-aligned within it)
-        dots_area_width = 280
+        dots_area_width = 200
         dots_area_x = (self.width() - dots_area_width) // 2
         painter.drawText(dots_area_x, self.height() - 10, self.progress_dots)
         
@@ -216,7 +216,7 @@ class SplashScreen(QSplashScreen):
         #self.random_timer.stop()
         action = random.choice(self.action_words).title()
         self.status_text = f"{action} {text}"
-        self.progress_dots += "•"
+        self.progress_dots += " •"
         self.repaint()
         QApplication.processEvents()
     
