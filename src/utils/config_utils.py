@@ -161,7 +161,7 @@ def load_user_defaults() -> Dict[str, Any]:
         'minimize_to_tray': False,
         'show_notifications': True,
         'confirm_exit': True,
-        'auto_start_queue': False,
+        'auto_start_upload': False,
         'save_window_geometry': True
     }
     
@@ -185,7 +185,7 @@ def load_user_defaults() -> Dict[str, Any]:
                         except ValueError:
                             pass
                     elif key in ['auto_rename', 'use_firefox_cookies', 'minimize_to_tray',
-                                 'show_notifications', 'confirm_exit', 'auto_start_queue',
+                                 'show_notifications', 'confirm_exit', 'auto_start_upload',
                                  'save_window_geometry']:
                         defaults[key] = value.lower() in ('true', '1', 'yes', 'on')
                     else:

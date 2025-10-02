@@ -229,9 +229,18 @@ class QueueManager(QObject):
                         # This ensures the gallery is saved to the correct tab in the database
                         print(f"DEBUG: SAVING TO DATABASE NOW - status is ready, tab_name='{item.tab_name}'")
                         
+                        # Check if auto-start uploads is enabled
+                        from src.utils.config_utils import load_user_defaults
+                        defaults = load_user_defaults()
+                        if defaults.get('auto_start_upload', False):
+                            print(f"DEBUG: Auto-start upload enabled, starting upload for {path}")
+                            # Auto-start the upload by changing status to queued
+                            item.status = QUEUE_STATE_QUEUED
+                            print(f"DEBUG: Status auto-changed from ready to {QUEUE_STATE_QUEUED}")
+
                         # Emit signal directly (we're already in mutex lock)
                         print(f"DEBUG: EMITTING status_changed signal for {path}")
-                        self.status_changed.emit(path, old_status, QUEUE_STATE_READY)
+                        self.status_changed.emit(path, old_status, item.status)
                         print(f"DEBUG: status_changed signal emitted")
             
             # Save to database immediately now that scan is complete and status is "ready"

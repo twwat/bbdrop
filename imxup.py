@@ -26,7 +26,7 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.3.7"  # Application version number
+__version__ = "0.3.9"  # Application version number
 
 def timestamp():
     """Return current timestamp for logging"""
@@ -882,7 +882,31 @@ class ImxToUploader:
         session.mount("https://", adapter)
         
         return session
-    
+
+    def refresh_session_pool(self):
+        """Refresh session connection pool with current parallel_batch_size setting"""
+        try:
+            defaults = load_user_defaults()
+            current_batch_size = defaults.get('parallel_batch_size', 4)
+
+            # Recreate session with updated pool size
+            old_cookies = self.session.cookies if hasattr(self, 'session') else None
+            self.session = self._setup_resilient_session(current_batch_size)
+            self.session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US',
+                'Accept-Encoding': 'gzip, deflate, br, zstd',
+                'DNT': '1'
+            })
+
+            # Preserve cookies from old session
+            if old_cookies:
+                self.session.cookies.update(old_cookies)
+
+        except Exception as e:
+            print(f"Warning: Failed to refresh session pool: {e}")
+
     def __init__(self):
         # Get credentials from stored config
         self.username, self.password, self.api_key = self._get_credentials()
@@ -1373,7 +1397,7 @@ class ImxToUploader:
             try:
                 # Use configurable timeouts to prevent indefinite hangs
                 timeout_tuple = (self.upload_connect_timeout, self.upload_read_timeout)
-                response = requests.post(
+                response = self.session.post(
                     self.upload_url,
                     headers=self.headers,
                     files=files,

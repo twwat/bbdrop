@@ -244,6 +244,12 @@ class ComprehensiveSettingsDialog(QDialog):
         self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
         self.auto_regenerate_bbcode_check.setToolTip("Automatically regenerate BBCode when template, gallery name, or custom fields change")
         general_layout.addWidget(self.auto_regenerate_bbcode_check, 2, 0)
+
+        # Auto-start uploads
+        self.auto_start_upload_check = QCheckBox("Start uploads automatically after scanning")
+        self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
+        self.auto_start_upload_check.setToolTip("Automatically start uploads when scanning completes instead of waiting for manual start")
+        general_layout.addWidget(self.auto_start_upload_check, 3, 0)
         
         # Storage options group
         storage_group = QGroupBox("Storage Options")
@@ -1666,7 +1672,20 @@ class ComprehensiveSettingsDialog(QDialog):
             config.set('DEFAULTS', 'thumbnail_size', str(self.thumbnail_size_combo.currentIndex() + 1))
             config.set('DEFAULTS', 'thumbnail_format', str(self.thumbnail_format_combo.currentIndex() + 1))
             config.set('DEFAULTS', 'max_retries', str(self.max_retries_slider.value()))
-            config.set('DEFAULTS', 'parallel_batch_size', str(self.batch_size_slider.value()))
+
+            # Check if batch size changed to trigger connection pool refresh
+            from src.utils.config_utils import load_user_defaults
+            current_defaults = load_user_defaults()
+            old_batch_size = current_defaults.get('parallel_batch_size', 4)
+            new_batch_size = self.batch_size_slider.value()
+            config.set('DEFAULTS', 'parallel_batch_size', str(new_batch_size))
+
+            # Signal uploader to refresh connection pool if batch size changed
+            if old_batch_size != new_batch_size and self.parent and hasattr(self.parent, 'uploader'):
+                try:
+                    self.parent.uploader.refresh_session_pool()
+                except Exception as e:
+                    print(f"Warning: Failed to refresh connection pool: {e}")
 
             # Save timeout settings
             config.set('DEFAULTS', 'upload_connect_timeout', str(self.connect_timeout_slider.value()))
@@ -1676,6 +1695,7 @@ class ComprehensiveSettingsDialog(QDialog):
             config.set('DEFAULTS', 'confirm_delete', str(self.confirm_delete_check.isChecked()))
             config.set('DEFAULTS', 'auto_rename', str(self.auto_rename_check.isChecked()))
             config.set('DEFAULTS', 'auto_regenerate_bbcode', str(self.auto_regenerate_bbcode_check.isChecked()))
+            config.set('DEFAULTS', 'auto_start_upload', str(self.auto_start_upload_check.isChecked()))
             config.set('DEFAULTS', 'store_in_uploaded', str(self.store_in_uploaded_check.isChecked()))
             config.set('DEFAULTS', 'store_in_central', str(self.store_in_central_check.isChecked()))
             

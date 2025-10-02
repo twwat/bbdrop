@@ -174,7 +174,7 @@ class SplashScreen(QSplashScreen):
         painter.drawText(status_x, self.height() - 38, self.status_text)
         
         # Draw progress dots in fixed position (left-aligned within centered area)
-        dots_font = QFont("Courier", 15)
+        dots_font = QFont("Courier", 18)
         painter.setFont(dots_font)
         painter.setPen(QColor(150, 150, 227))
         
@@ -216,7 +216,7 @@ class SplashScreen(QSplashScreen):
         #self.random_timer.stop()
         action = random.choice(self.action_words).title()
         self.status_text = f"{action} {text}"
-        self.progress_dots += " •"
+        self.progress_dots += "•"
         self.repaint()
         QApplication.processEvents()
     
