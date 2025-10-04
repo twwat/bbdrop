@@ -26,7 +26,14 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.3.12"  # Application version number
+__version__ = "0.3.13"  # Application version number
+
+# Build User-Agent string once at module load
+_system = platform.system()
+_release = platform.release()
+_machine = platform.machine()
+_version = platform.version()
+USER_AGENT = f"Mozilla/5.0 (ImxUp {__version__}; {_system} {_release} {_version}; {_machine}; rv:141.0) Gecko/20100101 Firefox/141.0"
 
 def timestamp():
     """Return current timestamp for logging"""
@@ -294,38 +301,57 @@ def decrypt_password(encrypted_password):
         return None
 
 def load_user_defaults():
-    """Load user defaults from config file"""
+    """Load user defaults from config file
+
+    Returns:
+        Dictionary of user settings with defaults
+    """
+    # Default values for all settings
+    defaults = {
+        'thumbnail_size': 3,
+        'thumbnail_format': 2,
+        'max_retries': 3,
+        'parallel_batch_size': 4,
+        'template_name': 'default',
+        'confirm_delete': True,
+        'auto_rename': True,
+        'auto_start_upload': False,
+        'auto_regenerate_bbcode': False,
+        'store_in_uploaded': True,
+        'store_in_central': True,
+        'central_store_path': get_default_central_store_base_path(),
+        'upload_connect_timeout': 30,
+        'upload_read_timeout': 120,
+    }
+
     config = configparser.ConfigParser()
     config_file = get_config_path()
-    
+
     if os.path.exists(config_file):
         config.read(config_file)
-        defaults = {}
-        
+
         if 'DEFAULTS' in config:
-            defaults['thumbnail_size'] = config.getint('DEFAULTS', 'thumbnail_size', fallback=3)
-            defaults['thumbnail_format'] = config.getint('DEFAULTS', 'thumbnail_format', fallback=2)
-            defaults['max_retries'] = config.getint('DEFAULTS', 'max_retries', fallback=3)
-            defaults['parallel_batch_size'] = config.getint('DEFAULTS', 'parallel_batch_size', fallback=4)
+            # Load integer settings
+            for key in ['thumbnail_size', 'thumbnail_format', 'max_retries',
+                       'parallel_batch_size', 'upload_connect_timeout', 'upload_read_timeout']:
+                defaults[key] = config.getint('DEFAULTS', key, fallback=defaults[key])
+
+            # Load boolean settings
+            for key in ['confirm_delete', 'auto_rename', 'auto_start_upload',
+                       'auto_regenerate_bbcode', 'store_in_uploaded', 'store_in_central']:
+                defaults[key] = config.getboolean('DEFAULTS', key, fallback=defaults[key])
+
+            # Load string settings
             defaults['template_name'] = config.get('DEFAULTS', 'template_name', fallback='default')
-            defaults['confirm_delete'] = config.getboolean('DEFAULTS', 'confirm_delete', fallback=True)
-            # Auto-rename unnamed galleries after successful login (GUI feature)
-            defaults['auto_rename'] = config.getboolean('DEFAULTS', 'auto_rename', fallback=True)
-            # Storage locations for artifacts
-            defaults['store_in_uploaded'] = config.getboolean('DEFAULTS', 'store_in_uploaded', fallback=True)
-            defaults['store_in_central'] = config.getboolean('DEFAULTS', 'store_in_central', fallback=True)
-            # Optional central store path (falls back to default if not set)
+
+            # Load central store path with fallback handling
             try:
-                defaults['central_store_path'] = config.get('DEFAULTS', 'central_store_path', fallback=get_default_central_store_base_path())
+                defaults['central_store_path'] = config.get('DEFAULTS', 'central_store_path',
+                                                           fallback=get_default_central_store_base_path())
             except Exception:
-                # If any parsing issue occurs, use default base path
                 defaults['central_store_path'] = get_default_central_store_base_path()
-            # Upload request timeouts
-            defaults['upload_connect_timeout'] = config.getint('DEFAULTS', 'upload_connect_timeout', fallback=30)
-            defaults['upload_read_timeout'] = config.getint('DEFAULTS', 'upload_read_timeout', fallback=120)
-        
-        return defaults
-    return {}
+
+    return defaults
 
 
 
@@ -926,7 +952,7 @@ class ImxToUploader:
         defaults = load_user_defaults()
         self.upload_connect_timeout = defaults.get('upload_connect_timeout', 30)
         self.upload_read_timeout = defaults.get('upload_read_timeout', 120)
-        print(f"{timestamp()} Timeout settings loaded: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s")
+        #print(f"{timestamp()} Timeout settings loaded: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s")
 
         self.base_url = "https://api.imx.to/v1"
         self.web_url = "https://imx.to"
@@ -939,7 +965,8 @@ class ImxToUploader:
         # Set headers based on authentication method
         if self.api_key:
             self.headers = {
-                "X-API-Key": self.api_key
+                "X-API-Key": self.api_key,
+                "User-Agent": USER_AGENT
             }
         else:
             self.headers = {}
@@ -1064,17 +1091,17 @@ class ImxToUploader:
                         # Test if we're already logged in with cookies
                         test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                         if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                            print(f"{timestamp()} Successfully authenticated using cookies (no password login)")
+                            print(f"{timestamp()} INFO: Successfully authenticated using cookies (no password login)")
                             try:
                                 self.last_login_method = "cookies"
                             except Exception:
                                 pass
                             return True
-                else:
-                    print(f"{timestamp()} Skipping Firefox cookies per settings")
+                #else:
+                #    print(f"{timestamp()} Skipping Firefox cookies per settings")
                 
                 # Fall back to regular login
-                print(f"{timestamp()} Attempting login to {self.web_url}/login.php")
+                #print(f"{timestamp()} Attempting login to {self.web_url}/login.php")
                 login_page = self.session.get(f"{self.web_url}/login.php")
                 
                 # Submit login form
@@ -1089,13 +1116,13 @@ class ImxToUploader:
                 
                 # Check if we hit DDoS-Guard
                 if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-                    print(f"{timestamp()} DDoS-Guard detected, trying browser cookies...")
+                    print(f"{timestamp()} DEBUG: DDoS-Guard detected, trying browser cookies...")
                     firefox_cookies = get_firefox_cookies("imx.to") if use_cookies else {}
                     file_cookies = load_cookies_from_file("cookies.txt") if use_cookies else {}
                     all_cookies = {**firefox_cookies, **file_cookies} if use_cookies else {}
                     
                     if all_cookies:
-                        print(f"{timestamp()} Retrying with browser cookies...")
+                        print(f"{timestamp()} DEBUG: Retrying with browser cookies...")
                         # Clear session and try with cookies (use resilient session)
                         defaults = load_user_defaults()
                         parallel_batch_size = defaults.get('parallel_batch_size', 4)
@@ -1118,25 +1145,25 @@ class ImxToUploader:
                         
                         # If we still hit DDoS-Guard but have cookies, test if we can access user pages
                         if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-                            print(f"{timestamp()} DDoS-Guard detected but cookies loaded - testing access to user pages...")
+                            print(f"{timestamp()} DEBUG: DDoS-Guard detected but cookies loaded - testing access to user pages...")
                             # Test if we can access a user page
                             test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                             if test_response.status_code == 200 and 'login' not in test_response.url:
-                                print(f"{timestamp()} Successfully accessed user pages with cookies")
+                                print(f"{timestamp()} INFO: Successfully accessed user pages with cookies")
                                 try:
                                     self.last_login_method = "cookies"
                                 except Exception:
                                     pass
                                 return True
                             else:
-                                print(f"{timestamp()} Cannot access user pages despite cookies - login may have failed")
+                                print(f"{timestamp()} DEBUG: Cannot access user pages despite cookies - login may have failed")
                                 if attempt < max_retries - 1:
                                     continue
                                 else:
                                     return False
                     
                     if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-                        print(f"{timestamp()} DDoS-Guard still detected, falling back to API-only upload...")
+                        print(f"{timestamp()} DEBUG: DDoS-Guard still detected, falling back to API-only upload...")
                         if attempt < max_retries - 1:
                             continue
                         else:
@@ -1144,21 +1171,21 @@ class ImxToUploader:
                 
                 # Check if login was successful
                 if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-                    print(f"{timestamp()} Successfully logged in")
+                    print(f"{timestamp()} INFO: Successfully logged in")
                     try:
                         self.last_login_method = "credentials"
                     except Exception:
                         pass
                     return True
                 else:
-                    print(f"{timestamp()} Login failed - check username/password")
+                    print(f"{timestamp()} WARNING: Login failed - check username/password")
                     if attempt < max_retries - 1:
                         continue
                     else:
                         return False
                     
             except Exception as e:
-                print(f"{timestamp()} Login error: {str(e)}")
+                print(f"{timestamp()} WARNING: Login error: {str(e)}")
                 if attempt < max_retries - 1:
                     continue
                 else:
@@ -1206,7 +1233,7 @@ class ImxToUploader:
     def create_gallery_with_name(self, gallery_name, skip_login=False):
         """Create a gallery with a specific name using web interface"""
         if not skip_login and not self.login():
-            print(f"{timestamp()} Login failed - cannot create gallery with name")
+            print(f"{timestamp()} DEBUG: Login failed - cannot create gallery with name")
             return None
         
         try:
@@ -1225,18 +1252,18 @@ class ImxToUploader:
             # Extract gallery ID from redirect URL
             if 'gallery/manage?id=' in response.url:
                 gallery_id = response.url.split('id=')[1]
-                print(f"{timestamp()} Created gallery '{gallery_name}' with ID: {gallery_id}")
+                print(f"{timestamp()} Created gallery '{gallery_name}' with ID '{gallery_id}'")
                 return gallery_id
             else:
-                print(f"{timestamp()} Failed to create gallery")
-                print(f"{timestamp()} Response URL: {response.url}")
-                print(f"{timestamp()} Response status: {response.status_code}")
+                print(f"{timestamp()} DEBUG: Failed to create gallery")
+                print(f"{timestamp()} - Response URL: {response.url}")
+                print(f"{timestamp()} - Response status: {response.status_code}")
                 if 'DDoS-Guard' in response.text:
-                    print(f"{timestamp()} DDoS-Guard detected in gallery creation")
+                    print(f"{timestamp()} DEBUG: DDoS-Guard detected in gallery creation")
                 return None
                 
         except Exception as e:
-            print(f"{timestamp()} Error creating gallery: {str(e)}")
+            print(f"{timestamp()} DEBUG: Error creating gallery: {str(e)}")
             return None
     
     # REMOVED: _upload_without_named_gallery — unified into upload_folder
@@ -1260,14 +1287,14 @@ class ImxToUploader:
             response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
             
             if response.status_code == 200:
-                print(f"{timestamp()} Successfully renamed gallery to '{new_name}'")
+                print(f"{timestamp()} INFO: Successfully renamed gallery '{gallery_id}' to '{new_name}'")
                 return True
             else:
-                print(f"{timestamp()} Failed to rename gallery")
+                print(f"{timestamp()} DEBUG: Failed to rename gallery")
                 return False
                 
         except Exception as e:
-            print(f"{timestamp()} Error renaming gallery: {str(e)}")
+            print(f"{timestamp()} DEBUG: Error renaming gallery: {str(e)}")
             return False
     
     def rename_gallery_with_session(self, gallery_id, new_name):
@@ -1320,7 +1347,7 @@ class ImxToUploader:
             if response.status_code == 200:
                 # Check if the rename was actually successful
                 if 'success' in response.text.lower() or 'gallery' in response.url:
-                    print(f"{timestamp()} Successfully renamed gallery to '{new_name}'")
+                    print(f"{timestamp()} Successfully renamed gallery '{gallery_id}' to '{new_name}'")
                     return True
                 else:
                     print(f"{timestamp()} Rename request returned 200 but may have failed")
@@ -1463,7 +1490,7 @@ class ImxToUploader:
             dict: Contains gallery URL and individual image URLs
         """
         start_time = time.time()
-        print(f"[TIMING] upload_folder({folder_path}) started at {start_time:.6f}")
+        print(f"{timestamp()} [TIMING] upload_folder({folder_path}) started at {start_time:.6f}")
         
         if not os.path.exists(folder_path):
             raise FileNotFoundError(f"Folder not found: {folder_path}")
@@ -1494,7 +1521,7 @@ class ImxToUploader:
                     image_dimensions.append((0, 0))  # Error reading image
         
         scan_duration = time.time() - scan_start
-        print(f"[TIMING] File scanning and PIL processing took {scan_duration:.6f}s for {len(image_files)} files")
+        print(f"{timestamp()} [TIMING] File scanning and PIL processing took {scan_duration:.6f}s for {len(image_files)} files")
         
         if not image_files:
             raise ValueError(f"No image files found in {folder_path}")
@@ -1510,7 +1537,7 @@ class ImxToUploader:
         check_start = time.time()
         existing_files = check_if_gallery_exists(gallery_name)
         check_duration = time.time() - check_start
-        print(f"[TIMING] Gallery existence check took {check_duration:.6f}s")
+        print(f"{timestamp()} [TIMING] Gallery existence check took {check_duration:.6f}s")
         
         if existing_files:
             print(f"{timestamp()} Found existing gallery files for '{gallery_name}':")
@@ -1526,13 +1553,13 @@ class ImxToUploader:
         create_start = time.time()
         gallery_id = self.create_gallery_with_name(gallery_name, skip_login=True)
         create_duration = time.time() - create_start
-        print(f"[TIMING] Gallery creation took {create_duration:.6f}s")
+        print(f"{timestamp()} [TIMING] Gallery creation took {create_duration:.6f}s")
         initial_completed = 0
         initial_uploaded_size = 0
         preseed_images = []
         files_to_upload = []
         if not gallery_id:
-            print("Failed to create named gallery, falling back to API-only upload...")
+            print(f"{timestamp()} Failed to create named gallery, falling back to API-only upload...")
             # Upload first image to create gallery
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
@@ -2055,7 +2082,7 @@ def main():
         unnamed_galleries = get_unnamed_galleries()
         
         if not unnamed_galleries:
-            print(f"{timestamp()} No unnamed galleries found to rename")
+            #print(f"{timestamp()} No unnamed galleries found to rename")
             return
         
         print(f"{timestamp()} Found {len(unnamed_galleries)} unnamed galleries to rename:")
@@ -2092,13 +2119,13 @@ def main():
             # Expand wildcards
             expanded = glob.glob(path)
             if not expanded:
-                print(f"Warning: No folders found matching pattern: {path}")
+                print(f"{timestamp()} Warning: No folders found matching pattern: {path}")
             expanded_paths.extend(expanded)
         else:
             expanded_paths.append(path)
     
     if not expanded_paths:
-        print("No valid folders found to upload.")
+        print(f"{timestamp()} No valid folders found to upload.")
         return 1  # No valid folders
     
     # Determine public gallery setting
@@ -2110,7 +2137,7 @@ def main():
         all_results = []
 
         # Login once for all galleries
-        print(f"{timestamp()} Logging in for all galleries...")
+        #print(f"{timestamp()} Logging in for all galleries...")
         if not uploader.login():
             print(f"{timestamp()} Login failed - falling back to API-only uploads")
 
@@ -2121,10 +2148,10 @@ def main():
         rename_worker = None
         try:
             from src.processing.rename_worker import RenameWorker
-            rename_worker = RenameWorker(uploader)
+            rename_worker = RenameWorker()
             print(f"{timestamp()} Background RenameWorker initialized")
         except Exception as e:
-            print(f"{timestamp()} Warning: Failed to initialize RenameWorker: {e}")
+            print(f"{timestamp()} WARNING: Failed to initialize RenameWorker: {e}")
             
         engine = UploadEngine(uploader, rename_worker)
 
@@ -2152,12 +2179,12 @@ def main():
                         template_name=args.template or "default",
                     )
                 except Exception as e:
-                    print(f"{timestamp()} Artifact save error: {e}")
+                    print(f"{timestamp()} WARNING: Artifact save error: {e}")
 
                 all_results.append(results)
 
             except KeyboardInterrupt:
-                print(f"\n{timestamp()} Upload interrupted by user")
+                print(f"\n{timestamp()} DEBUG: Upload interrupted by user")
                 # Cleanup RenameWorker on interrupt
                 if rename_worker:
                     rename_worker.stop()
@@ -2244,7 +2271,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nExiting gracefully...")
+        print("\n{timestamp()} Exiting gracefully...")
         sys.exit(0)
     except SystemExit:
         # Handle argparse errors gracefully in PyInstaller

@@ -143,84 +143,8 @@ def decrypt_password(encrypted_password: str) -> str:
             return encrypted_password
 
 
-def load_user_defaults() -> Dict[str, Any]:
-    """Load user default settings from config file
-    
-    Returns:
-        Dictionary of user settings with defaults
-    """
-    defaults = {
-        'thumbnail_size': 3,
-        'thumbnail_format': 2,
-        'max_retries': 3,
-        'parallel_batch_size': 4,
-        'template_name': 'default',
-        'auto_rename': True,
-        'use_firefox_cookies': False,
-        'theme': 'auto',
-        'minimize_to_tray': False,
-        'show_notifications': True,
-        'confirm_exit': True,
-        'auto_start_upload': False,
-        'save_window_geometry': True
-    }
-    
-    config = configparser.ConfigParser()
-    config_file = get_config_path()
-    
-    if os.path.exists(config_file):
-        config.read(config_file)
-        
-        # Load settings section
-        if 'SETTINGS' in config:
-            for key in defaults:
-                if key in config['SETTINGS']:
-                    value = config['SETTINGS'][key]
-                    
-                    # Convert to appropriate type
-                    if key in ['thumbnail_size', 'thumbnail_format', 'max_retries', 
-                               'parallel_batch_size']:
-                        try:
-                            defaults[key] = int(value)
-                        except ValueError:
-                            pass
-                    elif key in ['auto_rename', 'use_firefox_cookies', 'minimize_to_tray',
-                                 'show_notifications', 'confirm_exit', 'auto_start_upload',
-                                 'save_window_geometry']:
-                        defaults[key] = value.lower() in ('true', '1', 'yes', 'on')
-                    else:
-                        defaults[key] = value
-    
-    return defaults
-
-
-def save_user_defaults(settings: Dict[str, Any]) -> None:
-    """Save user default settings to config file
-    
-    Args:
-        settings: Dictionary of settings to save
-    """
-    config = configparser.ConfigParser()
-    config_file = get_config_path()
-    
-    # Read existing config
-    if os.path.exists(config_file):
-        config.read(config_file)
-    
-    # Ensure SETTINGS section exists
-    if 'SETTINGS' not in config:
-        config['SETTINGS'] = {}
-    
-    # Update settings
-    for key, value in settings.items():
-        if isinstance(value, bool):
-            config['SETTINGS'][key] = 'true' if value else 'false'
-        else:
-            config['SETTINGS'][key] = str(value)
-    
-    # Write config
-    with open(config_file, 'w') as f:
-        config.write(f)
+# Note: load_user_defaults() has been consolidated into imxup.py
+# All code should import from imxup instead of this module
 
 
 def get_credentials() -> Dict[str, Optional[str]]:

@@ -5,8 +5,8 @@ All magic numbers, configuration values, and constant strings.
 
 # Application Info
 APP_NAME = "ImxUp"
-APP_VERSION = "0.3.12"
-APP_AUTHOR = "ImxUploader"
+APP_VERSION = "0.3.13"
+APP_AUTHOR = "twat"
 
 # Network Configuration
 COMMUNICATION_PORT = 27849

@@ -251,7 +251,7 @@ class UploadEngine:
             try:
                 upload_start = time.time()
                 if on_log:
-                    on_log(f"[concurrency:debug] Starting upload of {image_file}")
+                    on_log(f"[uploads:file] Starting '{image_file}' upload..")
 
                 # Get thread-local session for this upload
                 thread_session = get_thread_session()
@@ -264,8 +264,8 @@ class UploadEngine:
                     thread_session=thread_session,
                 )
                 upload_duration = time.time() - upload_start
-                #if on_log:
-                #    on_log(f"[concurrency:debug] Completed upload of {image_file} in {upload_duration:.2f}s")
+                if on_log:
+                    on_log(f"[uploads:file] Uploaded '{image_file}' in {upload_duration:.3f}s")
                 if response.get('status') == 'success':
                     return image_file, response['data'], None
                 return image_file, None, f"API error: {response}"
@@ -313,12 +313,12 @@ class UploadEngine:
                     if image_data:
                         uploaded_images.append((image_file, image_data))
                         # Per-image success log (categorized)
-                        #if on_log:
-                        #    try:
-                        #        img_url = image_data.get('image_url', '')
-                        #        on_log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
-                        #    except Exception:
-                        #        pass
+                        if on_log:
+                            try:
+                                img_url = image_data.get('image_url', '')
+                                on_log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
+                            except Exception:
+                                pass
                         # Per-image callback for resume-aware consumers
                         if on_image_uploaded:
                             try:

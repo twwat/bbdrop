@@ -232,13 +232,15 @@ class QueueManager(QObject):
                         #print(f"DEBUG: SAVING TO DATABASE NOW - status is ready, tab_name='{item.tab_name}'")
                         
                         # Check if auto-start uploads is enabled
-                        from src.utils.config_utils import load_user_defaults
+                        # load_user_defaults already imported from imxup at top of file
                         defaults = load_user_defaults()
                         if defaults.get('auto_start_upload', False):
-                            print(f"DEBUG: Auto-start upload enabled, starting upload for {path}")
-                            # Auto-start the upload by changing status to queued
+                            print(f"{timestamp()} Auto-start enabled: queuing {path} for upload")
+                            # Auto-start the upload by changing status to queued and adding to queue
+                            self._update_status_count(old_status, QUEUE_STATE_QUEUED)
                             item.status = QUEUE_STATE_QUEUED
-                            print(f"DEBUG: Status auto-changed from ready to {QUEUE_STATE_QUEUED}")
+                            self.queue.put(item)  # CRITICAL: Add to queue so worker picks it up
+                            print(f"{timestamp()} Auto-queued {path} for immediate upload")
 
                         # Emit signal directly (we're already in mutex lock)
                         #print(f"DEBUG: EMITTING status_changed signal for {path}")

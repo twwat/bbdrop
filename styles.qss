@@ -119,7 +119,7 @@ QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; lef
 /* Tabs */
 QTabBar::tab                 { background: #f8f9fa; border: 1px solid #dee2e6; border-bottom: none; padding: 5px 16px; margin-right: 2px; min-width: 80px; border-top-left-radius: 5px; border-top-right-radius: 5px; color: #495057; font-weight: 500; }
 QTabBar::tab:selected        { background: #ffffff; border-bottom: 3px solid #3498db; color: #212529; font-weight: 600; }
-QTabBar::tab:hover:!selected { background: #e9ecef; border-color: #adb5bd; border: 1px solid #e74c3c; }
+QTabBar::tab:hover:!selected { background: #e9ecef; border: 1px solid #e74c3c; }
 QTabBar::tab:!selected:hover { color: #212529; }
 
 /* Buttons */

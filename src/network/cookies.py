@@ -32,7 +32,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
     # Check cache first
     if _firefox_cookie_cache and (time.time() - _firefox_cache_time) < _cache_duration:
         elapsed = time.time() - start_time
-        print(f"{_timestamp()} DEBUG: Using cached Firefox cookies (took {elapsed:.3f}s)")
+        print(f"{_timestamp()} INFO: Using cached Firefox cookies (took {elapsed:.3f}s)")
         return _firefox_cookie_cache.copy()
     
     try:
@@ -50,13 +50,13 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
         if not profiles:
             profiles = [d for d in os.listdir(firefox_dir) if 'default' in d]
         if not profiles:
-            print(f"{_timestamp()} No Firefox profile found")
+            print(f"{_timestamp()} DEBUG: No Firefox profile found")
             return {}
 
         profile_dir = os.path.join(firefox_dir, profiles[0])
         cookie_file = os.path.join(profile_dir, 'cookies.sqlite')
         if not os.path.exists(cookie_file):
-            print(f"{_timestamp()} Firefox cookie file not found: {cookie_file}")
+            print(f"{_timestamp()} DEBUG: Firefox cookie file not found: {cookie_file}")
             return {}
 
         cookies = {}
@@ -78,7 +78,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             (f'%{domain}%',),
         )
         query_time = time.time() - query_start
-        print(f"{_timestamp()} DEBUG: SQLite: connect took {sqlite_connect_time:.3f}s, query took {query_time:.3f}s")
+        print(f"{_timestamp()} INFO: SQLite connect took {sqlite_connect_time:.3f}s, query took {query_time:.3f}s")
         for row in cursor.fetchall():
             name, value, host, path, _expiry, secure = row
             cookies[name] = {
@@ -94,11 +94,11 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
         _firefox_cache_time = time.time()
         
         elapsed = time.time() - start_time
-        print(f"{_timestamp()} DEBUG: get_firefox_cookies() completed in {elapsed:.3f}s, found {len(cookies)} cookies (cached)")
+        print(f"{_timestamp()} INFO: get_firefox_cookies() completed in {elapsed:.3f}s, found {len(cookies)} {domain} cookies (cached)")
         return cookies
     except Exception as e:
         elapsed = time.time() - start_time
-        print(f"{_timestamp()} Error extracting Firefox cookies: {e} (took {elapsed:.3f}s)")
+        print(f"{_timestamp()} DEBUG: Error extracting Firefox cookies: {e} (took {elapsed:.3f}s)")
         # Cache empty result to avoid repeated failures
         _firefox_cookie_cache = {}
         _firefox_cache_time = time.time()
@@ -125,11 +125,11 @@ def load_cookies_from_file(cookie_file: str = "cookies.txt") -> dict:
                                 'path': path,
                                 'secure': secure == 'TRUE',
                             }
-            print(f"{_timestamp()} Loaded {len(cookies)} cookies from {cookie_file}")
+            print(f"{_timestamp()} INFO: Loaded {len(cookies)} cookies from {cookie_file}")
         #else:
         #    print(f"{_timestamp()} Cookie file not found: {cookie_file}")
     except Exception as e:
-        print(f"{_timestamp()} Error loading cookies: {e}")
+        print(f"{_timestamp()} DEBUG: Error loading cookies: {e}")
     return cookies
 
 

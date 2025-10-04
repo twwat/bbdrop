@@ -155,7 +155,7 @@ class ComprehensiveSettingsDialog(QDialog):
         upload_layout.addWidget(retries_widget, 0, 1)
         
         # Concurrent uploads
-        upload_layout.addWidget(QLabel("<b>Concurrent Upload</b>s:"), 1, 0)
+        upload_layout.addWidget(QLabel("<b>Concurrent Uploads</b>:"), 1, 0)
         concurrent_widget = QWidget()
         concurrent_layout = QHBoxLayout(concurrent_widget)
         concurrent_layout.setContentsMargins(0, 0, 0, 0)
@@ -176,7 +176,7 @@ class ComprehensiveSettingsDialog(QDialog):
         connect_timeout_layout = QHBoxLayout(connect_timeout_widget)
         connect_timeout_layout.setContentsMargins(0, 0, 0, 0)
         self.connect_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.connect_timeout_slider.setRange(15, 120)
+        self.connect_timeout_slider.setRange(10, 120)
         self.connect_timeout_slider.setValue(defaults.get('upload_connect_timeout', 30))
         self.connect_timeout_slider.setToolTip("Maximum time to wait for server connection. Increase if you have slow internet.")
         self.connect_timeout_value = QLabel(str(defaults.get('upload_connect_timeout', 30)))
@@ -191,10 +191,10 @@ class ComprehensiveSettingsDialog(QDialog):
         read_timeout_layout = QHBoxLayout(read_timeout_widget)
         read_timeout_layout.setContentsMargins(0, 0, 0, 0)
         self.read_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.read_timeout_slider.setRange(30, 120)
+        self.read_timeout_slider.setRange(20, 120)
         self.read_timeout_slider.setValue(defaults.get('upload_read_timeout', 60))
         self.read_timeout_slider.setToolTip("Maximum time to wait for server response. Increase for large images or slow servers.")
-        self.read_timeout_value = QLabel(str(defaults.get('upload_read_timeout', 120)))
+        self.read_timeout_value = QLabel(str(defaults.get('upload_read_timeout', 60)))
         self.read_timeout_value.setMinimumWidth(30)
         read_timeout_layout.addWidget(self.read_timeout_slider)
         read_timeout_layout.addWidget(self.read_timeout_value)
@@ -256,7 +256,7 @@ class ComprehensiveSettingsDialog(QDialog):
         storage_layout = QGridLayout(storage_group)
         
         # Store in uploaded folder
-        self.store_in_uploaded_check = QCheckBox("Save artifacts in '.uploaded' folder")
+        self.store_in_uploaded_check = QCheckBox("Save artifacts in '.uploaded' subfolder in gallery")
         self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
         storage_layout.addWidget(self.store_in_uploaded_check, 0, 0, 1, 3)
         
@@ -266,7 +266,7 @@ class ComprehensiveSettingsDialog(QDialog):
         storage_layout.addWidget(self.store_in_central_check, 1, 0, 1, 3)
         
         # Data location section
-        location_label = QLabel("<b>Data location</b>:")
+        location_label = QLabel("<b>Data location (central store)</b>:")
         storage_layout.addWidget(location_label, 2, 0, 1, 3)
         
         # Import path functions
@@ -388,6 +388,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.confirm_delete_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.auto_rename_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.auto_regenerate_bbcode_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.auto_start_upload_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.store_in_uploaded_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.store_in_central_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.home_radio.toggled.connect(lambda: self.mark_tab_dirty(0))
@@ -1166,15 +1167,23 @@ class ComprehensiveSettingsDialog(QDialog):
         """Load scanning settings from QSettings"""
         try:
             if self.parent and hasattr(self.parent, 'settings'):
+                # Block signals during loading to prevent marking tab as dirty
+                self.fast_scan_check.blockSignals(True)
+                self.pil_sampling_combo.blockSignals(True)
+
                 # Load fast scan setting
                 fast_scan = self.parent.settings.value('scanning/fast_scan', True, type=bool)
                 self.fast_scan_check.setChecked(fast_scan)
-                
+
                 # Load PIL sampling strategy
                 sampling_index = self.parent.settings.value('scanning/pil_sampling', 2, type=int)
                 if 0 <= sampling_index < self.pil_sampling_combo.count():
                     self.pil_sampling_combo.setCurrentIndex(sampling_index)
-                    
+
+                # Unblock signals
+                self.fast_scan_check.blockSignals(False)
+                self.pil_sampling_combo.blockSignals(False)
+
         except Exception as e:
             print(f"{timestamp()} WARNING: Failed to load scanning settings: {e}")
     
@@ -1675,7 +1684,7 @@ class ComprehensiveSettingsDialog(QDialog):
             config.set('DEFAULTS', 'max_retries', str(self.max_retries_slider.value()))
 
             # Check if batch size changed to trigger connection pool refresh
-            from src.utils.config_utils import load_user_defaults
+            # load_user_defaults already imported from imxup at top of file
             current_defaults = load_user_defaults()
             old_batch_size = current_defaults.get('parallel_batch_size', 4)
             new_batch_size = self.batch_size_slider.value()

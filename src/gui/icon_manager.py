@@ -151,8 +151,8 @@ class IconManager:
         config = self.ICON_MAP[icon_key]
         
         # Debug output for config type
-        if icon_key.startswith('status_') and (is_selected or is_dark_theme):
-            print(f"DEBUG: {icon_key} config type: {type(config)} = {config}")
+        #if icon_key.startswith('status_') and (is_selected or is_dark_theme):
+        #    print(f"{DEBUG: {icon_key} config type: {type(config)} = {config}")
         
         # Determine which icon file to use
         filename = self._get_themed_filename(config, is_dark_theme, is_selected)

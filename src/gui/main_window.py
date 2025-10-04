@@ -1123,9 +1123,9 @@ class TabbedGalleryWidget(QWidget):
                         item.tab_name = tab_name
                         updated_count += 1
                         # Verify the change stuck
-                        print(f"DEBUG: Drag-drop updated item {path} tab '{old_tab}' -> '{tab_name}' (item.tab_name is now '{item.tab_name}')", flush=True))
+                        #print(f"{timestamp()} DEBUG: Drag-drop updated item {path} tab '{old_tab}' -> '{tab_name}' (item.tab_name is now '{item.tab_name}')", flush=True)
                     else:
-                        print(f"DEBUG: No item found for path: {path}", flush=True)
+                        print(f"{timestamp()} DEBUG: No item found for path: {path}", flush=True)
                 #print(f"DEBUG: Updated {updated_count} in-memory items out of {len(gallery_paths)} paths")
                 
                 # Don't call save_persistent_queue() here - database is already updated
@@ -1736,7 +1736,7 @@ class TabbedGalleryWidget(QWidget):
             "#f39c12" if is_dark else "#e67e22",  # modified color
             "#404040" if is_dark else "#e3f2fd"   # drag highlight background
         )
-        
+
         self.tab_bar.setStyleSheet(special_style)
         self._update_new_tab_button_style(is_dark)
     
@@ -2569,13 +2569,17 @@ class GalleryTableWidget(QTableWidget):
                     #print(f"DEBUG: RIGHT-CLICK BEFORE invalidate - Main={main_count_before}, {target_tab}={target_count_before}", flush=True)
                     
                     tabbed_widget.tab_manager.invalidate_tab_cache()
-                    
+
                     # Check database counts AFTER cache invalidation
                     #main_count_after = len(tabbed_widget.tab_manager.load_tab_galleries('Main'))
                     #target_count_after = len(tabbed_widget.tab_manager.load_tab_galleries(target_tab))
 
                     tabbed_widget.refresh_filter()
-                    
+
+                    # Update tab tooltips to reflect new counts
+                    if hasattr(tabbed_widget, '_update_tab_tooltips'):
+                        tabbed_widget._update_tab_tooltips()
+
                     # Show feedback message
                     gallery_word = "gallery" if moved_count == 1 else "galleries"
                     #print(f"DEBUG: RIGHT-CLICK PATH - Moved {moved_count} {gallery_word} to '{target_tab}' tab")
@@ -4870,8 +4874,12 @@ class ImxUploadGUI(QMainWindow):
 
             # View menu
             view_menu = menu_bar.addMenu("View")
-            action_log = view_menu.addAction("Open Log Viewer")
+            action_log = view_menu.addAction("Open Log Viewer (Settings)")
             action_log.triggered.connect(self.open_log_viewer)
+
+            # Standalone log viewer popup
+            action_log_popup = view_menu.addAction("Open Log Viewer (Popup)")
+            action_log_popup.triggered.connect(self.open_log_viewer_popup)
             # Theme submenu: System / Light / Dark
             theme_menu = view_menu.addMenu("Theme")
             theme_group = QActionGroup(self)
@@ -7262,6 +7270,18 @@ class ImxUploadGUI(QMainWindow):
     def add_log_message(self, message: str):
         """Add message to log"""
         # Determine category and subtype for GUI gating and file logging
+        # Auto-detect log level from message keywords
+        log_level = logging.INFO  # Default
+        message_upper = message.upper()
+        if "CRITICAL" in message_upper or "FATAL" in message_upper:
+            log_level = logging.CRITICAL
+        elif "ERROR" in message_upper:
+            log_level = logging.ERROR
+        elif "WARNING" in message_upper or "WARN" in message_upper:
+            log_level = logging.WARNING
+        elif "DEBUG" in message_upper:
+            log_level = logging.DEBUG
+
         category = "general"
         subtype = None
         try:
@@ -7282,7 +7302,7 @@ class ImxUploadGUI(QMainWindow):
         show_in_gui = True
         try:
             logger = get_logger()
-            if not logger.should_emit_gui(category, logging.INFO):
+            if not logger.should_emit_gui(category, log_level):
                 show_in_gui = False
             if category == "uploads" and show_in_gui:
                 if subtype == "file" and not logger.should_log_upload_file_success("gui"):
@@ -7324,7 +7344,7 @@ class ImxUploadGUI(QMainWindow):
 
         # Always write to centralized rolling logfile using category (file sink can be filtered separately)
         try:
-            get_logger().log_to_file(message, level=logging.INFO, category=category)
+            get_logger().log_to_file(message, level=log_level, category=category)
         except Exception:
             pass
         # Retain long history; no aggressive trimming
@@ -7337,7 +7357,18 @@ class ImxUploadGUI(QMainWindow):
     def open_log_viewer(self):
         """Open comprehensive settings to logs tab"""
         self.open_comprehensive_settings(tab_index=5)  # Logs tab
-    
+
+    def open_log_viewer_popup(self):
+        """Open standalone log viewer dialog popup"""
+        try:
+            from src.utils.logging import get_logger
+            initial_text = get_logger().read_current_log(tail_bytes=2 * 1024 * 1024) or ""
+        except Exception:
+            initial_text = ""
+
+        dialog = LogViewerDialog(initial_text, self)
+        dialog.show()  # Non-modal dialog
+
     def start_single_item(self, path: str):
         """Start a single item"""
         if self.queue_manager.start_item(path):
@@ -7806,7 +7837,11 @@ class ImxUploadGUI(QMainWindow):
             
             # Force GUI update
             QApplication.processEvents()
-            
+
+            # Update tab tooltips to reflect new counts
+            if hasattr(self.gallery_table, '_update_tab_tooltips'):
+                self.gallery_table._update_tab_tooltips()
+
             # Defer database save to prevent GUI freeze
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(100, self.queue_manager.save_persistent_queue)
