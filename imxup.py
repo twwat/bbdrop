@@ -26,7 +26,7 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.3.11"  # Application version number
+__version__ = "0.3.12"  # Application version number
 
 def timestamp():
     """Return current timestamp for logging"""
@@ -875,12 +875,12 @@ class ImxToUploader:
             pool_connections=pool_size,  # Number of connection pools to cache
             pool_maxsize=pool_size       # Max connections per pool
         )
-        
+
         # Create session and mount adapters
         session = requests.Session()
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-        
+
         return session
 
     def refresh_session_pool(self):
@@ -910,27 +910,31 @@ class ImxToUploader:
     def __init__(self):
         # Get credentials from stored config
         self.username, self.password, self.api_key = self._get_credentials()
-        
+
         # Fallback to environment variable for API key if not in config
         #if not self.api_key:
         #    self.api_key = os.getenv('IMX_API')
-        
+
         # Check if we have either username/password or API key
         has_credentials = (self.username and self.password) or self.api_key
-        
+
         if not has_credentials:
             print(f"{timestamp()} Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.")
             sys.exit(1)
-        
+
         # Load timeout settings
         defaults = load_user_defaults()
         self.upload_connect_timeout = defaults.get('upload_connect_timeout', 30)
         self.upload_read_timeout = defaults.get('upload_read_timeout', 120)
         print(f"{timestamp()} Timeout settings loaded: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s")
-        
+
         self.base_url = "https://api.imx.to/v1"
         self.web_url = "https://imx.to"
         self.upload_url = f"{self.base_url}/upload.php"
+
+        # Connection tracking for visibility
+        self._upload_count = 0
+        self._connection_info_logged = False
         
         # Set headers based on authentication method
         if self.api_key:
@@ -969,24 +973,24 @@ class ImxToUploader:
                 try:
                     import time
                     login_start = time.time()
-                    print(f"{timestamp()} DEBUG: Starting cookie-based login process...")
-                    print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
+                    #print(f"{timestamp()} DEBUG: Starting cookie-based login process...")
+                    #print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
                     
                     cookies_start = time.time()
                     firefox_cookies = get_firefox_cookies("imx.to")
                     firefox_time = time.time() - cookies_start
-                    print(f"{timestamp()} DEBUG: Firefox cookies took {firefox_time:.3f}s")
+                    #print(f"{timestamp()} DEBUG: Firefox cookies took {firefox_time:.3f}s")
                     
                     file_start = time.time()
                     file_cookies = load_cookies_from_file("cookies.txt")
                     file_time = time.time() - file_start
-                    print(f"{timestamp()} DEBUG: File cookies took {file_time:.3f}s")
+                    #print(f"{timestamp()} DEBUG: File cookies took {file_time:.3f}s")
                     all_cookies = {}
                     if firefox_cookies:
-                        print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
+                        #print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
                         all_cookies.update(firefox_cookies)
                     if file_cookies:
-                        print(f"{timestamp()} Loaded cookies from cookies.txt")
+                        #print(f"{timestamp()} Loaded cookies from cookies.txt")
                         all_cookies.update(file_cookies)
                     if all_cookies:
                         for name, cookie_data in all_cookies.items():
@@ -1039,15 +1043,15 @@ class ImxToUploader:
                 except Exception:
                     use_cookies = True
                 if use_cookies:
-                    print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
+                    #print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
                     firefox_cookies = get_firefox_cookies("imx.to")
                     file_cookies = load_cookies_from_file("cookies.txt")
                     all_cookies = {}
                     if firefox_cookies:
-                        print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
+                        #print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
                         all_cookies.update(firefox_cookies)
                     if file_cookies:
-                        print(f"{timestamp()} Loaded cookies from cookies.txt")
+                        #print(f"{timestamp()} Loaded cookies from cookies.txt")
                         all_cookies.update(file_cookies)
                     if all_cookies:
                         # Add cookies to session
@@ -1361,62 +1365,88 @@ class ImxToUploader:
             print(f"{timestamp()} Error updating gallery visibility: {str(e)}")
             return False
     
-    def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2):
+    def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None):
         """
         Upload a single image to imx.to
-        
+
         Args:
             image_path (str): Path to the image file
             create_gallery (bool): Whether to create a new gallery
             gallery_id (str): ID of existing gallery to add image to
             thumbnail_size (int): Thumbnail size (1=100x100, 2=180x180, 3=250x250, 4=300x300, 6=150x150)
             thumbnail_format (int): Thumbnail format (1=Fixed width, 2=Proportional, 3=Square, 4=Fixed height)
-            
+            thread_session (requests.Session): Optional thread-local session for concurrent uploads
+
         Returns:
             dict: API response
         """
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found: {image_path}")
-        
-        # Prepare files and data for upload
+
+        # Use thread-local session if provided, otherwise use shared session
+        session = thread_session if thread_session else self.session
+
+        # Read file into memory BEFORE POST to enable true concurrent uploads
+        # Keeping file handles open during network I/O causes Python's file I/O to serialize
+        # the reads even though HTTP operations can be concurrent (7x performance penalty)
+        file_read_start = time.time()
         with open(image_path, 'rb') as f:
-            files = {'image': f}
-            data = {}
-            
-            if create_gallery:
-                data['create_gallery'] = 'true'
-            
-            if gallery_id:
-                data['gallery_id'] = gallery_id
-                
-            # Request output format as JSON with all data
-            data['format'] = 'all'
-            data['thumbnail_size'] = str(thumbnail_size)
-            data['thumbnail_format'] = str(thumbnail_format)
-            
-            try:
-                # Use configurable timeouts to prevent indefinite hangs
-                timeout_tuple = (self.upload_connect_timeout, self.upload_read_timeout)
-                response = self.session.post(
-                    self.upload_url,
-                    headers=self.headers,
-                    files=files,
-                    data=data,
-                    timeout=timeout_tuple
-                )
-                
-                if response.status_code == 200:
-                    return response.json()
-                else:
-                    raise Exception(f"Upload failed with status code {response.status_code}: {response.text}")
-                    
-            except requests.exceptions.Timeout as e:
-                # Include actual timeout values in error for debugging
-                raise Exception(f"Upload timeout (connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s): {str(e)}")
-            except requests.exceptions.ConnectionError as e:
-                raise Exception(f"Connection error during upload: {str(e)}")
-            except requests.exceptions.RequestException as e:
-                raise Exception(f"Network error during upload: {str(e)}")
+            file_data = f.read()
+        file_read_time = time.time() - file_read_start
+
+        if not hasattr(self, '_first_read_logged'):
+            print(f"{timestamp()} [concurrency:fileio] Read {os.path.basename(image_path)} ({len(file_data)/1024/1024:.1f}MB) in {file_read_time:.3f}s")
+            self._first_read_logged = True
+
+        # Prepare files and data for upload (file handle now closed)
+        files = {'image': (os.path.basename(image_path), file_data)}
+        data = {}
+
+        if create_gallery:
+            data['create_gallery'] = 'true'
+
+        if gallery_id:
+            data['gallery_id'] = gallery_id
+
+        # Request output format as JSON with all data
+        data['format'] = 'all'
+        data['thumbnail_size'] = str(thumbnail_size)
+        data['thumbnail_format'] = str(thumbnail_format)
+
+        try:
+            # Track upload count and log connection pool info
+            self._upload_count += 1
+
+            # Log connection pool info on first upload to show reuse configuration
+            if not self._connection_info_logged:
+                adapter = self.session.get_adapter('https://')
+                pool_size = getattr(adapter, 'pool_maxsize', 'unknown')
+                pool_conns = getattr(adapter, 'pool_connections', 'unknown')
+                print(f"{timestamp()} [connection] Session pool configured: max_size={pool_size}, pool_connections={pool_conns}")
+                self._connection_info_logged = True
+
+            # Use configurable timeouts to prevent indefinite hangs
+            timeout_tuple = (self.upload_connect_timeout, self.upload_read_timeout)
+            response = session.post(
+                self.upload_url,
+                headers=self.headers,
+                files=files,
+                data=data,
+                timeout=timeout_tuple
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise Exception(f"Upload failed with status code {response.status_code}: {response.text}")
+
+        except requests.exceptions.Timeout as e:
+            # Include actual timeout values in error for debugging
+            raise Exception(f"Upload timeout (connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s): {str(e)}")
+        except requests.exceptions.ConnectionError as e:
+            raise Exception(f"Connection error during upload: {str(e)}")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Network error during upload: {str(e)}")
     
     def upload_folder(self, folder_path, gallery_name=None, thumbnail_size=3, thumbnail_format=2, max_retries=3, parallel_batch_size=4, template_name="default"):
         """

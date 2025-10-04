@@ -19,6 +19,8 @@ from functools import cmp_to_key
 import ctypes
 from typing import Callable, Iterable, Optional, Tuple, List, Dict, Any, Set
 
+from src.utils.format_utils import format_binary_size, format_binary_rate
+
 
 ProgressCallback = Callable[[int, int, int, str], None]
 LogCallback = Callable[[str], None]
@@ -102,6 +104,7 @@ class UploadEngine:
             if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
         ])
         if not all_image_files:
+            self.statusBar().showMessage
             raise ValueError(f"No image files found in {folder_path}")
 
         # Resume: exclude already-uploaded files
@@ -222,15 +225,47 @@ class UploadEngine:
             'images': list(preseed_images),
         }
 
+        # Create thread-local sessions for true connection reuse per thread
+        import threading
+        thread_sessions = {}
+        sessions_lock = threading.Lock()
+
+        def get_thread_session():
+            """Get or create a session for the current thread"""
+            thread_id = threading.get_ident()
+            with sessions_lock:
+                if thread_id not in thread_sessions:
+                    # Create new session for this thread with same config as main session
+                    import requests
+                    from requests.adapters import HTTPAdapter
+                    session = requests.Session()
+                    adapter = HTTPAdapter(pool_connections=1, pool_maxsize=1)
+                    session.mount('https://', adapter)
+                    session.mount('http://', adapter)
+                    session.headers.update(self.uploader.headers)
+                    thread_sessions[thread_id] = session
+                return thread_sessions[thread_id]
+
         def upload_single_image(image_file: str) -> Tuple[str, Optional[Dict[str, Any]], Optional[str]]:
             image_path = os.path.join(folder_path, image_file)
             try:
+                upload_start = time.time()
+                if on_log:
+                    on_log(f"[concurrency:debug] Starting upload of {image_file}")
+
+                # Get thread-local session for this upload
+                thread_session = get_thread_session()
+
                 response = self.uploader.upload_image(
                     image_path,
                     gallery_id=gallery_id,
                     thumbnail_size=thumbnail_size,
                     thumbnail_format=thumbnail_format,
+                    thread_session=thread_session,
                 )
+                upload_duration = time.time() - upload_start
+                #if on_log:
+                #    on_log(f"[concurrency:debug] Completed upload of {image_file} in {upload_duration:.2f}s")
                 if response.get('status') == 'success':
                     return image_file, response['data'], None
                 return image_file, None, f"API error: {response}"
@@ -245,6 +280,13 @@ class UploadEngine:
         def maybe_soft_stopping() -> bool:
             return bool(should_soft_stop and should_soft_stop())
 
+        # Track concurrent uploads for visibility
+        active_uploads = 0
+        max_concurrent_seen = 0
+
+        #if on_log:
+        #    on_log(f"[concurrency] Starting upload with batch size: {parallel_batch_size}")
+
         with ThreadPoolExecutor(max_workers=parallel_batch_size) as executor:
             remaining: List[str] = list(files_to_upload)
             futures_map: Dict[concurrent.futures.Future, str] = {}
@@ -252,21 +294,31 @@ class UploadEngine:
             for _ in range(min(parallel_batch_size, len(remaining))):
                 img = remaining.pop(0)
                 futures_map[executor.submit(upload_single_image, img)] = img
+                active_uploads += 1
+
+            max_concurrent_seen = len(futures_map)
+            #if on_log:
+            #    on_log(f"[concurrency] Primed pool with {len(futures_map)} initial uploads")
 
             while futures_map:
+                # Log current concurrency before waiting
+                current_active = len(futures_map)
+                if current_active > max_concurrent_seen:
+                    max_concurrent_seen = current_active
                 done, _ = concurrent.futures.wait(list(futures_map.keys()), return_when=concurrent.futures.FIRST_COMPLETED)
                 for fut in done:
                     img = futures_map.pop(fut)
+                    active_uploads -= 1
                     image_file, image_data, error = fut.result()
                     if image_data:
                         uploaded_images.append((image_file, image_data))
                         # Per-image success log (categorized)
-                        if on_log:
-                            try:
-                                img_url = image_data.get('image_url', '')
-                                on_log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
-                            except Exception:
-                                pass
+                        #if on_log:
+                        #    try:
+                        #        img_url = image_data.get('image_url', '')
+                        #        on_log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
+                        #    except Exception:
+                        #        pass
                         # Per-image callback for resume-aware consumers
                         if on_image_uploaded:
                             try:
@@ -288,6 +340,7 @@ class UploadEngine:
                     if remaining and not maybe_soft_stopping():
                         nxt = remaining.pop(0)
                         futures_map[executor.submit(upload_single_image, nxt)] = nxt
+                        active_uploads += 1
 
         # Retries
         retry_count = 0
@@ -335,6 +388,10 @@ class UploadEngine:
                             futures_map[executor.submit(upload_single_image, nxt)] = nxt
             failed_images = retry_failed
 
+        # Log concurrency summary
+        #if on_log:
+        #    on_log(f"[concurrency] Upload complete - max concurrent uploads seen: {max_concurrent_seen}/{parallel_batch_size}")
+
         # Sort by original order
         uploaded_images.sort(key=lambda x: file_position.get(x[0], 10**9))
         for _, image_data in uploaded_images:
@@ -369,6 +426,7 @@ class UploadEngine:
                     with Image.open(fp) as img:
                         w, h = img.size
                         sampled_dims.append((w, h))
+                        image_dimensions_map[fname] = (w, h)  # Store per-image dimensions
                 except Exception:
                     continue
             avg_width = sum(w for w, h in sampled_dims) / len(sampled_dims) if sampled_dims else 0
@@ -483,8 +541,16 @@ class UploadEngine:
                         gname = results.get('gallery_name') or gallery_name
                     except Exception:
                         gname = gallery_name
+
+                    # Calculate metrics
+                    size_str = format_binary_size(uploaded_size, precision=2)
+                    rate_bytes_per_sec = uploaded_size / upload_time if upload_time > 0 else 0
+                    rate_kib_per_sec = rate_bytes_per_sec / 1024
+                    rate_str = format_binary_rate(rate_kib_per_sec, precision=2)
+                    time_per_file = upload_time / results['successful_count'] if results['successful_count'] > 0 else 0
+
                     on_log(
-                        f"[uploads:gallery] ✓ Uploaded {results['successful_count']} images ({int(uploaded_size)/(1024*1024):.1f} MiB) in {upload_time:.1f}s: {gname} -> {gallery_url}"
+                        f"[uploads:gallery] ✓ {gallery_id}: {results['successful_count']} images ({size_str}) in {upload_time:.1f}s ({rate_str}, {time_per_file:.2f}s/file) {gname}"
                     )
             except Exception:
                 pass

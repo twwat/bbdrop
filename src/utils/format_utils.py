@@ -103,9 +103,9 @@ def format_duration(seconds: float) -> str:
 
 
 def sanitize_gallery_name(name: str) -> str:
-    """Sanitize a gallery name for use as a filename
+    """Sanitize gallery name to remove characters not accepted in gallery name by imx.to
     
-    Removes or replaces invalid characters for Windows/Unix filenames
+    Replaces characters <>:"/\\|?* with _
     
     Args:
         name: Original gallery name
@@ -114,7 +114,7 @@ def sanitize_gallery_name(name: str) -> str:
         Sanitized name safe for use as filename
     """
     if not name:
-        return "untitled"
+        return "untitled gallery"
     
     # Replace invalid characters
     invalid_chars = '<>:"/\\|?*'

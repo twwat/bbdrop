@@ -28,8 +28,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
     global _firefox_cookie_cache, _firefox_cache_time
     
     start_time = time.time()
-    print(f"{_timestamp()} DEBUG: get_firefox_cookies() started")
-    
+        
     # Check cache first
     if _firefox_cookie_cache and (time.time() - _firefox_cache_time) < _cache_duration:
         elapsed = time.time() - start_time
@@ -61,12 +60,12 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             return {}
 
         cookies = {}
-        print(f"{_timestamp()} DEBUG: About to connect to SQLite database: {cookie_file}")
+        #print(f"{_timestamp()} DEBUG: About to connect to SQLite database: {cookie_file}")
         sqlite_start = time.time()
         # Set a 1-second timeout to prevent long waits on locked Firefox databases
         conn = sqlite3.connect(cookie_file, timeout=1.0)
         sqlite_connect_time = time.time() - sqlite_start
-        print(f"{_timestamp()} DEBUG: SQLite connect took {sqlite_connect_time:.3f}s")
+        #print(f"{_timestamp()} DEBUG: SQLite connect took {sqlite_connect_time:.3f}s")
         
         cursor = conn.cursor()
         query_start = time.time()
@@ -79,7 +78,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             (f'%{domain}%',),
         )
         query_time = time.time() - query_start
-        print(f"{_timestamp()} DEBUG: SQLite query took {query_time:.3f}s")
+        print(f"{_timestamp()} DEBUG: SQLite: connect took {sqlite_connect_time:.3f}s, query took {query_time:.3f}s")
         for row in cursor.fetchall():
             name, value, host, path, _expiry, secure = row
             cookies[name] = {
@@ -127,8 +126,8 @@ def load_cookies_from_file(cookie_file: str = "cookies.txt") -> dict:
                                 'secure': secure == 'TRUE',
                             }
             print(f"{_timestamp()} Loaded {len(cookies)} cookies from {cookie_file}")
-        else:
-            print(f"{_timestamp()} Cookie file not found: {cookie_file}")
+        #else:
+        #    print(f"{_timestamp()} Cookie file not found: {cookie_file}")
     except Exception as e:
         print(f"{_timestamp()} Error loading cookies: {e}")
     return cookies

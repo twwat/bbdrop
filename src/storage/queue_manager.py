@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, QSettings, QTimer
 
 from src.storage.database import QueueStore
-from imxup import sanitize_gallery_name, load_user_defaults
+from imxup import sanitize_gallery_name, load_user_defaults, timestamp
 from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
     QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED, QUEUE_STATE_SCAN_FAILED,
@@ -83,6 +83,7 @@ class QueueManager(QObject):
     # Signals
     status_changed = pyqtSignal(str, str, str)  # path, old_status, new_status
     queue_loaded = pyqtSignal()
+    log_message = pyqtSignal(str)
     
     def __init__(self):
         super().__init__()
@@ -129,35 +130,35 @@ class QueueManager(QObject):
     
     def _start_scan_worker(self):
         """Start the sequential scan worker thread"""
-        print(f"DEBUG: _start_scan_worker called, running={self._scan_worker_running}")
+        #print(f"{timestamp()} DEBUG: _start_scan_worker called, running={self._scan_worker_running}")
         if not self._scan_worker_running:
-            print(f"DEBUG: Starting scan worker thread")
             self._scan_worker_running = True
             self._scan_worker = threading.Thread(
                 target=self._sequential_scan_worker,
                 daemon=True
             )
             self._scan_worker.start()
-            print(f"DEBUG: Scan worker thread started")
+            self.log_message.emit(f"{timestamp()} [scan] Scan worker thread started")
     
     def _sequential_scan_worker(self):
         """Worker that processes galleries sequentially"""
-        print(f"DEBUG: Scan worker starting")
+        #print(f"{timestamp()} DEBUG: Scan worker starting")
         while self._scan_worker_running:
             try:
                 path = self._scan_queue.get(timeout=1.0)
-                print(f"DEBUG: Scan worker got path: {path}")
                 if path is None:  # Shutdown signal
                     break
-                print(f"DEBUG: About to scan path: {path}")
+                #print(f"DEBUG: About to scan path: {path}")
                 self._comprehensive_scan_item(path)
-                print(f"DEBUG: Scan completed for {path}")
+                #print(f"{timestamp()} DEBUG: Scan completed for {path}")
+                self.log_message.emit(f"{timestamp()} [scan] Scan completed for {path}")
                 self._scan_queue.task_done()
                 
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Scan worker error: {e}")
+                print(f"{timestamp()} ERROR scanning {path}: {e}")
+                self.log_message.emit(f"{timestamp()} [scan] Error scanning {path}: {e}")
                 try:
                     self._scan_queue.task_done()
                 except:
@@ -169,12 +170,17 @@ class QueueManager(QObject):
             # Validation
             if not os.path.exists(path) or not os.path.isdir(path):
                 self._mark_item_failed(path, "Path does not exist or is not a directory")
+                #print(f"{timestamp()} DEBUG: Scan completed for {path}")
+                print(f"{timestamp()} DEBUG: [scan] Path does not exist or is not a directory: {path}")
+                self.log_message.emit(f"{timestamp()} [scan] Path does not exist or is not a directory: {path}")
                 return
             
             # Find images
             files = self._get_image_files(path)
             if not files:
                 self.mark_scan_failed(path, "No images found")
+                self.log_message.emit(f"{timestamp()} [scan] No images found: {path}")
+                print(f"{timestamp()} DEBUG: [scan] No images found: {path}")
                 return
             
             # Check for existing gallery
@@ -187,10 +193,7 @@ class QueueManager(QObject):
                 # No longer silently failing duplicates here
                 
                 item.total_images = len(files)
-                print(f"DEBUG: Set total_images={len(files)} for {path}")
-                print(f"DEBUG: Before status change to scanning - tab_name='{item.tab_name}'")
                 item.status = "scanning"
-                print(f"DEBUG: Changed status to scanning for {path}, tab_name still='{item.tab_name}'")
             
             # Scan images
             scan_result = self._scan_images(path, files)
@@ -207,7 +210,6 @@ class QueueManager(QObject):
             with QMutexLocker(self.mutex):
                 if path in self.items:
                     item = self.items[path]
-                    print(f"DEBUG: Before scan update - item tab_name = '{item.tab_name}'")
                     item.total_size = scan_result['total_size']
                     item.avg_width = scan_result['avg_width']
                     item.avg_height = scan_result['avg_height']
@@ -218,16 +220,16 @@ class QueueManager(QObject):
                     item.scan_complete = True
                     
                     if item.status == "scanning":
-                        print(f"DEBUG: Scan complete, updating status to ready for {path}")
-                        print(f"DEBUG: Item tab_name is still: '{item.tab_name}'")
+                        #print(f"DEBUG: Scan complete, updating status to ready for {path}")
+                        #print(f"DEBUG: Item tab_name is still: '{item.tab_name}'")
                         old_status = item.status
                         item.status = QUEUE_STATE_READY
-                        print(f"DEBUG: Status changed from {old_status} to {QUEUE_STATE_READY}")
-                        print(f"DEBUG: After status change - item tab_name = '{item.tab_name}'")
+                        #print(f"DEBUG: Status changed from {old_status} to {QUEUE_STATE_READY}")
+                        #print(f"DEBUG: After status change - item tab_name = '{item.tab_name}'")
                         
                         # CRITICAL: Save immediately now that status is "ready" (no longer "validating")
                         # This ensures the gallery is saved to the correct tab in the database
-                        print(f"DEBUG: SAVING TO DATABASE NOW - status is ready, tab_name='{item.tab_name}'")
+                        #print(f"DEBUG: SAVING TO DATABASE NOW - status is ready, tab_name='{item.tab_name}'")
                         
                         # Check if auto-start uploads is enabled
                         from src.utils.config_utils import load_user_defaults
@@ -239,20 +241,20 @@ class QueueManager(QObject):
                             print(f"DEBUG: Status auto-changed from ready to {QUEUE_STATE_QUEUED}")
 
                         # Emit signal directly (we're already in mutex lock)
-                        print(f"DEBUG: EMITTING status_changed signal for {path}")
+                        #print(f"DEBUG: EMITTING status_changed signal for {path}")
                         self.status_changed.emit(path, old_status, item.status)
-                        print(f"DEBUG: status_changed signal emitted")
+                        #print(f"DEBUG: status_changed signal emitted")
             
             # Save to database immediately now that scan is complete and status is "ready"
             from PyQt6.QtCore import QTimer
-            print(f"DEBUG: Scheduling IMMEDIATE save for {path} with tab_name='{item.tab_name}'")
+            #print(f"DEBUG: Scheduling IMMEDIATE save for {path} with tab_name='{item.tab_name}'")
             # Capture the path in a closure-safe way
             saved_path = path
             # Save and then refresh the filter to show the item in the correct tab
             def save_and_refresh():
-                print(f"DEBUG: Executing save_and_refresh for {saved_path}")
+                #print(f"DEBUG: Executing save_and_refresh for {saved_path}")
                 self.save_persistent_queue([saved_path])
-                print(f"DEBUG: Saved {saved_path} to database, emitting refresh signal")
+                #print(f"DEBUG: Saved {saved_path} to database, emitting refresh signal")
                 # Emit a signal to refresh the tab filter after save
                 from PyQt6.QtCore import QTimer as QT2
                 QT2.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
@@ -293,16 +295,26 @@ class QueueManager(QObject):
         # Scan files
         if use_fast:
             import imghdr
+            from PIL import Image
+
             for i, f in enumerate(files):
                 fp = os.path.join(path, f)
                 try:
                     result['total_size'] += os.path.getsize(fp)
+                    # Quick validation with imghdr first
                     with open(fp, 'rb') as img:
                         if not imghdr.what(img):
-                            result['failed_files'].append((f, "Invalid image"))
+                            # imghdr failed - verify with PIL (more robust for some formats)
+                            try:
+                                with Image.open(fp) as pil_img:
+                                    pil_img.verify()  # Checks image integrity, raises exception for corrupt/truncated
+                                # PIL validation passed - image is valid
+                            except Exception as pil_error:
+                                # Both imghdr and PIL failed - mark as invalid
+                                result['failed_files'].append((f, f"Invalid image: {str(pil_error)}"))
                 except Exception as e:
                     result['failed_files'].append((f, str(e)))
-                
+
                 if i % 10 == 0:
                     time.sleep(0.001)  # Yield
         
@@ -692,43 +704,43 @@ class QueueManager(QObject):
             }
             
             self.store.bulk_upsert_async([item_data])
-            print(f"DEBUG: _save_single_item saved: {item.path}")
+            print(f"{timestamp()} DEBUG: _save_single_item saved: {item.path}")
         except Exception as e:
-            print(f"ERROR: _save_single_item failed for {item.path}: {e}")
+            print(f"{timestamp()} ERROR: _save_single_item failed for {item.path}: {e}")
 
     def save_persistent_queue(self, specific_paths: List[str] = None):
         """Save queue state to database"""
-        print(f"DEBUG: save_persistent_queue called with {len(specific_paths) if specific_paths else 'all'} items")
+        print(f"{timestamp()} DEBUG: save_persistent_queue called with {len(specific_paths) if specific_paths else 'all'} items")
         if self._batch_mode and specific_paths:
-            print(f"DEBUG: In batch mode, adding to batched changes")
+            print(f"{timestamp()} DEBUG: In batch mode, adding to batched changes")
             self._batched_changes.update(specific_paths)
             return
         
-        print(f"DEBUG: Acquiring mutex for database save")
+        #print(f"DEBUG: Acquiring mutex for database save")
         with QMutexLocker(self.mutex):
-            print(f"DEBUG: Mutex acquired, preparing items list")
+            #print(f"DEBUG: Mutex acquired, preparing items list")
             if specific_paths:
                 items = [self.items[p] for p in specific_paths if p in self.items]
-                print(f"DEBUG: Found {len(items)} items for specific paths")
+                print(f"{timestamp()} DEBUG: Found {len(items)} items for specific paths")
             else:
                 items = list(self.items.values())
-                print(f"DEBUG: Saving all {len(items)} items")
+                #print(f"DEBUG: Saving all {len(items)} items")
             
             queue_data = []
-            print(f"DEBUG: Building queue data for {len(items)} items")
+            print(f"{timestamp()} DEBUG: Mutex acquired, building queue data for {len(items)} items")
             for item in items:
                 if item.status in [QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
                                   QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
                                   "scanning", QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED]:
                     queue_data.append(self._item_to_dict(item))
-            print(f"DEBUG: Built queue data with {len(queue_data)} items to save")
+            #print(f"DEBUG: Built queue data with {len(queue_data)} items to save")
             
             try:
-                print(f"DEBUG: About to call store.bulk_upsert_async")
+                #print(f"DEBUG: About to call store.bulk_upsert_async")
                 self.store.bulk_upsert_async(queue_data)
-                print(f"DEBUG: bulk_upsert_async completed")
+                print(f"{timestamp()} bulk_upsert_async database save completed")
             except Exception as e:
-                print(f"DEBUG: Database save failed: {e}")
+                print(f"{timestamp()} ERROR: Database save failed: {e}")
                 pass
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
@@ -849,15 +861,15 @@ class QueueManager(QObject):
     
     def add_item(self, path: str, name: str = None, template_name: str = "default", tab_name: str = "Main") -> bool:
         """Add gallery to queue"""
-        print(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}")
+        #print(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}")
         with QMutexLocker(self.mutex):
             if path in self.items:
                 return False
             
-            print(f"DEBUG: Using original folder name for {path}")
+            #print(f"DEBUG: Using original folder name for {path}")
             gallery_name = name or os.path.basename(path)
-            print(f"DEBUG: Gallery name: {gallery_name}")
-            print(f"DEBUG: Creating GalleryQueueItem with tab_name={tab_name}...")
+            #print(f"DEBUG: Gallery name: {gallery_name}")
+            #print(f"DEBUG: Creating GalleryQueueItem with tab_name={tab_name}...")
             item = GalleryQueueItem(
                 path=path,
                 name=gallery_name,
@@ -867,23 +879,23 @@ class QueueManager(QObject):
                 template_name=template_name,
                 tab_name=tab_name
             )
-            print(f"DEBUG: GalleryQueueItem created successfully")
+            #print(f"DEBUG: GalleryQueueItem created successfully")
             self._next_order += 1
             
             self.items[path] = item
-            print(f"DEBUG: Item added to dict, updating status count...")
+            #print(f"DEBUG: Item added to dict, updating status count...")
             self._update_status_count("", "validating")
-            print(f"DEBUG: Scheduling deferred database save...")
+            #print(f"DEBUG: Scheduling deferred database save...")
             # Use QTimer to defer database save to prevent blocking GUI thread
             from PyQt6.QtCore import QTimer
             self._schedule_debounced_save([path])
-            print(f"DEBUG: Incrementing version...")
+            #print(f"DEBUG: Incrementing version...")
             self._inc_version()
-            print(f"DEBUG: Version incremented")
+            print(f"{timestamp()} DEBUG: Version incremented")
         
-        print(f"DEBUG: Adding to scan queue: {path}")
+        #print(f"DEBUG: Adding to scan queue: {path}")
         self._scan_queue.put(path)
-        print(f"DEBUG: add_item returning True")
+        #print(f"DEBUG: add_item returning True")
         return True
     
     def start_item(self, path: str) -> bool:
@@ -933,7 +945,7 @@ class QueueManager(QObject):
                     try:
                         self.parent.regenerate_bbcode_for_gallery(path)
                     except Exception as e:
-                        print(f"Error auto-regenerating BBCode for {path}: {e}")
+                        print(f"{timestamp()} Error auto-regenerating BBCode for {path}: {e}")
 
                 return True
         return False
@@ -1012,8 +1024,10 @@ class QueueManager(QObject):
             if hasattr(self, 'parent') and self.parent and hasattr(self.parent, 'regenerate_bbcode_for_gallery'):
                 try:
                     self.parent.regenerate_bbcode_for_gallery(path)
+                    print(f"{timestamp()} [fileio] Regenerated bbcode for {path}")
+                    
                 except Exception as e:
-                    print(f"Error auto-regenerating BBCode for {path}: {e}")
+                    print(f"{timestamp()} [fileio] Error auto-regenerating BBCode for {path}: {e}")
 
             return True
 
@@ -1041,6 +1055,10 @@ class QueueManager(QObject):
     
     def shutdown(self):
         """Shutdown queue manager"""
+        # Stop pending save timer
+        if self._pending_save_timer and self._pending_save_timer.isActive():
+            self._pending_save_timer.stop()
+
         self._scan_worker_running = False
         try:
             self._scan_queue.put(None, timeout=1.0)

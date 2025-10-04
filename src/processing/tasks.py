@@ -77,11 +77,11 @@ class ProgressUpdateBatcher:
         """Process all pending updates"""
         if not self._pending_updates:
             return
-        
+
         updates_to_process = self._pending_updates.copy()
         self._pending_updates.clear()
         self._last_batch_time = time.time()
-        
+
         # Process updates on main thread
         for path, update_data in updates_to_process.items():
             self._callback(
@@ -91,6 +91,11 @@ class ProgressUpdateBatcher:
                 update_data['progress_percent'],
                 update_data['current_image']
             )
+
+    def cleanup(self):
+        """Stop timer and cleanup resources"""
+        if self._timer.isActive():
+            self._timer.stop()
 
 
 class IconCache:
@@ -236,10 +241,16 @@ class TableUpdateQueue:
             del self._pending_updates[path]
         
         self._processing = False
-        
+
         # Schedule next batch if needed
         if self._pending_updates:
             self._timer.start(TABLE_UPDATE_INTERVAL)
+
+    def cleanup(self):
+        """Stop timer and cleanup resources"""
+        if self._timer.isActive():
+            self._timer.stop()
+        self._pending_updates.clear()
     
     def _update_progress_only(self, table, task):
         """Update only progress-related cells"""

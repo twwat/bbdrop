@@ -9,12 +9,13 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, 
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
     QListWidgetItem, QLabel, QMessageBox, QFileDialog, QCheckBox,
-    QGroupBox, QSplitter, QTextEdit, QProgressDialog, QDialogButtonBox
+    QGroupBox, QSplitter, QTextEdit, QTextBrowser, QProgressDialog, QDialogButtonBox
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QThread, QTimer
-from PyQt6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QThread, QTimer, QUrl
+from PyQt6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent, QImage
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 
 from src.core.constants import IMAGE_EXTENSIONS
 
@@ -32,40 +33,50 @@ class FileScanner(QThread):
         self._stop = False
     
     def run(self):
-        """Scan files for validity"""
+        """Scan files for validity - quick imghdr check with PIL fallback verification"""
         import imghdr
-        
+        from PIL import Image
+
         total = len(self.files)
         for i, filename in enumerate(self.files):
             if self._stop:
                 break
-                
+
             filepath = os.path.join(self.folder_path, filename)
             is_valid = True
             error_msg = ""
-            
+
             try:
                 # Check if file exists
                 if not os.path.exists(filepath):
                     is_valid = False
                     error_msg = "File not found"
-                # Check if it's an image
+                # Check if it's an image extension
                 elif not filename.lower().endswith(IMAGE_EXTENSIONS):
                     is_valid = False
                     error_msg = "Not an image file"
                 else:
-                    # Validate image format
+                    # Quick validation with imghdr first
                     with open(filepath, 'rb') as f:
                         if not imghdr.what(f):
-                            is_valid = False
-                            error_msg = "Invalid or corrupt image"
+                            # imghdr failed - verify with PIL (more robust for some formats)
+                            try:
+                                with Image.open(filepath) as img:
+                                    img.verify()  # Checks image integrity
+                                    # Note: verify() will raise exception for truncated/corrupt files
+                                # PIL validation passed - image is actually valid
+                                is_valid = True
+                            except Exception as pil_error:
+                                # Both imghdr and PIL failed - reject as corrupt
+                                is_valid = False
+                                error_msg = f"Invalid or corrupt image: {str(pil_error)}"
             except Exception as e:
                 is_valid = False
                 error_msg = str(e)
-            
+
             self.file_scanned.emit(filename, is_valid, error_msg)
             self.progress.emit(i + 1, total)
-            
+
         self.finished.emit()
     
     def stop(self):
@@ -74,7 +85,7 @@ class FileScanner(QThread):
 
 class GalleryFileManagerDialog(QDialog):
     """Dialog for managing files in a gallery"""
-    
+
     def __init__(self, gallery_path: str, queue_manager, parent=None):
         super().__init__(parent)
         self.gallery_path = gallery_path
@@ -82,13 +93,17 @@ class GalleryFileManagerDialog(QDialog):
         self.gallery_item = queue_manager.get_item(gallery_path)
         self.modified = False
         self.scanner = None
-        
+
         # Track original and current files
         self.original_files = set()
         self.removed_files = set()
         self.added_files = set()
         self.file_status = {}  # filename -> (is_valid, error_msg)
-        
+
+        # Artifact data for completed galleries
+        self.artifact_data = None
+        self.is_completed = False
+
         self.setup_ui()
         self.load_gallery_files()
     
@@ -158,9 +173,10 @@ class GalleryFileManagerDialog(QDialog):
         # Right side - details
         right_widget = QGroupBox("Details")
         right_layout = QVBoxLayout()
-        
-        self.details_text = QTextEdit()
-        self.details_text.setReadOnly(True)
+
+        # Text details
+        self.details_text = QTextBrowser()
+        self.details_text.setOpenExternalLinks(True)
         right_layout.addWidget(self.details_text)
         
         right_widget.setLayout(right_layout)
@@ -210,21 +226,71 @@ class GalleryFileManagerDialog(QDialog):
             self.info_label.setText("Gallery information not available")
     
     def load_gallery_files(self):
-        """Load and scan files from the gallery folder"""
+        """Load files - from artifact for completed galleries, scan folder otherwise"""
+        # Check if this is a completed gallery with artifact
+        if self.gallery_item and self.gallery_item.status == "completed" and hasattr(self.gallery_item, 'gallery_id') and self.gallery_item.gallery_id:
+            # Try to load from artifact (folder doesn't need to exist)
+            from src.utils.artifact_finder import find_gallery_json_by_id
+            import json
+
+            json_path = find_gallery_json_by_id(self.gallery_item.gallery_id, self.gallery_path)
+            if json_path and os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        self.artifact_data = json.load(f)
+                    self.is_completed = True
+                    self.load_from_artifact()
+                    return
+                except Exception as e:
+                    print(f"Failed to load artifact: {e}")
+                    # Fall through to folder scan
+
+        # Fallback: scan folder for non-completed or if artifact not found
         if not os.path.exists(self.gallery_path):
             QMessageBox.warning(self, "Error", "Gallery folder does not exist")
             return
-        
-        # Get all files in the folder
+
         files = []
         for f in os.listdir(self.gallery_path):
             if f.lower().endswith(IMAGE_EXTENSIONS):
                 files.append(f)
                 self.original_files.add(f)
-        
+
         # Start scanning files
         self.scan_files(files)
-    
+
+    def load_from_artifact(self):
+        """Load files from artifact data for completed galleries"""
+        if not self.artifact_data:
+            return
+
+        # Extract images from artifact
+        images = self.artifact_data.get('images', [])
+
+        for img_data in images:
+            filename = img_data.get('original_filename', '')
+            if not filename:
+                continue
+
+            self.original_files.add(filename)
+            # All artifact images are valid (already uploaded successfully)
+            self.file_status[filename] = (True, "")
+
+            # Add to file list
+            item = QListWidgetItem(filename)
+            item.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_DialogApplyButton))
+            item.setToolTip("Uploaded image")
+            self.file_list.addItem(item)
+
+        # Disable editing for completed galleries
+        self.add_btn.setEnabled(False)
+        self.remove_btn.setEnabled(False)
+        self.add_btn.setToolTip("Cannot modify completed galleries")
+        self.remove_btn.setToolTip("Cannot modify completed galleries")
+
+        self.update_info_label()
+        self.update_button_states()
+
     def scan_files(self, files: List[str]):
         """Scan files for validity in background"""
         if self.scanner and self.scanner.isRunning():
@@ -300,23 +366,63 @@ class GalleryFileManagerDialog(QDialog):
             self.details_text.clear()
     
     def show_file_details(self, filename: str):
-        """Show details for selected file"""
+        """Show details for selected file - from artifact for completed galleries"""
+        # Check if we have artifact data for this file
+        if self.is_completed and self.artifact_data:
+            # Find the image data in the artifact
+            images = self.artifact_data.get('images', [])
+            img_data = None
+            for img in images:
+                if img.get('original_filename') == filename:
+                    img_data = img
+                    break
+
+            if img_data:
+                # Display artifact data with HTML thumbnail
+                details = f"<b>File:</b> {filename}<br><br>"
+
+                # Size
+                size_bytes = img_data.get('size_bytes', 0)
+                if size_bytes:
+                    size_mb = size_bytes / (1024 * 1024)
+                    details += f"<b>Size:</b> {size_mb:.2f} MB<br>"
+
+                # Dimensions
+                width = img_data.get('width', 0)
+                height = img_data.get('height', 0)
+                if width and height:
+                    details += f"<b>Dimensions:</b> {width} x {height}<br>"
+
+                # Upload URLs
+                details += f"<b>Image URL:</b> <a href='{img_data.get('image_url', '')}'>{img_data.get('image_url', '')}</a><br>"
+                details += f"<b>Thumbnail URL:</b> <a href='{img_data.get('thumbnail_url', '')}'>{img_data.get('thumbnail_url', '')}</a><br><br>"
+
+                # BBCode
+                bbcode = img_data.get('bbcode', '')
+                if bbcode:
+                    details += f"<b>BBCode:</b><br><code style='background: #f0f0f0; padding: 5px; display: block;'>{bbcode}</code><br><br>"
+                    hotlink = img_data.get('bbcode','').replace('/u/t/', '/u/i/')
+                    details += f"<b>Hotlink:</b><br><code style='background: #f0f0f0; paddingL: 5px; display: block;'>{hotlink}</code><br>"
+                self.details_text.setHtml(details)
+                return
+
+        # Fallback: show local file details for non-completed galleries
         filepath = os.path.join(self.gallery_path, filename)
-        
+
         details = f"<b>File:</b> {filename}<br><br>"
-        
+
         if os.path.exists(filepath):
             stat = os.stat(filepath)
             size_mb = stat.st_size / (1024 * 1024)
             details += f"<b>Size:</b> {size_mb:.2f} MB<br>"
             details += f"<b>Path:</b> {filepath}<br><br>"
-            
+
             # Add status info
             if filename in self.file_status:
                 is_valid, error_msg = self.file_status[filename]
                 if is_valid:
                     details += "<b>Status:</b> ✅ Valid image<br>"
-                    
+
                     # Try to get dimensions
                     try:
                         from PIL import Image
@@ -329,15 +435,15 @@ class GalleryFileManagerDialog(QDialog):
                     details += f"<b>Status:</b> ❌ {error_msg}<br>"
         else:
             details += "<b>Status:</b> File not found<br>"
-        
+
         # Add action hints
         if filename in self.added_files:
             details += "<br><i>This file was added in this session</i>"
         elif filename in self.removed_files:
             details += "<br><i>This file is marked for removal</i>"
-        
+
         self.details_text.setHtml(details)
-    
+
     def add_files(self):
         """Add files to the gallery"""
         files, _ = QFileDialog.getOpenFileNames(

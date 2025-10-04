@@ -588,7 +588,7 @@ class ComprehensiveSettingsDialog(QDialog):
             
             
         except Exception as e:
-            print(f"Error loading tabs settings: {e}")
+            print(f"{timestamp()} Error loading tabs settings: {e}")
             self._disable_tab_controls()
     
     def _disable_tab_controls(self):
@@ -940,9 +940,9 @@ class ComprehensiveSettingsDialog(QDialog):
         layout.addWidget(strategy_group)
         layout.addStretch()
         
-        # Connect change signals to mark tab as dirty (tab index 5 for scanning)
-        self.fast_scan_check.toggled.connect(lambda: self.mark_tab_dirty(5))
-        self.pil_sampling_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(5))
+        # Connect change signals to mark tab as dirty (tab index 6 for scanning)
+        self.fast_scan_check.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.pil_sampling_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(6))
         
         self.tab_widget.addTab(scanning_widget, "Image Scanning")
     
@@ -1176,7 +1176,7 @@ class ComprehensiveSettingsDialog(QDialog):
                     self.pil_sampling_combo.setCurrentIndex(sampling_index)
                     
         except Exception as e:
-            print(f"Failed to load scanning settings: {e}")
+            print(f"{timestamp()} WARNING: Failed to load scanning settings: {e}")
     
     def _load_tabs_settings(self):
         """Load tabs settings if available"""
@@ -1184,7 +1184,7 @@ class ComprehensiveSettingsDialog(QDialog):
             if hasattr(self, 'load_tabs_settings'):
                 self.load_tabs_settings()
         except Exception as e:
-            print(f"Failed to load tabs settings: {e}")
+            print(f"{timestamp()} WARNING: Failed to load tabs settings: {e}")
         
     def save_settings(self):
         """Save all settings"""
@@ -1213,10 +1213,10 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Save font size
                 if hasattr(self.parent, 'settings'):
                     font_size = self.font_size_spin.value()
-                    print(f"Saving font size to settings: {font_size}")
+                    #print(f"Saving font size to settings: {font_size}")
                     self.parent.settings.setValue('ui/font_size', font_size)
                     if hasattr(self.parent, 'apply_font_size'):
-                        print(f"Applying font size: {font_size}")
+                        #print(f"Applying font size: {font_size}")
                         self.parent.apply_font_size(font_size)
                 
                 # Save scanning settings
@@ -1247,7 +1247,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.parent.settings.setValue('scanning/pil_sampling', sampling_index)
                 
         except Exception as e:
-            print(f"Failed to save scanning settings: {e}")
+            print(f"{timestamp()} WARNING: Failed to save scanning settings: {e}")
     
     def _save_tabs_settings(self):
         """Save tabs settings - handled by TabManager automatically"""
@@ -1269,7 +1269,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Refresh display
                 self.load_tabs_settings()
         except Exception as e:
-            print(f"Failed to reset tabs settings: {e}")
+            print(f"{timestamp()} WARNING: Failed to reset tabs settings: {e}")
             
     def reset_to_defaults(self):
         """Reset all settings to defaults"""
@@ -1425,7 +1425,7 @@ class ComprehensiveSettingsDialog(QDialog):
         if self.save_current_tab():
             self.mark_tab_clean(current_index)
             # Show brief success message in status or log
-            print(f"Applied changes for {tab_name} tab")
+            #print(f"Applied changes for {tab_name} tab")
     
     def save_current_tab(self):
         """Save only the current tab's settings"""
@@ -1434,22 +1434,23 @@ class ComprehensiveSettingsDialog(QDialog):
         try:
             if current_index == 0:  # General tab
                 return self._save_general_tab()
-            elif current_index == 1:  # Credentials tab  
+            elif current_index == 1:  # Credentials tab
                 return self._save_credentials_tab()
             elif current_index == 2:  # Templates tab
                 return self._save_templates_tab()
             elif current_index == 3:  # Tabs tab
                 return self._save_tabs_tab()
-            elif current_index == 4:  # Logs tab
-                return self._save_logs_tab()
-            elif current_index == 5:  # Scanning tab
-                return self._save_scanning_tab()
-            elif current_index == 6:  # Icons tab
+            elif current_index == 4:  # Icon Manager tab
                 return self._save_icons_tab()
+            elif current_index == 5:  # Logs tab
+                return self._save_logs_tab()
+            elif current_index == 6:  # Image Scanning tab
+                self._save_scanning_settings()
+                return True
             else:
                 return True
         except Exception as e:
-            print(f"Error saving tab {current_index}: {e}")
+            print(f"{timestamp()} WARNING: Error saving tab {current_index}: {e}")
             return False
     
     def on_cancel_clicked(self):
@@ -1602,7 +1603,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
         if current_index == 0:  # General tab
             self._reload_general_tab()
-        elif current_index == 5:  # Scanning tab  
+        elif current_index == 6:  # Image Scanning tab
             self._reload_scanning_tab()
         # Other tabs don't have form controls that need reloading
     
@@ -1649,7 +1650,7 @@ class ComprehensiveSettingsDialog(QDialog):
             fast_scan = self.parent.settings.value('scanning/fast_scan', True, type=bool)
             self.fast_scan_check.setChecked(fast_scan)
             
-            sampling_index = self.parent.settings.value('scanning/pil_sampling_index', 2, type=int)
+            sampling_index = self.parent.settings.value('scanning/pil_sampling', 2, type=int)
             if 0 <= sampling_index < self.pil_sampling_combo.count():
                 self.pil_sampling_combo.setCurrentIndex(sampling_index)
     
@@ -1685,7 +1686,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 try:
                     self.parent.uploader.refresh_session_pool()
                 except Exception as e:
-                    print(f"Warning: Failed to refresh connection pool: {e}")
+                    print(f"{timestamp()} WARNING: Failed to refresh connection pool: {e}")
 
             # Save timeout settings
             config.set('DEFAULTS', 'upload_connect_timeout', str(self.connect_timeout_slider.value()))
@@ -1789,19 +1790,19 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Save theme and font size to QSettings
                 if hasattr(self.parent, 'settings'):
                     font_size = self.font_size_spin.value()
-                    print(f"_save_general_tab: Saving font size to settings: {font_size}")
+                    #print(f"_save_general_tab: Saving font size to settings: {font_size}")
                     self.parent.settings.setValue('ui/theme', self.theme_combo.currentText())
                     self.parent.settings.setValue('ui/font_size', font_size)
                     
                     # Apply theme and font size immediately
                     self.parent.apply_theme(self.theme_combo.currentText())
                     if hasattr(self.parent, 'apply_font_size'):
-                        print(f"_save_general_tab: Applying font size: {font_size}")
+                        #print(f"_save_general_tab: Applying font size: {font_size}")
                         self.parent.apply_font_size(font_size)
             
             return True
         except Exception as e:
-            print(f"Error saving general settings: {e}")
+            print(f"{timestamp()} WARNING: Error saving general settings: {e}")
             return False
     
     def _perform_migration_and_restart(self, old_path, new_path):
@@ -1901,7 +1902,7 @@ class ComprehensiveSettingsDialog(QDialog):
             # This tab doesn't have bulk settings to save
             return True
         except Exception as e:
-            print(f"Error saving upload settings: {e}")
+            print(f"{timestamp()} WARNING: Error saving upload settings: {e}")
             return False
     
     def _save_templates_tab(self):
@@ -1911,7 +1912,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 return self.template_dialog.save_template()
             return True
         except Exception as e:
-            print(f"Error saving template settings: {e}")
+            print(f"{timestamp()} WARNING: Error saving template settings: {e}")
             return False
     
     def _save_scanning_tab(self):
@@ -1927,15 +1928,15 @@ class ComprehensiveSettingsDialog(QDialog):
                 config.add_section('SCANNING')
             
             # Save scanning settings
-            config.set('SCANNING', 'fast_scanning', str(self.fast_scanning_cb.isChecked()))
-            config.set('SCANNING', 'pil_sample_count', str(self.pil_sample_spin.value()))
+            config.set('SCANNING', 'fast_scanning', str(self.fast_scan_check.isChecked()))
+            config.set('SCANNING', 'pil_sample_count', str(self.pil_sampling_combo.currentIndex()))
             
             with open(config_file, 'w') as f:
                 config.write(f)
             
             return True
         except Exception as e:
-            print(f"Error saving scanning settings: {e}")
+            print(f"{timestamp()} WARNING: Error saving scanning settings: {e}")
             return False
     
     def _save_tabs_tab(self):
@@ -1954,7 +1955,7 @@ class ComprehensiveSettingsDialog(QDialog):
             # This tab is mostly for viewing/managing tabs, not configuration
             return True
         except Exception as e:
-            print(f"Error saving tab settings: {e}")
+            print(f"{timestamp()} WARNING: Error saving tab settings: {e}")
             return False
     
     def _save_icons_tab(self):
@@ -1975,10 +1976,10 @@ class ComprehensiveSettingsDialog(QDialog):
                 elif hasattr(self, 'parent') and self.parent and hasattr(self.parent, '_update_all_status_icons'):
                     self.parent._update_all_status_icons()
                 
-                print("Icon changes applied successfully")
+                #print("Icon changes applied successfully")
                 return True
             else:
-                print("Warning: IconManager not available")
+                print("{timestamp()} WARNING: IconManager not available")
                 return True
                 
         except Exception as e:
@@ -1994,7 +1995,7 @@ class ComprehensiveSettingsDialog(QDialog):
             # Add any logs-specific settings here if needed in the future
             return True
         except Exception as e:
-            print(f"Error saving logs tab: {e}")
+            print(f"{timestamp()} WARNING: Error saving logs tab: {e}")
             return False
 
     def populate_icon_list(self):
@@ -2162,7 +2163,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.default_status_label.setText("Using: Qt fallback")
                 
         except Exception as e:
-            print(f"Error updating icon preview: {e}")
+            print(f"{timestamp()} WARNING: Error updating icon preview: {e}")
             self.current_icon_label.setText("Error")
     
     def update_icon_previews(self):
@@ -2248,7 +2249,7 @@ class ComprehensiveSettingsDialog(QDialog):
             self._update_reset_button_states(icon_key, icon_config)
                 
         except Exception as e:
-            print(f"Error updating dual icon previews: {e}")
+            print(f"{timestamp()} WARNING: Error updating dual icon previews: {e}")
             self.light_status_label.setText("Error")
             self.dark_status_label.setText("Error")
             self.config_type_label.setText("Configuration: Error")
@@ -2290,7 +2291,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.dark_reset_btn.setEnabled(False)
                 
         except Exception as e:
-            print(f"Error updating reset button states: {e}")
+            print(f"{timestamp()} WARNING: Error updating reset button states: {e}")
             # Enable by default if we can't determine state
             self.light_reset_btn.setEnabled(True)
             self.dark_reset_btn.setEnabled(True)
@@ -2648,7 +2649,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.update_selected_icon_preview(icon_key)
                 
                 # Mark tab as dirty
-                self.mark_tab_dirty(6)  # Icons tab
+                self.mark_tab_dirty(4)  # Icons tab
                 
                 show_info(self, "Icon Reset", 
                                       f"Icon '{self.icon_data[icon_key]['display_name']}' has been reset to default.")

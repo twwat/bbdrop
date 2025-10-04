@@ -44,9 +44,9 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup, QDrag
 
 # Import the core uploader functionality
-from imxup import ImxToUploader, load_user_defaults, timestamp, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from imxup import ImxToUploader, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
 from imxup import create_windows_context_menu, remove_windows_context_menu
-from src.utils.format_utils import format_binary_size, format_binary_rate
+from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
 from src.gui.splash_screen import SplashScreen
 from src.gui.icon_manager import IconManager, init_icon_manager, get_icon_manager
 from src.gui.dialogs.log_viewer import LogViewerDialog
@@ -259,8 +259,7 @@ class UploadWorker(QThread):
             try:
                 self.rename_worker.stop()
             except Exception as e:
-                from imxup import timestamp
-                print(f"DEBUG: Error stopping RenameWorker: {e}")
+                print(f"{timestamp()} DEBUG: Error stopping RenameWorker: {e}")
                 self.log_message.emit(f"{timestamp()} [renaming] Error stopping RenameWorker: {e}")
         self.wait()
     
@@ -279,21 +278,18 @@ class UploadWorker(QThread):
             if self._rename_worker_available:
                 try:
                     from src.processing.rename_worker import RenameWorker
-                    from imxup import timestamp
                     self.rename_worker = RenameWorker(self.uploader)
                     self.log_message.emit(f"{timestamp()} [renaming] RenameWorker initialized successfully")
                 except Exception as e:
-                    from imxup import timestamp
-                    print(f"DEBUG: Failed to initialize RenameWorker in main_window: {e}")
+                    print(f"{timestamp()} DEBUG: Failed to initialize RenameWorker in main_window: {e}")
                     self.log_message.emit(f"{timestamp()} [renaming] Failed to initialize RenameWorker: {e}")
                     self.rename_worker = None
             else:
-                from imxup import timestamp
                 print(f"DEBUG: RenameWorker not available (import failed)")
                 self.log_message.emit(f"{timestamp()} [renaming] RenameWorker not available (import failed)")
             
             # Login once for session reuse
-            self.log_message.emit(f"{timestamp()} [auth] Logging in...")
+            #self.log_message.emit(f"{timestamp()} [auth] Logging in...")
             try:
                 login_success = self.uploader.login()
             except Exception as e:
@@ -310,7 +306,7 @@ class UploadWorker(QThread):
                 elif method == 'api_key':
                     self.log_message.emit(f"{timestamp()} [auth] Using API key authentication (no web login)")
                 elif method == 'none':
-                    self.log_message.emit(f"{timestamp()} [auth] No credentials available; proceeding without web login")
+                    self.log_message.emit(f"{timestamp()} [auth] No credentials available")
             except Exception:
                 pass
             if not login_success:
@@ -366,8 +362,8 @@ class UploadWorker(QThread):
                 
                 if item is None:
                     # Only log timing if get_next_item took significant time
-                    if get_item_duration > 0.0015:
-                        print(f"[TIMING] get_next_item() > 0.0015s: took {get_item_duration:.6f}s (returned None)")
+                    if get_item_duration > 0.005:
+                        print(f"{timestamp()} [TIMING] get_next_item() > 0.005s: took {get_item_duration:.6f}s (returned None)")
                     # Periodically emit queue stats even when idle
                     try:
                         self._emit_queue_stats()
@@ -383,8 +379,8 @@ class UploadWorker(QThread):
                     self.current_item = item
                     self.upload_gallery(item)
                     upload_duration = time.time() - upload_start
-                    print(f"[TIMING] upload_gallery({item.path}) took {upload_duration:.6f}s")
-                    print(f"DEBUG: Upload finished for {item.path}")
+                    print(f"{timestamp()} [TIMING] upload_gallery({item.path}) took {upload_duration:.6f}s")
+                    #print(f"DEBUG: Upload finished for {item.path}")
                 elif item.status == "paused":
                     # Skip paused items
                     try:
@@ -393,7 +389,8 @@ class UploadWorker(QThread):
                         pass
                     time.sleep(0.1)
                 else:
-                    print(f"DEBUG: Item {item.path} has unexpected status: {item.status}")
+                    print(f"{timestamp()} DEBUG: Item {item.path} has unexpected status: {item.status}")
+                    self.log_message.emit(f"{timestamp()} Item {item.path} has unexpected status: {item.status}")
                     # Put item back in queue if not ready
                     try:
                         self._emit_queue_stats()
@@ -402,7 +399,7 @@ class UploadWorker(QThread):
                     time.sleep(0.1)
                 
         except Exception as e:
-            print(f"DEBUG: Worker thread crashed with error: {e}")
+            print(f"{timestamp()} DEBUG: Worker thread crashed with error: {e}")
             import traceback
             traceback.print_exc()
             self.log_message.emit(f"{timestamp()} Worker error: {str(e)}")
@@ -449,6 +446,7 @@ class UploadWorker(QThread):
                 self.log_message.emit(f"{timestamp()} [auth] Login retry failed")
         except Exception as e:
             self.log_message.emit(f"{timestamp()} [auth] Login retry error: {e}")
+            print(f"{timestamp()} DEBUG: Login retry error: {e}")
 
     def request_retry_login(self, credentials_only: bool = False) -> None:
         """Request the worker to retry login on its own thread soon.
@@ -489,7 +487,7 @@ class UploadWorker(QThread):
             except Exception:
                 pass
             signal_duration = time.time() - signal_start
-            print(f"[TIMING] Signal emissions took {signal_duration:.6f}s")
+            #print(f"[TIMING] Signal emissions took {signal_duration:.6f}s")
             
             # If soft stop already requested by the time we start, reflect status to incomplete in UI
             if getattr(self, '_soft_stop_requested_for', None) == item.path:
@@ -499,11 +497,11 @@ class UploadWorker(QThread):
             defaults_start = time.time()
             defaults = load_user_defaults()
             defaults_duration = time.time() - defaults_start
-            print(f"[TIMING] load_user_defaults() took {defaults_duration:.6f}s")
+            #print(f"[TIMING] load_user_defaults() took {defaults_duration:.6f}s")
             
             # Upload with progress tracking
             upload_start = time.time()
-            print(f"[TIMING] About to call uploader.upload_folder() at {upload_start:.6f}")
+            #print(f"[TIMING] About to call uploader.upload_folder() at {upload_start:.6f}")
             results = self.uploader.upload_folder(
                 item.path,
                 gallery_name=item.name,
@@ -514,12 +512,13 @@ class UploadWorker(QThread):
                 template_name=item.template_name
             )
             upload_duration = time.time() - upload_start
-            print(f"[TIMING] uploader.upload_folder() took {upload_duration:.6f}s")
+            #print(f"[TIMING] uploader.upload_folder() took {upload_duration:.6f}s")
             # Defer artifact writing to on_gallery_completed where UI context is available
             
             # Check if item was paused during upload
             if item.status == "paused":
                 self.log_message.emit(f"{timestamp()} Upload paused: {item.name}")
+                print(f"{timestamp()} Upload paused: {item.name}")
                 return
             
             if results:
@@ -531,6 +530,7 @@ class UploadWorker(QThread):
                     self.queue_manager.update_item_status(item.path, "incomplete")
                     item.status = "incomplete"
                     self.log_message.emit(f"{timestamp()} Marked incomplete: {item.name}")
+                    print(f"{timestamp()} Marked incomplete: {item.name}")
                     # Do not emit gallery_failed; just return to allow next item
                     return
                 else:
@@ -587,6 +587,7 @@ class UploadWorker(QThread):
         except Exception as e:
             error_msg = str(e)
             self.log_message.emit(f"{timestamp()} Error uploading {item.name}: {error_msg}")
+            print(f"{timestamp()} Error uploading {item.name}: {error_msg}")
             item.error_message = error_msg
             self.queue_manager.update_item_status(item.path, "failed")
             self.gallery_failed.emit(item.path, error_msg)
@@ -614,6 +615,7 @@ class UploadWorker(QThread):
                 pass
         except Exception as e:
             self.log_message.emit(f"{timestamp()} Artifact save error: {e}")
+            print(f"{timestamp()} Artifact save error: {e}")
     
 
 
@@ -653,6 +655,7 @@ class CompletionWorker(QThread):
                 continue
             except Exception as e:
                 self.log_message.emit(f"{timestamp()} Completion processing error: {e}")
+                print(f"{timestamp()} Completion processing error: {e}")
     
     def _process_completion_background(self, path: str, results: dict, gui_parent):
         """Do the heavy completion processing in background thread"""
@@ -982,7 +985,7 @@ class TabbedGalleryWidget(QWidget):
     def _refresh_tabs(self):
         """Refresh tabs from tab manager"""
         if not self.tab_manager:
-            print("Warning: No tab manager available for TabbedGalleryWidget")
+            print(f"{timestamp()} WARNING: No tab manager available for TabbedGalleryWidget")
             return
 
         # Block tab change signals from saving during restoration
@@ -997,7 +1000,6 @@ class TabbedGalleryWidget(QWidget):
         
         # Get tabs from manager
         manager_tabs = self.tab_manager.get_visible_tab_names()
-        print(f"Debug: TabManager returned {len(manager_tabs)} tabs: {manager_tabs}")
         
         # Restore saved tab order if available
         settings = QSettings()
@@ -1030,7 +1032,7 @@ class TabbedGalleryWidget(QWidget):
                 self.tab_bar.setCurrentIndex(1)
         else:
             # No tabs available, create a default Main tab after "All Tabs"
-            print("Warning: No tabs available, creating default Main tab")
+            print(f"{timestamp()} WARNING: No tabs available, creating default Main tab")
             self.tab_bar.addTab("Main")
             self.tab_bar.setCurrentIndex(1)  # Select Main tab, not "All Tabs"
         
@@ -1100,9 +1102,9 @@ class TabbedGalleryWidget(QWidget):
     
     def _on_galleries_dropped(self, tab_name, gallery_paths):
         """Handle galleries being dropped on a tab"""
-        print(f"DEBUG: _on_galleries_dropped called with tab_name='{tab_name}', {len(gallery_paths)} paths", flush=True)
+        print(f"{timestamp()} DEBUG: _on_galleries_dropped called with tab_name='{tab_name}', {len(gallery_paths)} paths", flush=True)
         if not self.tab_manager or not gallery_paths:
-            print(f"DEBUG: Early return - tab_manager={bool(self.tab_manager)}, gallery_paths={len(gallery_paths) if gallery_paths else 0}", flush=True)
+            print(f"{timestamp()} DEBUG: Early return - tab_manager={bool(self.tab_manager)}, gallery_paths={len(gallery_paths) if gallery_paths else 0}", flush=True)
             return
         
         try:
@@ -1111,7 +1113,7 @@ class TabbedGalleryWidget(QWidget):
             #print(f"DEBUG: move_galleries_to_tab returned moved_count={moved_count}", flush=True)
             
             # Update queue manager's in-memory items to match database
-            print(f"DEBUG: moved_count={moved_count}, has_queue_manager={hasattr(self, 'queue_manager')}, has_tab_manager={bool(self.tab_manager)}")
+            #print(f"DEBUG: moved_count={moved_count}, has_queue_manager={hasattr(self, 'queue_manager')}, has_tab_manager={bool(self.tab_manager)}")
             if moved_count > 0 and hasattr(self, 'queue_manager') and self.tab_manager:
                 updated_count = 0
                 for path in gallery_paths:
@@ -1120,12 +1122,11 @@ class TabbedGalleryWidget(QWidget):
                         old_tab = item.tab_name
                         item.tab_name = tab_name
                         updated_count += 1
-                        print(f"DEBUG: Drag-drop updated item {path} tab: '{old_tab}' -> '{tab_name}'", flush=True)
                         # Verify the change stuck
-                        print(f"DEBUG: Verification - item.tab_name is now '{item.tab_name}'", flush=True)
+                        print(f"DEBUG: Drag-drop updated item {path} tab '{old_tab}' -> '{tab_name}' (item.tab_name is now '{item.tab_name}')", flush=True))
                     else:
                         print(f"DEBUG: No item found for path: {path}", flush=True)
-                print(f"DEBUG: Updated {updated_count} in-memory items out of {len(gallery_paths)} paths")
+                #print(f"DEBUG: Updated {updated_count} in-memory items out of {len(gallery_paths)} paths")
                 
                 # Don't call save_persistent_queue() here - database is already updated
                 # and is the source of truth. QueueManager loads from database on startup.
@@ -1143,22 +1144,23 @@ class TabbedGalleryWidget(QWidget):
                 
                 # Optional: Show feedback message
                 gallery_word = "gallery" if moved_count == 1 else "galleries"
-                print(f"DEBUG: DRAG-DROP PATH - Moved {moved_count} {gallery_word} to '{tab_name}' tab")
+                #print(f"DEBUG: DRAG-DROP PATH - Moved {moved_count} {gallery_word} to '{tab_name}' tab")
                 
         except Exception as e:
-            print(f"DEBUG: Error moving galleries to tab '{tab_name}': {e}")
+            print(f"WARNING: Error moving galleries to tab '{tab_name}': {e}")
+            
     
     def _apply_filter(self, tab_name):
         """Apply filtering to show only rows belonging to the specified tab with intelligent caching"""
         if not self.tab_manager:
             # No filtering if no tab manager
-            print("DEBUG: ERROR: No tab manager available for filtering")
+            print("ERROR: No tab manager available for filtering")
             for row in range(self.gallery_table.rowCount()):
                 self.gallery_table.setRowHidden(row, False)
             return
         
         if not tab_name:
-            print("DEBUG: WARNING: No tab name specified for filtering")
+            print("WARNING: No tab name specified for filtering")
             return
         
         #print(f"Debug: Applying filter for tab: {tab_name}")
@@ -1233,7 +1235,7 @@ class TabbedGalleryWidget(QWidget):
                                 if item.tab_name == tab_name:
                                     should_show = True
                         else:
-                            print(f"DEBUG _apply_filter: parent_window has no queue_manager attribute")
+                            print(f"{timestamp()} WARNING: _apply_filter: parent_window has no queue_manager attribute")
                     
                 visibility_map[row] = should_show
                 self.gallery_table.setRowHidden(row, not should_show)
@@ -1291,7 +1293,7 @@ class TabbedGalleryWidget(QWidget):
             return set()
         
         if not self.tab_manager:
-            print("WARNING: No tab manager available for loading tab galleries")
+            print(f"{timestamp()} WARNING: No tab manager available for loading tab galleries")
             return set()
         
         # CACHING DISABLED - always load fresh from database
@@ -1300,7 +1302,7 @@ class TabbedGalleryWidget(QWidget):
             tab_paths_set = {gallery.get('path') for gallery in tab_galleries if gallery.get('path')}
             #print(f"Debug: Loaded {len(tab_paths_set)} galleries for tab '{tab_name}' (NO CACHE)")
         except Exception as e:
-            print(f"DEBUG: ERROR: Error loading galleries for tab '{tab_name}': {e}")
+            print(f"{timestamp()} ERROR: Error loading galleries for tab '{tab_name}': {e}")
             tab_paths_set = set()
         
         return tab_paths_set
@@ -1796,12 +1798,12 @@ class TabbedGalleryWidget(QWidget):
         
         # Prevent recursive calls completely - return immediately if called again
         if hasattr(self, '_updating_tooltips') and self._updating_tooltips:
-            print(f"DEBUG: _update_tab_tooltips already running, skipping recursion", flush=True)
+            print(f"{timestamp()} DEBUG: _update_tab_tooltips already running, skipping recursion", flush=True)
             return
         
         # Block ALL calls during initialization to prevent infinite loops
         if hasattr(self, '_initializing') and self._initializing:
-            print(f"DEBUG: Still initializing, skipping _update_tab_tooltips", flush=True)
+            print(f"{timestamp()} DEBUG: Still initializing, skipping _update_tab_tooltips", flush=True)
             return
         
         self._updating_tooltips = True
@@ -2532,17 +2534,17 @@ class GalleryTableWidget(QTableWidget):
         if tabbed_widget and hasattr(tabbed_widget, 'tab_manager') and tabbed_widget.tab_manager:
             try:
                 moved_count = tabbed_widget.tab_manager.move_galleries_to_tab(gallery_paths, target_tab)
-                print(f"DEBUG: Right-click move_galleries_to_tab returned moved_count={moved_count}", flush=True)
+                #print(f"DEBUG: Right-click move_galleries_to_tab returned moved_count={moved_count}", flush=True)
                 
                 # Update queue manager's in-memory items to match database
-                print(f"DEBUG: Checking conditions - moved_count={moved_count}, has_queue_manager={hasattr(tabbed_widget, 'queue_manager')}, has_tab_manager={bool(tabbed_widget.tab_manager)}", flush=True)
+                #print(f"DEBUG: Checking conditions - moved_count={moved_count}, has_queue_manager={hasattr(tabbed_widget, 'queue_manager')}, has_tab_manager={bool(tabbed_widget.tab_manager)}", flush=True)
                 
                 # Find the widget with queue_manager
                 queue_widget = tabbed_widget
                 while queue_widget and not hasattr(queue_widget, 'queue_manager'):
                     queue_widget = queue_widget.parent()
                 
-                print(f"DEBUG: Found queue_widget={bool(queue_widget)}, has_queue_manager={hasattr(queue_widget, 'queue_manager') if queue_widget else False}", flush=True)
+                #print(f"DEBUG: Found queue_widget={bool(queue_widget)}, has_queue_manager={hasattr(queue_widget, 'queue_manager') if queue_widget else False}", flush=True)
                 
                 if moved_count > 0 and queue_widget and hasattr(queue_widget, 'queue_manager') and tabbed_widget.tab_manager:
                     # Get the tab_id for the target tab
@@ -2576,10 +2578,10 @@ class GalleryTableWidget(QTableWidget):
                     
                     # Show feedback message
                     gallery_word = "gallery" if moved_count == 1 else "galleries"
-                    print(f"DEBUG: RIGHT-CLICK PATH - Moved {moved_count} {gallery_word} to '{target_tab}' tab")
+                    #print(f"DEBUG: RIGHT-CLICK PATH - Moved {moved_count} {gallery_word} to '{target_tab}' tab")
                     
             except Exception as e:
-                print(f"ERROR: Error moving galleries to tab '{target_tab}': {e}")
+                print(f"{timestamp()} ERROR: Error moving galleries to tab '{target_tab}': {e}")
     
     def manage_gallery_files(self, path: str):
         """Open the file manager dialog for a gallery"""
@@ -2841,8 +2843,7 @@ class GalleryTableWidget(QTableWidget):
                     started_paths.append(path)
         if started:
             if hasattr(widget, 'add_log_message'):
-                timestamp_func = getattr(widget, '_timestamp', lambda: time.strftime("%H:%M:%S"))
-                widget.add_log_message(f"{timestamp_func()} Started {started} selected item(s)")
+                widget.add_log_message(f"{timestamp()} Started {started} selected item(s)")
             # Update only the affected rows instead of full table refresh
             if hasattr(widget, '_update_specific_gallery_display'):
                 for path in started_paths:
@@ -2984,16 +2985,16 @@ class GalleryTableWidget(QTableWidget):
         while widget and not hasattr(widget, 'queue_manager'):
             widget = widget.parent()
         if not widget:
-            print("DEBUG: No widget with queue_manager found")
+            print(f"{timestamp()} WARNING: No widget with queue_manager found")
             return
         # Aggregate BBCode contents; reuse copy function to centralize path lookup
         contents = []
         for path in paths:
             item = widget.queue_manager.get_item(path)
             if not item:
-                print(f"DEBUG: No item found for path: {path}")
+                print(f"{timestamp()} DEBUG: No item found for path: {path}")
                 continue
-            print(f"DEBUG: Item status: {item.status}, gallery_id: {getattr(item, 'gallery_id', 'MISSING')}")
+            #print(f"DEBUG: Item status: {item.status}, gallery_id: {getattr(item, 'gallery_id', 'MISSING')}")
             if item.status != "completed":
                 continue
             # Inline read similar to copy_bbcode_to_clipboard to avoid changing it
@@ -3005,32 +3006,32 @@ class GalleryTableWidget(QTableWidget):
                 #print(f"DEBUG: Using widget._get_central_storage_path: {central_path}")
             else:
                 central_path = os.path.expanduser("~/.imxup/galleries")
-                print(f"DEBUG: Using fallback central_path: {central_path}")
+                print(f"{timestamp()} DEBUG: Using fallback central_path: {central_path}")
             if item.gallery_id and (item.name or folder_name):
-                print(f"DEBUG: Has gallery_id and name, item.name: {getattr(item, 'name', 'MISSING')}")
+                #print(f"DEBUG: Has gallery_id and name, item.name: {getattr(item, 'name', 'MISSING')}")
                 if hasattr(widget, '_build_gallery_filenames'):
                     _, _, bbcode_filename = widget._build_gallery_filenames(item.name or folder_name, item.gallery_id)
                 else:
                     # No sanitization - only rename worker should sanitize
                     gallery_name = item.name or folder_name
                     bbcode_filename = f"{gallery_name}_{item.gallery_id}_bbcode.txt"
-                    print(f"DEBUG: Using fallback filename: {bbcode_filename}")
+                    print(f"{timestamp()} DEBUG: Using fallback filename: {bbcode_filename}")
                 central_bbcode = os.path.join(central_path, bbcode_filename)
             else:
                 central_bbcode = os.path.join(central_path, f"{folder_name}_bbcode.txt")
-                print(f"DEBUG: Using folder_name fallback: {central_bbcode}")
-            print(f"DEBUG: Looking for BBCode file: {central_bbcode}  File exists: {os.path.exists(central_bbcode)}")
+                print(f"{timestamp()} DEBUG: Using folder_name fallback: {central_bbcode}")
+            #print(f"DEBUG: Looking for BBCode file: {central_bbcode}  File exists: {os.path.exists(central_bbcode)}")
 
             # If exact file doesn't exist, try pattern-based lookup
             if not os.path.exists(central_bbcode) and item.gallery_id:
                 import glob
-                print(f"DEBUG: Exact file not found, trying pattern for gallery_id: {item.gallery_id}")
+                #print(f"DEBUG: Exact file not found, trying pattern for gallery_id: {item.gallery_id}")
                 pattern = os.path.join(central_path, f"*_{item.gallery_id}_bbcode.txt")
                 matches = glob.glob(pattern)
-                print(f"DEBUG: Pattern '{pattern}' found {len(matches)} matches: {matches}")
+                #print(f"DEBUG: Pattern '{pattern}' found {len(matches)} matches: {matches}")
                 if matches:
                     central_bbcode = matches[0]
-                    print(f"DEBUG: Using pattern match: {central_bbcode}")
+                    #print(f"DEBUG: Using pattern match: {central_bbcode}")
 
             # Move file I/O to background to avoid blocking GUI
             def _read_bbcode_async():
@@ -3430,7 +3431,7 @@ class ImxUploadGUI(QMainWindow):
     def __init__(self, splash=None):
         self._initializing = True  # Block recursive calls during init
         super().__init__()
-        print(f"DEBUG: QMainWindow.__init__ completed")
+        print(f"{timestamp()} QMainWindow.__init__ completed")
         self.splash = splash
         # Initialize IconManager
         if self.splash:
@@ -3441,7 +3442,7 @@ class ImxUploadGUI(QMainWindow):
             # Validate icons and report any issues
             validation_result = icon_mgr.validate_icons(report=True)
         except Exception as e:
-            print(f"WARNING: Failed to initialize IconManager: {e}")
+            print(f"{timestamp()} WARNING: Failed to initialize IconManager: {e}")
             
             
         # Set main window icon
@@ -3555,7 +3556,7 @@ class ImxUploadGUI(QMainWindow):
                         self.context_menu_helper.show_context_menu_for_table(actual_table, position)
                     actual_table.show_context_menu = new_show_context_menu
         except Exception as e:
-            print(f"Warning: Could not connect context menu helper: {e}")
+            print(f"{timestamp()} WARNING: Could not connect context menu helper: {e}")
         
         if self.splash:
             self.splash.set_status("Menu Bar")
@@ -3672,7 +3673,7 @@ class ImxUploadGUI(QMainWindow):
         self._update_button_counts() # Initial button count update
         self.gallery_table.setFocus() # Ensure table has focus for keyboard shortcuts
         self._initializing = False # Clear initialization flag to allow normal tooltip updates
-        print("DEBUG: ImxUploadGUI.__init__ Completed")
+        print(f"{timestamp()} ImxUploadGUI.__init__ Completed")
 
     def refresh_filter(self):
         """Refresh current tab filter on the embedded tabbed gallery widget."""
@@ -3684,7 +3685,7 @@ class ImxUploadGUI(QMainWindow):
     
     def on_galleries_moved_to_tab(self, new_tab_name, gallery_paths):
         """Handle galleries being moved to a different tab - DATABASE ALREADY UPDATED BY DRAG-DROP HANDLER"""
-        print(f"DEBUG: on_galleries_moved_to_tab called with {len(gallery_paths)} paths to '{new_tab_name}' - database already updated", flush=True)
+        #print(f"DEBUG: on_galleries_moved_to_tab called with {len(gallery_paths)} paths to '{new_tab_name}' - database already updated", flush=True)
         try:
             # Update the MAIN WINDOW queue manager's in-memory items to match database
             if hasattr(self, 'queue_manager') and hasattr(self, 'tab_manager'):
@@ -3697,7 +3698,7 @@ class ImxUploadGUI(QMainWindow):
                         old_tab = item.tab_name
                         item.tab_name = new_tab_name
                         item.tab_id = tab_id
-                        print(f"DEBUG: Drag-drop updated MAIN WINDOW item {path} tab: '{old_tab}' -> '{new_tab_name}'", flush=True)
+                        #print(f"DEBUG: Drag-drop updated MAIN WINDOW item {path} tab: '{old_tab}' -> '{new_tab_name}'", flush=True)
             
             # Invalidate cache and refresh MAIN WINDOW display
             if hasattr(self, 'tab_manager'):
@@ -3706,7 +3707,8 @@ class ImxUploadGUI(QMainWindow):
                     self.gallery_table._update_tab_tooltips()
                 
         except Exception as e:
-            print(f"Error handling gallery move to tab '{new_tab_name}': {e}")
+            print(f"{timestamp()} ERROR handling gallery move to tab '{new_tab_name}': {e}")
+            self.add_log_message(f"{timestamp()} ERROR handling gallery move to tab '{new_tab_name}': {e}")
     
     # ----------------------------- Background Tab Update System -----------------------------
     
@@ -4014,7 +4016,7 @@ class ImxUploadGUI(QMainWindow):
         """
         # Validate row bounds to prevent setting icons on wrong rows
         if row < 0 or row >= self.gallery_table.rowCount():
-            print(f"DEBUG: _set_status_cell_icon: Invalid row {row}, table has {self.gallery_table.rowCount()} rows")
+            print(f"{timestamp()} DEBUG: _set_status_cell_icon: Invalid row {row}, table has {self.gallery_table.rowCount()} rows")
             return
         
         try:
@@ -4236,7 +4238,7 @@ class ImxUploadGUI(QMainWindow):
                     item.setText("")
                 else:
                     item.setText("✓")
-                    print(f"DEBUG: Using fallback text for renamed_true")
+                    print(f"{timestamp()} DEBUG: Using fallback text for renamed_true")
             elif is_renamed is False:
                 icon = get_icon('renamed_false', QStyle.StandardPixmap.SP_ComputerIcon, self.style())
                 tooltip = "Pending rename"
@@ -4246,7 +4248,7 @@ class ImxUploadGUI(QMainWindow):
                     item.setText("")
                 else:
                     item.setText("⏳")
-                    print(f"DEBUG: Using fallback text for renamed_false")
+                    print(f"{timestamp()} DEBUG: Using fallback text for renamed_false")
             else:
                 # None/blank - no icon or text
                 item.setIcon(QIcon())
@@ -5012,7 +5014,7 @@ class ImxUploadGUI(QMainWindow):
     def check_credentials(self):
         """Prompt to set credentials only if API key is not set."""
         if not api_key_is_set():
-            print(f"DEBUG: No API key, showing credential dialog")
+            print(f"{timestamp()} No API key, showing credential dialog")
             self.add_log_message(f"{timestamp()} [auth] No API key, showing credential dialog")
             dialog = CredentialSetupDialog(self)
             # Use non-blocking show() instead of blocking exec() to prevent GUI freezing
@@ -5393,11 +5395,9 @@ class ImxUploadGUI(QMainWindow):
             # Save the current font size
             if hasattr(self, 'settings'):
                 self.settings.setValue('ui/font_size', font_size)
-
-            print(f"Applied font size: {font_size}pt")
             
         except Exception as e:
-            print(f"Error applying font size: {e}")
+            print(f"{timestamp()} WARNING: Error applying font size: {e}")
     
     def _get_current_font_size(self) -> int:
         """Get the current font size setting"""
@@ -5460,7 +5460,7 @@ class ImxUploadGUI(QMainWindow):
             self.worker.bandwidth_updated.connect(self.on_bandwidth_updated)
             self.worker.queue_stats.connect(self.on_queue_stats)
             self.worker.start()
-            print(f"DEBUG: Worker.isRunning():", self.worker.isRunning())
+            #print(f"{timestamp()} DEBUG: Worker.isRunning():", self.worker.isRunning())
             self.add_log_message(f"{timestamp()} [general] Worker thread started")
             # Propagate auto-rename preference to worker
             try:
@@ -5581,11 +5581,14 @@ class ImxUploadGUI(QMainWindow):
 
     def on_queue_item_status_changed(self, path: str, old_status: str, new_status: str):
         """Handle individual queue item status changes"""
-        print(f"DEBUG: GUI received status change signal: {path} from {old_status} to {new_status}")
+        item = self.queue_manager.get_item(path)
+        scan_status = item.scan_complete if item else "NO_ITEM"
+        in_mapping = path in self.path_to_row
+        #print(f"DEBUG: GUI received status change signal: {path} from {old_status} to {new_status}, scan_complete={scan_status}, in_path_to_row={in_mapping}")
         
         # When an item goes from scanning to ready, just update tab counts
         if old_status == "scanning" and new_status == "ready":
-            print(f"DEBUG: Item completed scanning, updating tab counts")
+            #print(f"DEBUG: Item completed scanning, updating tab counts")
             # Just update the tab counts, don't refresh the filter which hides items
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(150, lambda: self.gallery_table._update_tab_tooltips() if hasattr(self.gallery_table, '_update_tab_tooltips') else None)
@@ -5668,7 +5671,7 @@ class ImxUploadGUI(QMainWindow):
     
     def add_folders(self, folder_paths: List[str]):
         """Add folders to the upload queue with duplicate detection"""
-        print(f"DEBUG: add_folders called with {len(folder_paths)} paths")
+        #print(f"{timestamp()} DEBUG: add_folders called with {len(folder_paths)} paths")
         
         if len(folder_paths) == 1:
             # Single folder - use the old method for backward compatibility
@@ -5679,7 +5682,7 @@ class ImxUploadGUI(QMainWindow):
     
     def _add_single_folder(self, path: str):
         """Add a single folder with duplicate detection."""
-        print(f"DEBUG: _add_single_folder called with path={path}")
+        #print(f"{timestamp()} DEBUG: _add_single_folder called with path={path}")
         
         # Use duplicate detection for single folders too
         folder_name = os.path.basename(path)
@@ -5725,7 +5728,7 @@ class ImxUploadGUI(QMainWindow):
         template_name = self.template_combo.currentText()
         # Get current tab BEFORE adding item
         current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
-        print(f"DEBUG: Single folder - adding to tab: {current_tab}")
+        #print(f"{timestamp()} DEBUG: Single folder - adding to tab: {current_tab}")
         result = self.queue_manager.add_item(path, template_name=template_name, tab_name=current_tab)
         
         if result == True:
@@ -5735,7 +5738,8 @@ class ImxUploadGUI(QMainWindow):
             if item:
                 self._add_gallery_to_table(item)
                 # Force immediate table refresh to ensure visibility and update tab counts
-                QTimer.singleShot(50, self._update_scanned_rows)
+                # TESTING: Comment out _update_scanned_rows to see if it's causing race condition
+                #QTimer.singleShot(50, self._update_scanned_rows)
                 QTimer.singleShot(100, lambda: self._update_tab_tooltips() if hasattr(self, '_update_tab_tooltips') else None)
         else:
             self.add_log_message(f"{timestamp()} [queue] Failed to add: {os.path.basename(path)} (no images found)")
@@ -5843,7 +5847,9 @@ class ImxUploadGUI(QMainWindow):
             
             # Force immediate table refresh to ensure visibility
             if results.get('added_paths'):
-                QTimer.singleShot(50, self._update_scanned_rows)
+                # TESTING: Comment out _update_scanned_rows to see if it's causing race condition
+                #QTimer.singleShot(50, self._update_scanned_rows)
+                pass
             
         except Exception as e:
             self.add_log_message(f"{timestamp()} [queue] Error adding multiple folders: {str(e)}")
@@ -5866,11 +5872,11 @@ class ImxUploadGUI(QMainWindow):
             
             # Process folders that passed duplicate checks
             if folders_to_add_normally:
-                print(f"DEBUG: Adding {len(folders_to_add_normally)} folders normally")
+                #print(f"DEBUG: Adding {len(folders_to_add_normally)} folders normally")
                 template_name = self.template_combo.currentText()
                 # Get current tab BEFORE adding items
                 current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
-                print(f"DEBUG: Multiple folders - adding to tab: {current_tab}")
+                #print(f"{timestamp()} DEBUG: Multiple folders - adding to tab: {current_tab}")
                 
                 for folder_path in folders_to_add_normally:
                     try:
@@ -5884,17 +5890,17 @@ class ImxUploadGUI(QMainWindow):
                             
                             self.add_log_message(f"{timestamp()} [queue] Added to queue: {os.path.basename(folder_path)}")
                     except Exception as e:
-                        print(f"DEBUG: Error adding folder {folder_path}: {e}")
+                        print(f"{timestamp()} DEBUG: Error adding folder {folder_path}: {e}")
                         self.add_log_message(f"Error adding {os.path.basename(folder_path)}: {e}")
             
             # Process folders that should replace existing queue items
             if folders_to_replace_in_queue:
-                print(f"DEBUG: Replacing {len(folders_to_replace_in_queue)} folders in queue")
+                #print(f"{timestamp()} DEBUG: Replacing {len(folders_to_replace_in_queue)} folders in queue")
                 template_name = self.template_combo.currentText()
                 # Get current tab for replacements too
                 if 'current_tab' not in locals():
                     current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
-                    print(f"DEBUG: Multiple folders replacement - adding to tab: {current_tab}")
+                    #print(f"{timestamp()} DEBUG: Multiple folders replacement - adding to tab: {current_tab}")
                 
                 for folder_path in folders_to_replace_in_queue:
                     try:
@@ -5913,7 +5919,7 @@ class ImxUploadGUI(QMainWindow):
                         
                         self.add_log_message(f"Replaced {os.path.basename(folder_path)} in queue")
                     except Exception as e:
-                        print(f"DEBUG: Error replacing folder {folder_path}: {e}")
+                        print(f"{timestamp()} DEBUG: Error replacing folder {folder_path}: {e}")
                         self.add_log_message(f"Error replacing {os.path.basename(folder_path)}: {e}")
             
             # Update display
@@ -5921,11 +5927,12 @@ class ImxUploadGUI(QMainWindow):
             if total_processed > 0:
                 self.add_log_message(f"Added {total_processed} galleries to queue")
                 # Trigger table refresh and update tab counts/tooltips
-                QTimer.singleShot(50, self._update_scanned_rows)
+                # TESTING: Comment out _update_scanned_rows to see if it's causing race condition
+                #QTimer.singleShot(50, self._update_scanned_rows)
                 QTimer.singleShot(100, lambda: self._update_tab_tooltips() if hasattr(self, '_update_tab_tooltips') else None)
             
         except Exception as e:
-            print(f"DEBUG: Error in duplicate detection: {e}")
+            print(f"{timestamp()} DEBUG: Error in duplicate detection: {e}")
             self.add_log_message(f"Error processing folders: {e}")
     
     def add_folder_from_command_line(self, folder_path: str):
@@ -5941,18 +5948,20 @@ class ImxUploadGUI(QMainWindow):
     
     def _add_gallery_to_table(self, item: GalleryQueueItem):
         """Add a new gallery item to the table without rebuilding"""
-        print(f"DEBUG: _add_gallery_to_table called for {item.path} with tab_name={item.tab_name}")
+        #print(f"{timestamp()} DEBUG: _add_gallery_to_table called for {item.path} with tab_name={item.tab_name}")
         
         row = self.gallery_table.rowCount()
         self.gallery_table.setRowCount(row + 1)
-        print(f"DEBUG: Adding gallery to table at row {row}")
+        #print(f"{timestamp()} DEBUG: Adding gallery to table at row {row}")
         
         # Update mappings
         self.path_to_row[item.path] = row
         self.row_to_path[row] = item.path
-        
+        #print(f"{timestamp()} DEBUG: Added {item.path} to path_to_row at row {row}, scan_complete={item.scan_complete}, status={item.status}")
+
         # Initialize scan state tracking
         self._last_scan_states[item.path] = item.scan_complete
+        print(f"{timestamp()} DEBUG: Initialized _last_scan_states[{item.path}] = {item.scan_complete}")
         
         # Populate the new row
         self._populate_table_row(row, item)
@@ -5961,10 +5970,10 @@ class ImxUploadGUI(QMainWindow):
         current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else None
         if current_tab and (current_tab == "All Tabs" or item.tab_name == current_tab):
             self.gallery_table.setRowHidden(row, False)
-            #print(f"DEBUG: Row {row} set visible for current tab {current_tab}")
+            #print(f"{timestamp()} DEBUG: Row {row} set VISIBLE for current tab '{current_tab}' (item tab: '{item.tab_name}')")
         else:
             self.gallery_table.setRowHidden(row, True)
-            #print(f"DEBUG: Row {row} hidden - item tab {item.tab_name} != current tab {current_tab}")
+            #print(f"{timestamp()} DEBUG: Row {row} set HIDDEN - item tab '{item.tab_name}' != current tab '{current_tab}'")
         
         # Invalidate TabManager's cache for this tab so it reloads from database
         if hasattr(self.gallery_table, 'tab_manager') and item.tab_name:
@@ -6052,15 +6061,16 @@ class ImxUploadGUI(QMainWindow):
             return
         
         # Get current font sizes
-            
-        # If this is a new item, add it to the table
+
+        # If item not in table, skip update (it should be added explicitly via add_folders)
+        # This prevents duplicate additions via status change signals
         if path not in self.path_to_row:
-            self._add_gallery_to_table(item)
+            print(f"{timestamp()} DEBUG: Item {path} not in path_to_row, skipping update (prevents duplicates)")
             return
         
         # Check if row is currently visible for performance optimization
         row = self.path_to_row.get(path)
-        print(f"DEBUG: _update_specific_gallery_display - row={row}, path_to_row has path: {path in self.path_to_row}")
+        print(f"{timestamp()} DEBUG: _update_specific_gallery_display - row={row}, path_to_row has path: {path in self.path_to_row}")
         if row is not None and 0 <= row < self.gallery_table.rowCount():
             #print(f"DEBUG: Row {row} is valid, checking update queue")
             # Use table update queue for visible rows (includes hidden row filtering)
@@ -6068,7 +6078,7 @@ class ImxUploadGUI(QMainWindow):
                 #print(f"DEBUG: Using _table_update_queue to update row {row}")
                 self._table_update_queue.queue_update(path, item, 'full')
             else:
-                print(f"DEBUG: No _table_update_queue, using direct update for row {row}")
+                print(f"{timestamp()} WARNING: No _table_update_queue, using direct update for row {row}")
                 # Fallback to direct update
                 QTimer.singleShot(0, lambda: self._populate_table_row(row, item))
         else:
@@ -6144,7 +6154,7 @@ class ImxUploadGUI(QMainWindow):
             # PyQt is retarded, manually set font
             self.gallery_table.setItem(row, 2, uploaded_item)
         else:
-                        print(f"DEBUG: No uploaded column set because total_images={total_images} <= 0")
+            print(f"{timestamp()} DEBUG: No uploaded column set because total_images={total_images} <= 0")
         
         # Progress bar
         progress_widget = self.gallery_table.cellWidget(row, 3)
@@ -6435,6 +6445,7 @@ class ImxUploadGUI(QMainWindow):
                 # Scan completion status changed, update this row
                 self._last_scan_states[item.path] = current_state
                 updated_any = True
+                #print(f"DEBUG: _update_scanned_rows - Scan state changed for {item.path}: {last_state} -> {current_state}, status={item.status}")
                 # Scan state changed
                 
                 # Only update the specific row that changed
@@ -6464,7 +6475,7 @@ class ImxUploadGUI(QMainWindow):
                     # Update action column (column 7) for any status change
                     action_widget = self.gallery_table.cellWidget(row, 7)
                     if isinstance(action_widget, ActionButtonWidget):
-                        print(f"DEBUG: Updating action buttons for {item.path}, status: {item.status}")
+                        #print(f"DEBUG: Updating action buttons for {item.path}, status: {item.status}")
                         action_widget.update_buttons(item.status)
                         if item.status == "ready":
                             action_widget.start_btn.setEnabled(True)
@@ -7432,9 +7443,11 @@ class ImxUploadGUI(QMainWindow):
                     return True
                 else:
                     print(f"Failed to start upload for: {path}")
+                    self.add_log_message(f"{timestamp()} [queue] Failed to start upload for: {path}")
                     return False
             else:
                 print(f"Cannot start upload for item with status: {item.status}")
+                self.add_log_message(f"{timestamp()} [queue] Cannot start upload for item with status: {item.status}")
                 return False
         except Exception as e:
             print(f"Error starting upload for {path}: {e}")
@@ -7456,21 +7469,17 @@ class ImxUploadGUI(QMainWindow):
             # For upload failures, retry the upload
             self.start_upload_for_item(path)
         elif item.status == "scan_failed" or item.status == "failed":
-            # For scan failures or generic failures, find widget with manage_gallery_files method
-            widget = self
-            while widget:
-                if hasattr(widget, 'manage_gallery_files') and widget != self:
-                    widget.manage_gallery_files(path)
-                    return
-                widget = widget.parent()
+            # For scan failures or generic failures, open gallery file manager
+            # The manage_gallery_files method is in GalleryTableWidget (self.gallery_table.gallery_table)
+            if hasattr(self.gallery_table, 'gallery_table') and hasattr(self.gallery_table.gallery_table, 'manage_gallery_files'):
+                self.gallery_table.gallery_table.manage_gallery_files(path)
+                return
         else:
-            # For other statuses (uploading, paused, etc.), find widget with manage_gallery_files method
-            widget = self
-            while widget:
-                if hasattr(widget, 'manage_gallery_files') and widget != self:
-                    widget.manage_gallery_files(path)
-                    return
-                widget = widget.parent()
+            # For other statuses (uploading, paused, etc.), open gallery file manager
+            # The manage_gallery_files method is in GalleryTableWidget (self.gallery_table.gallery_table)
+            if hasattr(self.gallery_table, 'gallery_table') and hasattr(self.gallery_table.gallery_table, 'manage_gallery_files'):
+                self.gallery_table.gallery_table.manage_gallery_files(path)
+                return
     
     
     def view_bbcode_files(self, path: str):
@@ -7503,12 +7512,11 @@ class ImxUploadGUI(QMainWindow):
         from imxup import build_gallery_filenames
         item = self.queue_manager.get_item(path)
         if item and item.gallery_id and (item.name or folder_name):
-            print(f"DEBUG BBcode copy: item.name='{item.name}', folder_name='{folder_name}', gallery_id='{item.gallery_id}'")
+            #print(f"DEBUG BBcode copy: item.name='{item.name}', folder_name='{folder_name}', gallery_id='{item.gallery_id}'")
             _, _, bbcode_filename = build_gallery_filenames(item.name or folder_name, item.gallery_id)
-            print(f"DEBUG BBCode copy: Looking for bbcode_filename='{bbcode_filename}'")
+            #print(f"DEBUG BBCode copy: Looking for bbcode_filename='{bbcode_filename}'")
             central_bbcode = os.path.join(central_path, bbcode_filename)
-            print(f"DEBUG BBCode copy: central_bbcode path='{central_bbcode}'")
-            print(f"DEBUG BBCode copy: central_bbcode exists? {os.path.exists(central_bbcode)}")
+            print(f"{timestamp()} DEBUG: bbcode copy central_bbcode path='{central_bbcode}' Exists={os.path.exists(central_bbcode)}")
         else:
             central_bbcode = os.path.join(central_path, f"{folder_name}_bbcode.txt") # Fallback to old format for existing files
         
@@ -7523,13 +7531,13 @@ class ImxUploadGUI(QMainWindow):
             # Try pattern-based lookup using gallery_id if exact filename fails
             if item and item.gallery_id:
                 import glob
-                print(f"DEBUG BBCode copy: Exact filename not found, trying pattern-based lookup for gallery_id '{item.gallery_id}'")
+                #print(f"{timestamp()} DEBUG BBCode copy: Exact filename not found, trying pattern-based lookup for gallery_id '{item.gallery_id}'")
                 pattern = os.path.join(central_path, f"*_{item.gallery_id}_bbcode.txt")
                 matches = glob.glob(pattern)
-                print(f"DEBUG BBCode copy: Pattern '{pattern}' found {len(matches)} matches: {matches}")
+                #print(f"DEBUG BBCode copy: Pattern '{pattern}' found {len(matches)} matches: {matches}")
                 if matches:
                     central_bbcode = matches[0]  # Use first match
-                    print(f"DEBUG BBCode copy: Using pattern match: '{central_bbcode}'")
+                    #print(f"{timestamp()} DEBUG BBCode copy: Using pattern match: '{central_bbcode}'")
                     if os.path.exists(central_bbcode):
                         with open(central_bbcode, 'r', encoding='utf-8') as f:
                             content = f.read()
@@ -7559,12 +7567,12 @@ class ImxUploadGUI(QMainWindow):
     def start_all_uploads(self):
         """Start all ready uploads"""
         start_time = time.time()
-        print(f"[TIMING] start_all_uploads() started at {start_time:.6f}")
+        print(f"{timestamp()} [TIMING] start_all_uploads() started at {start_time:.6f}")
         
         get_items_start = time.time()
         items = self._get_current_tab_items()
         get_items_duration = time.time() - get_items_start
-        print(f"[TIMING] _get_current_tab_items() took {get_items_duration:.6f}s")
+        #print(f"[TIMING] _get_current_tab_items() took {get_items_duration:.6f}s")
         
         started_count = 0
         started_paths = []
@@ -7577,15 +7585,16 @@ class ImxUploadGUI(QMainWindow):
                     start_item_begin = time.time()
                     if self.queue_manager.start_item(item.path):
                         start_item_duration = time.time() - start_item_begin
-                        print(f"[TIMING] start_item({item.path}) took {start_item_duration:.6f}s")
+                        print(f"{timestamp()} [TIMING] start_item({item.path}) took {start_item_duration:.6f}s")
                         started_count += 1
                         started_paths.append(item.path)
                     else:
                         start_item_duration = time.time() - start_item_begin
-                        print(f"[TIMING] start_item({item.path}) failed in {start_item_duration:.6f}s")
+                        print(f"{timestamp()} [TIMING] start_item({item.path}) failed in {start_item_duration:.6f}s")
+                        self.add_log_message(f"{timestamp()} [TIMING] start_item({item.path}) failed in {start_item_duration:.6f}s")
         
         item_processing_duration = time.time() - item_processing_start
-        print(f"[TIMING] Processing all items took {item_processing_duration:.6f}s")
+        print(f"{timestamp()} [TIMING] Processing all items took {item_processing_duration:.6f}s")
         
         ui_update_start = time.time()
         if started_count > 0:
@@ -7599,10 +7608,10 @@ class ImxUploadGUI(QMainWindow):
             self.add_log_message(f"{timestamp()} No items to start")
         
         ui_update_duration = time.time() - ui_update_start
-        print(f"[TIMING] UI updates took {ui_update_duration:.6f}s")
+        print(f"{timestamp()} [TIMING] UI updates took {ui_update_duration:.6f}s")
         
         total_duration = time.time() - start_time
-        print(f"[TIMING] start_all_uploads() completed in {total_duration:.6f}s total")
+        print(f"{timestamp()} [TIMING] start_all_uploads() completed in {total_duration:.6f}s total")
     
     def pause_all_uploads(self):
         """Reset all queued items back to ready (acts like Cancel for queued) - tab-specific"""
@@ -7839,7 +7848,6 @@ class ImxUploadGUI(QMainWindow):
         # Apply saved font size
         try:
             font_size = int(self.settings.value('ui/font_size', 9))
-            print(f"Loading font size from settings: {font_size}")
             self.apply_font_size(font_size)
         except Exception as e:
             print(f"Error loading font size: {e}")
@@ -8083,24 +8091,34 @@ class ImxUploadGUI(QMainWindow):
     def closeEvent(self, event):
         """Handle window close"""
         self.save_settings()
-        
+
         # Save queue state (deferred to prevent blocking shutdown)
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(10, self.queue_manager.save_persistent_queue)
-      
+
         self.queue_manager.shutdown()
-        
+
+        # Stop batchers and cleanup timers
+        if hasattr(self, '_progress_batcher'):
+            self._progress_batcher.cleanup()
+        if hasattr(self, '_table_update_queue'):
+            self._table_update_queue.cleanup()
+        if hasattr(self, '_background_update_timer') and self._background_update_timer.isActive():
+            self._background_update_timer.stop()
+        if hasattr(self, 'update_timer') and self.update_timer.isActive():
+            self.update_timer.stop()
+
         # Always stop workers and server on close
         if self.worker:
             self.worker.stop()
-        
+
         # Stop completion worker
         if hasattr(self, 'completion_worker'):
             self.completion_worker.stop()
             self.completion_worker.wait(3000)  # Wait up to 3 seconds for shutdown
-            
+
         self.server.stop()
-        
+
         # Accept the close event to ensure app exits
         event.accept()
 
@@ -8130,12 +8148,12 @@ class ImxUploadGUI(QMainWindow):
         # Get gallery path the same way as context menu - from column 1 UserRole data
         name_item = table.item(row, 1)  # Gallery name column
         if not name_item:
-            print(f"DEBUG: No item found at row {row}, column 1")
+            print(f"{timestamp()} DEBUG: No item found at row {row}, column 1")
             return
         
         gallery_path = name_item.data(Qt.ItemDataRole.UserRole)
         if not gallery_path:
-            print(f"DEBUG: No UserRole data in gallery name column")
+            print(f"{timestamp()} DEBUG: No UserRole data in gallery name column")
             return
 
         # Get current template
@@ -8167,7 +8185,7 @@ class ImxUploadGUI(QMainWindow):
 
     def update_gallery_template(self, row, gallery_path, new_template, combo_widget):
         """Update template for a gallery and regenerate BBCode if needed."""
-        print(f"DEBUG: update_gallery_template called - row={row}, path={gallery_path}, new_template={new_template}")
+        print(f"{timestamp()} DEBUG: update_gallery_template called - row={row}, path={gallery_path}, new_template={new_template}")
         try:
             from imxup import timestamp
             
@@ -8186,25 +8204,25 @@ class ImxUploadGUI(QMainWindow):
                 #print(f"DEBUG: Sample database paths: {db_paths}")
                 #print(f"DEBUG: Does our path exist in DB? {gallery_path in [item.path for item in all_db_items]}")
             except Exception as e:
-                print(f"DEBUG: Error checking database: {e}")
+                print(f"{timestamp()} ERROR: Error checking database: {e}")
             
             # Update database
             success = self.queue_manager.store.update_item_template(gallery_path, new_template)
-            print(f"DEBUG: Database update success: {success}")
+            #print(f"DEBUG: Database update success: {success}")
             
             # Update the table cell display
             template_item = table.item(row, 10)
             if template_item:
                 template_item.setText(new_template)
             else:
-                print(f"DEBUG: No template item found at row {row}, column 10")
+                print(f"{timestamp()} DEBUG: No template item found at row {row}, column 10")
             
-            print(f"DEBUG: Template update completed")
+            #print(f"{timestamp()} DEBUG: Template update completed")
             
             # Get the actual gallery item to check real status
             gallery_item = self.queue_manager.get_item(gallery_path)
             if not gallery_item:
-                print(f"DEBUG: Could not get gallery item from queue manager")
+                print(f"{timestamp()} DEBUG: Could not get gallery item from queue manager")
                 status = ""
             else:
                 status = gallery_item.status
@@ -8219,10 +8237,10 @@ class ImxUploadGUI(QMainWindow):
                     self.add_log_message(f"{timestamp()} Template changed to '{new_template}' and BBCode regenerated for {os.path.basename(gallery_path)}")
                     #print(f"DEBUG: BBCode regeneration successful")
                 except Exception as e:
-                    print(f"DEBUG: BBCode regeneration failed: {e}")
+                    print(f"{timestamp()} DEBUG: BBCode regeneration failed: {e}")
                     self.add_log_message(f"{timestamp()} Template changed to '{new_template}' for {os.path.basename(gallery_path)}, but BBCode regeneration failed: {e}")
             else:
-                print(f"DEBUG: Gallery not completed, skipping BBCode regeneration")
+                print(f"{timestamp()} DEBUG: Gallery not completed, skipping BBCode regeneration")
                 self.add_log_message(f"{timestamp()} Template changed to '{new_template}' for {os.path.basename(gallery_path)}")
             
             # Remove combo box and update display
@@ -8235,7 +8253,7 @@ class ImxUploadGUI(QMainWindow):
             # Note: refresh_gallery_display doesn't exist, removing this call
             
         except Exception as e:
-            print(f"DEBUG: ERROR: Error updating gallery template: {e}")
+            print(f"{timestamp()} DEBUG: ERROR: Error updating gallery template: {e}")
             # Remove combo box on error
             try:
                 table = self.gallery_table.gallery_table
@@ -8262,14 +8280,14 @@ class ImxUploadGUI(QMainWindow):
 
     def regenerate_bbcode_for_gallery_multi(self, paths):
         """Regenerate BBCode for multiple completed galleries using their current templates"""
-        print(f"DEBUG: regenerate_bbcode_for_gallery_multi called with {len(paths)} paths")
+        print(f"{timestamp()} DEBUG: regenerate_bbcode_for_gallery_multi called with {len(paths)} paths")
 
         # Find the main GUI window
         widget = self
         while widget and not hasattr(widget, 'queue_manager'):
             widget = widget.parent()
         if not widget:
-            print("DEBUG: No widget with queue_manager found")
+            print(f"{timestamp()} DEBUG: No widget with queue_manager found")
             return
 
         success_count = 0
@@ -8280,11 +8298,11 @@ class ImxUploadGUI(QMainWindow):
                 #print(f"DEBUG: Processing path: {path}")
                 item = widget.queue_manager.get_item(path)
                 if not item:
-                    print(f"DEBUG: No item found for path: {path}")
+                    print(f"{timestamp()} DEBUG: No item found for path: {path}")
                     continue
 
                 if item.status != "completed":
-                    print(f"DEBUG: Skipping non-completed item: {item.status}")
+                    #print(f"{timestamp()} DEBUG: Skipping non-completed item: {item.status}")
                     continue
 
                 # Get template for this gallery (same logic as single version)
@@ -8300,7 +8318,7 @@ class ImxUploadGUI(QMainWindow):
 
             except Exception as e:
                 error_count += 1
-                print(f"DEBUG: Error regenerating BBCode for {path}: {e}")
+                print(f"{timestamp()} DEBUG: Error regenerating BBCode for {path}: {e}")
 
         # Show summary message
         if success_count > 0 or error_count > 0:
@@ -8342,7 +8360,7 @@ class ImxUploadGUI(QMainWindow):
         # It will handle BBCode generation, file saving, and JSON updates
         # Use current gallery name from database (which could be renamed), not from old JSON
         current_gallery_name = item.name if item.name else json_data['meta']['gallery_name']
-        print(f"DEBUG regenerate_gallery_bbcode: Using current_gallery_name='{current_gallery_name}' from database, old JSON had='{json_data['meta']['gallery_name']}'")
+        #print(f"DEBUG regenerate_gallery_bbcode: Using current_gallery_name='{current_gallery_name}' from database, old JSON had='{json_data['meta']['gallery_name']}'")
         results = {
             'gallery_id': json_data['meta']['gallery_id'],
             'gallery_name': current_gallery_name,
@@ -8414,7 +8432,7 @@ class ImxUploadGUI(QMainWindow):
                 self.queue_manager.update_custom_field(path, field_name, new_value)
             
         except Exception as e:
-            print(f"Error handling table item change: {e}")
+            print(f"{timestamp()} DEBUG: Error handling table item change: {e}")
 
     def _should_auto_regenerate_bbcode(self, path: str) -> bool:
         """Check if BBCode should be auto-regenerated for a gallery"""
@@ -8471,7 +8489,7 @@ def main():
     else:
         # Check for existing instance even when no folders provided
         if check_single_instance():
-            print("GUI is already running, bringing existing window to front")
+            print(f"{timestamp()} GUI is already running, bringing existing window to front")
             splash.finish_and_hide()
             return
     
