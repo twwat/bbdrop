@@ -44,7 +44,6 @@ class HelpDialog(QDialog):
             ("Keyboard Shortcuts", "KEYBOARD_SHORTCUTS.md"),
             ("GUI Guide", "GUI_README.md"),
             ("Quick Start (GUI)", "QUICK_START_GUI.md"),
-            ("Troubleshooting Drag & Drop", "TROUBLESHOOT_DRAG_DROP.md"),
             ("GUI Improvements", "GUI_IMPROVEMENTS.md"),
         ]
 
