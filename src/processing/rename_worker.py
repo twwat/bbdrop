@@ -1,176 +1,298 @@
 """
-Background worker for handling gallery rename operations asynchronously.
-
-This worker processes gallery renames in the background to avoid blocking
-the main upload process, significantly improving upload performance.
+Background worker for gallery renames - uses EXACT working code from ImxToUploader.
 """
 
 import threading
 import queue
 import time
-from typing import Optional, Callable, Any
+import requests
+import configparser
+import os
+from typing import Optional, Callable
 
 
 class RenameWorker:
-    """Background worker for handling gallery rename operations."""
-    
-    def __init__(self, uploader: Any = None):
-        """
-        Initialize RenameWorker.
-        
-        Args:
-            uploader: The uploader instance with rename_gallery_with_session method
-        """
+    """Background worker that handles gallery renames using its own web session."""
+
+    def __init__(self, on_log: Optional[Callable[[str], None]] = None):
+        """Initialize RenameWorker with own web session."""
+        # Import existing functions
+        from imxup import get_config_path, decrypt_password, get_firefox_cookies, load_cookies_from_file
+        from imxup import get_unnamed_galleries, remove_unnamed_gallery, sanitize_gallery_name
+
+        # Store references to these functions
+        self._get_config_path = get_config_path
+        self._decrypt_password = decrypt_password
+        self._get_firefox_cookies = get_firefox_cookies
+        self._load_cookies_from_file = load_cookies_from_file
+        self._get_unnamed_galleries = get_unnamed_galleries
+        self._remove_unnamed_gallery = remove_unnamed_gallery
+        self._sanitize_gallery_name = sanitize_gallery_name
+
+        # Logging callback
+        self.on_log = on_log or print
+
+        # Queue for rename requests
         self.queue = queue.Queue()
         self.running = True
-        self.uploader = uploader
+
+        # Web session and credentials
+        self.username = None
+        self.password = None
+        self.web_url = "https://imx.to"
+        self.session = None
+
+        # Load credentials using EXACT same method as ImxToUploader._get_credentials
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+        if config_file and os.path.exists(config_file):
+            config.read(config_file)
+            if 'CREDENTIALS' in config:
+                auth_type = config['CREDENTIALS'].get('auth_type', 'username_password')
+                if auth_type == 'username_password':
+                    self.username = config['CREDENTIALS'].get('username')
+                    encrypted_password = config['CREDENTIALS'].get('password', '')
+                    if self.username and encrypted_password:
+                        self.password = decrypt_password(encrypted_password)
+
+        # Create session using EXACT same setup as ImxToUploader
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+
+        retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=1)
+
+        self.session = requests.Session()
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'DNT': '1'
+        })
+
+        # Start background worker thread
         self.thread = threading.Thread(target=self._process_renames, daemon=True, name="RenameWorker")
         self.thread.start()
-    
-    def queue_rename(self, gallery_id: str, gallery_name: str, callback: Optional[Callable[[str], None]] = None):
-        """
-        Queue a rename request for background processing.
-        
-        Args:
-            gallery_id: The ID of the gallery to rename
-            gallery_name: The desired name for the gallery
-            callback: Optional callback function for logging (receives log message string)
-        """
-        if not gallery_id or not gallery_name:
-            return
-            
-        self.queue.put({
-            'gallery_id': gallery_id,
-            'gallery_name': gallery_name,
-            'callback': callback,
-            'timestamp': time.time()
-        })
-    
-    def _process_renames(self):
-        """Process rename requests from the queue in background thread."""
-        while self.running:
+
+        # Login and auto-rename in background
+        threading.Thread(target=self._initial_login, daemon=True).start()
+
+    def _initial_login(self):
+        """Login once and handle auto-rename of unnamed galleries."""
+        from imxup import timestamp
+
+        if self.login():
+            # Auto-rename unnamed galleries
             try:
-                # Wait for rename request with timeout
-                try:
-                    request = self.queue.get(timeout=1.0)
-                except queue.Empty:
-                    continue
-                
-                if request is None:  # Shutdown signal
-                    break
-                
-                gallery_id = request['gallery_id']
-                gallery_name = request['gallery_name']
-                callback = request['callback']
-                
-                # Attempt to rename the gallery
-                success = self._attempt_rename(gallery_id, gallery_name, callback)
-                
-                if not success:
-                    # If rename failed, queue for later auto-rename
-                    self._queue_for_auto_rename(gallery_id, gallery_name, callback)
-                
-                # Mark task as done
-                self.queue.task_done()
-                
+                unnamed = self._get_unnamed_galleries()
+                if unnamed:
+                    self.on_log(f"{timestamp()} RenameWorker: Auto-renaming {len(unnamed)} galleries")
+                    for gallery_id, gallery_name in list(unnamed.items()):
+                        if self.rename_gallery_with_session(gallery_id, gallery_name):
+                            self._remove_unnamed_gallery(gallery_id)
             except Exception as e:
-                # Don't let any exception crash the worker thread
-                if callback:
-                    try:
-                        callback(f"RenameWorker error: {str(e)}")
-                    except Exception:
-                        pass
-                continue
-    
-    def _attempt_rename(self, gallery_id: str, gallery_name: str, callback: Optional[Callable[[str], None]]) -> bool:
-        """
-        Attempt to rename a gallery using the uploader session.
-        
-        Returns:
-            bool: True if rename was successful, False otherwise
-        """
-        if not self.uploader:
-            if callback:
-                callback(f"RenameWorker: No uploader instance available for '{gallery_name}'")
+                self.on_log(f"{timestamp()} RenameWorker: Auto-rename error: {e}")
+
+    # EXACT COPY of ImxToUploader.login() - lines 985-1197 from imxup.py
+    def login(self):
+        """Login to imx.to web interface"""
+        from imxup import timestamp
+        from src.network.cookies import get_firefox_cookies, load_cookies_from_file
+
+        if not self.username or not self.password:
+            # Try cookies only
+            try:
+                firefox_cookies = get_firefox_cookies("imx.to")
+                file_cookies = load_cookies_from_file("cookies.txt")
+                all_cookies = {}
+                if firefox_cookies:
+                    all_cookies.update(firefox_cookies)
+                if file_cookies:
+                    all_cookies.update(file_cookies)
+                if all_cookies:
+                    for name, cookie_data in all_cookies.items():
+                        try:
+                            self.session.cookies.set(name, cookie_data['value'], domain=cookie_data['domain'], path=cookie_data['path'])
+                        except Exception:
+                            pass
+                    test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
+                    if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
+                        self.on_log(f"{timestamp()} RenameWorker: Authenticated using cookies")
+                        return True
+            except Exception:
+                pass
+            self.on_log(f"{timestamp()} RenameWorker: No credentials available")
             return False
-        
+
+        max_retries = 1
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    self.on_log(f"{timestamp()} RenameWorker: Retry attempt {attempt + 1}/{max_retries}")
+                    time.sleep(1)
+
+                # Try cookies first
+                firefox_cookies = get_firefox_cookies("imx.to")
+                file_cookies = load_cookies_from_file("cookies.txt")
+                all_cookies = {}
+                if firefox_cookies:
+                    all_cookies.update(firefox_cookies)
+                if file_cookies:
+                    all_cookies.update(file_cookies)
+                if all_cookies:
+                    for name, cookie_data in all_cookies.items():
+                        try:
+                            self.session.cookies.set(name, cookie_data['value'], domain=cookie_data['domain'], path=cookie_data['path'])
+                        except Exception:
+                            pass
+                    test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
+                    if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
+                        self.on_log(f"{timestamp()} RenameWorker: Authenticated using cookies")
+                        return True
+
+                # Submit login form
+                login_data = {
+                    'usr_email': self.username,
+                    'pwd': self.password,
+                    'remember': '1',
+                    'doLogin': 'Login'
+                }
+
+                response = self.session.post(f"{self.web_url}/login.php", data=login_data)
+
+                # Check if login was successful
+                if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
+                    self.on_log(f"{timestamp()} RenameWorker: Authenticated using credentials")
+                    return True
+                else:
+                    self.on_log(f"{timestamp()} RenameWorker: Login failed")
+                    if attempt < max_retries - 1:
+                        continue
+                    else:
+                        return False
+
+            except Exception as e:
+                self.on_log(f"{timestamp()} RenameWorker: Login error: {str(e)}")
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    return False
+
+        return False
+
+    # EXACT COPY of ImxToUploader.rename_gallery_with_session() - lines 1300-1365 from imxup.py
+    def rename_gallery_with_session(self, gallery_id, new_name):
+        """Rename gallery using existing session (no login call)"""
+        from imxup import timestamp
+
         try:
-            # Check if uploader has the rename method
-            rename_method = getattr(self.uploader, 'rename_gallery_with_session', None)
-            if not rename_method:
-                if callback:
-                    callback(f"RenameWorker: Uploader missing rename_gallery_with_session method for '{gallery_name}'")
+            # Sanitize the gallery name
+            original_name = new_name
+            new_name = self._sanitize_gallery_name(new_name)
+            if original_name != new_name:
+                self.on_log(f"{timestamp()} RenameWorker: Sanitized '{original_name}' -> '{new_name}'")
+
+            # Get the edit gallery page
+            edit_page = self.session.get(f"{self.web_url}/user/gallery/edit?id={gallery_id}")
+
+            # Check if we can access the edit page
+            if edit_page.status_code != 200:
+                self.on_log(f"{timestamp()} RenameWorker: Cannot access edit page (HTTP {edit_page.status_code})")
                 return False
-            
-            # Log the attempt
-            if callback:
-                callback(f"RenameWorker: Attempting to rename gallery '{gallery_name}' (ID: {gallery_id})")
-            
-            # Attempt the rename
-            success = rename_method(gallery_id, gallery_name)
-            
-            if success:
-                if callback:
-                    callback(f"RenameWorker: Successfully renamed gallery to '{gallery_name}'")
+
+            if 'DDoS-Guard' in edit_page.text:
+                self.on_log(f"{timestamp()} RenameWorker: DDoS-Guard detected")
+                return False
+
+            if 'login' in edit_page.url or 'login' in edit_page.text.lower():
+                self.on_log(f"{timestamp()} RenameWorker: Not logged in")
+                return False
+
+            # Submit gallery rename form
+            rename_data = {
+                'gallery_name': new_name,
+                'submit_new_gallery': 'Rename Gallery',
+            }
+
+            response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
+
+            if response.status_code == 200:
+                self.on_log(f"{timestamp()} RenameWorker: Successfully renamed gallery '{gallery_id}' to '{new_name}'")
                 return True
             else:
-                if callback:
-                    callback(f"RenameWorker: Gallery rename failed for '{gallery_name}' (ID: {gallery_id})")
+                self.on_log(f"{timestamp()} RenameWorker: Rename failed (HTTP {response.status_code})")
                 return False
-                
+
         except Exception as e:
-            if callback:
-                callback(f"RenameWorker: Exception renaming gallery '{gallery_name}': {str(e)}")
+            self.on_log(f"{timestamp()} RenameWorker: Error renaming gallery: {str(e)}")
             return False
-    
-    def _queue_for_auto_rename(self, gallery_id: str, gallery_name: str, callback: Optional[Callable[[str], None]]):
-        """
-        Queue gallery for later auto-rename if immediate rename failed.
-        """
-        try:
-            # Import here to avoid circular imports
-            from imxup import save_unnamed_gallery
-            save_unnamed_gallery(gallery_id, gallery_name)
-            
-            if callback:
-                callback(f"RenameWorker: Background rename failed, queued for auto-rename: '{gallery_name}'")
-                
-        except Exception as e:
-            if callback:
-                callback(f"RenameWorker: Failed to queue gallery for auto-rename: {str(e)}")
-    
-    def set_uploader(self, uploader: Any):
-        """
-        Set or update the uploader instance.
-        
-        Args:
-            uploader: The uploader instance with rename_gallery_with_session method
-        """
-        self.uploader = uploader
-    
+
+    def queue_rename(self, gallery_id: str, gallery_name: str, callback: Optional[Callable[[str], None]] = None):
+        """Queue a rename request."""
+        if gallery_id and gallery_name:
+            self.queue.put({'gallery_id': gallery_id, 'gallery_name': gallery_name, 'callback': callback})
+
+    def _process_renames(self):
+        """Background thread that processes rename queue."""
+        from imxup import timestamp, save_unnamed_gallery
+
+        while self.running:
+            try:
+                request = self.queue.get(timeout=1.0)
+                if request is None:
+                    break
+
+                gallery_id = request['gallery_id']
+                gallery_name = request['gallery_name']
+                callback = request.get('callback')
+
+                # Attempt rename
+                success = self.rename_gallery_with_session(gallery_id, gallery_name)
+
+                if success:
+                    # Remove from unnamed list
+                    try:
+                        self._remove_unnamed_gallery(gallery_id)
+                    except Exception:
+                        pass
+                else:
+                    # Queue for later auto-rename
+                    try:
+                        save_unnamed_gallery(gallery_id, gallery_name)
+                        self.on_log(f"{timestamp()} RenameWorker: Queued for auto-rename: '{gallery_name}'")
+                    except Exception as e:
+                        self.on_log(f"{timestamp()} RenameWorker: Failed to queue for auto-rename: {e}")
+
+                self.queue.task_done()
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                self.on_log(f"{timestamp()} RenameWorker error: {e}")
+                continue
+
     def stop(self, timeout: float = 5.0):
-        """
-        Stop the rename worker thread.
-        
-        Args:
-            timeout: Maximum time to wait for worker to stop
-        """
+        """Stop the rename worker."""
         self.running = False
-        
-        # Send shutdown signal
         try:
             self.queue.put(None)
         except Exception:
             pass
-        
-        # Wait for thread to finish
         if self.thread.is_alive():
             self.thread.join(timeout=timeout)
-    
+        if self.session:
+            try:
+                self.session.close()
+            except Exception:
+                pass
+
     def is_running(self) -> bool:
-        """Check if the worker is running."""
+        """Check if worker is running."""
         return self.running and self.thread.is_alive()
-    
+
     def queue_size(self) -> int:
-        """Get the current size of the rename queue."""
+        """Get queue size."""
         return self.queue.qsize()

@@ -278,8 +278,9 @@ class UploadWorker(QThread):
             if self._rename_worker_available:
                 try:
                     from src.processing.rename_worker import RenameWorker
-                    self.rename_worker = RenameWorker(self.uploader)
-                    self.log_message.emit(f"{timestamp()} [renaming] RenameWorker initialized successfully")
+                    # Pass logging callback so rename operations appear in GUI log
+                    self.rename_worker = RenameWorker(on_log=lambda msg: self.log_message.emit(msg))
+                    self.log_message.emit(f"{timestamp()} [renaming] RenameWorker initialized with independent session")
                 except Exception as e:
                     print(f"{timestamp()} DEBUG: Failed to initialize RenameWorker in main_window: {e}")
                     self.log_message.emit(f"{timestamp()} [renaming] Failed to initialize RenameWorker: {e}")
@@ -288,66 +289,10 @@ class UploadWorker(QThread):
                 print(f"DEBUG: RenameWorker not available (import failed)")
                 self.log_message.emit(f"{timestamp()} [renaming] RenameWorker not available (import failed)")
             
-            # Login once for session reuse
-            #self.log_message.emit(f"{timestamp()} [auth] Logging in...")
-            try:
-                login_success = self.uploader.login()
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                login_success = False
-            # Report the login method used (cookies, credentials, api_key, none)
-            try:
-                method = getattr(self.uploader, 'last_login_method', None)
-                if method == 'cookies':
-                    self.log_message.emit(f"{timestamp()} [auth] Authenticated using cookies")
-                elif method == 'credentials':
-                    self.log_message.emit(f"{timestamp()} [auth] Authenticated using username/password")
-                elif method == 'api_key':
-                    self.log_message.emit(f"{timestamp()} [auth] Using API key authentication (no web login)")
-                elif method == 'none':
-                    self.log_message.emit(f"{timestamp()} [auth] No credentials available")
-            except Exception:
-                pass
-            if not login_success:
-                self.log_message.emit(f"{timestamp()} [auth] Login failed - using API-only mode")
-            else:
-                # Method-specific post-login messaging and auto-rename gating
-                try:
-                    method = getattr(self.uploader, 'last_login_method', None)
-                except Exception:
-                    method = None
+            # Uploader uses API ONLY - no login needed
+            # RenameWorker handles its own login independently
+            self.log_message.emit(f"{timestamp()} [auth] Uploader using API-only mode (no web login)")
 
-                if method in ('cookies', 'credentials'):
-                    self.log_message.emit(f"{timestamp()} [auth] Login successful using {method}")
-                    # Auto-rename unnamed galleries only when a web session exists
-                    try:
-                        if self.auto_rename_enabled:
-                            renamed = rename_all_unnamed_with_session(self.uploader)
-                            if renamed > 0:
-                                self.log_message.emit(f"{timestamp()} Auto-renamed {renamed} gallery(ies) after login")
-                            else:
-                                # Only report none if the unnamed list is actually empty.
-                                try:
-                                    from imxup import get_unnamed_galleries
-                                    if not get_unnamed_galleries():
-                                        self.log_message.emit(f"{timestamp()} No unnamed galleries to auto-rename")
-                                except Exception:
-                                    # Fall back to quiet if we cannot check
-                                    pass
-                    except Exception as e:
-                        self.log_message.emit(f"{timestamp()} Auto-rename error: {e}")
-                elif method == 'api_key':
-                    # API key present; no web session to rename galleries
-                    self.log_message.emit(f"{timestamp()} [auth] API key loaded; web login skipped")
-                    try:
-                        if self.auto_rename_enabled:
-                            self.log_message.emit(f"{timestamp()} [auth] Skipping auto-rename; web session required")
-                    except Exception:
-                        pass
-                else:
-                    # Fallback: unknown method but login reported success; do not auto-rename
-                    self.log_message.emit(f"{timestamp()} [auth] Login successful")
             
             while self.running:
                 # Handle requested login retries from GUI
@@ -3792,41 +3737,7 @@ class ImxUploadGUI(QMainWindow):
     
     # ----------------------------- End Background Tab Update System -----------------------------
     
-    def closeEvent(self, event):
-        """Clean shutdown with proper thread cleanup"""
-        try:
-            # Stop background processing
-            if hasattr(self, '_thread_pool'):
-                self._thread_pool.clear()
-                self._thread_pool.waitForDone(1000)  # Wait up to 1 second
-                
-            # Clean up progress batcher
-            if hasattr(self, '_progress_batcher'):
-                if hasattr(self._progress_batcher, '_timer'):
-                    self._progress_batcher._timer.stop()
-                    
-            # Clean up table update queue
-            if hasattr(self, '_table_update_queue'):
-                if hasattr(self._table_update_queue, '_timer'):
-                    self._table_update_queue._timer.stop()
-            
-                    
-            # Clear icon cache
-            if hasattr(self, '_icon_cache'):
-                self._icon_cache.clear()
-                
-        except Exception:
-            pass  # Ignore cleanup errors
-            
-        # Call parent closeEvent
-        super().closeEvent(event)
-        
-        # Add scanning status indicator to status bar
-        self.scan_status_label = QLabel("Scanning: 0")
-        self.scan_status_label.setVisible(False)
-        self.statusBar().addPermanentWidget(self.scan_status_label)
-        self._log_viewer_dialog = None # Log viewer dialog reference
-        self._current_transfer_kbps = 0.0 # Current transfer speed tracking
+
         
     def resizeEvent(self, event):
         """Update right panel maximum width when window is resized"""
@@ -4340,6 +4251,13 @@ class ImxUploadGUI(QMainWindow):
         
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
+        
+        # Add scanning status indicator to status bar
+        self.scan_status_label = QLabel("Scanning: 0")
+        self.scan_status_label.setVisible(False)
+        self.statusBar().addPermanentWidget(self.scan_status_label)
+        self._log_viewer_dialog = None # Log viewer dialog reference
+        self._current_transfer_kbps = 0.0 # Current transfer speed tracking
         
         # Main layout - vertical to stack queue and progress
         main_layout = QVBoxLayout(central_widget)
@@ -5042,6 +4960,15 @@ class ImxUploadGUI(QMainWindow):
     def retry_login(self, credentials_only: bool = False):
         """Ask the worker to retry login soon (optionally credentials-only)."""
         try:
+            # Invalidate RenameWorker session so it re-logins on next rename
+            if self.worker is not None and hasattr(self.worker, 'rename_worker'):
+                if self.worker.rename_worker is not None:
+                    try:
+                        self.worker.rename_worker.invalidate_session()
+                        self.add_log_message(f"{timestamp()} [auth] Invalidated RenameWorker session")
+                    except Exception as e:
+                        self.add_log_message(f"{timestamp()} [auth] Failed to invalidate RenameWorker session: {e}")
+
             if self.worker is None or not self.worker.isRunning():
                 self.add_log_message(f"{timestamp()} [auth] Worker not running; starting worker first")
                 self.start_worker()

@@ -17,7 +17,7 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(560, 370)  # Increased height for logo
+        pixmap = QPixmap(540, 380)  # Increased height for logo
         pixmap.fill(QColor(29, 22, 22))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
