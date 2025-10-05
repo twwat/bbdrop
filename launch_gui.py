@@ -14,7 +14,7 @@ try:
     main_window.main()
 except ImportError as e:
     print("Error: PyQt6 is required for GUI mode.")
-    print("Install with: pip install PyQt6")
+    print("Make sure virtual environment (venv) is active, and/oor install with: pip install PyQt6")
     print(f"Import error: {e}")
     sys.exit(1)
 except Exception as e:

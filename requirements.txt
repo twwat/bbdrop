@@ -11,10 +11,3 @@ cryptography==45.0.5
 colorama==0.4.6
 pywin32-ctypes==0.2.3
 winregistry==2.1.1
-
-# Build tools (optional, for creating executables)
-pyinstaller==6.15.0
-pyinstaller-hooks-contrib==2025.8
-altgraph==0.17.4
-pefile==2023.2.7
-packaging==25.0
