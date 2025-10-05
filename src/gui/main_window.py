@@ -5883,12 +5883,20 @@ class ImxUploadGUI(QMainWindow):
     
     def _add_gallery_to_table(self, item: GalleryQueueItem):
         """Add a new gallery item to the table without rebuilding"""
-        #print(f"{timestamp()} DEBUG: _add_gallery_to_table called for {item.path} with tab_name={item.tab_name}")
-        
+        print(f"{timestamp()} DEBUG: _add_gallery_to_table called for {item.path} with tab_name={item.tab_name}")
+
+        # CRITICAL FIX: Check if path already exists in table to prevent duplicates
+        if item.path in self.path_to_row:
+            existing_row = self.path_to_row[item.path]
+            print(f"{timestamp()} WARNING: Gallery already in table at row {existing_row}, updating instead of adding duplicate")
+            # Update existing row instead of creating duplicate
+            self._populate_table_row(existing_row, item)
+            return
+
         row = self.gallery_table.rowCount()
         self.gallery_table.setRowCount(row + 1)
-        #print(f"{timestamp()} DEBUG: Adding gallery to table at row {row}")
-        
+        print(f"{timestamp()} DEBUG: Adding NEW gallery to table at row {row}")
+
         # Update mappings
         self.path_to_row[item.path] = row
         self.row_to_path[row] = item.path
@@ -6335,9 +6343,6 @@ class ImxUploadGUI(QMainWindow):
             pass
         self.gallery_table.setItem(row, 9, xfer_item)
     
-    def _populate_table_row_working(self, row: int, item: GalleryQueueItem):
-        """Just use the full table refresh - it works"""
-        QTimer.singleShot(0, self.update_queue_display)
 
     def _initialize_table_from_queue(self):
         """Initialize table from existing queue items - called once on startup"""
@@ -6464,12 +6469,18 @@ class ImxUploadGUI(QMainWindow):
         # Clear the table first
         self.gallery_table.clearContents()
         self.gallery_table.setRowCount(len(items))
-        
-        
-        
+
+        # CRITICAL FIX: Clear and rebuild path mappings when rebuilding table
+        print(f"{timestamp()} DEBUG: update_queue_display clearing path mappings and rebuilding")
+        self.path_to_row.clear()
+        self.row_to_path.clear()
+
         # Populate the table with current items
         for row, item in enumerate(items):
-            
+            # Update path mappings for this row
+            self.path_to_row[item.path] = row
+            self.row_to_path[row] = item.path
+
             # Order number (numeric-sorting item)
             order_item = NumericTableWidgetItem(item.insertion_order)
             order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)

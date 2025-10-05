@@ -1143,7 +1143,8 @@ class ComprehensiveSettingsDialog(QDialog):
         dialog.setDirectory(current_path)
         
         # Connect to slot for non-blocking execution
-        dialog.directorySelected.connect(self._handle_directory_selected)
+        # PyQt6 uses fileSelected for directory mode, not directorySelected
+        dialog.fileSelected.connect(self._handle_directory_selected)
         dialog.open()
     
     def _handle_directory_selected(self, directory):

@@ -26,7 +26,7 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.4.0"  # Application version number
+__version__ = "0.4.01"  # Application version number
 
 # Build User-Agent string once at module load
 _system = platform.system()
