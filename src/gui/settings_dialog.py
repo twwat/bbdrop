@@ -250,7 +250,13 @@ class ComprehensiveSettingsDialog(QDialog):
         self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
         self.auto_start_upload_check.setToolTip("Automatically start uploads when scanning completes instead of waiting for manual start")
         general_layout.addWidget(self.auto_start_upload_check, 3, 0)
-        
+
+        # Auto-clear completed uploads
+        self.auto_clear_completed_check = QCheckBox("Clear uploads automatically after completing")
+        self.auto_clear_completed_check.setChecked(defaults.get('auto_clear_completed', False))
+        self.auto_clear_completed_check.setToolTip("Automatically remove completed galleries from the queue")
+        general_layout.addWidget(self.auto_clear_completed_check, 4, 0)
+
         # Storage options group
         storage_group = QGroupBox("Storage Options")
         storage_layout = QGridLayout(storage_group)
@@ -389,6 +395,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.auto_rename_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.auto_regenerate_bbcode_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.auto_start_upload_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+        self.auto_clear_completed_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.store_in_uploaded_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.store_in_central_check.toggled.connect(lambda: self.mark_tab_dirty(0))
         self.home_radio.toggled.connect(lambda: self.mark_tab_dirty(0))
@@ -1707,6 +1714,7 @@ class ComprehensiveSettingsDialog(QDialog):
             config.set('DEFAULTS', 'auto_rename', str(self.auto_rename_check.isChecked()))
             config.set('DEFAULTS', 'auto_regenerate_bbcode', str(self.auto_regenerate_bbcode_check.isChecked()))
             config.set('DEFAULTS', 'auto_start_upload', str(self.auto_start_upload_check.isChecked()))
+            config.set('DEFAULTS', 'auto_clear_completed', str(self.auto_clear_completed_check.isChecked()))
             config.set('DEFAULTS', 'store_in_uploaded', str(self.store_in_uploaded_check.isChecked()))
             config.set('DEFAULTS', 'store_in_central', str(self.store_in_central_check.isChecked()))
             

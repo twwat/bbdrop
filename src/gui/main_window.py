@@ -4769,7 +4769,21 @@ class ImxUploadGUI(QMainWindow):
             main_layout.setStretch(1, 0)  # bottom_layout
         except Exception:
             pass
-        
+
+    def open_central_store_folder(self):
+        """Open the central store folder in the OS file manager"""
+        try:
+            central_path = self._get_central_store_base_path()
+            if os.path.isdir(central_path):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(central_path))
+            else:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Folder Not Found",
+                                  f"Central store folder does not exist:\n{central_path}")
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Error", f"Could not open central store folder:\n{str(e)}")
+
     def setup_menu_bar(self):
         """Create a simple application menu bar."""
         try:
@@ -4786,6 +4800,9 @@ class ImxUploadGUI(QMainWindow):
             action_pause_all.triggered.connect(self.pause_all_uploads)
             action_clear_completed = file_menu.addAction("Clear Completed")
             action_clear_completed.triggered.connect(self.clear_completed)
+            file_menu.addSeparator()
+            action_open_store = file_menu.addAction("Open Central Store Folder")
+            action_open_store.triggered.connect(self.open_central_store_folder)
             file_menu.addSeparator()
             action_exit = file_menu.addAction("Exit")
             action_exit.triggered.connect(self.close)
@@ -6071,8 +6088,23 @@ class ImxUploadGUI(QMainWindow):
 
     def _populate_table_row(self, row: int, item: GalleryQueueItem):
         """Update row data immediately with proper font consistency - COMPLETE VERSION"""
+        # CRITICAL: Verify row is still valid for this item (table may have changed due to deletions)
+        # Always use the current mapping as the source of truth
+        actual_row = self.path_to_row.get(item.path)
+
+        if actual_row is None:
+            # Item was removed from table entirely
+            print(f"{timestamp()} DEBUG: Skipping update - {os.path.basename(item.path)} no longer in table")
+            return
+
+        if actual_row != row:
+            # Table was modified (row deletions/insertions), use current row
+            print(f"{timestamp()} DEBUG: Row adjusted for {os.path.basename(item.path)}: {row} → {actual_row}")
+            row = actual_row
+
+
         _is_dark_mode = self._get_cached_theme()
-        
+
         # Order number (numeric-sorting item)
         order_item = NumericTableWidgetItem(item.insertion_order)
         order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -7074,10 +7106,20 @@ class ImxUploadGUI(QMainWindow):
 
         # Update display with targeted update instead of full rebuild
         self._update_specific_gallery_display(path)
-        
+
+        # Auto-clear completed gallery if enabled
+        from imxup import load_user_defaults
+        defaults = load_user_defaults()
+        if defaults.get('auto_clear_completed', False):
+            # Get item to check if it's actually completed (not failed)
+            item = self.queue_manager.get_item(path)
+            if item and item.status == "completed":
+                QTimer.singleShot(100, lambda: self.remove_gallery(path))
+
+
         # Update button counts and progress after status change
         QTimer.singleShot(0, self._update_counts_and_progress)
-        
+
         # Defer only the heavy stats update to avoid blocking
         QTimer.singleShot(50, lambda: self._update_stats_deferred(results))
     
