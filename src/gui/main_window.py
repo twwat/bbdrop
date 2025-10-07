@@ -6211,7 +6211,9 @@ class ImxUploadGUI(QMainWindow):
         self.gallery_table.setItem(row, 10, tmpl_item)
         
         # Renamed status: Set icon based on whether gallery has been renamed
-        is_renamed = item.gallery_id is not None and bool(item.gallery_id)
+        # Check if gallery is in the unnamed galleries list (pending rename)
+        from imxup import check_gallery_renamed
+        is_renamed = check_gallery_renamed(item.gallery_id) if item.gallery_id else None
         self._set_renamed_cell_icon(row, is_renamed)
         
         # Custom columns (12-15): Load from database and make editable
