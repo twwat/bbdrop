@@ -24,6 +24,7 @@ from PyQt6.QtGui import QSyntaxHighlighter
 
 # Import local modules
 from imxup import load_user_defaults, get_config_path, encrypt_password, decrypt_password
+from src.utils.format_utils import timestamp
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
 from src.gui.dialogs.credential_setup import CredentialSetupDialog
@@ -923,24 +924,131 @@ class ComprehensiveSettingsDialog(QDialog):
         self.fast_scan_check.setChecked(True)  # Default enabled
         strategy_layout.addWidget(self.fast_scan_check)
         
-        # PIL sampling
-        self.pil_sampling_label = QLabel("PIL sampling for min/max calculations:")
-        strategy_layout.addWidget(self.pil_sampling_label)
-        
-        self.pil_sampling_combo = QComboBox()
-        self.pil_sampling_combo.addItems([
-            "1 image (first only)",
-            "2 images (first + last)",
-            "4 images (first + 2 middle + last)",
-            "8 images (strategic sampling)",
-            "16 images (extended sampling)",
-            "All images (full PIL scan)"
-        ])
-        self.pil_sampling_combo.setCurrentIndex(2)  # Default to 4 images
-        strategy_layout.addWidget(self.pil_sampling_combo)
+        # Separator line
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        strategy_layout.addWidget(separator)
+
+        # PIL Sampling Section
+        sampling_label = QLabel("<b>Dimension Calculation Sampling</b>")
+        strategy_layout.addWidget(sampling_label)
+
+        # Sampling Method
+        method_layout = QHBoxLayout()
+        method_label = QLabel("Method:")
+        method_layout.addWidget(method_label)
+
+        self.sampling_fixed_radio = QRadioButton("Fixed count")
+        self.sampling_fixed_radio.setChecked(True)
+        method_layout.addWidget(self.sampling_fixed_radio)
+
+        self.sampling_fixed_spin = QSpinBox()
+        self.sampling_fixed_spin.setRange(1, 100)
+        self.sampling_fixed_spin.setValue(25)
+        self.sampling_fixed_spin.setSuffix(" images")
+        method_layout.addWidget(self.sampling_fixed_spin)
+
+        self.sampling_percent_radio = QRadioButton("Percentage")
+        method_layout.addWidget(self.sampling_percent_radio)
+
+        self.sampling_percent_spin = QSpinBox()
+        self.sampling_percent_spin.setRange(1, 100)
+        self.sampling_percent_spin.setValue(10)
+        self.sampling_percent_spin.setSuffix("%")
+        self.sampling_percent_spin.setEnabled(False)
+        method_layout.addWidget(self.sampling_percent_spin)
+
+        method_layout.addStretch()
+        strategy_layout.addLayout(method_layout)
+
+        # Connect radio buttons to enable/disable spinboxes
+        self.sampling_fixed_radio.toggled.connect(lambda checked: self.sampling_fixed_spin.setEnabled(checked))
+        self.sampling_fixed_radio.toggled.connect(lambda checked: self.sampling_percent_spin.setEnabled(not checked))
+
+        # Exclusions Section
+        exclusions_label = QLabel("<b>Exclusions</b> (skip these images from sampling)")
+        exclusions_label.setStyleSheet("margin-top: 10px;")
+        strategy_layout.addWidget(exclusions_label)
+
+        # Exclude first/last checkboxes
+        position_layout = QHBoxLayout()
+        self.exclude_first_check = QCheckBox("Skip first image")
+        self.exclude_first_check.setToolTip("Often cover/poster image")
+        position_layout.addWidget(self.exclude_first_check)
+
+        self.exclude_last_check = QCheckBox("Skip last image")
+        self.exclude_last_check.setToolTip("Often credits/logo image")
+        position_layout.addWidget(self.exclude_last_check)
+        position_layout.addStretch()
+        strategy_layout.addLayout(position_layout)
+
+        # Exclude small images
+        small_layout = QHBoxLayout()
+        self.exclude_small_check = QCheckBox("Skip images smaller than")
+        small_layout.addWidget(self.exclude_small_check)
+
+        self.exclude_small_spin = QSpinBox()
+        self.exclude_small_spin.setRange(10, 90)
+        self.exclude_small_spin.setValue(50)
+        self.exclude_small_spin.setSuffix("% of largest")
+        self.exclude_small_spin.setEnabled(False)
+        small_layout.addWidget(self.exclude_small_spin)
+
+        small_layout.addWidget(QLabel("(thumbnails, previews)"))
+        small_layout.addStretch()
+        strategy_layout.addLayout(small_layout)
+
+        self.exclude_small_check.toggled.connect(self.exclude_small_spin.setEnabled)
+
+        # Exclude filename patterns
+        pattern_layout = QVBoxLayout()
+        pattern_h_layout = QHBoxLayout()
+        self.exclude_patterns_check = QCheckBox("Skip filenames matching:")
+        pattern_h_layout.addWidget(self.exclude_patterns_check)
+        pattern_h_layout.addStretch()
+        pattern_layout.addLayout(pattern_h_layout)
+
+        self.exclude_patterns_edit = QLineEdit()
+        self.exclude_patterns_edit.setPlaceholderText("e.g., cover*, poster*, thumb*, *_small.* (comma-separated patterns)")
+        self.exclude_patterns_edit.setEnabled(False)
+        pattern_layout.addWidget(self.exclude_patterns_edit)
+        strategy_layout.addLayout(pattern_layout)
+
+        self.exclude_patterns_check.toggled.connect(self.exclude_patterns_edit.setEnabled)
+
+        # Statistics Calculation
+        stats_label = QLabel("<b>Statistics Calculation</b>")
+        stats_label.setStyleSheet("margin-top: 10px;")
+        strategy_layout.addWidget(stats_label)
+
+        stats_layout = QHBoxLayout()
+        self.stats_all_radio = QRadioButton("Average all sampled images")
+        self.stats_all_radio.setChecked(True)
+        stats_layout.addWidget(self.stats_all_radio)
+
+        self.stats_exclude_outliers_radio = QRadioButton("Exclude outliers (±1.5 IQR)")
+        self.stats_exclude_outliers_radio.setToolTip("Remove images with dimensions outside 1.5x interquartile range")
+        stats_layout.addWidget(self.stats_exclude_outliers_radio)
+        stats_layout.addStretch()
+        strategy_layout.addLayout(stats_layout)
+
+        # Average Method
+        avg_layout = QHBoxLayout()
+        avg_layout.addWidget(QLabel("Average method:"))
+        self.avg_mean_radio = QRadioButton("Mean")
+        self.avg_mean_radio.setToolTip("Arithmetic mean (sum / count)")
+        self.avg_mean_radio.setChecked(True)
+        avg_layout.addWidget(self.avg_mean_radio)
+
+        self.avg_median_radio = QRadioButton("Median")
+        self.avg_median_radio.setToolTip("Middle value (more robust to outliers)")
+        avg_layout.addWidget(self.avg_median_radio)
+        avg_layout.addStretch()
+        strategy_layout.addLayout(avg_layout)
         
         # Performance info
-        perf_info = QLabel("Fast mode uses imghdr for corruption detection and PIL only on sampled images for dimension calculations.")
+        perf_info = QLabel("Fast mode uses imghdr for corruption detection and PIL for dimension calculations and to rescan images that fail imghdr test.")
         perf_info.setWordWrap(True)
         perf_info.setStyleSheet("color: #666; font-style: italic;")
         strategy_layout.addWidget(perf_info)
@@ -950,7 +1058,26 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Connect change signals to mark tab as dirty (tab index 6 for scanning)
         self.fast_scan_check.toggled.connect(lambda: self.mark_tab_dirty(6))
-        self.pil_sampling_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(6))
+
+        # Connect new sampling controls
+        self.sampling_fixed_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.sampling_percent_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.sampling_fixed_spin.valueChanged.connect(lambda: self.mark_tab_dirty(6))
+        self.sampling_percent_spin.valueChanged.connect(lambda: self.mark_tab_dirty(6))
+
+        # Connect exclusion controls
+        self.exclude_first_check.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.exclude_last_check.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.exclude_small_check.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.exclude_small_spin.valueChanged.connect(lambda: self.mark_tab_dirty(6))
+        self.exclude_patterns_check.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.exclude_patterns_edit.textChanged.connect(lambda: self.mark_tab_dirty(6))
+
+        # Connect stats calculation controls
+        self.stats_all_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.stats_exclude_outliers_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.avg_mean_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.avg_median_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
         
         self.tab_widget.addTab(scanning_widget, "Image Scanning")
     
@@ -1175,22 +1302,64 @@ class ComprehensiveSettingsDialog(QDialog):
         """Load scanning settings from QSettings"""
         try:
             if self.parent and hasattr(self.parent, 'settings'):
-                # Block signals during loading to prevent marking tab as dirty
-                self.fast_scan_check.blockSignals(True)
-                self.pil_sampling_combo.blockSignals(True)
+                # Block ALL signals during loading to prevent marking tab as dirty
+                controls_to_block = [
+                    self.fast_scan_check, self.sampling_fixed_radio, self.sampling_percent_radio,
+                    self.sampling_fixed_spin, self.sampling_percent_spin, self.exclude_first_check,
+                    self.exclude_last_check, self.exclude_small_check, self.exclude_small_spin,
+                    self.exclude_patterns_check, self.exclude_patterns_edit, self.stats_all_radio,
+                    self.stats_exclude_outliers_radio, self.avg_mean_radio, self.avg_median_radio
+                ]
+                for control in controls_to_block:
+                    control.blockSignals(True)
 
                 # Load fast scan setting
                 fast_scan = self.parent.settings.value('scanning/fast_scan', True, type=bool)
                 self.fast_scan_check.setChecked(fast_scan)
 
-                # Load PIL sampling strategy
-                sampling_index = self.parent.settings.value('scanning/pil_sampling', 2, type=int)
-                if 0 <= sampling_index < self.pil_sampling_combo.count():
-                    self.pil_sampling_combo.setCurrentIndex(sampling_index)
+                # Load sampling method and values
+                sampling_method = self.parent.settings.value('scanning/sampling_method', 0, type=int)
+                if sampling_method == 0:
+                    self.sampling_fixed_radio.setChecked(True)
+                else:
+                    self.sampling_percent_radio.setChecked(True)
+
+                self.sampling_fixed_spin.setValue(
+                    self.parent.settings.value('scanning/sampling_fixed_count', 25, type=int))
+                self.sampling_percent_spin.setValue(
+                    self.parent.settings.value('scanning/sampling_percentage', 10, type=int))
+
+                # Load exclusion settings
+                self.exclude_first_check.setChecked(
+                    self.parent.settings.value('scanning/exclude_first', False, type=bool))
+                self.exclude_last_check.setChecked(
+                    self.parent.settings.value('scanning/exclude_last', False, type=bool))
+                self.exclude_small_check.setChecked(
+                    self.parent.settings.value('scanning/exclude_small_images', False, type=bool))
+                self.exclude_small_spin.setValue(
+                    self.parent.settings.value('scanning/exclude_small_threshold', 50, type=int))
+                self.exclude_patterns_check.setChecked(
+                    self.parent.settings.value('scanning/exclude_patterns', False, type=bool))
+                self.exclude_patterns_edit.setText(
+                    self.parent.settings.value('scanning/exclude_patterns_text', '', type=str))
+
+                # Load statistics calculation setting
+                exclude_outliers = self.parent.settings.value('scanning/stats_exclude_outliers', False, type=bool)
+                if exclude_outliers:
+                    self.stats_exclude_outliers_radio.setChecked(True)
+                else:
+                    self.stats_all_radio.setChecked(True)
+
+                # Load average method setting
+                use_median = self.parent.settings.value('scanning/use_median', False, type=bool)
+                if use_median:
+                    self.avg_median_radio.setChecked(True)
+                else:
+                    self.avg_mean_radio.setChecked(True)
 
                 # Unblock signals
-                self.fast_scan_check.blockSignals(False)
-                self.pil_sampling_combo.blockSignals(False)
+                for control in controls_to_block:
+                    control.blockSignals(False)
 
         except Exception as e:
             print(f"{timestamp()} WARNING: Failed to load scanning settings: {e}")
@@ -1258,11 +1427,26 @@ class ComprehensiveSettingsDialog(QDialog):
             if self.parent and hasattr(self.parent, 'settings'):
                 # Save fast scan setting
                 self.parent.settings.setValue('scanning/fast_scan', self.fast_scan_check.isChecked())
-                
-                # Save PIL sampling strategy
-                sampling_index = self.pil_sampling_combo.currentIndex()
-                self.parent.settings.setValue('scanning/pil_sampling', sampling_index)
-                
+
+                # Save sampling method and values
+                self.parent.settings.setValue('scanning/sampling_method', 0 if self.sampling_fixed_radio.isChecked() else 1)
+                self.parent.settings.setValue('scanning/sampling_fixed_count', self.sampling_fixed_spin.value())
+                self.parent.settings.setValue('scanning/sampling_percentage', self.sampling_percent_spin.value())
+
+                # Save exclusion settings
+                self.parent.settings.setValue('scanning/exclude_first', self.exclude_first_check.isChecked())
+                self.parent.settings.setValue('scanning/exclude_last', self.exclude_last_check.isChecked())
+                self.parent.settings.setValue('scanning/exclude_small_images', self.exclude_small_check.isChecked())
+                self.parent.settings.setValue('scanning/exclude_small_threshold', self.exclude_small_spin.value())
+                self.parent.settings.setValue('scanning/exclude_patterns', self.exclude_patterns_check.isChecked())
+                self.parent.settings.setValue('scanning/exclude_patterns_text', self.exclude_patterns_edit.text())
+
+                # Save statistics calculation setting
+                self.parent.settings.setValue('scanning/stats_exclude_outliers', self.stats_exclude_outliers_radio.isChecked())
+
+                # Save average method setting
+                self.parent.settings.setValue('scanning/use_median', self.avg_median_radio.isChecked())
+
         except Exception as e:
             print(f"{timestamp()} WARNING: Failed to save scanning settings: {e}")
     
@@ -1664,12 +1848,8 @@ class ComprehensiveSettingsDialog(QDialog):
         """Reload Scanning tab form values from saved settings"""
         # Reload scanning settings from QSettings
         if self.parent and hasattr(self.parent, 'settings'):
-            fast_scan = self.parent.settings.value('scanning/fast_scan', True, type=bool)
-            self.fast_scan_check.setChecked(fast_scan)
-            
-            sampling_index = self.parent.settings.value('scanning/pil_sampling', 2, type=int)
-            if 0 <= sampling_index < self.pil_sampling_combo.count():
-                self.pil_sampling_combo.setCurrentIndex(sampling_index)
+            # Just call the main load function - it handles everything
+            self._load_scanning_settings()
     
     def _save_general_tab(self):
         """Save General tab settings only"""

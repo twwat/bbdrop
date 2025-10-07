@@ -175,6 +175,7 @@ class GUIImxToUploader(ImxToUploader):
             template_name=template_name,
             already_uploaded=already_uploaded,
             existing_gallery_id=existing_gallery_id,
+            precalculated_dimensions=current_item,  # Pass the whole item, engine will extract what it needs
             on_progress=on_progress,
             on_log=on_log,
             should_soft_stop=should_soft_stop,

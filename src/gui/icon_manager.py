@@ -113,28 +113,30 @@ class IconManager:
         #    if key.startswith('status_'):
         #        print(f"  {key}: {type(config)} = {config}")
         
-    def get_icon(self, icon_key: str, style_instance=None, is_dark_theme: bool = False, is_selected: bool = False, requested_size: int = 32) -> QIcon:
+    def get_icon(self, icon_key: str, style_instance=None, is_dark_theme: bool = None, is_selected: bool = False, requested_size: int = 32) -> QIcon:
         """
         Get an icon by its key with theme and selection awareness.
-        
+
         Args:
             icon_key: The icon identifier (e.g., 'status_completed', 'action_start')
             style_instance: QStyle instance for fallback icons
-            is_dark_theme: Whether the current theme is dark
+            is_dark_theme: Whether the current theme is dark (None = auto-detect)
             is_selected: Whether the icon is for a selected table row
             requested_size: Size to generate inverted icons at (for quality)
-            
+
         Returns:
             QIcon object (may be null if not found and no fallback)
         """
-        # Auto-detect dark theme if not explicitly set to True
-        if not is_dark_theme:
+        # Auto-detect dark theme if not explicitly set
+        if is_dark_theme is None:
             from PyQt6.QtWidgets import QApplication
             app = QApplication.instance()
             if app:
                 palette = app.palette()
                 window_color = palette.color(palette.ColorRole.Window)
                 is_dark_theme = window_color.lightness() < 128
+            else:
+                is_dark_theme = False
         
         # Create cache key that includes theme/selection state and size
         cache_key = f"{icon_key}_{is_dark_theme}_{is_selected}_{requested_size}"

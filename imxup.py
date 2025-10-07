@@ -26,7 +26,7 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.4.10"  # Application version number
+__version__ = "0.4.12"  # Application version number
 
 # Build User-Agent string once at module load
 _system = platform.system()
@@ -38,6 +38,10 @@ USER_AGENT = f"Mozilla/5.0 (ImxUp {__version__}; {_system} {_release} {_version}
 def timestamp():
     """Return current timestamp for logging"""
     return datetime.now().strftime("%H:%M:%S")
+
+def get_project_root() -> str:
+    """Return the project root directory (where imxup.py is located)."""
+    return os.path.dirname(os.path.abspath(__file__))
 
 def get_config_path() -> str:
     """Return the canonical path to the application's config file (~/.imxup/imxup.ini)."""

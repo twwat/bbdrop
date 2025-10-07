@@ -184,7 +184,22 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         # Migration 5: Add custom fields columns
         cursor = conn.execute("PRAGMA table_info(galleries)")
         columns = [column[1] for column in cursor.fetchall()]
-        
+
+        # Migration: Add dimension columns for storing calculated values
+        dimension_columns = [
+            ('avg_width', 'REAL DEFAULT 0.0'),
+            ('avg_height', 'REAL DEFAULT 0.0'),
+            ('max_width', 'REAL DEFAULT 0.0'),
+            ('max_height', 'REAL DEFAULT 0.0'),
+            ('min_width', 'REAL DEFAULT 0.0'),
+            ('min_height', 'REAL DEFAULT 0.0')
+        ]
+        for col_name, col_def in dimension_columns:
+            if col_name not in columns:
+                print(f"Adding {col_name} column to galleries table...")
+                conn.execute(f"ALTER TABLE galleries ADD COLUMN {col_name} {col_def}")
+                print(f"+ Added {col_name} column")
+
         for custom_field in ['custom1', 'custom2', 'custom3', 'custom4']:
             if custom_field not in columns:
                 print(f"Adding {custom_field} column to galleries table...")
@@ -392,6 +407,14 @@ class QueueStore:
         custom2 = item.get('custom2', '')
         custom3 = item.get('custom3', '')
         custom4 = item.get('custom4', '')
+
+        # Extract dimension values
+        avg_width = float(item.get('avg_width', 0.0) or 0.0)
+        avg_height = float(item.get('avg_height', 0.0) or 0.0)
+        max_width = float(item.get('max_width', 0.0) or 0.0)
+        max_height = float(item.get('max_height', 0.0) or 0.0)
+        min_width = float(item.get('min_width', 0.0) or 0.0)
+        min_height = float(item.get('min_height', 0.0) or 0.0)
         
         # Get tab_id for the tab_name
         cursor = conn.execute("SELECT id FROM tabs WHERE name = ? AND is_active = 1", (tab_name,))
@@ -411,150 +434,50 @@ class QueueStore:
             tab_name = 'Main'
 
 
-        # Check if tab_id and custom field columns exist
+        # Build SQL dynamically based on existing columns
         cursor = conn.execute("PRAGMA table_info(galleries)")
-        columns = [column[1] for column in cursor.fetchall()]
-        has_tab_id = 'tab_id' in columns
-        has_custom_fields = all(field in columns for field in ['custom1', 'custom2', 'custom3', 'custom4'])
-        
-        if has_tab_id:
-            # New schema with tab_id column
-            if has_custom_fields:
-                # Full schema with custom fields
-                conn.execute(
-                    """
-                    INSERT INTO galleries(
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name, tab_id, custom1, custom2, custom3, custom4
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    ON CONFLICT(path) DO UPDATE SET
-                        name=excluded.name,
-                        status=excluded.status,
-                        added_ts=excluded.added_ts,
-                        finished_ts=excluded.finished_ts,
-                        template=excluded.template,
-                        total_images=excluded.total_images,
-                        uploaded_images=excluded.uploaded_images,
-                        total_size=excluded.total_size,
-                        scan_complete=excluded.scan_complete,
-                        uploaded_bytes=excluded.uploaded_bytes,
-                        final_kibps=excluded.final_kibps,
-                        gallery_id=excluded.gallery_id,
-                        gallery_url=excluded.gallery_url,
-                        insertion_order=excluded.insertion_order,
-                        failed_files=excluded.failed_files,
-                        tab_name=excluded.tab_name,
-                        tab_id=excluded.tab_id,
-                        custom1=excluded.custom1,
-                        custom2=excluded.custom2,
-                        custom3=excluded.custom3,
-                        custom4=excluded.custom4
-                    """,
-                    (
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name, tab_id, custom1, custom2, custom3, custom4
-                    ),
-                )
-            else:
-                # Schema without custom fields
-                conn.execute(
-                    """
-                    INSERT INTO galleries(
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name, tab_id
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    ON CONFLICT(path) DO UPDATE SET
-                        name=excluded.name,
-                        status=excluded.status,
-                        added_ts=excluded.added_ts,
-                        finished_ts=excluded.finished_ts,
-                        template=excluded.template,
-                        total_images=excluded.total_images,
-                        uploaded_images=excluded.uploaded_images,
-                        total_size=excluded.total_size,
-                        scan_complete=excluded.scan_complete,
-                        uploaded_bytes=excluded.uploaded_bytes,
-                        final_kibps=excluded.final_kibps,
-                        gallery_id=excluded.gallery_id,
-                        gallery_url=excluded.gallery_url,
-                        insertion_order=excluded.insertion_order,
-                        failed_files=excluded.failed_files,
-                        tab_name=excluded.tab_name,
-                        tab_id=excluded.tab_id
-                    """,
-                    (
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name, tab_id
-                    ),
-                )
-        else:
-            # Old schema without tab_id column
-            if has_custom_fields:
-                # Schema with custom fields but no tab_id
-                conn.execute(
-                    """
-                    INSERT INTO galleries(
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name, custom1, custom2, custom3, custom4
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    ON CONFLICT(path) DO UPDATE SET
-                        name=excluded.name,
-                        status=excluded.status,
-                        added_ts=excluded.added_ts,
-                        finished_ts=excluded.finished_ts,
-                        template=excluded.template,
-                        total_images=excluded.total_images,
-                        uploaded_images=excluded.uploaded_images,
-                        total_size=excluded.total_size,
-                        scan_complete=excluded.scan_complete,
-                        uploaded_bytes=excluded.uploaded_bytes,
-                        final_kibps=excluded.final_kibps,
-                        gallery_id=excluded.gallery_id,
-                        gallery_url=excluded.gallery_url,
-                        insertion_order=excluded.insertion_order,
-                        failed_files=excluded.failed_files,
-                        tab_name=excluded.tab_name,
-                        custom1=excluded.custom1,
-                        custom2=excluded.custom2,
-                        custom3=excluded.custom3,
-                        custom4=excluded.custom4
-                    """,
-                    (
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name, custom1, custom2, custom3, custom4
-                    ),
-                )
-            else:
-                # Original schema without custom fields or tab_id
-                conn.execute(
-                    """
-                    INSERT INTO galleries(
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    ON CONFLICT(path) DO UPDATE SET
-                        name=excluded.name,
-                        status=excluded.status,
-                        added_ts=excluded.added_ts,
-                        finished_ts=excluded.finished_ts,
-                        template=excluded.template,
-                        total_images=excluded.total_images,
-                        uploaded_images=excluded.uploaded_images,
-                        total_size=excluded.total_size,
-                        scan_complete=excluded.scan_complete,
-                        uploaded_bytes=excluded.uploaded_bytes,
-                        final_kibps=excluded.final_kibps,
-                        gallery_id=excluded.gallery_id,
-                        gallery_url=excluded.gallery_url,
-                        insertion_order=excluded.insertion_order,
-                        failed_files=excluded.failed_files,
-                        tab_name=excluded.tab_name
-                    """,
-                    (
-                        path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
-                        total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url, insertion_order, failed_files, tab_name
-                    ),
-                )
+        existing_columns = {column[1] for column in cursor.fetchall()}
+
+        # Base columns that always exist
+        columns = ['path', 'name', 'status', 'added_ts', 'finished_ts', 'template', 'total_images', 'uploaded_images',
+                   'total_size', 'scan_complete', 'uploaded_bytes', 'final_kibps', 'gallery_id', 'gallery_url',
+                   'insertion_order', 'failed_files', 'tab_name']
+        values = [path, name, status, added_ts, finished_ts, template, total_images, uploaded_images,
+                  total_size, scan_complete, uploaded_bytes, final_kibps, gallery_id, gallery_url,
+                  insertion_order, failed_files, tab_name]
+
+        # Optional columns - add if they exist in schema
+        optional_fields = {
+            'tab_id': tab_id,
+            'custom1': custom1,
+            'custom2': custom2,
+            'custom3': custom3,
+            'custom4': custom4,
+            'avg_width': avg_width,
+            'avg_height': avg_height,
+            'max_width': max_width,
+            'max_height': max_height,
+            'min_width': min_width,
+            'min_height': min_height
+        }
+
+        for col_name, col_value in optional_fields.items():
+            if col_name in existing_columns:
+                columns.append(col_name)
+                values.append(col_value)
+
+        # Build SQL statement
+        columns_str = ', '.join(columns)
+        placeholders = ','.join(['?'] * len(columns))
+        update_pairs = ','.join([f"{col}=excluded.{col}" for col in columns if col != 'path'])
+
+        sql = f"""
+            INSERT INTO galleries({columns_str})
+            VALUES({placeholders})
+            ON CONFLICT(path) DO UPDATE SET {update_pairs}
+        """
+
+        conn.execute(sql, tuple(values))
 
     def bulk_upsert(self, items: Iterable[Dict[str, Any]]) -> None:
         items_list = list(items)  # Convert to list to avoid consuming iterator

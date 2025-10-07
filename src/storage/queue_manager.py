@@ -138,7 +138,7 @@ class QueueManager(QObject):
                 daemon=True
             )
             self._scan_worker.start()
-            self.log_message.emit(f"{timestamp()} [scan] Scan worker thread started")
+            self.log_message.emit(f"{timestamp()} [scan] DEBUG: Scan worker thread started")
     
     def _sequential_scan_worker(self):
         """Worker that processes galleries sequentially"""
@@ -151,14 +151,14 @@ class QueueManager(QObject):
                 #print(f"DEBUG: About to scan path: {path}")
                 self._comprehensive_scan_item(path)
                 #print(f"{timestamp()} DEBUG: Scan completed for {path}")
-                self.log_message.emit(f"{timestamp()} [scan] Scan completed for {path}")
+                self.log_message.emit(f"{timestamp()} [scan] INFO: Scan completed for {path}")
                 self._scan_queue.task_done()
                 
             except queue.Empty:
                 continue
             except Exception as e:
                 print(f"{timestamp()} ERROR scanning {path}: {e}")
-                self.log_message.emit(f"{timestamp()} [scan] Error scanning {path}: {e}")
+                self.log_message.emit(f"{timestamp()} [scan] ERROR: Error scanning {path}: {e}")
                 try:
                     self._scan_queue.task_done()
                 except:
@@ -171,16 +171,16 @@ class QueueManager(QObject):
             if not os.path.exists(path) or not os.path.isdir(path):
                 self._mark_item_failed(path, "Path does not exist or is not a directory")
                 #print(f"{timestamp()} DEBUG: Scan completed for {path}")
-                print(f"{timestamp()} DEBUG: [scan] Path does not exist or is not a directory: {path}")
-                self.log_message.emit(f"{timestamp()} [scan] Path does not exist or is not a directory: {path}")
+                #print(f"{timestamp()} DEBUG: [scan] Path does not exist or is not a directory: {path}")
+                self.log_message.emit(f"{timestamp()} [scan] WARNING: Path does not exist or is not a directory: {path}")
                 return
             
             # Find images
             files = self._get_image_files(path)
             if not files:
                 self.mark_scan_failed(path, "No images found")
-                self.log_message.emit(f"{timestamp()} [scan] No images found: {path}")
-                print(f"{timestamp()} DEBUG: [scan] No images found: {path}")
+                self.log_message.emit(f"{timestamp()} [scan] WARNING: No images found: {path}")
+                #print(f"{timestamp()} DEBUG: [scan] No images found: {path}")
                 return
             
             # Check for existing gallery
@@ -204,6 +204,7 @@ class QueueManager(QObject):
                     f"Validation failed: {len(scan_result['failed_files'])}/{len(files)} images invalid",
                     scan_result['failed_files']
                 )
+                self.log_message.emit(f"{timestamp()} [scan] WARNING: Validation failed: {len(scan_result['failed_files'])}/{len(files)} images invalid")
                 return
             
             # Update item with scan results
@@ -235,12 +236,13 @@ class QueueManager(QObject):
                         # load_user_defaults already imported from imxup at top of file
                         defaults = load_user_defaults()
                         if defaults.get('auto_start_upload', False):
-                            print(f"{timestamp()} Auto-start enabled: queuing {path} for upload")
+                            self.log_message.emit(f"{timestamp()} [queue] DEBUG: Auto-start enabled: queuing {path} for upload")
+                            
                             # Auto-start the upload by changing status to queued and adding to queue
                             self._update_status_count(old_status, QUEUE_STATE_QUEUED)
                             item.status = QUEUE_STATE_QUEUED
                             self.queue.put(item)  # CRITICAL: Add to queue so worker picks it up
-                            print(f"{timestamp()} Auto-queued {path} for immediate upload")
+                            self.log_message.emit(f"{timestamp()} [queue] INFO: Auto-queued {path} for immediate upload")
 
                         # Emit signal directly (we're already in mutex lock)
                         #print(f"DEBUG: EMITTING status_changed signal for {path}")
@@ -324,12 +326,19 @@ class QueueManager(QObject):
         if not result['failed_files']:
             dims = self._calculate_dimensions(path, files, sampling)
             if dims:
-                result['avg_width'] = sum(w for w, _ in dims) / len(dims)
-                result['avg_height'] = sum(h for _, h in dims) / len(dims)
-                result['max_width'] = max(w for w, _ in dims)
-                result['max_height'] = max(h for _, h in dims)
-                result['min_width'] = min(w for w, _ in dims)
-                result['min_height'] = min(h for _, h in dims)
+                # Use the outlier exclusion utility if configured
+                from src.utils.sampling_utils import calculate_dimensions_with_outlier_exclusion
+                settings = QSettings()
+                exclude_outliers = settings.value('scanning/stats_exclude_outliers', False, type=bool)
+                use_median = settings.value('scanning/use_median', False, type=bool)
+
+                stats = calculate_dimensions_with_outlier_exclusion(dims, exclude_outliers, use_median)
+                result['avg_width'] = stats['avg_width']
+                result['avg_height'] = stats['avg_height']
+                result['max_width'] = stats['max_width']
+                result['max_height'] = stats['max_height']
+                result['min_width'] = stats['min_width']
+                result['min_height'] = stats['min_height']
         
         return result
     
@@ -340,26 +349,27 @@ class QueueManager(QObject):
         try:
             from PIL import Image
             
-            # Determine sample files based on strategy
-            if sampling == 0:  # 1 image
-                samples = [files[0]]
-            elif sampling == 1:  # 2 images
-                samples = [files[0], files[-1]]
-            elif sampling == 2:  # 4 images
-                if len(files) <= 4:
-                    samples = files
-                else:
-                    indices = [0, len(files)//3, 2*len(files)//3, -1]
-                    samples = [files[i] for i in indices]
-            elif sampling == 3:  # 8 images
-                step = max(1, len(files) // 8)
-                samples = files[::step][:8]
-            elif sampling == 4:  # 16 images
-                step = max(1, len(files) // 16)
-                samples = files[::step][:16]
-            else:  # All images
-                samples = files
-            
+            # Use new sampling utility
+            from src.utils.sampling_utils import get_sample_indices, calculate_dimensions_with_outlier_exclusion
+
+            # Get enhanced config from settings
+            settings = QSettings()
+            enhanced_config = {
+                'sampling_method': settings.value('scanning/sampling_method', 0, type=int),
+                'sampling_fixed_count': settings.value('scanning/sampling_fixed_count', 25, type=int),
+                'sampling_percentage': settings.value('scanning/sampling_percentage', 10, type=int),
+                'exclude_first': settings.value('scanning/exclude_first', False, type=bool),
+                'exclude_last': settings.value('scanning/exclude_last', False, type=bool),
+                'exclude_small_images': settings.value('scanning/exclude_small_images', False, type=bool),
+                'exclude_small_threshold': settings.value('scanning/exclude_small_threshold', 50, type=int),
+                'exclude_patterns': settings.value('scanning/exclude_patterns', False, type=bool),
+                'exclude_patterns_text': settings.value('scanning/exclude_patterns_text', '', type=str),
+            }
+
+            # Get sample indices using new logic
+            sample_indices = get_sample_indices(files, enhanced_config, path)
+            samples = [files[i] for i in sample_indices]
+
             # Process samples
             for f in samples:
                 fp = os.path.join(path, f)
@@ -399,7 +409,8 @@ class QueueManager(QObject):
                 
                 # Log scan failure
                 from imxup import timestamp
-                print(f"{timestamp()} [SCAN_FAILED] {item.name or os.path.basename(path)}: {error}")
+                self.log_message.emit(f"{timestamp()} [scan] WARNING: Scan failed - {item.name or os.path.basename(path)}: {error}")
+                
         
         self._schedule_debounced_save([path])
         self._inc_version()
@@ -420,6 +431,7 @@ class QueueManager(QObject):
                 log_msg = f"{timestamp()} [UPLOAD_FAILED] {item.name or os.path.basename(path)}: {error}"
                 if failed_files:
                     log_msg += f" ({len(failed_files)} files failed)"
+                self.log_message.emit(log_msg)
                 print(log_msg)
         
         self._schedule_debounced_save([path])
@@ -450,8 +462,7 @@ class QueueManager(QObject):
                         remaining_images = (item.total_images or 0) - (item.uploaded_images or 0)
                         
                         from imxup import timestamp
-                        print(f"{timestamp()} [RETRY_PARTIAL] {item.name or os.path.basename(path)}: "
-                              f"Retrying {remaining_images} images ({item.uploaded_images} already uploaded)")
+                        self.log_message.emit(f"{timestamp()} [queue] INFO: Retrying {item.name or os.path.basename(path)}: {remaining_images} images ({item.uploaded_images} already uploaded)")
                         
                         # Clear failed files list so they can be retried
                         item.failed_files = []
@@ -465,7 +476,7 @@ class QueueManager(QObject):
                         item.progress = 0
                         
                         from imxup import timestamp
-                        print(f"{timestamp()} [RETRY_FULL] {item.name or os.path.basename(path)}: Full retry")
+                        self.log_message.emit(f"{timestamp()} [queue] DEBUG: Full retry for {item.name or os.path.basename(path)}")
                     
                     # Emit status change signal
                     if hasattr(self, 'status_changed'):
@@ -507,8 +518,7 @@ class QueueManager(QObject):
                         
                         from imxup import timestamp
                         uploaded = item.uploaded_images or 0
-                        print(f"{timestamp()} [RESCAN_ADDITIVE] {item.name or os.path.basename(path)}: "
-                              f"Found {new_images} new images ({uploaded} uploaded, {current_count - uploaded} remaining)")
+                        self.log_message.emit(f"{timestamp()} [scan] INFO: Rescan of {item.name or os.path.basename(path)}: Found {new_images} new images ({uploaded} uploaded, {current_count - uploaded} remaining)")
                         
                     elif current_count < previous_count:
                         # Images were removed
@@ -524,7 +534,7 @@ class QueueManager(QObject):
                             item.progress = int((item.uploaded_images or 0) / item.total_images * 100)
                         
                         from imxup import timestamp
-                        print(f"{timestamp()} [RESCAN_REDUCED] {item.name or os.path.basename(path)}: "
+                        self.log_message.emit(f"{timestamp()} [scan] INFO: {item.name or os.path.basename(path)}: "
                               f"{removed} images removed, {current_count} total")
                     else:
                         # Same count - just clear error if any, but preserve completed status
@@ -536,7 +546,7 @@ class QueueManager(QObject):
                         item.error_message = ""
                         
                         from imxup import timestamp
-                        print(f"{timestamp()} [RESCAN_REFRESH] {item.name or os.path.basename(path)}: "
+                        self.log_message.emit(f"{timestamp()} [scan] INFO: {item.name or os.path.basename(path)}: "
                               f"No changes detected, cleared errors")
                     
                     # Emit status change if changed
@@ -544,7 +554,9 @@ class QueueManager(QObject):
                         QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, item.status))
                     
                 except Exception as e:
+                    from imxup import timestamp
                     self.mark_scan_failed(path, f"Additive rescan error: {e}")
+                    self.log_message.emit(f"{timestamp()} [scan] ERROR: Additive rescan error: {e}")
         
         self._schedule_debounced_save([path])
         self._inc_version()
@@ -570,7 +582,7 @@ class QueueManager(QObject):
                 item.end_time = None
                 
                 from imxup import timestamp
-                print(f"{timestamp()} [RESET_COMPLETE] {item.name or os.path.basename(path)}: "
+                self.log_message.emit(f"{timestamp()} INFO: ]{item.name or os.path.basename(path)}: "
                       f"Complete reset, starting fresh scan")
                 
                 # Emit status change signal
@@ -644,12 +656,22 @@ class QueueManager(QObject):
     
     def _schedule_debounced_save(self, paths: List[str]):
         """Schedule a debounced save to prevent overlapping database operations"""
+        from PyQt6.QtCore import QTimer, QThread, QCoreApplication
+
+        # Check if we're on the main thread
+        app = QCoreApplication.instance()
+        if app and QThread.currentThread() != app.thread():
+            # We're not on the main thread, defer to main thread
+            QTimer.singleShot(0, lambda: self._schedule_debounced_save(paths))
+            return
+
         # Cancel any pending save
         if self._pending_save_timer:
             self._pending_save_timer.stop()
-        
-        # Create new timer for debounced save
-        from PyQt6.QtCore import QTimer
+            self._pending_save_timer.deleteLater()
+            self._pending_save_timer = None
+
+        # Create new timer for debounced save (only on main thread)
         self._pending_save_timer = QTimer()
         self._pending_save_timer.setSingleShot(True)
         self._pending_save_timer.timeout.connect(lambda: self.save_persistent_queue(paths))
@@ -1057,9 +1079,18 @@ class QueueManager(QObject):
     
     def shutdown(self):
         """Shutdown queue manager"""
-        # Stop pending save timer
-        if self._pending_save_timer and self._pending_save_timer.isActive():
-            self._pending_save_timer.stop()
+        # Process any pending saves before shutting down
+        if self._pending_save_timer:
+            try:
+                if self._pending_save_timer.isActive():
+                    self._pending_save_timer.stop()
+                # Execute the save immediately if there was a pending one
+                self.save_persistent_queue()
+            except RuntimeError:
+                # Timer might be from another thread, just do a direct save
+                self.save_persistent_queue()
+            finally:
+                self._pending_save_timer = None
 
         self._scan_worker_running = False
         try:
