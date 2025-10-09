@@ -15,6 +15,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from imxup import ImxToUploader, timestamp, sanitize_gallery_name
 from src.core.engine import UploadEngine
+from src.utils.logger import log
 from src.core.constants import (
     COMMUNICATION_PORT,
     QUEUE_STATE_UPLOADING
@@ -82,14 +83,14 @@ class GUIImxToUploader(ImxToUploader):
             if hasattr(self.worker_thread, 'rename_worker'):
                 rename_worker = self.worker_thread.rename_worker
                 if rename_worker:
-                    self.worker_thread.log_message.emit(f"Using RenameWorker for background renaming")
+                    log("Using RenameWorker for background renaming", level="debug", category="renaming")
                 else:
-                    self.worker_thread.log_message.emit(f"Worker thread has rename_worker attribute but it's None")
+                    log("Worker thread has rename_worker attribute but it's None", level="debug", category="renaming")
             else:
-                self.worker_thread.log_message.emit(f"Worker thread missing rename_worker attribute")
+                log("Worker thread missing rename_worker attribute", level="debug", category="renaming")
         else:
             # This should not happen in GUI mode but let's log it
-            print(f"No worker_thread available for RenameWorker")
+            log("No worker_thread available for RenameWorker", level="warning", category="renaming")
         
         engine = UploadEngine(self, rename_worker)
 
@@ -140,9 +141,53 @@ class GUIImxToUploader(ImxToUploader):
                 pass
                     
         def on_log(message: str):
-            if self.worker_thread:
-                # Pass through categorized messages from engine
-                self.worker_thread.log_message.emit(f"{timestamp()} {message}")
+            # Parse category from engine messages like "[uploads:file] message"
+            # Engine uses callback pattern for separation of concerns
+            import re
+            category_match = re.match(r'^\[([^\]]+)\]\s*', message)
+            msg_to_log = message
+            category = "uploads"
+            subtype = None
+            level = "info"
+
+            if category_match:
+                cat_str = category_match.group(1)
+                msg_to_log = message[len(category_match.group(0)):]
+                # Map engine categories and extract subtype
+                if ':' in cat_str:
+                    parts = cat_str.split(':', 1)
+                    category = parts[0]
+                    subtype = parts[1]
+                elif cat_str.startswith('uploads'):
+                    category = "uploads"
+                elif cat_str == 'concurrency':
+                    category = "uploads"
+                    level = "debug"
+                else:
+                    category = cat_str
+
+            # Detect level from message content
+            if '✗' in msg_to_log or 'failed' in msg_to_log.lower() or 'error' in msg_to_log.lower():
+                level = "error"
+            elif '✓' in msg_to_log and 'uploaded successfully' in msg_to_log:
+                # File upload success - check if we should log based on subtype
+                from src.utils.logging import get_logger
+                app_logger = get_logger()
+                # If subtype is 'file', check file success settings
+                if subtype == 'file':
+                    if not app_logger.should_log_upload_file_success('gui') and not app_logger.should_log_upload_file_success('file'):
+                        return  # Don't log individual file successes if disabled
+                # If subtype is 'gallery' or no subtype, check gallery settings
+                elif subtype == 'gallery' or not subtype:
+                    if not app_logger.should_log_upload_gallery_success('gui') and not app_logger.should_log_upload_gallery_success('file'):
+                        return  # Don't log gallery successes if disabled
+
+            # Reconstruct category tag with subtype for proper filtering in add_log_message
+            if subtype:
+                # Prepend [category:subtype] tag so add_log_message can detect it
+                log(f"[{category}:{subtype}] {msg_to_log}", level=level, category=category)
+            else:
+                log(msg_to_log, level=level, category=category)
 
         def should_soft_stop() -> bool:
             if self.worker_thread and self.worker_thread.current_item:
@@ -300,11 +345,11 @@ class SingleInstanceServer(QThread):
                     continue
                 except Exception as e:
                     if self.running:  # Only log if we're supposed to be running
-                        print(f"Server error: {e}")
-                        
+                        log(f"Server error: {e}", level="error", category="network")
+
             server_socket.close()
         except Exception as e:
-            print(f"Failed to start server: {e}")
+            log(f"Failed to start server: {e}", level="error", category="network")
     
     def stop(self):
         """Stop the server"""

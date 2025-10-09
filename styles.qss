@@ -169,6 +169,11 @@ QTextEdit[class="help-content"] {
 /* Icon frames */
 QFrame[class="light-icon-frame"] { border: 2px dashed #ddd; background: #ffffff; border-radius: 8px; }
 QFrame[class="dark-icon-frame"]  { border: 2px dashed #555; background: #2b2b2b; border-radius: 8px; }
+
+/* Log Viewer table styling */
+QTableWidget[class="log-viewer"] { gridline-color: rgba(204, 204, 204, 0.5); show-decoration-selected: 1; }
+QTableWidget[class="log-viewer"]::item { padding: 1px 4px; border-bottom: 1px solid rgba(204, 204, 204, 0.5); }
+QTableWidget[class="log-viewer"] QHeaderView::section { padding: 2px 4px; }
 /* LIGHT_THEME_END */
 
 /* DARK_THEME_START */
@@ -287,4 +292,9 @@ QTextEdit[class="help-content"] {
 
 /* Template editor */
 QTextEdit[class="template-editor-placeholder"] { background-color: #2d2d2d; color: #999; }
+
+/* Log Viewer table styling */
+QTableWidget[class="log-viewer"] { gridline-color: rgba(13, 52, 84, 0.5); show-decoration-selected: 1; }
+QTableWidget[class="log-viewer"]::item { padding: 1px 4px; border-bottom: 1px solid rgba(102, 102, 102, 0.5); }
+QTableWidget[class="log-viewer"] QHeaderView::section { padding: 2px 4px; }
 /* DARK_THEME_END */

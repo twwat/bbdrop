@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import platform
+from src.utils.logger import log
 from datetime import datetime
 
 # Cookie cache to avoid repeated Firefox database access
@@ -32,7 +33,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
     # Check cache first
     if _firefox_cookie_cache and (time.time() - _firefox_cache_time) < _cache_duration:
         elapsed = time.time() - start_time
-        print(f"{_timestamp()} INFO: Using cached Firefox cookies (took {elapsed:.3f}s)")
+        log(f"Using cached Firefox cookies (took {elapsed:.3f}s)", level="debug")
         return _firefox_cookie_cache.copy()
     
     try:
@@ -43,20 +44,20 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
 
         if not os.path.exists(firefox_dir):
             elapsed = time.time() - start_time
-            print(f"{_timestamp()} DEBUG: Firefox profiles directory not found: {firefox_dir} (took {elapsed:.3f}s)")
+            log(f"Firefox profiles directory not found: {firefox_dir} (took {elapsed:.3f}s)", level="warning", category="auth")
             return {}
 
         profiles = [d for d in os.listdir(firefox_dir) if d.endswith('.default-release')]
         if not profiles:
             profiles = [d for d in os.listdir(firefox_dir) if 'default' in d]
         if not profiles:
-            print(f"{_timestamp()} DEBUG: No Firefox profile found")
+            log(f"No Firefox profile found", level="debug")
             return {}
 
         profile_dir = os.path.join(firefox_dir, profiles[0])
         cookie_file = os.path.join(profile_dir, 'cookies.sqlite')
         if not os.path.exists(cookie_file):
-            print(f"{_timestamp()} DEBUG: Firefox cookie file not found: {cookie_file}")
+            log(f"Firefox cookie file not found: {cookie_file}", level="debug")
             return {}
 
         cookies = {}
@@ -65,7 +66,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
         # Set a 1-second timeout to prevent long waits on locked Firefox databases
         conn = sqlite3.connect(cookie_file, timeout=1.0)
         sqlite_connect_time = time.time() - sqlite_start
-        #print(f"{_timestamp()} DEBUG: SQLite connect took {sqlite_connect_time:.3f}s")
+        log(f"SQLite connect took {sqlite_connect_time:.4f}s", level="debug")
         
         cursor = conn.cursor()
         query_start = time.time()
@@ -78,7 +79,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             (f'%{domain}%',),
         )
         query_time = time.time() - query_start
-        print(f"{_timestamp()} INFO: SQLite connect took {sqlite_connect_time:.3f}s, query took {query_time:.3f}s")
+        log(f"SQLite query took {query_time:.4f}s", level="debug")
         for row in cursor.fetchall():
             name, value, host, path, _expiry, secure = row
             cookies[name] = {
@@ -94,11 +95,11 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
         _firefox_cache_time = time.time()
         
         elapsed = time.time() - start_time
-        print(f"{_timestamp()} INFO: get_firefox_cookies() completed in {elapsed:.3f}s, found {len(cookies)} {domain} cookies (cached)")
+        log(f"get_firefox_cookies() completed in {elapsed:.3f}s, found {len(cookies)} {domain} cookies (cached)", level="debug")
         return cookies
     except Exception as e:
         elapsed = time.time() - start_time
-        print(f"{_timestamp()} DEBUG: Error extracting Firefox cookies: {e} (took {elapsed:.3f}s)")
+        log(f"Error extracting Firefox cookies: {e} (took {elapsed:.3f}s)", level="warning")
         # Cache empty result to avoid repeated failures
         _firefox_cookie_cache = {}
         _firefox_cache_time = time.time()
@@ -125,11 +126,11 @@ def load_cookies_from_file(cookie_file: str = "cookies.txt") -> dict:
                                 'path': path,
                                 'secure': secure == 'TRUE',
                             }
-            print(f"{_timestamp()} INFO: Loaded {len(cookies)} cookies from {cookie_file}")
+            log(f"Loaded {len(cookies)} cookies from {cookie_file}", level="info")
         #else:
         #    print(f"{_timestamp()} Cookie file not found: {cookie_file}")
     except Exception as e:
-        print(f"{_timestamp()} DEBUG: Error loading cookies: {e}")
+        log(f"Error loading cookies: {e}", level="error")
     return cookies
 
 

@@ -52,27 +52,14 @@ class SplashScreen(QSplashScreen):
             "exorcising"
         ]
         
-        self.objects = [
-            "PyQt6", "database connection", "galleries", "tab manager", "QueueManager",
-            "main GUI", "upload engine", "settings manager", "image scanner", "file system",
-            "SSL certificates", "network adapter", "memory allocator", "thread pool",
-            "cache manager", "template engine", "BBCode parser", "progress tracker",
-            "status monitor", "cookie jar", "session handler", "encryption module",
-            "thumbnail generator", "metadata extractor", "queue processor", "drag handler"
-        ]
-        
+       
         # Get version info
         try:
             from imxup import __version__
             self.version = f"IMXup {__version__} "
         except:
             self.version = "v69"
-        
-        # Auto-cycling timer for random status updates
-        #self.random_timer = QTimer()
-        #self.random_timer.timeout.connect(self.update_random_status)
-        #self.random_timer.start(random.randint(300, 700))  # Random interval
-        
+
         # Set rounded window shape
         self.setWindowShape()
     
@@ -86,6 +73,11 @@ class SplashScreen(QSplashScreen):
     def paintEvent(self, event):
         """Custom paint event to draw text and layout"""
         super().paintEvent(event)
+        
+        license_lines = [
+            "Software distributed under the license is on an \"as is\"",
+            "basis without warranties or conditions of any kind.",
+        ]
         
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -103,16 +95,6 @@ class SplashScreen(QSplashScreen):
             logo_x = (self.width() - logo_scaled.width()) // 2
             painter.drawPixmap(logo_x, y_offset, logo_scaled)
             y_offset += logo_height
-        
-        # Draw title
-        #painter.setPen(QColor(203, 73, 25))
-        #title_font = QFont("Arial", 26, QFont.Weight.Bold)
-        #painter.setFont(title_font)
-        #title_text = "IMXup"
-        #title_rect = painter.fontMetrics().boundingRect(title_text)
-        #title_x = (self.width() - title_rect.width()) // 2
-        #painter.drawText(title_x, y_offset + 25, title_text)
-        #y_offset += 40
         
         # Draw version
         version_font = QFont("Courier", 13)
@@ -146,21 +128,13 @@ class SplashScreen(QSplashScreen):
         license_font = QFont("Courier", 9)
         painter.setFont(license_font)
         
-        license_lines = [
-            "Software distributed under the license is on an \"as is\"",
-            "basis without warranties or conditions of any kind.",
-        ]
-
         y_pos = y_offset
         for line in license_lines:
             if line:
                 line_rect = painter.fontMetrics().boundingRect(line)
                 line_x = (self.width() - line_rect.width()) // 2
                 painter.drawText(line_x, y_pos, line)
-            if line == "":
-                y_pos += 12
-            else:
-                y_pos += 15
+            y_pos += 15
         
         # Draw status text at bottom
         painter.setPen(QColor(210, 133, 133))
@@ -195,20 +169,6 @@ class SplashScreen(QSplashScreen):
         action = random.choice(self.action_words).title()
         obj = random.choice(self.objects)
         
-        # Add some variety to the format
-        #formats = [
-        #    f"{action} {obj}",
-        #    f"{action} {obj}",
-        #    f"{action} {random.randint(1, 999)} {obj}",
-        #    f"{action} the {obj}",
-        #]
-        
-        #status = random.choice(formats)
-        #self.update_status(status)
-        
-        # Randomize next update interval
-        #self.random_timer.setInterval(random.randint(200, 600))
-    
     def set_status(self, text):
         """Set status text with random action word and add progress dot"""
         #self.random_timer.stop()
@@ -220,6 +180,4 @@ class SplashScreen(QSplashScreen):
     
     def finish_and_hide(self):
         """Clean shutdown of splash screen"""
-        #if self.random_timer:
-        #    self.random_timer.stop()
         self.hide()

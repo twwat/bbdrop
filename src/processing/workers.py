@@ -14,6 +14,7 @@ from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
 from imxup import ImxToUploader, save_gallery_artifacts, generate_bbcode_from_template
 from imxup import rename_all_unnamed_with_session, get_central_storage_path
 from src.core.engine import UploadEngine
+from src.utils.logger import log
 from src.core.constants import (
     QUEUE_STATE_UPLOADING, QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED,
     QUEUE_STATE_PAUSED, QUEUE_STATE_READY, QUEUE_STATE_INCOMPLETE
@@ -58,18 +59,18 @@ class UploadWorker(QThread):
         # Transfer rate now updated by GUI timer
         
         # Initialize background rename worker (do this in __init__ so it's available immediately)
-        print(f"DEBUG: UploadWorker.__init__ - Setting up RenameWorker attribute")
+        log(f"UploadWorker.__init__ - Setting up RenameWorker attribute", level="debug")
         self._rename_worker_available = True
         try:
             from src.processing.rename_worker import RenameWorker
-            print(f"DEBUG: RenameWorker import successful")
+            log(f"RenameWorker import successful", level="debug")
             # Import successful, will initialize with uploader in run()
         except Exception as e:
-            print(f"DEBUG: RenameWorker import failed: {e}")
+            log(f"RenameWorker import failed: {e}", level="error")
             self._rename_worker_available = False
         
         self.rename_worker = None  # Will be set in run() if available
-        print(f"DEBUG: UploadWorker.__init__ - rename_worker attribute set to None")
+        log(f"UploadWorker.__init__ - rename_worker attribute set to None", level="debug")
     
     def run(self):
         """Main worker thread loop"""
@@ -79,14 +80,14 @@ class UploadWorker(QThread):
         
         # Initialize background rename worker with uploader
         if not self._rename_worker_available:
-            self.log_message.emit("RenameWorker not available (import failed in __init__)")
+            log(f"RenameWorker not available (import failed in __init__)", level="error")
         else:
             try:
                 from src.processing.rename_worker import RenameWorker
                 self.rename_worker = RenameWorker(self.uploader)
-                self.log_message.emit("RenameWorker initialized successfully")
+                log("RenameWorker initialized successfully", level="debug")
             except Exception as e:
-                self.log_message.emit(f"Failed to initialize RenameWorker: {e}")
+                log(f"Failed to initialize RenameWorker: {e}", level="error")
                 self.rename_worker = None
         
         # Initialize session
@@ -126,7 +127,7 @@ class UploadWorker(QThread):
                     self.current_item = None
                     
             except Exception as e:
-                self.log_message.emit(f"Worker error: {e}")
+                log(f"Worker error: {e}", level="error")
                 traceback.print_exc()
     
     def _init_session(self):
@@ -134,11 +135,11 @@ class UploadWorker(QThread):
         try:
             success = self.uploader.init_session()
             if success:
-                self.log_message.emit("Session initialized successfully")
+                log("Session initialized successfully", level="debug")
             else:
-                self.log_message.emit("Failed to initialize session")
+                log("Failed to initialize session", level="warning")
         except Exception as e:
-            self.log_message.emit(f"Session initialization error: {e}")
+            log(f"Session initialization error: {e}", level="error")
     
     def _get_next_item(self):
         """Get next item from queue"""
@@ -213,7 +214,7 @@ class UploadWorker(QThread):
             error_msg = str(e)
             self.gallery_failed.emit(item.path, error_msg)
             self.queue_manager.update_item_status(item.path, QUEUE_STATE_FAILED)
-            self.log_message.emit(f"Upload error for {item.path}: {error_msg}")
+            log(f"Upload error for {item.path}: {error_msg}", level="debug")
     
     def _check_gallery_exists(self, gallery_url: str) -> bool:
         """Check if a gallery already exists"""
@@ -232,9 +233,9 @@ class UploadWorker(QThread):
                 if renamed:
                     for gallery_id, new_name in renamed:
                         self.gallery_renamed.emit(gallery_id, new_name)
-                        self.log_message.emit(f"Gallery {gallery_id} renamed to: {new_name}")
+                        log(f"Gallery {gallery_id} renamed to: {new_name}", level="info", category="renaming")
         except Exception as e:
-            self.log_message.emit(f"Auto-rename error: {e}")
+            log(f"Auto-rename error: {e}", level="debug", category="renaming")
     
     def _emit_queue_stats(self):
         """Emit queue statistics"""
@@ -255,9 +256,9 @@ class UploadWorker(QThread):
         if self.uploader:
             try:
                 self.uploader.retry_login(credentials_only)
-                self.log_message.emit("Login retry requested")
+                log(f"Login retry requested", level="debug", category="auth")
             except Exception as e:
-                self.log_message.emit(f"Login retry failed: {e}")
+                log(f"Login retry failed: {e}", level="debug", category="auth")
     
     def pause(self):
         """Pause the worker"""
@@ -313,7 +314,7 @@ class CompletionWorker(QThread):
                 continue
             except Exception as e:
                 from imxup import timestamp
-                self.log_message.emit(f"{timestamp()} Completion processing error: {e}")
+                log(f"Completion processing error: {e}", level="error")
     
     def _process_completion_background(self, path: str, results: dict, gui_parent):
         """Do the heavy completion processing in background thread"""
@@ -337,7 +338,7 @@ class CompletionWorker(QThread):
                     existing_unnamed = get_unnamed_galleries()
                     if gallery_id not in [g['gallery_id'] for g in existing_unnamed]:
                         save_unnamed_gallery(gallery_id, gallery_name)
-                        self.log_message.emit(f"{timestamp()} [rename] Tracking gallery for auto-rename: {gallery_name}")
+                        log(f"Tracking gallery for auto-rename: {gallery_name}", level="debug", category="renaming")
             except Exception:
                 pass
                 
@@ -355,14 +356,14 @@ class CompletionWorker(QThread):
                 )
                 
                 if written:
-                    self.log_message.emit(f"{timestamp()} [fileio] Saved gallery files")
+                    log(f"Saved gallery files", level="debug", category="fileio")
                     
             except Exception as e:
-                self.log_message.emit(f"{timestamp()} Artifact save error: {e}")
+                log(f"Artifact save error: {e}", level="error", category="fileio")
                 
         except Exception as e:
             from imxup import timestamp
-            self.log_message.emit(f"{timestamp()} Background completion processing error: {e}")
+            log(f"Background completion processing error: {e}", level="error")
 
 
 class BandwidthTracker:

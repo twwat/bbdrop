@@ -18,6 +18,7 @@ import concurrent.futures
 import time
 from tqdm import tqdm
 from src.utils.format_utils import format_binary_size, format_binary_rate
+from src.utils.logger import log
 import configparser
 import hashlib
 import getpass
@@ -26,7 +27,7 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.4.12"  # Application version number
+__version__ = "0.5.00"  # Application version number
 
 # Build User-Agent string once at module load
 _system = platform.system()
@@ -184,14 +185,14 @@ def create_windows_context_menu():
         winreg.CloseKey(gui_command_key_dir)
         winreg.CloseKey(gui_key_dir)
         
-        print(f"Context menu created successfully!")
-        print(f"Right-click on any folder (or background) and select:")
-        print(f"  - 'Upload to imx.to' for command line mode")
-        print(f"  - 'Upload to imx.to (GUI)' for graphical interface")
+        print("Context menu created successfully!")
+        print("Right-click on any folder (or background) and select:")
+        print("  - 'Upload to imx.to' for command line mode")
+        print("  - 'Upload to imx.to (GUI)' for graphical interface")
         return True
         
     except Exception as e:
-        print(f"Error creating context menu: {e}")
+        log(f"Error creating context menu: {e}", level="error")
         return False
 
 def remove_windows_context_menu():
@@ -229,10 +230,10 @@ def remove_windows_context_menu():
         except FileNotFoundError:
             pass
         
-        print("Context menu removed successfully!")
+        log("Context menu removed successfully.", level="info", category="ui")
         return True
     except Exception as e:
-        print(f"Error removing context menu: {e}")
+        log(f"Error removing context menu: {e}", level="error", category="ui")
         return False
 
 import base64
@@ -301,7 +302,7 @@ def decrypt_password(encrypted_password):
         f = Fernet(key)
         return f.decrypt(encrypted_password.encode()).decode()
     except Exception as e:
-        print(f"{timestamp()} Warning: Failed to decrypt password: {e}")
+        log(f"Failed to decrypt password: {e}", level="warning", category="auth")
         return None
 
 def load_user_defaults():
@@ -363,7 +364,7 @@ def setup_secure_password():
     """Interactive setup for secure password storage"""
     print("Setting up secure password storage for imx.to")
     print("This will store a hashed version of your password in ~/.imxup/imxup.ini")
-    print()
+    print("")
     
     username = input("Enter your imx.to username: ")
     password = getpass.getpass("Enter your imx.to password: ")
@@ -376,7 +377,7 @@ def setup_secure_password():
         print("You can test the credentials by running an upload.")
         return True
     else:
-        print("[ERROR] Failed to save credentials.")
+        log("Failed to save credentials.", level="error", category="auth")
         return False
 
 def _save_credentials(username, password):
@@ -396,7 +397,7 @@ def _save_credentials(username, password):
     with open(config_file, 'w') as f:
         config.write(f)
     
-    print(f"[OK] Credentials saved to {config_file}")
+    log(f"[OK] Credentials saved to {config_file}", level="info", category="auth")
     return True
 
 def save_unnamed_gallery(gallery_id, intended_name):
@@ -405,10 +406,10 @@ def save_unnamed_gallery(gallery_id, intended_name):
         from src.storage.database import QueueStore
         store = QueueStore()
         store.add_unnamed_gallery(gallery_id, intended_name)
-        print(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'")
+        log(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'", level="debug", category="renaming")
     except Exception as e:
         # Fallback to config file
-        print(f"Database save failed, using config file fallback: {e}")
+        log(f"Database save failed, using config file fallback: {e}", level="error", category="renaming")
         config = configparser.ConfigParser()
         config_file = get_config_path()
         
@@ -423,7 +424,7 @@ def save_unnamed_gallery(gallery_id, intended_name):
         with open(config_file, 'w') as f:
             config.write(f)
         
-        print(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'")
+        log(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'", level="info", category="renaming")
 
 def get_default_central_store_base_path():
     """Return the default central store BASE path (parent of galleries/templates)."""
@@ -565,9 +566,7 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
                 # Hard stop further renames to avoid hammering while blocked
                 try:
                     if hasattr(uploader, 'worker_thread') and uploader.worker_thread is not None:
-                        uploader.worker_thread.log_message.emit(
-                            f"{timestamp()} [renaming] Stopping auto-rename due to {'DDoS-Guard' if ddos else 'HTTP 403'}"
-                        )
+                        log(f"Stopping auto-rename due to {'DDoS-Guard' if ddos else 'HTTP 403'}", level="debug", category="renaming")
                 except Exception:
                     pass
                 # Do not continue processing additional galleries
@@ -575,9 +574,7 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
         if ok:
             try:
                 if hasattr(uploader, 'worker_thread') and uploader.worker_thread is not None:
-                    uploader.worker_thread.log_message.emit(
-                        f"{timestamp()} [renaming] Successfully renamed gallery '{gallery_id}' to '{intended_name}'"
-                    )
+                    log(f"Successfully renamed gallery '{gallery_id}' to '{intended_name}'", level="info", category="renaming")
                     try:
                         # Notify GUI to update Renamed column if available
                         if hasattr(uploader.worker_thread, 'gallery_renamed'):
@@ -594,9 +591,7 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
             try:
                 if hasattr(uploader, 'worker_thread') and uploader.worker_thread is not None:
                     reason = "DDoS-Guard" if ddos else (f"HTTP {status}" if status else "unknown error")
-                    uploader.worker_thread.log_message.emit(
-                        f"{timestamp()} [renaming] Failed to rename gallery '{gallery_id}' to '{intended_name}' ({reason})"
-                    )
+                    log(f"Failed to rename gallery '{gallery_id}' to '{intended_name}' ({reason})", level="warning", category="renaming")
             except Exception:
                 pass
             # Keep it in unnamed list for future attempts
@@ -621,10 +616,10 @@ def remove_unnamed_gallery(gallery_id):
         store = QueueStore()
         removed = store.remove_unnamed_gallery(gallery_id)
         if removed:
-            print(f"{timestamp()} Removed {gallery_id} from unnamed galleries list")
+            log(f"Removed {gallery_id} from unnamed galleries list", level="info")
     except Exception as e:
         # Fallback to config file
-        print(f"Database removal failed, using config file fallback: {e}")
+        log(f"Database removal failed, using config file fallback: {e}", level="warning")
         config = configparser.ConfigParser()
         config_file = get_config_path()
         
@@ -637,7 +632,7 @@ def remove_unnamed_gallery(gallery_id):
                 with open(config_file, 'w') as f:
                     config.write(f)
                 
-                print(f"{timestamp()} Removed {gallery_id} from unnamed galleries list")
+                log(f"Removed {gallery_id} from unnamed galleries list", level="info", category="renaming")
 
 from src.network.cookies import get_firefox_cookies, load_cookies_from_file
 
@@ -676,7 +671,7 @@ def load_templates():
                     with open(template_file, 'r', encoding='utf-8') as f:
                         templates[template_name] = f.read()
                 except Exception as e:
-                    print(f"{timestamp()} Warning: Could not load template '{template_name}': {e}")
+                    log(f"Could not load template '{template_name}': {e}", level="error")
     
     return templates
 
@@ -711,7 +706,7 @@ def generate_bbcode_from_template(template_name, data):
     templates = load_templates()
     
     if template_name not in templates:
-        print(f"{timestamp()} Warning: Template '{template_name}' not found, using default")
+        log(f" Warning: Template '{template_name}' not found, using default")
         template_name = "default"
     
     template_content = templates[template_name]
@@ -935,7 +930,7 @@ class ImxToUploader:
                 self.session.cookies.update(old_cookies)
 
         except Exception as e:
-            print(f"Warning: Failed to refresh session pool: {e}")
+            log(f"Warning: Failed to refresh session pool: {e}", level="warning")
 
     def __init__(self):
         # Get credentials from stored config
@@ -949,14 +944,14 @@ class ImxToUploader:
         has_credentials = (self.username and self.password) or self.api_key
 
         if not has_credentials:
-            print(f"{timestamp()} Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.")
+            log(f"Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.", level="warning", category="auth")
             sys.exit(1)
 
         # Load timeout settings
         defaults = load_user_defaults()
         self.upload_connect_timeout = defaults.get('upload_connect_timeout', 30)
         self.upload_read_timeout = defaults.get('upload_read_timeout', 120)
-        #print(f"{timestamp()} Timeout settings loaded: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s")
+        log(f"Timeout settings loaded: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s", level="debug", category="network")
 
         self.base_url = "https://api.imx.to/v1"
         self.web_url = "https://imx.to"
@@ -1004,24 +999,24 @@ class ImxToUploader:
                 try:
                     import time
                     login_start = time.time()
-                    #print(f"{timestamp()} DEBUG: Starting cookie-based login process...")
-                    #print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
+                    #log(f" DEBUG: Starting cookie-based login process...")
+                    #log(f" Attempting to use cookies to bypass DDoS-Guard...")
                     
                     cookies_start = time.time()
                     firefox_cookies = get_firefox_cookies("imx.to")
                     firefox_time = time.time() - cookies_start
-                    #print(f"{timestamp()} DEBUG: Firefox cookies took {firefox_time:.3f}s")
+                    #log(f" DEBUG: Firefox cookies took {firefox_time:.3f}s")
                     
                     file_start = time.time()
                     file_cookies = load_cookies_from_file("cookies.txt")
                     file_time = time.time() - file_start
-                    #print(f"{timestamp()} DEBUG: File cookies took {file_time:.3f}s")
+                    #log(f" DEBUG: File cookies took {file_time:.3f}s")
                     all_cookies = {}
                     if firefox_cookies:
-                        #print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
+                        #log(f" Found {len(firefox_cookies)} Firefox cookies for imx.to")
                         all_cookies.update(firefox_cookies)
                     if file_cookies:
-                        #print(f"{timestamp()} Loaded cookies from cookies.txt")
+                        #log(f" Loaded cookies from cookies.txt")
                         all_cookies.update(file_cookies)
                     if all_cookies:
                         for name, cookie_data in all_cookies.items():
@@ -1031,7 +1026,7 @@ class ImxToUploader:
                                 pass
                         test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                         if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                            print(f"{timestamp()} Successfully authenticated using cookies (no password login)")
+                            log(f"Successfully authenticated using cookies (no password login)", level="debug", category="auth")
                             try:
                                 self.last_login_method = "cookies"
                             except Exception:
@@ -1041,14 +1036,14 @@ class ImxToUploader:
                     # Ignore cookie errors and fall back
                     pass
             if self.api_key:
-                print(f"{timestamp()} Using API key authentication - gallery naming may be limited")
+                log(f"Using API key authentication - gallery naming may be limited", level="debug", category="info")
                 try:
                     self.last_login_method = "api_key"
                 except Exception:
                     pass
                 return True
             else:
-                print(f"{timestamp()} Warning: No stored credentials, gallery naming disabled")
+                log(f"No stored credentials, gallery naming disabled", level="warning", category="auth")
                 try:
                     self.last_login_method = "none"
                 except Exception:
@@ -1059,7 +1054,7 @@ class ImxToUploader:
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    print(f"{timestamp()} Retry attempt {attempt + 1}/{max_retries}")
+                    log(f" Retry attempt {attempt + 1}/{max_retries}")
                     time.sleep(1)
                 
                 # Try to get cookies first (browser + file) if enabled
@@ -1074,15 +1069,15 @@ class ImxToUploader:
                 except Exception:
                     use_cookies = True
                 if use_cookies:
-                    #print(f"{timestamp()} Attempting to use cookies to bypass DDoS-Guard...")
+                    #log(f" Attempting to use cookies to bypass DDoS-Guard...")
                     firefox_cookies = get_firefox_cookies("imx.to")
                     file_cookies = load_cookies_from_file("cookies.txt")
                     all_cookies = {}
                     if firefox_cookies:
-                        #print(f"{timestamp()} Found {len(firefox_cookies)} Firefox cookies for imx.to")
+                        #log(f" Found {len(firefox_cookies)} Firefox cookies for imx.to")
                         all_cookies.update(firefox_cookies)
                     if file_cookies:
-                        #print(f"{timestamp()} Loaded cookies from cookies.txt")
+                        #log(f" Loaded cookies from cookies.txt")
                         all_cookies.update(file_cookies)
                     if all_cookies:
                         # Add cookies to session
@@ -1095,17 +1090,17 @@ class ImxToUploader:
                         # Test if we're already logged in with cookies
                         test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                         if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                            print(f"{timestamp()} INFO: Successfully authenticated using cookies (no password login)")
+                            log(f"Successfully authenticated using cookies (no password login)", level="info", category="auth")
                             try:
                                 self.last_login_method = "cookies"
                             except Exception:
                                 pass
                             return True
                 #else:
-                #    print(f"{timestamp()} Skipping Firefox cookies per settings")
+                #    log(f" Skipping Firefox cookies per settings")
                 
                 # Fall back to regular login
-                #print(f"{timestamp()} Attempting login to {self.web_url}/login.php")
+                #log(f" Attempting login to {self.web_url}/login.php")
                 login_page = self.session.get(f"{self.web_url}/login.php")
                 
                 # Submit login form
@@ -1120,13 +1115,13 @@ class ImxToUploader:
                 
                 # Check if we hit DDoS-Guard
                 if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-                    print(f"{timestamp()} DEBUG: DDoS-Guard detected, trying browser cookies...")
+                    log(f"DDoS-Guard detected, trying browser cookies...", level="debug", category="auth")
                     firefox_cookies = get_firefox_cookies("imx.to") if use_cookies else {}
                     file_cookies = load_cookies_from_file("cookies.txt") if use_cookies else {}
                     all_cookies = {**firefox_cookies, **file_cookies} if use_cookies else {}
                     
                     if all_cookies:
-                        print(f"{timestamp()} DEBUG: Retrying with browser cookies...")
+                        log(f"Retrying with browser cookies...", level="debug", category="auth")
                         # Clear session and try with cookies (use resilient session)
                         defaults = load_user_defaults()
                         parallel_batch_size = defaults.get('parallel_batch_size', 4)
@@ -1149,25 +1144,25 @@ class ImxToUploader:
                         
                         # If we still hit DDoS-Guard but have cookies, test if we can access user pages
                         if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-                            print(f"{timestamp()} DEBUG: DDoS-Guard detected but cookies loaded - testing access to user pages...")
+                            log(f"DDoS-Guard detected but cookies loaded - testing access to user pages...", level="debug", category="auth")
                             # Test if we can access a user page
                             test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                             if test_response.status_code == 200 and 'login' not in test_response.url:
-                                print(f"{timestamp()} INFO: Successfully accessed user pages with cookies")
+                                log(f"Successfully accessed user pages with cookies", level="debug", category="auth")
                                 try:
                                     self.last_login_method = "cookies"
                                 except Exception:
                                     pass
                                 return True
                             else:
-                                print(f"{timestamp()} DEBUG: Cannot access user pages despite cookies - login may have failed")
+                                log(f"Cannot access user pages despite cookies - login may have failed", level="debug", category="auth")
                                 if attempt < max_retries - 1:
                                     continue
                                 else:
                                     return False
                     
                     if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-                        print(f"{timestamp()} DEBUG: DDoS-Guard still detected, falling back to API-only upload...")
+                        log(f"DDoS-Guard still detected, falling back to API-only upload...", level="debug", category="auth")
                         if attempt < max_retries - 1:
                             continue
                         else:
@@ -1175,21 +1170,21 @@ class ImxToUploader:
                 
                 # Check if login was successful
                 if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-                    print(f"{timestamp()} INFO: Successfully logged in")
+                    log(f"Successfully logged in", level="info", category="auth")
                     try:
                         self.last_login_method = "credentials"
                     except Exception:
                         pass
                     return True
                 else:
-                    print(f"{timestamp()} WARNING: Login failed - check username/password")
+                    log(f"Login failed - check username/password", level="warning", category="auth")
                     if attempt < max_retries - 1:
                         continue
                     else:
                         return False
                     
             except Exception as e:
-                print(f"{timestamp()} WARNING: Login error: {str(e)}")
+                log(f"Login error: {str(e)}", level="error", category="auth")
                 if attempt < max_retries - 1:
                     continue
                 else:
@@ -1237,7 +1232,7 @@ class ImxToUploader:
     def create_gallery_with_name(self, gallery_name, skip_login=False):
         """Create a gallery with a specific name using web interface"""
         if not skip_login and not self.login():
-            print(f"{timestamp()} DEBUG: Login failed - cannot create gallery with name")
+            log(f"Login failed - cannot create gallery with name", level="debug", category="auth")
             return None
         
         try:
@@ -1256,18 +1251,18 @@ class ImxToUploader:
             # Extract gallery ID from redirect URL
             if 'gallery/manage?id=' in response.url:
                 gallery_id = response.url.split('id=')[1]
-                print(f"{timestamp()} Created gallery '{gallery_name}' with ID '{gallery_id}'")
+                log(f"Created gallery '{gallery_name}' with ID '{gallery_id}'", level="debug", category="auth")
                 return gallery_id
             else:
-                print(f"{timestamp()} DEBUG: Failed to create gallery")
-                print(f"{timestamp()} - Response URL: {response.url}")
-                print(f"{timestamp()} - Response status: {response.status_code}")
+                log(f"Failed to create gallery", level="debug", category="auth")
+                log(f"- Response URL: {response.url}", level="debug", category="auth")
+                log(f"- Response status: {response.status_code}", level="debug", category="auth")
                 if 'DDoS-Guard' in response.text:
-                    print(f"{timestamp()} DEBUG: DDoS-Guard detected in gallery creation")
+                    log(f"DDoS-Guard detected in gallery creation", level="debug", category="auth")
                 return None
                 
         except Exception as e:
-            print(f"{timestamp()} DEBUG: Error creating gallery: {str(e)}")
+            log(f"Error creating gallery: {str(e)}", level="error")
             return None
     
     # REMOVED: _upload_without_named_gallery — unified into upload_folder
@@ -1291,14 +1286,14 @@ class ImxToUploader:
             response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
             
             if response.status_code == 200:
-                print(f"{timestamp()} INFO: Successfully renamed gallery '{gallery_id}' to '{new_name}'")
+                log(f"Successfully renamed gallery '{gallery_id}' to '{new_name}'", level="info")
                 return True
             else:
-                print(f"{timestamp()} DEBUG: Failed to rename gallery")
+                log(f"Failed to rename gallery", level="debug", category="renaming")
                 return False
                 
         except Exception as e:
-            print(f"{timestamp()} DEBUG: Error renaming gallery: {str(e)}")
+            log(f"Error renaming gallery: {str(e)}", level="error", category="renaming")
             return False
     
     def rename_gallery_with_session(self, gallery_id, new_name):
@@ -1308,7 +1303,7 @@ class ImxToUploader:
             original_name = new_name
             new_name = sanitize_gallery_name(new_name)
             if original_name != new_name:
-                print(f"{timestamp()} Sanitized gallery name: '{original_name}' -> '{new_name}'")
+                log(f"Sanitized gallery name: '{original_name}' -> '{new_name}'", level="debug", category="renaming")
             
             # Get the edit gallery page
             edit_page = self.session.get(f"{self.web_url}/user/gallery/edit?id={gallery_id}")
@@ -1322,14 +1317,14 @@ class ImxToUploader:
             
             # Check if we can access the edit page
             if edit_page.status_code != 200:
-                print(f"{timestamp()} Failed to access edit page for gallery {gallery_id} (status: {edit_page.status_code})")
+                log(f"Failed to access edit page for gallery {gallery_id} (status: {edit_page.status_code})", level="debug")
                 if 'DDoS-Guard' in edit_page.text:
-                    print(f"{timestamp()} DDoS-Guard detected on edit page")
+                    log(f"DDoS-Guard detected on edit page", level="debug")
                 return False
             
             # Check if we're actually logged in by looking for login form
             if 'login' in edit_page.url or 'login' in edit_page.text.lower():
-                print(f"{timestamp()} Not logged in - redirecting to login page")
+                log(f"Not logged in - redirecting to login page", level="debug", category="auth")
                 return False
             
             # Submit gallery rename form
@@ -1351,21 +1346,21 @@ class ImxToUploader:
             if response.status_code == 200:
                 # Check if the rename was actually successful
                 if 'success' in response.text.lower() or 'gallery' in response.url:
-                    print(f"{timestamp()} Successfully renamed gallery '{gallery_id}' to '{new_name}'")
+                    log(f"Rename Worker: Successfully renamed gallery '{gallery_id}' to '{new_name}'", level="info", category="renaming")
                     return True
                 else:
-                    print(f"{timestamp()} Rename request returned 200 but may have failed")
+                    log(f"Rename request returned 200 but may have failed", level="debug", category="renaming")
                     if 'DDoS-Guard' in response.text:
-                        print(f"{timestamp()} DDoS-Guard detected in response")
+                        log(f"DDoS-Guard detected in response", level="debug", category="renaming")
                     return False
             else:
-                print(f"{timestamp()} Failed to rename gallery (status: {response.status_code})")
+                log(f"Failed to rename gallery (status: {response.status_code})", level="debug", category="renaming")
                 if 'DDoS-Guard' in response.text:
-                    print(f"{timestamp()} DDoS-Guard detected in response")
+                    log(f"DDoS-Guard detected in response", level="debug", category="renaming")
                 return False
                 
         except Exception as e:
-            print(f"{timestamp()} Error renaming gallery: {str(e)}")
+            log(f"Error renaming gallery: {str(e)}", level="error", category="renaming")
             return False
     
     def set_gallery_visibility(self, gallery_id):
@@ -1386,14 +1381,14 @@ class ImxToUploader:
             response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=visibility_data)
             
             if response.status_code == 200:
-                print(f"{timestamp()} Successfully set gallery {gallery_id} visibility")
+                log(f"Successfully set gallery {gallery_id} visibility", level="debug")
                 return True
             else:
-                print(f"{timestamp()} Failed to update gallery visibility")
+                log(f"Failed to update gallery visibility", level="warning")
                 return False
                 
         except Exception as e:
-            print(f"{timestamp()} Error updating gallery visibility: {str(e)}")
+            log(f"Error updating gallery visibility: {str(e)}", level="error")
             return False
     
     def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None):
@@ -1426,7 +1421,7 @@ class ImxToUploader:
         file_read_time = time.time() - file_read_start
 
         if not hasattr(self, '_first_read_logged'):
-            print(f"{timestamp()} [concurrency:fileio] Read {os.path.basename(image_path)} ({len(file_data)/1024/1024:.1f}MB) in {file_read_time:.3f}s")
+            log(f"Read {os.path.basename(image_path)} ({len(file_data)/1024/1024:.1f}MB) in {file_read_time:.3f}s", level="debug", category="fileio")
             self._first_read_logged = True
 
         # Prepare files and data for upload (file handle now closed)
@@ -1453,7 +1448,7 @@ class ImxToUploader:
                 adapter = self.session.get_adapter('https://')
                 pool_size = getattr(adapter, 'pool_maxsize', 'unknown')
                 pool_conns = getattr(adapter, 'pool_connections', 'unknown')
-                print(f"{timestamp()} [connection] Session pool configured: max_size={pool_size}, pool_connections={pool_conns}")
+                log(f"Session pool configured: max_size={pool_size}, pool_connections={pool_conns}", level="debug", category="network")
                 self._connection_info_logged = True
 
             # Use configurable timeouts to prevent indefinite hangs
@@ -1498,7 +1493,7 @@ class ImxToUploader:
             dict: Contains gallery URL and individual image URLs
         """
         start_time = time.time()
-        print(f"{timestamp()} [TIMING] upload_folder({folder_path}) started at {start_time:.6f}")
+        log(f"upload_folder({folder_path}) started at {start_time:.6f}", level="debug", category="timing")
         
         if not os.path.exists(folder_path):
             raise FileNotFoundError(f"Folder not found: {folder_path}")
@@ -1529,7 +1524,7 @@ class ImxToUploader:
                     image_dimensions.append((0, 0))  # Error reading image
         
         scan_duration = time.time() - scan_start
-        print(f"{timestamp()} [TIMING] File scanning and PIL processing took {scan_duration:.6f}s for {len(image_files)} files")
+        log(f" [TIMING] File scanning and PIL processing took {scan_duration:.6f}s for {len(image_files)} files")
         
         if not image_files:
             raise ValueError(f"No image files found in {folder_path}")
@@ -1545,33 +1540,33 @@ class ImxToUploader:
         check_start = time.time()
         existing_files = check_if_gallery_exists(gallery_name)
         check_duration = time.time() - check_start
-        print(f"{timestamp()} [TIMING] Gallery existence check took {check_duration:.6f}s")
+        log(f" [TIMING] Gallery existence check took {check_duration:.6f}s")
         
         if existing_files:
-            print(f"{timestamp()} Found existing gallery files for '{gallery_name}':")
+            log(f" Found existing gallery files for '{gallery_name}':")
             for file_path in existing_files:
-                print(f"{timestamp()}   {file_path}")
+                log(f"   {file_path}")
             
             response = input(f"{timestamp()} Gallery appears to already exist. Continue anyway? (y/N): ")
             if response.lower() != 'y':
-                print(f"{timestamp()} Skipping {folder_path}")
+                log(f" Skipping {folder_path}")
                 return None
         
         # Create gallery (skip login since it's already done). If creation fails, fall back to API-only
         create_start = time.time()
         gallery_id = self.create_gallery_with_name(gallery_name, skip_login=True)
         create_duration = time.time() - create_start
-        print(f"{timestamp()} [TIMING] Gallery creation took {create_duration:.6f}s")
+        log(f" [TIMING] Gallery creation took {create_duration:.6f}s")
         initial_completed = 0
         initial_uploaded_size = 0
         preseed_images = []
         files_to_upload = []
         if not gallery_id:
-            print(f"{timestamp()} Failed to create named gallery, falling back to API-only upload...")
+            log(f" Failed to create named gallery, falling back to API-only upload...")
             # Upload first image to create gallery
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
-            print(f"{timestamp()} Uploading first image: {first_file}")
+            log(f" Uploading first image: {first_file}")
             first_response = self.upload_image(
                 first_image_path,
                 create_gallery=True,
@@ -1721,14 +1716,14 @@ class ImxToUploader:
                                for img_file, _ in uploaded_images])
         avg_width = sum(w for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
         avg_height = sum(h for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
-        print(f"{timestamp()} Successful dimensions: {successful_dimensions}")
+        log(f" Successful dimensions: {successful_dimensions}")
         max_width = max(w for w, h in successful_dimensions) if successful_dimensions else 0
         max_height = max(h for w, h in successful_dimensions) if successful_dimensions else 0
         min_width = min(w for w, h in successful_dimensions) if successful_dimensions else 0
         min_height = min(h for w, h in successful_dimensions) if successful_dimensions else 0
         
         # Add statistics to results
-        print(f"DEBUG RESULTS: Returning original_name='{original_name}' as gallery_name, actual upload name was='{gallery_name}'")
+        log(f"Returning original_name='{original_name}' as gallery_name, actual upload name was='{gallery_name}'", level="debug")
         results.update({
             'gallery_id': gallery_id,
             'gallery_name': original_name,
@@ -1776,7 +1771,7 @@ class ImxToUploader:
         extension = max(set(extensions), key=extensions.count) if extensions else "JPG"
         
         # Prepare template data
-        print(f"DEBUG TEMPLATE: original_name='{original_name}', gallery_name='{gallery_name}'")
+        log(f"Template: original_name='{original_name}', gallery_name='{gallery_name}'", level="debug")
         template_data = {
             'folder_name': original_name,
             'width': int(avg_width),
@@ -1792,7 +1787,7 @@ class ImxToUploader:
         # Generate bbcode using specified template and save artifacts centrally
         bbcode_content = generate_bbcode_from_template(template_name, template_data)
         try:
-            print(f"DEBUG ARTIFACTS: About to save artifacts with original_name='{original_name}', upload_name='{gallery_name}'")
+            log(f"About to save artifacts with original_name='{original_name}', upload_name='{gallery_name}'", level="debug")
             save_gallery_artifacts(
                 folder_path=folder_path,
                 results={
@@ -1820,9 +1815,9 @@ class ImxToUploader:
                 },
                 template_name=template_name,
             )
-            print(f"{timestamp()} Saved gallery files to central and/or .uploaded as configured")
+            log(f" Saved gallery files to central and/or .uploaded as configured")
         except Exception as e:
-            print(f"{timestamp()} Error writing artifacts: {e}")
+            log(f" Error writing artifacts: {e}")
 
         # Compose and save JSON artifact at both locations
         try:
@@ -1964,14 +1959,14 @@ class ImxToUploader:
             except Exception:
                 pass
         except Exception as e:
-            print(f"{timestamp()} Error writing JSON artifact: {e}")
+            log(f" Error writing JSON artifact: {e}")
         
         return results
 
 def main():
     # Load user defaults
     user_defaults = load_user_defaults()
-    
+
     parser = argparse.ArgumentParser(description='Upload image folders to imx.to as galleries and generate bbcode.\n\nSettings file: ' + get_config_path())
     parser.add_argument('-v', '--version', action='store_true', help='Show version and exit')
     parser.add_argument('folder_paths', nargs='*', help='Paths to folders containing images')
@@ -2008,7 +2003,9 @@ def main():
                        help='Remove Windows context menu integration')
     parser.add_argument('--gui', action='store_true',
                        help='Launch graphical user interface')
-    
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable debug mode: print all log messages to console')
+
     args = parser.parse_args()
     if args.version:
         print(f"imxup {__version__}")
@@ -2029,38 +2026,40 @@ def main():
                 sys.argv = [sys.argv[0]]
             
             # Launch GUI
+            print(f"{timestamp()} INFO: Launching GUI for ImxUp v{__version__}")
             imxup_gui.main()
             return
         except ImportError as e:
-            print(f"{timestamp()} Error: PyQt6 is required for GUI mode. Install with: pip install PyQt6")
-            print(f"{timestamp()} Import error: {e}")
+            print(f"{timestamp()} ERROR: Import error: {e}")
+            print(f"Could not import PyQt6, required for GUI mode. Install with: pip install PyQt6")
+            
             sys.exit(1)
         except Exception as e:
-            print(f"{timestamp()} Error launching GUI: {e}")
+            print(f"{timestamp()} CRITICAL: Error launching GUI: {e}")
             sys.exit(1)
     
     # Handle secure setup
     if args.setup_secure:
             if setup_secure_password():
-                print(f"{timestamp()} Setup complete! You can now use the script without storing passwords in plaintext.")
+                print(f"INFO: Setup complete! You can now use the script without storing passwords in plaintext.")
             else:
-                print(f"{timestamp()} Setup failed. Please try again.")
+                print(f"ERROR: Setup failed. Please try again.")
             return
     
     # Handle context menu installation
     if args.install_context_menu:
         if create_windows_context_menu():
-            print(f"{timestamp()} Context menu installed successfully!")
+            print(f"INFO: Context menu installed successfully!")
         else:
-            print(f"{timestamp()} Failed to install context menu.")
+            print(f"ERROR: Failed to install context menu.")
         return
     
     # Handle context menu removal
     if args.remove_context_menu:
         if remove_windows_context_menu():
-            print(f"{timestamp()} Context menu removed successfully!")
+            log(f"Context menu removed successfully.", level="info", category="ui")
         else:
-            print(f"{timestamp()} Failed to remove context menu.")
+            log(f"Failed to remove context menu.", level="error", category="ui")
         return
     
     # Handle gallery visibility changes
@@ -2072,16 +2071,16 @@ def main():
         
         if args.public:
             if uploader.set_gallery_visibility(gallery_id, 1):
-                print(f"Gallery {gallery_id} set to public")
+                log(f"Gallery {gallery_id} set to public")
             else:
-                print(f"Failed to set gallery {gallery_id} to public")
+                log(f"Failed to set gallery {gallery_id} to public", level="error")
         elif args.private:
             if uploader.set_gallery_visibility(gallery_id, 0):
-                print(f"Gallery {gallery_id} set to private")
+                log(f"Gallery {gallery_id} set to private")
             else:
-                print(f"Failed to set gallery {gallery_id} to private")
+                log(f"Failed to set gallery {gallery_id} to private", level="error")
         else:
-            print("Please specify --public or --private")
+            log("Please specify --public or --private", level="warning")
         return
     
     # Handle unnamed gallery renaming
@@ -2090,12 +2089,12 @@ def main():
         unnamed_galleries = get_unnamed_galleries()
         
         if not unnamed_galleries:
-            #print(f"{timestamp()} No unnamed galleries found to rename")
+            #log(f" No unnamed galleries found to rename")
             return
         
-        print(f"{timestamp()} Found {len(unnamed_galleries)} unnamed galleries to rename:")
+        log(f"Found {len(unnamed_galleries)} unnamed galleries to rename:", level="info", category="renaming")
         for gallery_id, intended_name in unnamed_galleries.items():
-            print(f"{timestamp()}   {gallery_id} -> '{intended_name}'")
+            log(f"   {gallery_id} -> '{intended_name}'")
         
         if uploader.login():
             success_count = 0
@@ -2104,15 +2103,15 @@ def main():
                     remove_unnamed_gallery(gallery_id)
                     success_count += 1
             
-            print(f"{timestamp()} Successfully renamed {success_count}/{len(unnamed_galleries)} galleries")
+            log(f" Successfully renamed {success_count}/{len(unnamed_galleries)} galleries")
         else:
-            print(f"{timestamp()} Login failed - cannot rename galleries")
-            print(f"{timestamp()} DDoS-Guard protection is blocking automated login.")
-            print(f"{timestamp()} To rename galleries manually:")
-            print(f"{timestamp()} 1. Log in to https://imx.to in your browser")
-            print(f"{timestamp()} 2. Navigate to each gallery and rename it manually")
-            print(f"{timestamp()} 3. Or export cookies from browser and place in cookies.txt file")
-            print(f"{timestamp()} Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
+            log(f" Login failed - cannot rename galleries")
+            log(f" DDoS-Guard protection is blocking automated login.")
+            log(f" To rename galleries manually:")
+            log(f" 1. Log in to https://imx.to in your browser")
+            log(f" 2. Navigate to each gallery and rename it manually")
+            log(f" 3. Or export cookies from browser and place in cookies.txt file")
+            log(f" Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
             return 1  # Failed to rename galleries
         return 0  # Successfully renamed galleries
     
@@ -2127,13 +2126,13 @@ def main():
             # Expand wildcards
             expanded = glob.glob(path)
             if not expanded:
-                print(f"{timestamp()} Warning: No folders found matching pattern: {path}")
+                log(f"Warning: No folders found matching pattern: {path}", level="warning")
             expanded_paths.extend(expanded)
         else:
             expanded_paths.append(path)
     
     if not expanded_paths:
-        print(f"{timestamp()} No valid folders found to upload.")
+        log(f"No valid folders found to upload.", level="warning")
         return 1  # No valid folders
     
     # Determine public gallery setting
@@ -2145,9 +2144,9 @@ def main():
         all_results = []
 
         # Login once for all galleries
-        #print(f"{timestamp()} Logging in for all galleries...")
+        #log(f" Logging in for all galleries...")
         if not uploader.login():
-            print(f"{timestamp()} Login failed - falling back to API-only uploads")
+            log(f"Login failed - falling back to API-only uploads", level="warning", category="auth")
 
         # Use shared UploadEngine for consistent behavior
         from src.core.engine import UploadEngine
@@ -2157,9 +2156,9 @@ def main():
         try:
             from src.processing.rename_worker import RenameWorker
             rename_worker = RenameWorker()
-            print(f"{timestamp()} Background RenameWorker initialized")
+            log(f"Rename Worker: Background worker initialized", level="debug", category="renaming")
         except Exception as e:
-            print(f"{timestamp()} WARNING: Failed to initialize RenameWorker: {e}")
+            log(f"Rename Worker: Failed to initialize RenameWorker: {e}", level="error", category="renaming")
             
         engine = UploadEngine(uploader, rename_worker)
 
@@ -2168,7 +2167,7 @@ def main():
             gallery_name = args.name if args.name else None
 
             try:
-                print(f"{timestamp()} Starting upload: {os.path.basename(folder_path)}")
+                log(f" Starting upload: {os.path.basename(folder_path)}")
                 results = engine.run(
                     folder_path=folder_path,
                     gallery_name=gallery_name,
@@ -2187,19 +2186,19 @@ def main():
                         template_name=args.template or "default",
                     )
                 except Exception as e:
-                    print(f"{timestamp()} WARNING: Artifact save error: {e}")
+                    log(f"WARNING: Artifact save error: {e}", level="error")
 
                 all_results.append(results)
 
             except KeyboardInterrupt:
-                print(f"\n{timestamp()} DEBUG: Upload interrupted by user")
+                log("DEBUG: Upload interrupted by user", level="debug")
                 # Cleanup RenameWorker on interrupt
                 if rename_worker:
                     rename_worker.stop()
-                    print(f"{timestamp()} Background RenameWorker stopped")
+                    log(f" Background RenameWorker stopped")
                 break
             except Exception as e:
-                print(f"Error uploading {folder_path}: {str(e)}", file=sys.stderr)
+                log(f"Error uploading {folder_path}: {str(e)}", level="error")
                 continue
         
         # Display summary for all galleries
@@ -2252,16 +2251,16 @@ def main():
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                print(f"{timestamp()} Background RenameWorker stopped")
+                log(f"Rename Worker: Background worker stopped", level="debug", category="renaming")
                 
             return 0  # Success
         else:
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                print(f"{timestamp()} Background RenameWorker stopped")
+                log(f"Background RenameWorker stopped", level="debug", category="renaming")
                 
-            print("No galleries were successfully uploaded.")
+            log("No galleries were successfully uploaded.", level="warning")
             return 1  # No galleries uploaded
             
     except Exception as e:
@@ -2269,21 +2268,22 @@ def main():
         try:
             if 'rename_worker' in locals() and rename_worker:
                 rename_worker.stop()
-                print(f"{timestamp()} Background RenameWorker stopped")
+                log(f"Rename Worker: Background worker stopped on exception: {e}", level="error", category="renaming")
         except Exception:
             pass  # Ignore cleanup errors
-        print(f"Error: {str(e)}", file=sys.stderr)
+        log(f"Rename Worker: Error: {str(e)}", level="error", category="renaming")
         return 1  # Error occurred
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n{timestamp()} Exiting gracefully...")
+        log("KeyboardInterrupt: Exiting gracefully...", level="debug", category="ui")
         sys.exit(0)
     except SystemExit:
         # Handle argparse errors gracefully in PyInstaller
         pass
     except Exception as e:
-        print(f"Error: {e}")
+        print(e)
+        log(f"Error: {e}", level="critical", category="ui")
         sys.exit(1)

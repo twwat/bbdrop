@@ -10,10 +10,10 @@ from typing import Dict
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout, QCheckBox,
     QComboBox, QSpinBox, QLabel, QPushButton, QTabWidget, QWidget,
-    QPlainTextEdit, QLineEdit, QDialogButtonBox
+    QTableWidget, QTableWidgetItem, QLineEdit, QDialogButtonBox, QHeaderView, QAbstractItemView
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QTextDocument
+from PyQt6.QtGui import QFont
 
 
 class LogViewerDialog(QDialog):
@@ -28,178 +28,14 @@ class LogViewerDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # Prepare logger and settings (used by both tabs)
+        # Prepare logger for reading logs
         try:
             from src.utils.logging import get_logger as _get_logger
             self._logger = _get_logger()
-            settings = self._logger.get_settings()
         except Exception:
             self._logger = None
-            settings = {
-                'enabled': True,
-                'rotation': 'daily',
-                'backup_count': 7,
-                'compress': True,
-                'max_bytes': 10485760,
-                'level_file': 'INFO',
-                'level_gui': 'INFO',
-            }
 
-        # Build Settings tab content
-        header = QGroupBox("Log Settings")
-        grid = QGridLayout(header)
-
-        self.chk_enabled = QCheckBox("Enable file logging")
-        self.chk_enabled.setChecked(bool(settings.get('enabled', True)))
-        grid.addWidget(self.chk_enabled, 0, 0, 1, 2)
-
-        self.cmb_rotation = QComboBox()
-        self.cmb_rotation.addItems(["daily", "size"])
-        try:
-            idx = ["daily", "size"].index(str(settings.get('rotation', 'daily')).lower())
-        except Exception:
-            idx = 0
-        self.cmb_rotation.setCurrentIndex(idx)
-        grid.addWidget(QLabel("Rotation:"), 1, 0)
-        grid.addWidget(self.cmb_rotation, 1, 1)
-
-        self.spn_backup = QSpinBox()
-        self.spn_backup.setRange(0, 3650)
-        self.spn_backup.setValue(int(settings.get('backup_count', 7)))
-        grid.addWidget(QLabel("Backups to keep:"), 1, 2)
-        grid.addWidget(self.spn_backup, 1, 3)
-
-        self.chk_compress = QCheckBox("Compress rotated logs (.gz)")
-        self.chk_compress.setChecked(bool(settings.get('compress', True)))
-        grid.addWidget(self.chk_compress, 2, 0, 1, 2)
-
-        self.spn_max_bytes = QSpinBox()
-        self.spn_max_bytes.setRange(1024, 1024 * 1024 * 1024)
-        self.spn_max_bytes.setSingleStep(1024 * 1024)
-        self.spn_max_bytes.setValue(int(settings.get('max_bytes', 10485760)))
-        grid.addWidget(QLabel("Max size (bytes, size mode):"), 2, 2)
-        grid.addWidget(self.spn_max_bytes, 2, 3)
-
-        self.cmb_gui_level = QComboBox()
-        levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        self.cmb_gui_level.addItems(levels)
-        try:
-            self.cmb_gui_level.setCurrentIndex(levels.index(str(settings.get('level_gui', 'INFO')).upper()))
-        except Exception:
-            pass
-        grid.addWidget(QLabel("GUI level:"), 3, 0)
-        grid.addWidget(self.cmb_gui_level, 3, 1)
-
-        self.cmb_file_level = QComboBox()
-        self.cmb_file_level.addItems(levels)
-        try:
-            self.cmb_file_level.setCurrentIndex(levels.index(str(settings.get('level_file', 'INFO')).upper()))
-        except Exception:
-            pass
-        grid.addWidget(QLabel("File level:"), 3, 2)
-        grid.addWidget(self.cmb_file_level, 3, 3)
-
-        buttons_row = QHBoxLayout()
-        self.btn_apply = QPushButton("Apply Settings")
-        self.btn_open_dir = QPushButton("Open Logs Folder")
-        buttons_row.addWidget(self.btn_apply)
-        buttons_row.addWidget(self.btn_open_dir)
-        grid.addLayout(buttons_row, 4, 0, 1, 4)
-
-        # Category toggles section
-        cats = [
-            ("uploads", "Uploads"),
-            ("auth", "Authentication"),
-            ("network", "Network"),
-            ("ui", "UI"),
-            ("queue", "Queue"),
-            ("general", "General"),
-        ]
-        row = 5
-        for cat_key, cat_label in cats:
-            try:
-                gui_key = f"cats_gui_{cat_key}"
-                file_key = f"cats_file_{cat_key}"
-                chk_gui = QCheckBox(f"Show {cat_label} in GUI log")
-                chk_file = QCheckBox(f"Write {cat_label} to file log")
-                chk_gui.setObjectName(gui_key)
-                chk_file.setObjectName(file_key)
-                chk_gui.setChecked(bool(settings.get(gui_key, True)))
-                chk_file.setChecked(bool(settings.get(file_key, True)))
-                grid.addWidget(chk_gui, row, 0, 1, 2)
-                grid.addWidget(chk_file, row, 2, 1, 2)
-                row += 1
-            except Exception:
-                pass
-
-        # Upload success modes
-        grid.addWidget(QLabel("Upload success detail (GUI):"), row, 0)
-        self.cmb_gui_upload_mode = QComboBox()
-        self.cmb_gui_upload_mode.addItems(["none", "file", "gallery", "both"])
-        try:
-            self.cmb_gui_upload_mode.setCurrentText(str(settings.get("upload_success_mode_gui", "gallery")))
-        except Exception:
-            pass
-        grid.addWidget(self.cmb_gui_upload_mode, row, 1)
-        grid.addWidget(QLabel("Upload success detail (File):"), row, 2)
-        self.cmb_file_upload_mode = QComboBox()
-        self.cmb_file_upload_mode.addItems(["none", "file", "gallery", "both"])
-        try:
-            self.cmb_file_upload_mode.setCurrentText(str(settings.get("upload_success_mode_file", "gallery")))
-        except Exception:
-            pass
-        grid.addWidget(self.cmb_file_upload_mode, row, 3)
-        row += 1
-
-        def on_apply():
-            if not self._logger:
-                return
-            try:
-                # Collect category toggles
-                cat_kwargs = {}
-                for cat_key, _label in cats:
-                    gui_key = f"cats_gui_{cat_key}"
-                    file_key = f"cats_file_{cat_key}"
-                    w_gui = header.findChild(QCheckBox, gui_key)
-                    w_file = header.findChild(QCheckBox, file_key)
-                    if w_gui is not None:
-                        cat_kwargs[gui_key] = w_gui.isChecked()
-                    if w_file is not None:
-                        cat_kwargs[file_key] = w_file.isChecked()
-                self._logger.update_settings(
-                    enabled=self.chk_enabled.isChecked(),
-                    rotation=self.cmb_rotation.currentText().lower(),
-                    backup_count=self.spn_backup.value(),
-                    compress=self.chk_compress.isChecked(),
-                    max_bytes=self.spn_max_bytes.value(),
-                    level_gui=self.cmb_gui_level.currentText(),
-                    level_file=self.cmb_file_level.currentText(),
-                    upload_success_mode_gui=self.cmb_gui_upload_mode.currentText(),
-                    upload_success_mode_file=self.cmb_file_upload_mode.currentText(),
-                    **cat_kwargs,
-                )
-                # Reload log content to reflect format changes
-                try:
-                    self.log_view.setPlainText(self._logger.read_current_log(tail_bytes=2 * 1024 * 1024))
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-        def on_open_dir():
-            try:
-                from PyQt6.QtGui import QDesktopServices
-                from PyQt6.QtCore import QUrl
-                logs_dir = self._logger.get_logs_dir() if self._logger else None
-                if logs_dir and os.path.exists(logs_dir):
-                    QDesktopServices.openUrl(QUrl.fromLocalFile(logs_dir))
-            except Exception:
-                pass
-
-        self.btn_apply.clicked.connect(on_apply)
-        self.btn_open_dir.clicked.connect(on_open_dir)
-
-        # Build Logs tab
+        # Build Logs UI
         logs_container = QWidget()
         logs_vbox = QVBoxLayout(logs_container)
 
@@ -228,10 +64,22 @@ class LogViewerDialog(QDialog):
         toolbar.addWidget(self.btn_find)
         logs_vbox.addLayout(toolbar)
 
-        # Filters row (separate line): 1 x 6
+        # Filters row
         self._filters_row: Dict[str, QCheckBox] = {}
         filters_bar = QHBoxLayout()
         filters_bar.addWidget(QLabel("View:"))
+        cats = [
+            ("uploads", "Uploads"),
+            ("auth", "Auth"),
+            ("network", "Network"),
+            ("ui", "UI"),
+            ("queue", "Queue"),
+            ("renaming", "Renaming"),
+            ("fileio", "FileIO"),
+            ("db", "DB"),
+            ("timing", "Timing"),
+            ("general", "General"),
+        ]
         for cat_key, cat_label in cats:
             cb = QCheckBox(cat_label)
             cb.setChecked(True)
@@ -240,28 +88,46 @@ class LogViewerDialog(QDialog):
         filters_bar.addStretch()
         logs_vbox.addLayout(filters_bar)
 
-        # Body: log view only (filters moved to toolbar)
+        # Body: log view table with timestamp, category, message columns
         body_hbox = QHBoxLayout()
-        self.log_view = QPlainTextEdit()
-        self.log_view.setReadOnly(True)
-        try:
-            self.log_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        except Exception:
-            pass
-        self.log_view.setProperty("class", "console")
+        self.log_view = QTableWidget()
+        self.log_view.setColumnCount(3)
+        self.log_view.setHorizontalHeaderLabels(["Timestamp", "Category", "Message"])
+        self.log_view.setAlternatingRowColors(True)
+        self.log_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.log_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.log_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        # Keep vertical header visible but style it like regular cells
+        self.log_view.verticalHeader().setVisible(True)
+        # Enable grid with semi-transparent styling
+        self.log_view.setShowGrid(True)
+        # Set monospace font
+        _log_font = QFont("Consolas", 9)
+        _log_font.setStyleHint(QFont.StyleHint.Monospace)
+        self.log_view.setFont(_log_font)
+        # Column sizing
+        header = self.log_view.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Timestamp
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Category
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Message
+        self.log_view.setProperty("class", "log-viewer")
+
+        # Apply inline stylesheet for semi-transparent gridlines
+        from PyQt6.QtWidgets import QApplication
+        palette = QApplication.palette()
+        is_dark = palette.window().color().lightness() < 128
+        gridline_color = "rgba(102, 102, 102, 0.2)" if is_dark else "rgba(204, 204, 204, 0.2)"
+        self.log_view.setStyleSheet(f"""
+            QTableWidget {{
+                gridline-color: {gridline_color};
+            }}
+        """)
+
         body_hbox.addWidget(self.log_view, 1)
         logs_vbox.addLayout(body_hbox)
 
-        # Tabs: Logs | Settings
-        tabs = QTabWidget(self)
-        # Settings tab
-        settings_container = QWidget()
-        sc_vbox = QVBoxLayout(settings_container)
-        sc_vbox.addWidget(header)
-        sc_vbox.addStretch()
-        tabs.addTab(logs_container, "Logs")
-        tabs.addTab(settings_container, "Log Settings")
-        layout.addWidget(tabs)
+        # Just show the logs tab (no tabs needed)
+        layout.addWidget(logs_container)
 
         # Populate initial log content via loader (with tail selection default)
         def _tail_bytes_from_choice(text: str) -> int | None:
@@ -337,13 +203,50 @@ class LogViewerDialog(QDialog):
             except Exception:
                 return ""
 
+        def _parse_log_line(line: str) -> tuple:
+            """Parse a log line into (timestamp, category, message)"""
+            try:
+                # Check for timestamp at start: YYYY-MM-DD HH:MM:SS
+                if len(line) >= 19 and line[4] == '-' and line[7] == '-' and line[10] == ' ' and line[13] == ':' and line[16] == ':':
+                    timestamp = line[:19]
+                    rest = line[20:].lstrip()
+                else:
+                    timestamp = ""
+                    rest = line
+
+                # Extract category from [category] or [category:subtype]
+                category = "general"
+                if rest.startswith("[") and "]" in rest:
+                    close_idx = rest.find("]")
+                    tag = rest[1:close_idx]
+                    # Split on : to get category
+                    category = tag.split(":")[0] if ":" in tag else tag
+                    message = rest[close_idx + 1:].lstrip()
+                else:
+                    message = rest
+
+                return timestamp, category, message
+            except Exception:
+                return "", "general", line
+
         def _apply_initial_content():
             try:
                 block = initial_text or _read_selected_file()
             except Exception:
                 block = initial_text
             norm = _normalize_dates(block)
-            self.log_view.setPlainText(norm)
+            # Add lines in reverse order (newest first)
+            self.log_view.setRowCount(0)
+            if norm:
+                lines = norm.splitlines()
+                for idx, line in enumerate(reversed(lines), 1):
+                    timestamp, category, message = _parse_log_line(line)
+                    row = self.log_view.rowCount()
+                    self.log_view.insertRow(row)
+                    self.log_view.setVerticalHeaderItem(row, QTableWidgetItem(str(idx)))
+                    self.log_view.setItem(row, 0, QTableWidgetItem(timestamp))
+                    self.log_view.setItem(row, 1, QTableWidgetItem(category))
+                    self.log_view.setItem(row, 2, QTableWidgetItem(message))
 
         _load_logs_list()
         _apply_initial_content()
@@ -385,7 +288,18 @@ class LogViewerDialog(QDialog):
         def on_refresh():
             text = _normalize_dates(_read_selected_file())
             text = _filter_block_by_view_cats(text)
-            self.log_view.setPlainText(text)
+            # Add lines in reverse order (newest first)
+            self.log_view.setRowCount(0)
+            if text:
+                lines = text.splitlines()
+                for idx, line in enumerate(reversed(lines), 1):
+                    timestamp, category, message = _parse_log_line(line)
+                    row = self.log_view.rowCount()
+                    self.log_view.insertRow(row)
+                    self.log_view.setVerticalHeaderItem(row, QTableWidgetItem(str(idx)))
+                    self.log_view.setItem(row, 0, QTableWidgetItem(timestamp))
+                    self.log_view.setItem(row, 1, QTableWidgetItem(category))
+                    self.log_view.setItem(row, 2, QTableWidgetItem(message))
 
         self.btn_refresh.clicked.connect(on_refresh)
         self.cmb_file_select.currentIndexChanged.connect(on_refresh)
@@ -403,53 +317,78 @@ class LogViewerDialog(QDialog):
                 pass
 
         def on_clear():
-            self.log_view.clear()
+            self.log_view.setRowCount(0)
         self.btn_clear.clicked.connect(on_clear)
 
         def on_follow_toggle(_=None):
             self.follow_enabled = self.chk_follow.isChecked()
         self.chk_follow.toggled.connect(on_follow_toggle)
 
-        # Find functionality
+        # Find functionality - search through table rows
+        self._last_find_row = -1
         def on_find_next():
-            pattern = (self.find_input.text() or "").strip()
+            pattern = (self.find_input.text() or "").strip().lower()
             if not pattern:
                 return
-            doc: QTextDocument = self.log_view.document()
-            cursor = self.log_view.textCursor()
-            # Move one char to avoid matching the same selection
-            if cursor.hasSelection():
-                cursor.setPosition(cursor.selectionEnd())
-            found = doc.find(pattern, cursor)
-            if not found.isNull():
-                self.log_view.setTextCursor(found)
-                self.log_view.ensureCursorVisible()
+
+            # Start from next row after last find, or from top
+            start_row = self._last_find_row + 1
+            if start_row >= self.log_view.rowCount():
+                start_row = 0
+
+            # Search through all rows starting from start_row
+            for i in range(self.log_view.rowCount()):
+                row = (start_row + i) % self.log_view.rowCount()
+                # Check all columns for match
+                for col in range(3):
+                    item = self.log_view.item(row, col)
+                    if item and pattern in item.text().lower():
+                        # Found match - select row and scroll to it
+                        self.log_view.selectRow(row)
+                        self.log_view.scrollToItem(item)
+                        self._last_find_row = row
+                        return
+            # No match found - wrap to beginning
+            self._last_find_row = -1
+
         self.btn_find.clicked.connect(on_find_next)
         self.find_input.returnPressed.connect(on_find_next)
 
+        # Bottom button row
+        button_layout = QHBoxLayout()
+        log_settings_btn = QPushButton("Log Settings")
+        log_settings_btn.clicked.connect(self.open_log_settings)
+        button_layout.addWidget(log_settings_btn)
+        button_layout.addStretch()
+
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         button_box.rejected.connect(self.reject)
-        button_box.accepted.connect(self.accept)
-        layout.addWidget(button_box)
+        button_layout.addWidget(button_box)
+        layout.addLayout(button_layout)
+
+    def open_log_settings(self):
+        """Open comprehensive settings to the Log tab"""
+        try:
+            # Get main window by traversing parent chain
+            widget = self.parent()
+            main_window = None
+            while widget:
+                if hasattr(widget, 'open_comprehensive_settings'):
+                    main_window = widget
+                    break
+                widget = widget.parent() if hasattr(widget, 'parent') else None
+
+            if main_window:
+                # Open settings to Log tab (index 5) - keep this dialog open
+                main_window.open_comprehensive_settings(tab_index=5)
+        except Exception as e:
+            # Debug: print error if settings don't open
+            print(f"Error opening log settings: {e}")
+            import traceback
+            traceback.print_exc()
 
     def append_message(self, message: str):
         try:
-            # Determine category like [uploads], [uploads:file], [auth], etc.
-            category = "general"
-            head = message
-            try:
-                parts = message.split(" ", 1)
-                if len(parts) > 1 and parts[0].count(":") == 2:
-                    head = parts[1]
-                if head.startswith("[") and "]" in head:
-                    token = head[1:head.find("]")]
-                    category = token.split(":")[0] or "general"
-            except Exception:
-                pass
-            # Apply viewer-only filters
-            # Apply viewer-only filters (toolbar row)
-            if category in getattr(self, '_filters_row', {}) and not self._filters_row[category].isChecked():
-                return
             # Ensure date is visible in the log viewer if time-only
             from datetime import datetime as _dt
             if isinstance(message, str) and len(message) >= 9 and message[2:3] == ":":
@@ -457,12 +396,52 @@ class LogViewerDialog(QDialog):
                 line = today + message
             else:
                 line = message
-            # Append and optionally follow
-            self.log_view.appendPlainText(line)
+
+            # Parse the log line
+            timestamp, category, msg_text = self._parse_log_line_for_append(line)
+
+            # Apply viewer-only filters (toolbar row)
+            if category in getattr(self, '_filters_row', {}) and not self._filters_row[category].isChecked():
+                return
+
+            # Prepend to table (newest first) and renumber all rows
+            self.log_view.insertRow(0)
+            # Update row numbers for all rows
+            for row in range(self.log_view.rowCount()):
+                self.log_view.setVerticalHeaderItem(row, QTableWidgetItem(str(row + 1)))
+            # Set data for new row
+            self.log_view.setItem(0, 0, QTableWidgetItem(timestamp))
+            self.log_view.setItem(0, 1, QTableWidgetItem(category))
+            self.log_view.setItem(0, 2, QTableWidgetItem(msg_text))
+
+            # Scroll to top if follow enabled
             if self.follow_enabled:
-                cursor = self.log_view.textCursor()
-                cursor.movePosition(cursor.MoveOperation.End)
-                self.log_view.setTextCursor(cursor)
-                self.log_view.ensureCursorVisible()
+                self.log_view.scrollToTop()
         except Exception:
             pass
+
+    def _parse_log_line_for_append(self, line: str) -> tuple:
+        """Parse a log line for append_message"""
+        try:
+            # Check for timestamp at start: YYYY-MM-DD HH:MM:SS
+            if len(line) >= 19 and line[4] == '-' and line[7] == '-' and line[10] == ' ' and line[13] == ':' and line[16] == ':':
+                timestamp = line[:19]
+                rest = line[20:].lstrip()
+            else:
+                timestamp = ""
+                rest = line
+
+            # Extract category from [category] or [category:subtype]
+            category = "general"
+            if rest.startswith("[") and "]" in rest:
+                close_idx = rest.find("]")
+                tag = rest[1:close_idx]
+                # Split on : to get category
+                category = tag.split(":")[0] if ":" in tag else tag
+                message = rest[close_idx + 1:].lstrip()
+            else:
+                message = rest
+
+            return timestamp, category, message
+        except Exception:
+            return "", "general", line

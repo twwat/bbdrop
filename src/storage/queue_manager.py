@@ -16,6 +16,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, QSettings, Q
 
 from src.storage.database import QueueStore
 from imxup import sanitize_gallery_name, load_user_defaults, timestamp
+from src.utils.logger import log
 from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
     QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED, QUEUE_STATE_SCAN_FAILED,
@@ -130,7 +131,7 @@ class QueueManager(QObject):
     
     def _start_scan_worker(self):
         """Start the sequential scan worker thread"""
-        #print(f"{timestamp()} DEBUG: _start_scan_worker called, running={self._scan_worker_running}")
+        #log(f" _start_scan_worker called, running={self._scan_worker_running}")
         if not self._scan_worker_running:
             self._scan_worker_running = True
             self._scan_worker = threading.Thread(
@@ -138,11 +139,11 @@ class QueueManager(QObject):
                 daemon=True
             )
             self._scan_worker.start()
-            self.log_message.emit(f"{timestamp()} [scan] DEBUG: Scan worker thread started")
+            log("Scan Worker: thread started", level="debug", category="scan")
     
     def _sequential_scan_worker(self):
         """Worker that processes galleries sequentially"""
-        #print(f"{timestamp()} DEBUG: Scan worker starting")
+        #log(f" Scan worker starting")
         while self._scan_worker_running:
             try:
                 path = self._scan_queue.get(timeout=1.0)
@@ -150,15 +151,15 @@ class QueueManager(QObject):
                     break
                 #print(f"DEBUG: About to scan path: {path}")
                 self._comprehensive_scan_item(path)
-                #print(f"{timestamp()} DEBUG: Scan completed for {path}")
-                self.log_message.emit(f"{timestamp()} [scan] INFO: Scan completed for {path}")
+                #log(f" Scan completed for {path}")
+                log(f"Scan Worker: Scan completed for {path}", category="scan")
                 self._scan_queue.task_done()
                 
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"{timestamp()} ERROR scanning {path}: {e}")
-                self.log_message.emit(f"{timestamp()} [scan] ERROR: Error scanning {path}: {e}")
+                # Already logged above with log()
+                log(f"Scan Worker: Error scanning {path}: {e}", level="error", category="scan")
                 try:
                     self._scan_queue.task_done()
                 except:
@@ -170,17 +171,17 @@ class QueueManager(QObject):
             # Validation
             if not os.path.exists(path) or not os.path.isdir(path):
                 self._mark_item_failed(path, "Path does not exist or is not a directory")
-                #print(f"{timestamp()} DEBUG: Scan completed for {path}")
-                #print(f"{timestamp()} DEBUG: [scan] Path does not exist or is not a directory: {path}")
-                self.log_message.emit(f"{timestamp()} [scan] WARNING: Path does not exist or is not a directory: {path}")
+                #log(f" Scan completed for {path}")
+                #log(f" [scan] Path does not exist or is not a directory: {path}")
+                log(f"Scan Worker: Path does not exist or is not a directory: {path}", level="warning", category="scan")
                 return
             
             # Find images
             files = self._get_image_files(path)
             if not files:
                 self.mark_scan_failed(path, "No images found")
-                self.log_message.emit(f"{timestamp()} [scan] WARNING: No images found: {path}")
-                #print(f"{timestamp()} DEBUG: [scan] No images found: {path}")
+                log(f"Scan Worker: No images found: {path}", level="warning", category="scan")
+                #log(f" [scan] No images found: {path}")
                 return
             
             # Check for existing gallery
@@ -204,7 +205,7 @@ class QueueManager(QObject):
                     f"Validation failed: {len(scan_result['failed_files'])}/{len(files)} images invalid",
                     scan_result['failed_files']
                 )
-                self.log_message.emit(f"{timestamp()} [scan] WARNING: Validation failed: {len(scan_result['failed_files'])}/{len(files)} images invalid")
+                log(f"Scan Worker: Validation failed: {len(scan_result['failed_files'])}/{len(files)} images invalid", level="warning", category="scan")
                 return
             
             # Update item with scan results
@@ -221,11 +222,11 @@ class QueueManager(QObject):
                     item.scan_complete = True
                     
                     if item.status == "scanning":
-                        #print(f"DEBUG: Scan complete, updating status to ready for {path}")
+                        log(f"Scan Worker: Scan complete, updating status to ready for {path}", level="debug", category="scan")
                         #print(f"DEBUG: Item tab_name is still: '{item.tab_name}'")
                         old_status = item.status
                         item.status = QUEUE_STATE_READY
-                        #print(f"DEBUG: Status changed from {old_status} to {QUEUE_STATE_READY}")
+                        log(f"Scan Worker: Status changed from {old_status} to {QUEUE_STATE_READY}", level="debug", category="scan")
                         #print(f"DEBUG: After status change - item tab_name = '{item.tab_name}'")
                         
                         # CRITICAL: Save immediately now that status is "ready" (no longer "validating")
@@ -236,13 +237,13 @@ class QueueManager(QObject):
                         # load_user_defaults already imported from imxup at top of file
                         defaults = load_user_defaults()
                         if defaults.get('auto_start_upload', False):
-                            self.log_message.emit(f"{timestamp()} [queue] DEBUG: Auto-start enabled: queuing {path} for upload")
+                            log(f"Auto-start enabled: queuing {path} for upload", level="debug", category="queue")
                             
                             # Auto-start the upload by changing status to queued and adding to queue
                             self._update_status_count(old_status, QUEUE_STATE_QUEUED)
                             item.status = QUEUE_STATE_QUEUED
                             self.queue.put(item)  # CRITICAL: Add to queue so worker picks it up
-                            self.log_message.emit(f"{timestamp()} [queue] INFO: Auto-queued {path} for immediate upload")
+                            log(f"Auto-queued {path} for immediate upload", level="debug", category="queue")
 
                         # Emit signal directly (we're already in mutex lock)
                         #print(f"DEBUG: EMITTING status_changed signal for {path}")
@@ -267,6 +268,7 @@ class QueueManager(QObject):
             
         except Exception as e:
             self.mark_scan_failed(path, f"Scan error: {e}")
+            log(f"Scan Worker: Scan error: {e}", level="error", category="scan")
     
     def _get_image_files(self, path: str) -> List[str]:
         """Get list of image files in directory"""
@@ -409,7 +411,7 @@ class QueueManager(QObject):
                 
                 # Log scan failure
                 from imxup import timestamp
-                self.log_message.emit(f"{timestamp()} [scan] WARNING: Scan failed - {item.name or os.path.basename(path)}: {error}")
+                log(f"Scan failed - {item.name or os.path.basename(path)}: {error}", level="warning", category="scan")
                 
         
         self._schedule_debounced_save([path])
@@ -427,12 +429,10 @@ class QueueManager(QObject):
                     item.failed_files = failed_files
                 
                 # Log upload failure with details
-                from imxup import timestamp
-                log_msg = f"{timestamp()} [UPLOAD_FAILED] {item.name or os.path.basename(path)}: {error}"
+                log_msg = f"{item.name or os.path.basename(path)}: {error}"
                 if failed_files:
                     log_msg += f" ({len(failed_files)} files failed)"
-                self.log_message.emit(log_msg)
-                print(log_msg)
+                log(log_msg, level="error", category="uploads")
         
         self._schedule_debounced_save([path])
         self._inc_version()
@@ -462,7 +462,7 @@ class QueueManager(QObject):
                         remaining_images = (item.total_images or 0) - (item.uploaded_images or 0)
                         
                         from imxup import timestamp
-                        self.log_message.emit(f"{timestamp()} [queue] INFO: Retrying {item.name or os.path.basename(path)}: {remaining_images} images ({item.uploaded_images} already uploaded)")
+                        log(f"Retrying {item.name or os.path.basename(path)}: {remaining_images} images ({item.uploaded_images} already uploaded)", category="queue")
                         
                         # Clear failed files list so they can be retried
                         item.failed_files = []
@@ -476,7 +476,7 @@ class QueueManager(QObject):
                         item.progress = 0
                         
                         from imxup import timestamp
-                        self.log_message.emit(f"{timestamp()} [queue] DEBUG: Full retry for {item.name or os.path.basename(path)}")
+                        log(f"Full retry for {item.name or os.path.basename(path)}", level="debug", category="queue")
                     
                     # Emit status change signal
                     if hasattr(self, 'status_changed'):
@@ -518,7 +518,7 @@ class QueueManager(QObject):
                         
                         from imxup import timestamp
                         uploaded = item.uploaded_images or 0
-                        self.log_message.emit(f"{timestamp()} [scan] INFO: Rescan of {item.name or os.path.basename(path)}: Found {new_images} new images ({uploaded} uploaded, {current_count - uploaded} remaining)")
+                        log(f"Rescan of {item.name or os.path.basename(path)}: Found {new_images} new images ({uploaded} uploaded, {current_count - uploaded} remaining)", category="scan")
                         
                     elif current_count < previous_count:
                         # Images were removed
@@ -534,8 +534,7 @@ class QueueManager(QObject):
                             item.progress = int((item.uploaded_images or 0) / item.total_images * 100)
                         
                         from imxup import timestamp
-                        self.log_message.emit(f"{timestamp()} [scan] INFO: {item.name or os.path.basename(path)}: "
-                              f"{removed} images removed, {current_count} total")
+                        log(f"{item.name or os.path.basename(path)}: {removed} images removed, {current_count} total", category="scan")
                     else:
                         # Same count - just clear error if any, but preserve completed status
                         if item.status in [QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_FAILED]:
@@ -546,8 +545,7 @@ class QueueManager(QObject):
                         item.error_message = ""
                         
                         from imxup import timestamp
-                        self.log_message.emit(f"{timestamp()} [scan] INFO: {item.name or os.path.basename(path)}: "
-                              f"No changes detected, cleared errors")
+                        log(f"{item.name or os.path.basename(path)}: No changes detected, cleared errors", category="scan")
                     
                     # Emit status change if changed
                     if hasattr(self, 'status_changed') and item.status != old_status:
@@ -556,7 +554,7 @@ class QueueManager(QObject):
                 except Exception as e:
                     from imxup import timestamp
                     self.mark_scan_failed(path, f"Additive rescan error: {e}")
-                    self.log_message.emit(f"{timestamp()} [scan] ERROR: Additive rescan error: {e}")
+                    log(f"Additive rescan error: {e}", level="error", category="scan")
         
         self._schedule_debounced_save([path])
         self._inc_version()
@@ -582,8 +580,7 @@ class QueueManager(QObject):
                 item.end_time = None
                 
                 from imxup import timestamp
-                self.log_message.emit(f"{timestamp()} INFO: ]{item.name or os.path.basename(path)}: "
-                      f"Complete reset, starting fresh scan")
+                log(f"{item.name or os.path.basename(path)}: Complete reset, starting fresh scan", category="scan")
                 
                 # Emit status change signal
                 if hasattr(self, 'status_changed'):
@@ -632,7 +629,7 @@ class QueueManager(QObject):
                         item.status = QUEUE_STATE_READY
                         item.scan_complete = True
                         from imxup import timestamp
-                        print(f"{timestamp()} [RESCAN] {item.name or os.path.basename(path)}: Marked ready for validation")
+                        log(f"{item.name or os.path.basename(path)}: Marked ready for validation", level="debug", category="scan")
                 
                 self._schedule_debounced_save([path])
                 self._inc_version()
@@ -728,15 +725,15 @@ class QueueManager(QObject):
             }
             
             self.store.bulk_upsert_async([item_data])
-            print(f"{timestamp()} DEBUG: _save_single_item saved: {item.path}")
+            log(f"_save_single_item saved: {item.path}", level="debug", category="queue")
         except Exception as e:
-            print(f"{timestamp()} ERROR: _save_single_item failed for {item.path}: {e}")
+            log(f"_save_single_item failed for {item.path}: {e}", level="error", category="queue")
 
     def save_persistent_queue(self, specific_paths: List[str] = None):
         """Save queue state to database"""
-        print(f"{timestamp()} DEBUG: save_persistent_queue called with {len(specific_paths) if specific_paths else 'all'} items")
+        log(f"save_persistent_queue called with {len(specific_paths) if specific_paths else 'all'} items", level="debug", category="queue")
         if self._batch_mode and specific_paths:
-            print(f"{timestamp()} DEBUG: In batch mode, adding to batched changes")
+            log(f" In batch mode, adding to batched changes")
             self._batched_changes.update(specific_paths)
             return
         
@@ -745,13 +742,13 @@ class QueueManager(QObject):
             #print(f"DEBUG: Mutex acquired, preparing items list")
             if specific_paths:
                 items = [self.items[p] for p in specific_paths if p in self.items]
-                print(f"{timestamp()} DEBUG: Found {len(items)} items for specific paths")
+                log(f" Found {len(items)} items for specific paths")
             else:
                 items = list(self.items.values())
                 #print(f"DEBUG: Saving all {len(items)} items")
             
             queue_data = []
-            print(f"{timestamp()} DEBUG: Mutex acquired, building queue data for {len(items)} items")
+            log(f" Mutex acquired, building queue data for {len(items)} items")
             for item in items:
                 if item.status in [QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
                                   QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
@@ -762,14 +759,14 @@ class QueueManager(QObject):
             try:
                 #print(f"DEBUG: About to call store.bulk_upsert_async")
                 self.store.bulk_upsert_async(queue_data)
-                print(f"{timestamp()} bulk_upsert_async database save completed")
+                print(f"{timestamp()} SQLite: bulk_upsert_async database save completed")
             except Exception as e:
-                print(f"{timestamp()} ERROR: Database save failed: {e}")
+                log(f" Database save failed: {e}", level="error", category="db")
                 pass
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
         """Convert item to dictionary for storage"""
-        #print(f"DEBUG: _item_to_dict converting {item.path} with tab_name='{item.tab_name}'")
+        log(f"_item_to_dict converting {item.path} with tab_name='{item.tab_name}'", level="debug")
         return {
             'path': item.path,
             'name': item.name,
@@ -885,15 +882,15 @@ class QueueManager(QObject):
     
     def add_item(self, path: str, name: str = None, template_name: str = "default", tab_name: str = "Main") -> bool:
         """Add gallery to queue"""
-        #print(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}")
+        log(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}", level="debug")
         with QMutexLocker(self.mutex):
             if path in self.items:
                 return False
             
-            #print(f"DEBUG: Using original folder name for {path}")
+            log(f"Using original folder name for {path}", level="debug")
             gallery_name = name or os.path.basename(path)
-            #print(f"DEBUG: Gallery name: {gallery_name}")
-            #print(f"DEBUG: Creating GalleryQueueItem with tab_name={tab_name}...")
+            log(f"Gallery name: {gallery_name}", level="debug")
+            log(f"Creating GalleryQueueItem with tab_name={tab_name}...", level="debug")
             item = GalleryQueueItem(
                 path=path,
                 name=gallery_name,
@@ -913,9 +910,7 @@ class QueueManager(QObject):
             # Use QTimer to defer database save to prevent blocking GUI thread
             from PyQt6.QtCore import QTimer
             self._schedule_debounced_save([path])
-            #print(f"DEBUG: Incrementing version...")
             self._inc_version()
-            print(f"{timestamp()} DEBUG: Version incremented")
         
         #print(f"DEBUG: Adding to scan queue: {path}")
         self._scan_queue.put(path)
@@ -1048,10 +1043,10 @@ class QueueManager(QObject):
             if hasattr(self, 'parent') and self.parent and hasattr(self.parent, 'regenerate_bbcode_for_gallery'):
                 try:
                     self.parent.regenerate_bbcode_for_gallery(path)
-                    print(f"{timestamp()} [fileio] Regenerated bbcode for {path}")
+                    log(f" Regenerated bbcode for {path}")
                     
                 except Exception as e:
-                    print(f"{timestamp()} [fileio] Error auto-regenerating BBCode for {path}: {e}")
+                    log(f" Error auto-regenerating BBCode for {path}: {e}")
 
             return True
 

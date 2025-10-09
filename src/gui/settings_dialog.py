@@ -878,27 +878,12 @@ class ComprehensiveSettingsDialog(QDialog):
     
         
     def setup_logs_tab(self):
-        """Setup the Logs tab with integrated log viewer"""
-        logs_widget = QWidget()
-        layout = QVBoxLayout(logs_widget)
-        
-        # Create and integrate the log viewer dialog
-        try:
-            # Get initial log text
-            from src.utils.logging import get_logger
-            initial_text = get_logger().read_current_log(tail_bytes=2 * 1024 * 1024) or ""
-        except Exception:
-            initial_text = ""
-        
-        self.log_dialog = LogViewerDialog(initial_text, self)
-        self.log_dialog.setParent(logs_widget)
-        self.log_dialog.setWindowFlags(Qt.WindowType.Widget)  # Make it a child widget
-        self.log_dialog.setModal(False)  # Not modal when embedded
-        
-        # Add the log dialog to the layout
-        layout.addWidget(self.log_dialog)
-        
-        self.tab_widget.addTab(logs_widget, "Logs")
+        """Setup the Logs tab with log settings"""
+        from src.gui.dialogs.log_settings_widget import LogSettingsWidget
+        self.log_settings_widget = LogSettingsWidget(self)
+        self.log_settings_widget.settings_changed.connect(lambda: self.mark_tab_dirty(5))
+        self.log_settings_widget.load_settings()  # Load current settings
+        self.tab_widget.addTab(self.log_settings_widget, "Logs")
         
     def setup_scanning_tab(self):
         """Setup the Image Scanning tab"""
@@ -2187,10 +2172,10 @@ class ComprehensiveSettingsDialog(QDialog):
             return False
     
     def _save_logs_tab(self):
-        """Save Logs tab settings (placeholder for now)"""
+        """Save Logs tab settings"""
         try:
-            # The logs tab is mostly for viewing, not configuration
-            # Add any logs-specific settings here if needed in the future
+            if hasattr(self, 'log_settings_widget'):
+                self.log_settings_widget.save_settings()
             return True
         except Exception as e:
             print(f"{timestamp()} WARNING: Error saving logs tab: {e}")
@@ -3071,12 +3056,3 @@ class LogViewerDialog(QDialog):
         """Open the logs folder"""
         # Implementation would go here
         pass
-        
-    def append_message(self, message: str):
-        """Append a message to the log viewer"""
-        if self.follow_check.isChecked():
-            self.log_text.appendPlainText(message)
-            # Auto-scroll to bottom
-            cursor = self.log_text.textCursor()
-            cursor.movePosition(cursor.MoveOperation.End)
-            self.log_text.setTextCursor(cursor)

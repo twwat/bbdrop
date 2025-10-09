@@ -9,6 +9,7 @@ import requests
 import configparser
 import os
 from typing import Optional, Callable
+from src.utils.logger import log
 
 
 class RenameWorker:
@@ -82,24 +83,21 @@ class RenameWorker:
 
     def _initial_login(self):
         """Login once and handle auto-rename of unnamed galleries."""
-        from imxup import timestamp
-
         if self.login():
             # Auto-rename unnamed galleries
             try:
                 unnamed = self._get_unnamed_galleries()
                 if unnamed:
-                    self.on_log(f"{timestamp()} RenameWorker: Auto-renaming {len(unnamed)} galleries")
+                    log(f"Auto-renaming {len(unnamed)} galleries", category="renaming")
                     for gallery_id, gallery_name in list(unnamed.items()):
                         if self.rename_gallery_with_session(gallery_id, gallery_name):
                             self._remove_unnamed_gallery(gallery_id)
             except Exception as e:
-                self.on_log(f"{timestamp()} RenameWorker: Auto-rename error: {e}")
+                log(f"Auto-rename error: {e}", level="error", category="renaming")
 
     # EXACT COPY of ImxToUploader.login() - lines 985-1197 from imxup.py
     def login(self):
         """Login to imx.to web interface"""
-        from imxup import timestamp
         from src.network.cookies import get_firefox_cookies, load_cookies_from_file
 
         if not self.username or not self.password:
@@ -120,18 +118,18 @@ class RenameWorker:
                             pass
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                        self.on_log(f"{timestamp()} RenameWorker: Authenticated using cookies")
+                        log("Authenticated using cookies", category="auth")
                         return True
             except Exception:
                 pass
-            self.on_log(f"{timestamp()} RenameWorker: No credentials available")
+            log("No credentials available", level="warning", category="auth")
             return False
 
         max_retries = 1
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    self.on_log(f"{timestamp()} RenameWorker: Retry attempt {attempt + 1}/{max_retries}")
+                    log(f"Retry attempt {attempt + 1}/{max_retries}", level="debug", category="auth")
                     time.sleep(1)
 
                 # Try cookies first
@@ -150,7 +148,7 @@ class RenameWorker:
                             pass
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                        self.on_log(f"{timestamp()} RenameWorker: Authenticated using cookies")
+                        log("Authenticated using cookies", category="auth")
                         return True
 
                 # Submit login form
@@ -165,17 +163,17 @@ class RenameWorker:
 
                 # Check if login was successful
                 if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-                    self.on_log(f"{timestamp()} RenameWorker: Authenticated using credentials")
+                    log("Authenticated using credentials", category="auth")
                     return True
                 else:
-                    self.on_log(f"{timestamp()} RenameWorker: Login failed")
+                    log("Login failed", level="warning", category="auth")
                     if attempt < max_retries - 1:
                         continue
                     else:
                         return False
 
             except Exception as e:
-                self.on_log(f"{timestamp()} RenameWorker: Login error: {str(e)}")
+                log(f"Login error: {str(e)}", level="error", category="auth")
                 if attempt < max_retries - 1:
                     continue
                 else:
@@ -186,29 +184,27 @@ class RenameWorker:
     # EXACT COPY of ImxToUploader.rename_gallery_with_session() - lines 1300-1365 from imxup.py
     def rename_gallery_with_session(self, gallery_id, new_name):
         """Rename gallery using existing session (no login call)"""
-        from imxup import timestamp
-
         try:
             # Sanitize the gallery name
             original_name = new_name
             new_name = self._sanitize_gallery_name(new_name)
             if original_name != new_name:
-                self.on_log(f"{timestamp()} RenameWorker: Sanitized '{original_name}' -> '{new_name}'")
+                log(f"Sanitized '{original_name}' -> '{new_name}'", level="debug", category="renaming")
 
             # Get the edit gallery page
             edit_page = self.session.get(f"{self.web_url}/user/gallery/edit?id={gallery_id}")
 
             # Check if we can access the edit page
             if edit_page.status_code != 200:
-                self.on_log(f"{timestamp()} RenameWorker: Cannot access edit page (HTTP {edit_page.status_code})")
+                log(f"Cannot access edit page (HTTP {edit_page.status_code})", level="error", category="renaming")
                 return False
 
             if 'DDoS-Guard' in edit_page.text:
-                self.on_log(f"{timestamp()} RenameWorker: DDoS-Guard detected")
+                log("DDoS-Guard detected", level="warning", category="renaming")
                 return False
 
             if 'login' in edit_page.url or 'login' in edit_page.text.lower():
-                self.on_log(f"{timestamp()} RenameWorker: Not logged in")
+                log("Not logged in", level="warning", category="renaming")
                 return False
 
             # Submit gallery rename form
@@ -220,14 +216,14 @@ class RenameWorker:
             response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
 
             if response.status_code == 200:
-                self.on_log(f"{timestamp()} RenameWorker: Successfully renamed gallery '{gallery_id}' to '{new_name}'")
+                log(f"Successfully renamed gallery '{gallery_id}' to '{new_name}'", category="renaming")
                 return True
             else:
-                self.on_log(f"{timestamp()} RenameWorker: Rename failed (HTTP {response.status_code})")
+                log(f"Rename failed (HTTP {response.status_code})", level="error", category="renaming")
                 return False
 
         except Exception as e:
-            self.on_log(f"{timestamp()} RenameWorker: Error renaming gallery: {str(e)}")
+            log(f"Error renaming gallery: {str(e)}", level="error", category="renaming")
             return False
 
     def queue_rename(self, gallery_id: str, gallery_name: str, callback: Optional[Callable[[str], None]] = None):
@@ -237,7 +233,7 @@ class RenameWorker:
 
     def _process_renames(self):
         """Background thread that processes rename queue."""
-        from imxup import timestamp, save_unnamed_gallery
+        from imxup import save_unnamed_gallery
 
         while self.running:
             try:
@@ -262,16 +258,16 @@ class RenameWorker:
                     # Queue for later auto-rename
                     try:
                         save_unnamed_gallery(gallery_id, gallery_name)
-                        self.on_log(f"{timestamp()} RenameWorker: Queued for auto-rename: '{gallery_name}'")
+                        log(f"Queued for auto-rename: '{gallery_name}'", level="debug", category="renaming")
                     except Exception as e:
-                        self.on_log(f"{timestamp()} RenameWorker: Failed to queue for auto-rename: {e}")
+                        log(f"Failed to queue for auto-rename: {e}", level="error", category="renaming")
 
                 self.queue.task_done()
 
             except queue.Empty:
                 continue
             except Exception as e:
-                self.on_log(f"{timestamp()} RenameWorker error: {e}")
+                log(f"RenameWorker error: {e}", level="error", category="renaming")
                 continue
 
     def stop(self, timeout: float = 5.0):

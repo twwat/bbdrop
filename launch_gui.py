@@ -9,6 +9,13 @@ import os
 # Add current directory to path to find imxup module
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Install exception hook BEFORE anything else to catch all crashes
+try:
+    from src.utils.logger import install_exception_hook
+    install_exception_hook()
+except Exception:
+    pass  # If logger not available, continue anyway
+
 try:
     from src.gui import main_window
     main_window.main()

@@ -15,6 +15,7 @@ from imxup import (
     save_gallery_artifacts, get_unnamed_galleries
 )
 from src.network.client import GUIImxToUploader
+from src.utils.logger import log
 from src.storage.queue_manager import GalleryQueueItem
 
 
@@ -43,35 +44,31 @@ class UploadWorker(QThread):
         self.auto_rename_enabled = True
         self._bw_last_emit = 0.0
         self._stats_last_emit = 0.0
-        
-        # Thread-safe request flags
-        self._request_mutex = QMutex()
-        self._retry_login_requested = False
-        self._retry_credentials_only = False
-        
+
+        # Initialize RenameWorker support
+        self.rename_worker = None
+        self._rename_worker_available = True
+        try:
+            from src.processing.rename_worker import RenameWorker
+        except Exception as e:
+            log(f"RenameWorker import failed: {e}", level="error", category="renaming")
+            self._rename_worker_available = False
+
     def stop(self):
         """Stop the worker thread"""
         self.running = False
+        # Cleanup RenameWorker
+        if hasattr(self, 'rename_worker') and self.rename_worker:
+            try:
+                self.rename_worker.stop()
+            except Exception as e:
+                log(f"Error stopping RenameWorker: {e}", level="error", category="renaming")
         self.wait()
     
     def request_soft_stop_current(self):
         """Request to stop the current item after in-flight uploads finish"""
         if self.current_item:
             self._soft_stop_requested_for = self.current_item.path
-    
-    def request_retry_login(self, credentials_only: bool = False):
-        """Request the worker to retry login on its own thread
-        Safe to call from the GUI thread
-        """
-        try:
-            self._request_mutex.lock()
-            self._retry_login_requested = True
-            self._retry_credentials_only = bool(credentials_only)
-        finally:
-            try:
-                self._request_mutex.unlock()
-            except Exception:
-                pass
     
     def run(self):
         """Main worker thread loop"""
@@ -85,9 +82,6 @@ class UploadWorker(QThread):
             
             # Main processing loop
             while self.running:
-                # Handle any pending login retry requests
-                self._maybe_handle_login_retry()
-                
                 # Emit bandwidth updates periodically (independent of file completions)
                 now = time.time()
                 if now - last_bandwidth_emit >= bandwidth_emit_interval:
@@ -118,116 +112,40 @@ class UploadWorker(QThread):
                     
         except Exception as e:
             import traceback
-            traceback.print_exc()
-            self.log_message.emit(f"{timestamp()} Worker error: {str(e)}")
+            error_trace = traceback.format_exc()
+            log(f"CRITICAL: Worker thread crashed: {error_trace}", level="critical", category="uploads")
+            # Also print directly to ensure it's visible
+            print(f"\n{'='*70}\nWORKER THREAD CRASH:\n{error_trace}\n{'='*70}\n", flush=True)
     
     def _initialize_uploader(self):
-        """Initialize uploader and perform initial login"""
+        """Initialize uploader with API-only mode and separate RenameWorker"""
+        # Initialize custom GUI uploader with reference to this worker
         self.uploader = GUIImxToUploader(worker_thread=self)
-        
-        # Attempt login
-        self.log_message.emit(f"{timestamp()} [auth] Logging in...")
-        try:
-            login_success = self.uploader.login()
-        except Exception as e:
-            login_success = False
-            self.log_message.emit(f"{timestamp()} [auth] Login error: {e}")
-        
-        # Report login method and handle post-login tasks
-        self._handle_login_result(login_success)
-    
-    def _handle_login_result(self, login_success: bool):
-        """Handle login result and perform post-login tasks"""
-        if not login_success:
-            self.log_message.emit(f"{timestamp()} [auth] Login failed - using API-only mode")
-            return
-        
-        # Get login method used
-        method = getattr(self.uploader, 'last_login_method', None)
-        
-        # Report authentication method
-        if method == 'cookies':
-            self.log_message.emit(f"{timestamp()} [auth] Authenticated using cookies")
-        elif method == 'credentials':
-            self.log_message.emit(f"{timestamp()} [auth] Authenticated using username/password")
-        elif method == 'api_key':
-            self.log_message.emit(f"{timestamp()} [auth] Using API key authentication (no web login)")
-        elif method == 'none':
-            self.log_message.emit(f"{timestamp()} [auth] No credentials available; proceeding without web login")
-        
-        # Handle auto-rename for web sessions
-        if method in ('cookies', 'credentials'):
-            self.log_message.emit(f"{timestamp()} [auth] Login successful using {method}")
-            self._perform_auto_rename()
-        elif method == 'api_key':
-            self.log_message.emit(f"{timestamp()} [auth] API key loaded; web login skipped")
-            self.log_message.emit(f"{timestamp()} [auth] Skipping auto-rename; web session required")
-    
-    def _perform_auto_rename(self):
-        """Perform auto-rename of unnamed galleries if enabled"""
-        if not self.auto_rename_enabled:
-            return
-        
-        try:
-            renamed = rename_all_unnamed_with_session(self.uploader)
-            if renamed > 0:
-                self.log_message.emit(f"{timestamp()} Auto-renamed {renamed} gallery(ies) after login")
-            else:
-                # Check if there are actually unnamed galleries
-                if not get_unnamed_galleries():
-                    self.log_message.emit(f"{timestamp()} No unnamed galleries to auto-rename")
-        except Exception as e:
-            self.log_message.emit(f"{timestamp()} Auto-rename error: {e}")
-    
-    def _maybe_handle_login_retry(self):
-        """Handle any pending login retry requests"""
-        need_retry = False
-        cred_only = False
-        
-        try:
-            self._request_mutex.lock()
-            if self._retry_login_requested:
-                need_retry = True
-                cred_only = bool(self._retry_credentials_only)
-                self._retry_login_requested = False
-                self._retry_credentials_only = False
-        finally:
+
+        # Initialize RenameWorker with independent session
+        if self._rename_worker_available:
             try:
-                self._request_mutex.unlock()
-            except Exception:
-                pass
-        
-        if not need_retry:
-            return
-        
-        # Perform login retry
-        try:
-            self.log_message.emit(f"{timestamp()} [auth] Re-attempting login{' (credentials only)' if cred_only else ''}...")
-            
-            if not self.uploader:
-                self.uploader = GUIImxToUploader(worker_thread=self)
-            
-            if cred_only and hasattr(self.uploader, 'login_with_credentials_only'):
-                ok = self.uploader.login_with_credentials_only()
-            else:
-                ok = self.uploader.login()
-            
-            if ok:
-                method = getattr(self.uploader, 'last_login_method', None)
-                self.log_message.emit(f"{timestamp()} [auth] Login successful using {method or 'unknown method'}")
-                self._perform_auto_rename()
-            else:
-                self.log_message.emit(f"{timestamp()} [auth] Login retry failed")
-                
-        except Exception as e:
-            self.log_message.emit(f"{timestamp()} [auth] Login retry error: {e}")
+                from src.processing.rename_worker import RenameWorker
+                # Pass logging callback so rename operations appear in GUI log
+                self.rename_worker = RenameWorker(on_log=lambda msg: log(msg))
+                log("RenameWorker initialized with independent session", category="renaming")
+            except Exception as e:
+                log(f"Failed to initialize RenameWorker: {e}", level="error", category="renaming")
+                self.rename_worker = None
+        else:
+            log("RenameWorker not available (import failed)", level="error", category="renaming")
+
+        # Uploader uses API ONLY - no login needed
+        # RenameWorker handles its own login independently
+        log("Uploader using API-only mode (no web login)", level="debug", category="auth")
+    
     
     def upload_gallery(self, item: GalleryQueueItem):
         """Upload a single gallery"""
         try:
             # Clear previous soft-stop request
             self._soft_stop_requested_for = None
-            self.log_message.emit(f"{timestamp()} Starting upload: {item.name or os.path.basename(item.path)}")
+            log(f"Starting upload: {item.name or os.path.basename(item.path)}", category="uploads")
             
             # Update status to uploading
             self.queue_manager.update_item_status(item.path, "uploading")
@@ -258,15 +176,17 @@ class UploadWorker(QThread):
             
             # Handle paused state
             if item.status == "paused":
-                self.log_message.emit(f"{timestamp()} Upload paused: {item.name}")
+                log(f"Upload paused: {item.name}", level="info", category="uploads")
                 return
             
             # Process results
             self._process_upload_results(item, results)
             
         except Exception as e:
+            import traceback
             error_msg = str(e)
-            self.log_message.emit(f"{timestamp()} Error uploading {item.name}: {error_msg}")
+            error_trace = traceback.format_exc()
+            log(f"Error uploading {item.name}: {error_msg}\n{error_trace}", level="error", category="uploads")
             item.error_message = error_msg
             self.queue_manager.mark_upload_failed(item.path, error_msg)
             self.gallery_failed.emit(item.path, error_msg)
@@ -278,7 +198,7 @@ class UploadWorker(QThread):
             if self._soft_stop_requested_for == item.path:
                 self.queue_manager.update_item_status(item.path, "incomplete")
                 item.status = "incomplete"
-                self.log_message.emit(f"{timestamp()} Marked incomplete: {item.name}")
+                log(f"Marked incomplete: {item.name}", level="info", category="uploads")
             else:
                 self.queue_manager.mark_upload_failed(item.path, "Upload failed")
                 self.gallery_failed.emit(item.path, "Upload failed")
@@ -292,11 +212,11 @@ class UploadWorker(QThread):
         item.gallery_id = results.get('gallery_id', '')
         
         # Check for incomplete upload due to soft stop
-        if (self._soft_stop_requested_for == item.path and 
+        if (self._soft_stop_requested_for == item.path and
             results.get('successful_count', 0) < (item.total_images or 0)):
             self.queue_manager.update_item_status(item.path, "incomplete")
             item.status = "incomplete"
-            self.log_message.emit(f"{timestamp()} Marked incomplete: {item.name}")
+            log(f"Marked incomplete: {item.name}", level="info", category="uploads")
             return
         
         # Save artifacts
@@ -326,7 +246,7 @@ class UploadWorker(QThread):
             )
             # Artifact save successful, no need to log details here
         except Exception as e:
-            self.log_message.emit(f"{timestamp()} Artifact save error: {e}")
+            log(f"Artifact save error: {e}", level="error", category="fileio")
     
     def _emit_queue_stats(self, force: bool = False):
         """Emit queue statistics if needed"""
@@ -394,10 +314,11 @@ class UploadWorker(QThread):
             
             # Emit bandwidth in KB/s
             self.bandwidth_updated.emit(total_rate / 1024.0)
-            
-        except Exception:
-            # Fail silently to avoid disrupting uploads
-            pass
+
+        except Exception as e:
+            # Log bandwidth errors in debug mode
+            import traceback
+            log(f"Bandwidth tracking error: {traceback.format_exc()}", level="debug", category="uploads")
 
 
 class CompletionWorker(QThread):
@@ -462,9 +383,9 @@ class CompletionWorker(QThread):
             
             # Log artifact locations if available
             self._log_artifact_locations(results)
-            
+
         except Exception as e:
-            self.log_message.emit(f"{timestamp()} Completion processing error: {e}")
+            log(f"Completion processing error: {e}", level="error", category="uploads")
     
     def _log_artifact_locations(self, results: dict):
         """Log artifact save locations from results"""
@@ -482,8 +403,8 @@ class CompletionWorker(QThread):
                 parts.append(f"folder: {uploaded_dir}")
             
             if parts:
-                self.log_message.emit(f"{timestamp()} [artifacts] Saved to {', '.join(parts)}")
-                
+                log(f"Saved to {', '.join(parts)}", level="debug", category="fileio")
+
         except Exception:
             pass
 
