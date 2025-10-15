@@ -40,10 +40,10 @@ class CredentialSetupDialog(QDialog):
         #self.success_color = "#1e7e34" if is_dark else "#27ae60"
         self.success_color = "#0fd66b" if is_dark else "#0ba653"
         self.error_color = "#c0392b" if is_dark else "#c0392b"
-        self.muted_color = "#aaa" if is_dark else "#666"
+        self.muted_color = "#dddddd" if is_dark else "#444444"
 
         # Legacy colors (keep for backward compatibility)
-        self._muted_color = "#aaaaaa" if is_dark else "#666666"
+        self._muted_color = "#dddddd" if is_dark else "#444444"
         self._text_color = "#dddddd" if is_dark else "#333333"
         self._panel_bg = "#2e2e2e" if is_dark else "#f0f8ff"
         self._panel_border = "#444444" if is_dark else "#cccccc"
@@ -66,7 +66,7 @@ class CredentialSetupDialog(QDialog):
         api_key_status_layout.addWidget(QLabel("<b>API Key</b>: "))
         self.api_key_status_label = QLabel("NOT SET")
         self.api_key_status_label.setProperty("class", "status-muted")
-        self.api_key_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+        #self.api_key_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         api_key_status_layout.addWidget(self.api_key_status_label)
         api_key_status_layout.addStretch()
         self.api_key_change_btn = QPushButton("Set")
@@ -102,7 +102,7 @@ class CredentialSetupDialog(QDialog):
         username_status_layout.addWidget(QLabel("<b>Username</b>: "))
         self.username_status_label = QLabel("NOT SET")
         self.username_status_label.setProperty("class", "status-muted")
-        self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+        #self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         username_status_layout.addWidget(self.username_status_label)
         username_status_layout.addStretch()
         self.username_change_btn = QPushButton("Set")
@@ -122,7 +122,7 @@ class CredentialSetupDialog(QDialog):
         password_status_layout.addWidget(QLabel("<b>Password</b>: "))
         self.password_status_label = QLabel("NOT SET")
         self.password_status_label.setProperty("class", "status-muted")
-        self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+        #self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         password_status_layout.addWidget(self.password_status_label)
         password_status_layout.addStretch()
         self.password_change_btn = QPushButton("Set")
@@ -155,7 +155,7 @@ class CredentialSetupDialog(QDialog):
         cookies_status_layout.addWidget(QLabel("<b>Firefox cookies</b>: "))
         self.cookies_status_label = QLabel("Unknown")
         self.cookies_status_label.setProperty("class", "status-muted")
-        self.cookies_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+        #self.cookies_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
         cookies_status_layout.addWidget(self.cookies_status_label)
         cookies_status_layout.addStretch()
         self.cookies_enable_btn = QPushButton("Enable")
@@ -182,7 +182,7 @@ class CredentialSetupDialog(QDialog):
             "The encrypted data won't work on other computers and is obfuscated from other users on this system.</small>"
         )
         encryption_note.setWordWrap(True)
-        encryption_note.setStyleSheet(f"color: {self.muted_color}; margin-top: 8px;")
+        encryption_note.setStyleSheet(f"margin-top: 8px;")
         layout.addWidget(encryption_note)
 
         # Remove all button at bottom
@@ -258,7 +258,7 @@ class CredentialSetupDialog(QDialog):
                 else:
                     self.username_status_label.setText("NOT SET")
                     self.username_status_label.setProperty("class", "status-muted")
-                    self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+                    self.username_status_label.setStyleSheet(f"font-style: italic;")
                     style = self.username_status_label.style()
                     if style:
                         style.polish(self.username_status_label)
@@ -289,7 +289,7 @@ class CredentialSetupDialog(QDialog):
                 else:
                     self.password_status_label.setText("NOT SET")
                     self.password_status_label.setProperty("class", "status-muted")
-                    self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+                    self.password_status_label.setStyleSheet(f"font-style: italic;")
                     style = self.password_status_label.style()
                     if style:
                         style.polish(self.password_status_label)
@@ -354,7 +354,7 @@ class CredentialSetupDialog(QDialog):
                 else:
                     self.api_key_status_label.setText("NOT SET")
                     self.api_key_status_label.setProperty("class", "status-muted")
-                    self.api_key_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+                    self.api_key_status_label.setStyleSheet(f"font-style: italic;")
                     self.api_key_status_label.style().polish(self.api_key_status_label)
                      # When not set, offer Set and disable Unset
                     try:

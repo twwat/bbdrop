@@ -1754,7 +1754,8 @@ class GalleryTableWidget(QTableWidget):
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
         try:
-            header.setCascadingSectionResizes(True)
+            # Disable cascading resizes for Excel-like behavior (independent column resizing)
+            header.setCascadingSectionResizes(False)
         except Exception as e:
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
@@ -1944,31 +1945,11 @@ class GalleryTableWidget(QTableWidget):
         return pixmap
     
     def resizeEvent(self, event):
-        """Auto-expand Gallery Name (col 1) when there is extra horizontal space.
-        Keep it otherwise user-resizable and clamp to a reasonable minimum when shrinking."""
+        """Excel-like behavior - columns don't auto-resize on window resize.
+        User manually resizes columns, horizontal scrollbar appears if needed."""
         super().resizeEvent(event)
-        try:
-            name_col_index = 1
-            if self.isColumnHidden(name_col_index):
-                return
-            # Calculate available space for the name column
-            viewport_width = self.viewport().width()
-            other_widths = 0
-            for col in range(self.columnCount()):
-                if col == name_col_index or self.isColumnHidden(col):
-                    continue
-                other_widths += self.columnWidth(col)
-            # Do not subtract vertical scrollbar width; viewport width excludes it already
-            available = viewport_width - other_widths
-            # Clamp and apply
-            min_width = 120
-            current = self.columnWidth(name_col_index)
-            target = max(min_width, available)
-            if target != current and target > 0:
-                self.setColumnWidth(name_col_index, target)
-        except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise
+        # Removed auto-resize logic to maintain Excel-like independent column behavior
+        # Columns now stay at their user-defined widths regardless of window size
     
     def handle_enter_or_double_click(self):
         """Handle Enter key or double-click for viewing items (BBCode for completed, file manager for others)"""
