@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Tuple
 from PIL import Image
 
 
-def get_sample_indices(files: List[str], config: Dict[str, Any], folder_path: str = None) -> List[int]:
+def get_sample_indices(files: List[str], config: Dict[str, Any], folder_path: str | None = None) -> List[int]:
     """
     Get indices of files to sample based on configuration.
 

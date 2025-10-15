@@ -113,105 +113,145 @@ class IconManager:
         #    if key.startswith('status_'):
         #        print(f"  {key}: {type(config)} = {config}")
         
-    def get_icon(self, icon_key: str, style_instance=None, is_dark_theme: bool = None, is_selected: bool = False, requested_size: int = 32) -> QIcon:
+    # Legacy name mapping for backward compatibility
+    LEGACY_ICON_MAP = {
+        'completed': 'status_completed',
+        'failed': 'status_failed',
+        'uploading': 'status_uploading',
+        'paused': 'status_paused',
+        'ready': 'status_ready',
+        'pending': 'status_pending',
+        'scan_failed': 'status_scan_failed',
+        'incomplete': 'status_incomplete',
+        'start': 'action_start',
+        'stop': 'action_stop',
+        'view': 'action_view',
+        'view_error': 'action_view_error',
+        'cancel': 'action_cancel',
+        'templates': 'templates',
+        'credentials': 'credentials',
+        'main_window': 'main_window',
+        'renamed_true': 'renamed_true',
+        'renamed_false': 'renamed_false',
+    }
+
+    def get_icon(self, icon_key: str, theme_mode: Optional[str] = None, is_selected: bool = False, requested_size: int = 32) -> QIcon:
         """
         Get an icon by its key with theme and selection awareness.
 
         Args:
-            icon_key: The icon identifier (e.g., 'status_completed', 'action_start')
-            style_instance: QStyle instance for fallback icons
-            is_dark_theme: Whether the current theme is dark (None = auto-detect)
+            icon_key: The icon identifier (e.g., 'status_completed', 'action_start', or legacy 'completed', 'start')
+            theme_mode: Theme mode string ('light', 'dark', or None for auto-detect from palette)
             is_selected: Whether the icon is for a selected table row
             requested_size: Size to generate inverted icons at (for quality)
 
         Returns:
             QIcon object (may be null if not found and no fallback)
         """
-        # Auto-detect dark theme if not explicitly set
-        if is_dark_theme is None:
+        # Handle legacy icon names
+        if icon_key in self.LEGACY_ICON_MAP:
+            icon_key = self.LEGACY_ICON_MAP[icon_key]
+
+        # Auto-detect theme if not provided
+        if theme_mode is None:
             from PyQt6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app:
+            from typing import cast
+            app_instance = QApplication.instance()
+            if app_instance:
+                app = cast(QApplication, app_instance)
                 palette = app.palette()
                 window_color = palette.color(palette.ColorRole.Window)
-                is_dark_theme = window_color.lightness() < 128
+                theme_mode = 'dark' if window_color.lightness() < 128 else 'light'
             else:
-                is_dark_theme = False
-        
+                theme_mode = 'dark'
+
         # Create cache key that includes theme/selection state and size
-        cache_key = f"{icon_key}_{is_dark_theme}_{is_selected}_{requested_size}"
-        
+        cache_key = f"{icon_key}_{theme_mode}_{is_selected}_{requested_size}"
+
         # Check cache first
         if cache_key in self._icon_cache:
             return self._icon_cache[cache_key]
-        
+
         # Get the configuration from our map
         if icon_key not in self.ICON_MAP:
             print(f"Warning: Unknown icon key '{icon_key}'")
+            # Try Qt standard fallback
+            if icon_key in self.QT_FALLBACKS:
+                from PyQt6.QtWidgets import QApplication
+                from typing import cast
+                app_instance = QApplication.instance()
+                if app_instance:
+                    app = cast(QApplication, app_instance)
+                    style = app.style()
+                    if style:
+                        fallback_pixmap = self.QT_FALLBACKS[icon_key]
+                        icon = style.standardIcon(fallback_pixmap)
+                        self._icon_cache[cache_key] = icon
+                        return icon
             return QIcon()
-        
+
         config = self.ICON_MAP[icon_key]
-        
-        # Debug output for config type
-        #if icon_key.startswith('status_') and (is_selected or is_dark_theme):
-        #    print(f"{DEBUG: {icon_key} config type: {type(config)} = {config}")
-        
+
         # Determine which icon file to use
-        filename = self._get_themed_filename(config, is_dark_theme, is_selected)
+        filename = self._get_themed_filename(config, theme_mode, is_selected)
         if not filename:
             return QIcon()
-            
+
         icon_path = os.path.join(self.assets_dir, filename)
-        
+
         # Try to load the icon
         if os.path.exists(icon_path):
             icon = QIcon(icon_path)
             if not icon.isNull():
-                # No inversion needed - we now have real light/dark files
                 self._icon_cache[cache_key] = icon
                 return icon
-        
+
         # Record missing icon
         self._missing_icons.add(icon_key)
-        
+
         # Use Qt standard icon fallback if available
-        if style_instance and icon_key in self.QT_FALLBACKS:
-            fallback_pixmap = self.QT_FALLBACKS[icon_key]
-            icon = style_instance.standardIcon(fallback_pixmap)
-            self._icon_cache[cache_key] = icon
-            return icon
-        
+        if icon_key in self.QT_FALLBACKS:
+            from PyQt6.QtWidgets import QApplication
+            from typing import cast
+            app_instance = QApplication.instance()
+            if app_instance:
+                app = cast(QApplication, app_instance)
+                style = app.style()
+                if style:
+                    fallback_pixmap = self.QT_FALLBACKS[icon_key]
+                    icon = style.standardIcon(fallback_pixmap)
+                    self._icon_cache[cache_key] = icon
+                    return icon
+
         # Return empty icon as last resort
         return QIcon()
     
-    def _get_themed_filename(self, config: Union[str, List[str]], is_dark_theme: bool, is_selected: bool) -> Optional[str]:
+    def _get_themed_filename(self, config: Union[str, List[str]], theme_mode: str, is_selected: bool) -> Optional[str]:
         """
         Get the appropriate filename based on theme and selection state.
-        
+
         Args:
             config: Icon configuration (string or [light, dark] list)
-            is_dark_theme: Whether current theme is dark
+            theme_mode: Current theme mode ('light' or 'dark')
             is_selected: Whether icon is for selected row
-            
+
         Returns:
             Filename to use, or None if invalid config
         """
         if isinstance(config, str):
-            # Single icon - return as-is (inversion handled later)
+            # Single icon - return as-is
             return config
         elif isinstance(config, list) and len(config) >= 2:
             # Manual light/dark pair
-            # Logic: 
-            # - Normal rows: light theme uses light icon, dark theme uses dark icon
-            # - Selected rows: always use dark icon for contrast against selection background
+            # Logic:
+            # - Normal rows: light theme uses light icon [0], dark theme uses dark icon [1]
+            # - Selected rows: always use dark icon [1] for contrast against selection background
             if is_selected:
-                # Selected: always use dark icon for contrast against selection background
-                filename = config[1]  # Always use dark icon for selected rows
-                return filename
+                # Selected: always use dark icon for contrast
+                return config[1]
             else:
                 # Not selected: use light icon in light theme, dark icon in dark theme
-                filename = config[0] if not is_dark_theme else config[1]
-                return filename
+                return config[0] if theme_mode == 'light' else config[1]
         else:
             print(f"Warning: Invalid icon configuration: {config}")
             return None
@@ -341,38 +381,36 @@ class IconManager:
                         import traceback
                         traceback.print_exc()
     
-    def get_status_icon(self, status: str, style_instance=None, is_dark_theme: bool = False, is_selected: bool = False, requested_size: int = 32) -> QIcon:
+    def get_status_icon(self, status: str, theme_mode: Optional[str] = None, is_selected: bool = False, requested_size: int = 32) -> QIcon:
         """
         Get icon for a specific status with theme/selection awareness.
-        
+
         Args:
             status: Status string (e.g., 'completed', 'uploading')
-            style_instance: QStyle instance for fallback icons
-            is_dark_theme: Whether current theme is dark
+            theme_mode: Theme mode string ('light', 'dark', or None for auto-detect)
             is_selected: Whether icon is for selected row
             requested_size: Size to generate inverted icons at (for quality)
-            
+
         Returns:
             QIcon object
         """
         icon_key = f'status_{status}'
-        return self.get_icon(icon_key, style_instance, is_dark_theme, is_selected, requested_size)
-    
-    def get_action_icon(self, action: str, style_instance=None, is_dark_theme: bool = False, is_selected: bool = False) -> QIcon:
+        return self.get_icon(icon_key, theme_mode, is_selected, requested_size)
+
+    def get_action_icon(self, action: str, theme_mode: Optional[str] = None, is_selected: bool = False) -> QIcon:
         """
         Get icon for an action button with theme/selection awareness.
-        
+
         Args:
             action: Action name (e.g., 'start', 'stop')
-            style_instance: QStyle instance for fallback icons
-            is_dark_theme: Whether current theme is dark
+            theme_mode: Theme mode string ('light', 'dark', or None for auto-detect)
             is_selected: Whether icon is for selected row
-            
+
         Returns:
             QIcon object
         """
         icon_key = f'action_{action}'
-        return self.get_icon(icon_key, style_instance, is_dark_theme, is_selected)
+        return self.get_icon(icon_key, theme_mode, is_selected)
     
     def validate_icons(self, report: bool = True) -> Dict[str, List[str]]:
         """

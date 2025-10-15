@@ -139,55 +139,6 @@ class GUIImxToUploader(ImxToUploader):
                     self.worker_thread._stats_last_emit = now_ts
             except Exception:
                 pass
-                    
-        def on_log(message: str):
-            # Parse category from engine messages like "[uploads:file] message"
-            # Engine uses callback pattern for separation of concerns
-            import re
-            category_match = re.match(r'^\[([^\]]+)\]\s*', message)
-            msg_to_log = message
-            category = "uploads"
-            subtype = None
-            level = "info"
-
-            if category_match:
-                cat_str = category_match.group(1)
-                msg_to_log = message[len(category_match.group(0)):]
-                # Map engine categories and extract subtype
-                if ':' in cat_str:
-                    parts = cat_str.split(':', 1)
-                    category = parts[0]
-                    subtype = parts[1]
-                elif cat_str.startswith('uploads'):
-                    category = "uploads"
-                elif cat_str == 'concurrency':
-                    category = "uploads"
-                    level = "debug"
-                else:
-                    category = cat_str
-
-            # Detect level from message content
-            if '✗' in msg_to_log or 'failed' in msg_to_log.lower() or 'error' in msg_to_log.lower():
-                level = "error"
-            elif '✓' in msg_to_log and 'uploaded successfully' in msg_to_log:
-                # File upload success - check if we should log based on subtype
-                from src.utils.logging import get_logger
-                app_logger = get_logger()
-                # If subtype is 'file', check file success settings
-                if subtype == 'file':
-                    if not app_logger.should_log_upload_file_success('gui') and not app_logger.should_log_upload_file_success('file'):
-                        return  # Don't log individual file successes if disabled
-                # If subtype is 'gallery' or no subtype, check gallery settings
-                elif subtype == 'gallery' or not subtype:
-                    if not app_logger.should_log_upload_gallery_success('gui') and not app_logger.should_log_upload_gallery_success('file'):
-                        return  # Don't log gallery successes if disabled
-
-            # Reconstruct category tag with subtype for proper filtering in add_log_message
-            if subtype:
-                # Prepend [category:subtype] tag so add_log_message can detect it
-                log(f"[{category}:{subtype}] {msg_to_log}", level=level, category=category)
-            else:
-                log(msg_to_log, level=level, category=category)
 
         def should_soft_stop() -> bool:
             if self.worker_thread and self.worker_thread.current_item:
@@ -222,7 +173,6 @@ class GUIImxToUploader(ImxToUploader):
             existing_gallery_id=existing_gallery_id,
             precalculated_dimensions=current_item,  # Pass the whole item, engine will extract what it needs
             on_progress=on_progress,
-            on_log=on_log,
             should_soft_stop=should_soft_stop,
             on_image_uploaded=on_image_uploaded,
         )

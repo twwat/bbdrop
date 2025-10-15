@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
+from src.gui.widgets.custom_widgets import CopyableLogTableWidget
 
 
 class LogViewerDialog(QDialog):
@@ -113,10 +114,11 @@ class LogViewerDialog(QDialog):
         self.log_view.setProperty("class", "log-viewer")
 
         # Apply inline stylesheet for semi-transparent gridlines
+        # Get theme mode from palette
         from PyQt6.QtWidgets import QApplication
         palette = QApplication.palette()
-        is_dark = palette.window().color().lightness() < 128
-        gridline_color = "rgba(102, 102, 102, 0.2)" if is_dark else "rgba(204, 204, 204, 0.2)"
+        theme_mode = 'dark' if palette.window().color().lightness() < 128 else 'light'
+        gridline_color = "rgba(102, 102, 102, 0.2)" if theme_mode == 'dark' else "rgba(204, 204, 204, 0.2)"
         self.log_view.setStyleSheet(f"""
             QTableWidget {{
                 gridline-color: {gridline_color};

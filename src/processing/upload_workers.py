@@ -126,8 +126,7 @@ class UploadWorker(QThread):
         if self._rename_worker_available:
             try:
                 from src.processing.rename_worker import RenameWorker
-                # Pass logging callback so rename operations appear in GUI log
-                self.rename_worker = RenameWorker(on_log=lambda msg: log(msg))
+                self.rename_worker = RenameWorker()
                 log("RenameWorker initialized with independent session", category="renaming")
             except Exception as e:
                 log(f"Failed to initialize RenameWorker: {e}", level="error", category="renaming")

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import time
 from typing import Dict, List, Optional, Tuple, Any, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 
 from src.storage.database import QueueStore
@@ -31,14 +31,8 @@ from src.storage.database import QueueStore
 class TabPreferences:
     """User-specific tab preferences"""
     last_active_tab: str = "Main"
-    hidden_tabs: Set[str] = None
-    custom_display_order: Dict[str, int] = None  # Tab name -> preferred order
-    
-    def __post_init__(self):
-        if self.hidden_tabs is None:
-            self.hidden_tabs = set()
-        if self.custom_display_order is None:
-            self.custom_display_order = {}
+    hidden_tabs: Set[str] = field(default_factory=set)
+    custom_display_order: Dict[str, int] = field(default_factory=dict)  # Tab name -> preferred order
 
 
 @dataclass  
@@ -447,7 +441,7 @@ class TabManager(QObject):
                 self._gallery_cache.pop(tab_name, None)
                 self._cache_timestamps.pop(tab_name, None)
                 
-    def invalidate_tab_cache(self, tab_name: str = None) -> None:
+    def invalidate_tab_cache(self, tab_name: str | None = None) -> None:
         """Invalidate cache for specific tab or all tabs"""
         if tab_name:
             self._gallery_cache.pop(tab_name, None)

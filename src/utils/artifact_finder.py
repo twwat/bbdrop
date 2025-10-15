@@ -31,15 +31,7 @@ def find_gallery_json_by_id(gallery_id: str, gallery_path: Optional[str] = None)
 
     # Check central storage
     try:
-        # Try multiple import paths
-        try:
-            from imxup import get_central_storage_path
-        except ImportError:
-            import sys
-            import os as _os
-            sys.path.append(_os.path.join(_os.path.dirname(__file__), '..', '..'))
-            from imxup import get_central_storage_path
-
+        from imxup import get_central_storage_path
         central_path = get_central_storage_path()
         if os.path.exists(central_path):
             search_locations.append(central_path)

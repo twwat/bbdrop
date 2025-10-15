@@ -8,14 +8,13 @@ import time
 import requests
 import configparser
 import os
-from typing import Optional, Callable
 from src.utils.logger import log
 
 
 class RenameWorker:
     """Background worker that handles gallery renames using its own web session."""
 
-    def __init__(self, on_log: Optional[Callable[[str], None]] = None):
+    def __init__(self):
         """Initialize RenameWorker with own web session."""
         # Import existing functions
         from imxup import get_config_path, decrypt_password, get_firefox_cookies, load_cookies_from_file
@@ -29,9 +28,6 @@ class RenameWorker:
         self._get_unnamed_galleries = get_unnamed_galleries
         self._remove_unnamed_gallery = remove_unnamed_gallery
         self._sanitize_gallery_name = sanitize_gallery_name
-
-        # Logging callback
-        self.on_log = on_log or print
 
         # Queue for rename requests
         self.queue = queue.Queue()
@@ -226,10 +222,10 @@ class RenameWorker:
             log(f"Error renaming gallery: {str(e)}", level="error", category="renaming")
             return False
 
-    def queue_rename(self, gallery_id: str, gallery_name: str, callback: Optional[Callable[[str], None]] = None):
+    def queue_rename(self, gallery_id: str, gallery_name: str):
         """Queue a rename request."""
         if gallery_id and gallery_name:
-            self.queue.put({'gallery_id': gallery_id, 'gallery_name': gallery_name, 'callback': callback})
+            self.queue.put({'gallery_id': gallery_id, 'gallery_name': gallery_name})
 
     def _process_renames(self):
         """Background thread that processes rename queue."""
@@ -243,7 +239,6 @@ class RenameWorker:
 
                 gallery_id = request['gallery_id']
                 gallery_name = request['gallery_name']
-                callback = request.get('callback')
 
                 # Attempt rename
                 success = self.rename_gallery_with_session(gallery_id, gallery_name)

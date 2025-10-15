@@ -332,7 +332,7 @@ class QueueManager(QObject):
                 from src.utils.sampling_utils import calculate_dimensions_with_outlier_exclusion
                 settings = QSettings()
                 exclude_outliers = settings.value('scanning/stats_exclude_outliers', False, type=bool)
-                use_median = settings.value('scanning/use_median', False, type=bool)
+                use_median = settings.value('scanning/use_median', True, type=bool)
 
                 stats = calculate_dimensions_with_outlier_exclusion(dims, exclude_outliers, use_median)
                 result['avg_width'] = stats['avg_width']
@@ -386,7 +386,7 @@ class QueueManager(QObject):
         
         return dims
     
-    def _mark_item_failed(self, path: str, error: str, failed_files: list = None):
+    def _mark_item_failed(self, path: str, error: str, failed_files: list | None = None):
         """Mark an item as failed (generic)"""
         with QMutexLocker(self.mutex):
             if path in self.items:
@@ -417,7 +417,7 @@ class QueueManager(QObject):
         self._schedule_debounced_save([path])
         self._inc_version()
     
-    def mark_upload_failed(self, path: str, error: str, failed_files: list = None):
+    def mark_upload_failed(self, path: str, error: str, failed_files: list | None = None):
         """Mark an item as upload failed (network issues, API problems, server errors)"""
         with QMutexLocker(self.mutex):
             if path in self.items:
@@ -578,6 +578,9 @@ class QueueManager(QObject):
                 item.scan_complete = False
                 item.start_time = None
                 item.end_time = None
+                item.uploaded_files = set()  # CRITICAL: Clear the set of uploaded filenames
+                item.uploaded_images_data = []  # Clear uploaded image metadata
+                item.uploaded_bytes = 0  # Clear uploaded bytes counter
                 
                 from imxup import timestamp
                 log(f"{item.name or os.path.basename(path)}: Complete reset, starting fresh scan", category="scan")
@@ -729,7 +732,7 @@ class QueueManager(QObject):
         except Exception as e:
             log(f"_save_single_item failed for {item.path}: {e}", level="error", category="queue")
 
-    def save_persistent_queue(self, specific_paths: List[str] = None):
+    def save_persistent_queue(self, specific_paths: List[str] | None = None):
         """Save queue state to database"""
         log(f"save_persistent_queue called with {len(specific_paths) if specific_paths else 'all'} items", level="debug", category="queue")
         if self._batch_mode and specific_paths:
@@ -880,7 +883,7 @@ class QueueManager(QObject):
         
         return item
     
-    def add_item(self, path: str, name: str = None, template_name: str = "default", tab_name: str = "Main") -> bool:
+    def add_item(self, path: str, name: str | None = None, template_name: str = "default", tab_name: str = "Main") -> bool:
         """Add gallery to queue"""
         log(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}", level="debug")
         with QMutexLocker(self.mutex):

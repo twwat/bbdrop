@@ -19,12 +19,11 @@ class BBCodeViewerDialog(QDialog):
         super().__init__(parent)
         self.folder_path = folder_path
         self.folder_name = os.path.basename(folder_path)
-        self.central_path = None
         self.folder_files = []
-        
+
         # Import here to avoid circular imports
         from imxup import get_central_storage_path
-        self.central_path = get_central_storage_path()
+        self.central_path: str = get_central_storage_path()  # Type annotation ensures non-None
         
         self.setWindowTitle(f"BBCode Files - {self.folder_name}")
         self.setModal(True)

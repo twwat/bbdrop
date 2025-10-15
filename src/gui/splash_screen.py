@@ -23,7 +23,9 @@ class SplashScreen(QSplashScreen):
         
         # Load the imxup logo
         try:
-            self.logo_pixmap = QPixmap(os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'assets', 'imxup2.png'))
+            from imxup import get_project_root
+            logo_path = os.path.join(get_project_root(), 'assets', 'imxup2.png')
+            self.logo_pixmap = QPixmap(logo_path)
             if self.logo_pixmap.isNull():
                 self.logo_pixmap = None
         except Exception:
@@ -163,12 +165,7 @@ class SplashScreen(QSplashScreen):
         self.status_text = message
         self.repaint()
         QApplication.processEvents()  # Ensure UI updates immediately
-    
-    def update_random_status(self):
-        """Generate and display a random status update"""
-        action = random.choice(self.action_words).title()
-        obj = random.choice(self.objects)
-        
+
     def set_status(self, text):
         """Set status text with random action word and add progress dot"""
         #self.random_timer.stop()

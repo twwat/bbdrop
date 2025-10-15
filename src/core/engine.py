@@ -20,10 +20,10 @@ import ctypes
 from typing import Callable, Iterable, Optional, Tuple, List, Dict, Any, Set
 
 from src.utils.format_utils import format_binary_size, format_binary_rate
+from src.utils.logger import log
 
 
 ProgressCallback = Callable[[int, int, int, str], None]
-LogCallback = Callable[[str], None]
 SoftStopCallback = Callable[[], bool]
 ImageUploadedCallback = Callable[[str, Dict[str, Any], int], None]
 
@@ -67,7 +67,6 @@ class UploadEngine:
         precalculated_dimensions: Optional[Dict[str, float]] = None,
         # Callbacks (all optional)
         on_progress: Optional[ProgressCallback] = None,
-        on_log: Optional[LogCallback] = None,
         should_soft_stop: Optional[SoftStopCallback] = None,
         on_image_uploaded: Optional[ImageUploadedCallback] = None,
     ) -> Dict[str, Any]:
@@ -106,7 +105,6 @@ class UploadEngine:
             if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
         ])
         if not all_image_files:
-            self.statusBar().showMessage
             raise ValueError(f"No image files found in {folder_path}")
 
         # Resume: exclude already-uploaded files
@@ -134,8 +132,8 @@ class UploadEngine:
             from imxup import sanitize_gallery_name  # type: ignore
             original_name = gallery_name
             # No sanitization - only rename worker should sanitize
-            if on_log and original_name != gallery_name:
-                on_log(f"Sanitized gallery name: '{original_name}' -> '{gallery_name}'")
+            if original_name != gallery_name:
+                log(f"Sanitized gallery name: '{original_name}' -> '{gallery_name}'", level="debug", category="uploads")
         except Exception:
             # Best-effort; if unavailable, proceed with provided name
             pass
@@ -149,8 +147,7 @@ class UploadEngine:
         
         if gallery_id:
             # Resume/append to existing gallery - no need to create new one
-            if on_log:
-                on_log(f"Resuming/appending to existing gallery: {gallery_id}")
+            log(f"Resuming/appending to existing gallery: {gallery_id}", level="info", category="uploads")
             files_to_upload = image_files
             # Set initial completed to the number of already-uploaded files for correct progress
             initial_completed = len(already_uploaded)
@@ -165,8 +162,7 @@ class UploadEngine:
 
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
-            if on_log:
-                on_log(f"Uploading first image to create gallery: {first_file}")
+            log(f"Uploading first image to create gallery: {first_file}", level="info", category="uploads")
             first_response = self.uploader.upload_image(
                 first_image_path,
                 create_gallery=True,
@@ -178,12 +174,11 @@ class UploadEngine:
             gallery_id = first_response['data'].get('gallery_id')
             preseed_images = [first_response['data']]
             # Log first image success with URL
-            if on_log:
-                try:
-                    first_url = first_response['data'].get('image_url', '')
-                    on_log(f"✓ [{gallery_id}] {first_file} uploaded successfully ({first_url})")
-                except Exception:
-                    pass
+            try:
+                first_url = first_response['data'].get('image_url', '')
+                log(f"✔ [{gallery_id}] {first_file} uploaded successfully ({first_url})", level="info", category="uploads:file")
+            except Exception:
+                pass
             # First image uploaded - set counters and files_to_upload
             files_to_upload = image_files[1:]  # Remaining files after first
             initial_completed = 1
@@ -198,7 +193,7 @@ class UploadEngine:
                 except Exception:
                     pass
         # Queue gallery rename for background processing to avoid blocking uploads
-        if gallery_name and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
+        if gallery_name and gallery_id and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
             try:
                 last_method = getattr(self.uploader, 'last_login_method', None)
             except Exception:
@@ -206,16 +201,14 @@ class UploadEngine:
                 
             if self.rename_worker:
                 # Always try RenameWorker first (it will fallback internally if needed)
-                if on_log:
-                    on_log(f"Queuing gallery rename via RenameWorker (login method: {last_method})")
-                self.rename_worker.queue_rename(gallery_id, gallery_name, on_log)
+                log(f"Queuing gallery rename via RenameWorker (login method: {last_method})", level="debug", category="renaming")
+                self.rename_worker.queue_rename(gallery_id, gallery_name)
             else:
                 # No rename worker; queue for later auto-rename
                 try:
                     from imxup import save_unnamed_gallery  # type: ignore
                     save_unnamed_gallery(gallery_id, gallery_name)
-                    if on_log:
-                        on_log(f"Queued gallery for auto-rename: '{gallery_name}' (no RenameWorker)")
+                    log(f"Queued gallery for auto-rename: '{gallery_name}' (no RenameWorker)", level="debug", category="renaming")
                 except Exception:
                     pass
         # Emit an initial progress update
@@ -248,7 +241,7 @@ class UploadEngine:
                     session = requests.Session()
                     adapter = HTTPAdapter(pool_connections=1, pool_maxsize=1)
                     session.mount('https://', adapter)
-                    session.mount('http://', adapter)
+                    #session.mount('http://', adapter)
                     session.headers.update(self.uploader.headers)
                     thread_sessions[thread_id] = session
                 return thread_sessions[thread_id]
@@ -257,8 +250,6 @@ class UploadEngine:
             image_path = os.path.join(folder_path, image_file)
             try:
                 upload_start = time.time()
-                if on_log:
-                    on_log(f"[uploads:file] Starting '{image_file}' upload..")
 
                 # Get thread-local session for this upload
                 thread_session = get_thread_session()
@@ -271,8 +262,7 @@ class UploadEngine:
                     thread_session=thread_session,
                 )
                 upload_duration = time.time() - upload_start
-                if on_log:
-                    on_log(f"[uploads:file] Uploaded '{image_file}' in {upload_duration:.3f}s")
+                log(f"Uploaded in {upload_duration:.4f}s: {image_file} ({image_path})",category="uploads:file")
                 if response.get('status') == 'success':
                     return image_file, response['data'], None
                 return image_file, None, f"API error: {response}"
@@ -290,9 +280,6 @@ class UploadEngine:
         # Track concurrent uploads for visibility
         active_uploads = 0
         max_concurrent_seen = 0
-
-        #if on_log:
-        #    on_log(f"[concurrency] Starting upload with batch size: {parallel_batch_size}")
 
         with ThreadPoolExecutor(max_workers=parallel_batch_size) as executor:
             remaining: List[str] = list(files_to_upload)
@@ -320,12 +307,11 @@ class UploadEngine:
                     if image_data:
                         uploaded_images.append((image_file, image_data))
                         # Per-image success log (categorized)
-                        if on_log:
-                            try:
-                                img_url = image_data.get('image_url', '')
-                                on_log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
-                            except Exception:
-                                pass
+                        try:
+                            img_url = image_data.get('image_url', '')
+                            log(f"✓ {image_file} uploaded successfully ({img_url})", level="debug", category="uploads:file")
+                        except Exception:
+                            pass
                         # Per-image callback for resume-aware consumers
                         if on_image_uploaded:
                             try:
@@ -336,8 +322,7 @@ class UploadEngine:
                     else:
                         failed_images.append((image_file, error or "unknown error"))
                         # Log the failure immediately with clear error indication
-                        if on_log:
-                            on_log(f"[uploads] ✗ Upload failed: {image_file} - {error or 'unknown error'}")
+                        log(f"[uploads:file] ✗ Upload failed: {image_file} - {error or 'unknown error'}", level="warning", category="uploads:file")
                     # Progress
                     completed_count = initial_completed + len(uploaded_images)
                     if on_progress:
@@ -354,8 +339,7 @@ class UploadEngine:
         while failed_images and retry_count < max_retries and not maybe_soft_stopping():
             retry_count += 1
             retry_failed: List[Tuple[str, str]] = []
-            if on_log:
-                on_log(f"[uploads] Retrying {len(failed_images)} failed uploads (attempt {retry_count}/{max_retries})")
+            log(f"[uploads] Retrying {len(failed_images)} failed uploads (attempt {retry_count}/{max_retries})", level="info", category="uploads")
             with ThreadPoolExecutor(max_workers=parallel_batch_size) as executor:
                 remaining = [img for img, _ in failed_images]
                 futures_map = {executor.submit(upload_single_image, img): img for img in remaining[:parallel_batch_size]}
@@ -374,18 +358,15 @@ class UploadEngine:
                                     size_bytes = 0
                                 on_image_uploaded(image_file, image_data, size_bytes)
                             # Per-image success log (retry path)
-                            if on_log:
-                                try:
-                                    img_url = image_data.get('image_url', '')
-                                    on_log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})")
-                                except Exception:
-                                    pass
-                            if on_log:
-                                on_log(f"[uploads] Retry successful: {image_file}")
+                            try:
+                                img_url = image_data.get('image_url', '')
+                                log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})", level="info", category="uploads:file")
+                            except Exception:
+                                pass
+                            log(f"[uploads] Retry successful: {image_file}", level="info", category="uploads")
                         else:
                             retry_failed.append((image_file, error or "unknown error"))
-                            if on_log:
-                                on_log(f"[uploads] ✗ Retry failed: {image_file} - {error or 'unknown error'}")
+                            log(f"[uploads] ✗ Retry failed: {image_file} - {error or 'unknown error'}", level="warning", category="uploads")
                         completed_count = initial_completed + len(uploaded_images)
                         if on_progress:
                             percent = int((completed_count / max(original_total_images, 1)) * 100)
@@ -470,9 +451,10 @@ class UploadEngine:
                 fname_norm = fname
             # Ensure thumb_url if missing
             t = data.get('thumb_url')
-            if not t and data.get('image_url'):
+            image_url = data.get('image_url')
+            if not t and image_url:
                 try:
-                    parts = data.get('image_url').split('/i/')
+                    parts = image_url.split('/i/')
                     if len(parts) == 2 and parts[1]:
                         img_id = parts[1].split('/')[0]
                         _, ext = os.path.splitext(fname_norm)
@@ -501,9 +483,10 @@ class UploadEngine:
                 except Exception:
                     fname_norm = fname
                 t = first_data.get('thumb_url')
-                if not t and first_data.get('image_url'):
+                first_image_url = first_data.get('image_url')
+                if not t and first_image_url:
                     try:
-                        parts = first_data.get('image_url').split('/i/')
+                        parts = first_image_url.split('/i/')
                         if len(parts) == 2 and parts[1]:
                             img_id = parts[1].split('/')[0]
                             _, ext = os.path.splitext(fname_norm)
@@ -545,32 +528,33 @@ class UploadEngine:
         })
 
         # Emit consolidated success at gallery level when appropriate
-        if on_log:
-            try:
-                total_attempted = len(all_image_files)
-                if failed_images:
-                    on_log(f"[uploads] ✗ Gallery '{gallery_id}' completed with failures in {upload_time:.1f}s ({results['successful_count']}/{total_attempted} images)")
-                    for fname, reason in failed_images:
-                        on_log(f"[uploads] ✗ {fname}: {reason}")
-                else:
-                    # Include gallery name and link for clarity
-                    try:
-                        gname = results.get('gallery_name') or gallery_name
-                    except Exception:
-                        gname = gallery_name
+        try:
+            total_attempted = len(all_image_files)
+            if failed_images:
+                log(f"[uploads] ✗ Gallery '{gallery_id}' completed with failures in {upload_time:.1f}s ({results['successful_count']}/{total_attempted} images)", level="warning", category="uploads:gallery")
+                for fname, reason in failed_images:
+                    log(f"[uploads] ✗ {fname}: {reason}", level="warning", category="uploads")
+            else:
+                # Include gallery name and link for clarity
+                try:
+                    gname = results.get('gallery_name') or gallery_name
+                except Exception:
+                    gname = gallery_name
 
-                    # Calculate metrics
-                    size_str = format_binary_size(uploaded_size, precision=2)
-                    rate_bytes_per_sec = uploaded_size / upload_time if upload_time > 0 else 0
-                    rate_kib_per_sec = rate_bytes_per_sec / 1024
-                    rate_str = format_binary_rate(rate_kib_per_sec, precision=2)
-                    time_per_file = upload_time / results['successful_count'] if results['successful_count'] > 0 else 0
+                # Calculate metrics
+                size_str = format_binary_size(uploaded_size, precision=2)
+                rate_bytes_per_sec = uploaded_size / upload_time if upload_time > 0 else 0
+                rate_kib_per_sec = rate_bytes_per_sec / 1024
+                rate_str = format_binary_rate(rate_kib_per_sec, precision=2)
+                time_per_file = upload_time / results['successful_count'] if results['successful_count'] > 0 else 0
 
-                    on_log(
-                        f"[uploads:gallery] ✓ {gallery_id}: {results['successful_count']} images ({size_str}) in {upload_time:.1f}s ({rate_str}, {time_per_file:.2f}s/file) {gname}"
-                    )
-            except Exception:
-                pass
+                log(
+                    f"[uploads:gallery] ✓ {gallery_id}: {results['successful_count']} images ({size_str}) in {upload_time:.1f}s ({rate_str}, {time_per_file:.2f}s/file) {gname}",
+                    level="info",
+                    category="uploads:gallery"
+                )
+        except Exception:
+            pass
 
         return results
 

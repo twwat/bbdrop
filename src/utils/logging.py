@@ -275,7 +275,7 @@ class AppLogger:
 
     def get_settings(self) -> Dict[str, Any]:
         # Return a copy with normalized types
-        s = dict(self._settings)
+        s: Dict[str, Any] = dict(self._settings)
         s["enabled"] = str(s.get("enabled", "true")).lower() == "true"
         s["compress"] = str(s.get("compress", "true")).lower() == "true"
         try:

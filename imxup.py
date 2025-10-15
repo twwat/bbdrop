@@ -11,6 +11,7 @@ import json
 import argparse
 import sys
 from pathlib import Path
+from typing import Optional, Any
 
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -27,7 +28,7 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.5.00"  # Application version number
+__version__ = "0.5.01"  # Application version number
 
 # Build User-Agent string once at module load
 _system = platform.system()
@@ -41,8 +42,20 @@ def timestamp():
     return datetime.now().strftime("%H:%M:%S")
 
 def get_project_root() -> str:
-    """Return the project root directory (where imxup.py is located)."""
-    return os.path.dirname(os.path.abspath(__file__))
+    """Return the project root directory.
+
+    When running as PyInstaller frozen executable:
+        Returns the directory containing the .exe (where assets/, docs/, src/ are located)
+    When running as Python script:
+        Returns the directory containing imxup.py
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller executable - use .exe location
+        # This ensures we find assets/, docs/, src/ next to the .exe
+        return os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        # Running as Python script - use imxup.py location
+        return os.path.dirname(os.path.abspath(__file__))
 
 def get_config_path() -> str:
     """Return the canonical path to the application's config file (~/.imxup/imxup.ini)."""
@@ -154,25 +167,37 @@ migrate_legacy_storage()
 def create_windows_context_menu():
     """Create Windows context menu integration"""
     try:
-        # Resolve Python executables and scripts
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        cli_script = os.path.join(script_dir, 'imxup.py')
-        gui_script = os.path.join(script_dir, 'launch_gui.py')
-        # Prefer python.exe for CLI and pythonw.exe for GUI
-        python_exe = sys.executable or 'python.exe'
-        if python_exe.lower().endswith('pythonw.exe'):
-            pythonw_exe = python_exe
-            python_cli_exe = python_exe[:-1]  # replace 'w' -> ''
-            if not os.path.exists(python_cli_exe):
-                python_cli_exe = python_exe  # best effort
-        else:
-            python_cli_exe = python_exe
-            pythonw_exe = python_exe.replace('python.exe', 'pythonw.exe')
-            if not os.path.exists(pythonw_exe):
-                pythonw_exe = python_exe  # fallback to python.exe if pythonw not present
-        
-        # Create registry entries for command line upload (background right-click)
+        # Resolve executables and scripts based on frozen/unfrozen state
+        is_frozen = getattr(sys, 'frozen', False)
 
+        if is_frozen:
+            # Running as .exe - use the executable directly
+            script_dir = os.path.dirname(os.path.abspath(sys.executable))
+            exe_path = sys.executable
+            # For frozen exe, both CLI and GUI use the same exe with different flags
+            cli_script = f'"{exe_path}"'
+            gui_script = f'"{exe_path}" --gui'
+            python_exe = None  # Not needed for .exe
+            pythonw_exe = None
+        else:
+            # Running as Python script - use .py files with python.exe
+            script_dir = get_project_root()
+            cli_script = os.path.join(script_dir, 'imxup.py')
+            gui_script = os.path.join(script_dir, 'launch_gui.py')
+            # Prefer python.exe for CLI and pythonw.exe for GUI
+            python_exe = sys.executable or 'python.exe'
+            if python_exe.lower().endswith('pythonw.exe'):
+                pythonw_exe = python_exe
+                python_cli_exe = python_exe[:-1]  # replace 'w' -> ''
+                if not os.path.exists(python_cli_exe):
+                    python_cli_exe = python_exe  # best effort
+            else:
+                python_cli_exe = python_exe
+                pythonw_exe = python_exe.replace('python.exe', 'pythonw.exe')
+                if not os.path.exists(pythonw_exe):
+                    pythonw_exe = python_exe  # fallback to python.exe if pythonw not present
+
+        # Create registry entries for GUI uploader (directory right-click)
         gui_key_path_dir = r"Directory\shell\UploadToImxGUI"
         gui_key_dir = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_dir)
         winreg.SetValue(gui_key_dir, "", winreg.REG_SZ, "IMX Uploader")
@@ -181,7 +206,16 @@ def create_windows_context_menu():
         except Exception:
             pass
         gui_command_key_dir = winreg.CreateKey(gui_key_dir, "command")
-        winreg.SetValue(gui_command_key_dir, "", winreg.REG_SZ, f'"{pythonw_exe}" "{gui_script}" "%V"')
+
+        # Build command based on frozen/unfrozen state
+        if is_frozen:
+            # For .exe, pass folder path as argument (--gui flag already in gui_script variable)
+            gui_command = f'{gui_script} "%V"'
+        else:
+            # For Python script, use pythonw.exe with script path
+            gui_command = f'"{pythonw_exe}" "{gui_script}" "%V"'
+
+        winreg.SetValue(gui_command_key_dir, "", winreg.REG_SZ, gui_command)
         winreg.CloseKey(gui_command_key_dir)
         winreg.CloseKey(gui_key_dir)
         
@@ -327,6 +361,8 @@ def load_user_defaults():
         'central_store_path': get_default_central_store_base_path(),
         'upload_connect_timeout': 30,
         'upload_read_timeout': 120,
+        'use_median': True,
+        'stats_exclude_outliers': False,
     }
 
     config = configparser.ConfigParser()
@@ -343,7 +379,8 @@ def load_user_defaults():
 
             # Load boolean settings
             for key in ['confirm_delete', 'auto_rename', 'auto_start_upload',
-                       'auto_regenerate_bbcode', 'store_in_uploaded', 'store_in_central']:
+                       'auto_regenerate_bbcode', 'store_in_uploaded', 'store_in_central',
+                       'use_median', 'stats_exclude_outliers']:
                 defaults[key] = config.getboolean('DEFAULTS', key, fallback=defaults[key])
 
             # Load string settings
@@ -397,7 +434,7 @@ def _save_credentials(username, password):
     with open(config_file, 'w') as f:
         config.write(f)
     
-    log(f"[OK] Credentials saved to {config_file}", level="info", category="auth")
+    log(f"Username and encrypted password saved to {config_file}", level="info", category="auth")
     return True
 
 def save_unnamed_gallery(gallery_id, intended_name):
@@ -446,7 +483,7 @@ def get_central_store_base_path():
                 storage_mode = config.get('DEFAULTS', 'storage_mode', fallback='home')
                 if storage_mode == 'portable':
                     # Use portable path (app root/.imxup)
-                    app_root = os.path.dirname(os.path.abspath(__file__))
+                    app_root = get_project_root()  # Use centralized function that handles frozen exe correctly
                     base_path = os.path.join(app_root, '.imxup')
                 elif storage_mode == 'custom':
                     # Use custom path from config
@@ -861,6 +898,9 @@ def save_gallery_artifacts(
     return written_paths
 
 class ImxToUploader:
+    # Type hints for attributes set externally by GUI worker threads
+    worker_thread: Optional[Any] = None  # Set by UploadWorker when used in GUI mode
+
     def _get_credentials(self):
         """Get credentials from stored config (username/password or API key)"""
         config = configparser.ConfigParser()
@@ -945,7 +985,11 @@ class ImxToUploader:
 
         if not has_credentials:
             log(f"Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.", level="warning", category="auth")
-            sys.exit(1)
+            # Don't exit in GUI mode - let the user set credentials through the dialog
+            # Only exit if running in CLI mode (when there's no way to set credentials interactively)
+            is_gui_mode = os.environ.get('IMXUP_GUI_MODE') == '1'
+            if not is_gui_mode:
+                sys.exit(1)
 
         # Load timeout settings
         defaults = load_user_defaults()
@@ -997,7 +1041,6 @@ class ImxToUploader:
                 use_cookies = True
             if use_cookies:
                 try:
-                    import time
                     login_start = time.time()
                     #log(f" DEBUG: Starting cookie-based login process...")
                     #log(f" Attempting to use cookies to bypass DDoS-Guard...")
@@ -1363,18 +1406,23 @@ class ImxToUploader:
             log(f"Error renaming gallery: {str(e)}", level="error", category="renaming")
             return False
     
-    def set_gallery_visibility(self, gallery_id):
-        """Set gallery visibility (public/private)"""
+    def set_gallery_visibility(self, gallery_id, visibility):
+        """Set gallery visibility (public/private)
+
+        Args:
+            gallery_id: Gallery ID
+            visibility: 1 for public, 0 for private
+        """
         if not self.login():
             return False
-        
+
         try:
             # Get the edit gallery page
             edit_page = self.session.get(f"{self.web_url}/user/gallery/edit?id={gallery_id}")
-            
+
             # Submit gallery visibility form
             visibility_data = {
-                'public_gallery': '1',  # Always public for now
+                'public_gallery': str(visibility),
                 'submit_new_gallery': 'Update Gallery'
             }
             
@@ -2014,28 +2062,99 @@ def main():
     # Handle GUI launch
     if args.gui:
         try:
-            # Try to import GUI module
-            from src.gui import main_window as imxup_gui
-            
+            # Set environment variable to indicate GUI mode BEFORE stripping --gui from sys.argv
+            # This allows ImxToUploader to detect GUI mode even after sys.argv is modified
+            os.environ['IMXUP_GUI_MODE'] = '1'
+
+            # Import only lightweight PyQt6 basics for splash screen FIRST
+            from PyQt6.QtWidgets import QApplication
+            from src.gui.splash_screen import SplashScreen
+
             # Check if folder paths were provided for GUI
             if args.folder_paths:
                 # Pass folder paths to GUI for initial loading
                 sys.argv = [sys.argv[0]] + args.folder_paths
             else:
-                # Remove GUI arg to avoid conflicts
+                # Remove GUI arg to avoid conflicts with Qt argument parsing
                 sys.argv = [sys.argv[0]]
-            
-            # Launch GUI
+
+            # Create QApplication and show splash IMMEDIATELY (before heavy imports)
+            app = QApplication(sys.argv)
+            app.setStyle("Fusion")
+            app.setQuitOnLastWindowClosed(True)
+
+            # Install global exception handler for Qt event loop
+            def qt_exception_hook(exctype, value, traceback_obj):
+                import traceback as tb_module
+                tb_lines = tb_module.format_exception(exctype, value, traceback_obj)
+                tb_text = ''.join(tb_lines)
+                print(f"\n{'='*60}")
+                print(f"UNCAUGHT EXCEPTION IN QT EVENT LOOP:")
+                print(f"{'='*60}")
+                print(tb_text)
+                print(f"{'='*60}\n")
+                # Also try to write to a crash log file
+                try:
+                    crash_log = os.path.join(os.path.expanduser("~"), ".imxup", "crash.log")
+                    with open(crash_log, 'a', encoding='utf-8') as f:
+                        f.write(f"\n{'='*60}\n")
+                        f.write(f"CRASH AT {datetime.now()}\n")
+                        f.write(tb_text)
+                        f.write(f"{'='*60}\n")
+                    print(f"Crash details written to: {crash_log}")
+                except Exception:
+                    pass
+
+            sys.excepthook = qt_exception_hook
+
+            splash = SplashScreen()
+            splash.show()
+            splash.update_status("Starting ImxUp...")
+            app.processEvents()  # Force splash to appear NOW
+
+            # NOW import the heavy main_window module (while splash is visible)
+            splash.set_status("Loading modules")
             print(f"{timestamp()} INFO: Launching GUI for ImxUp v{__version__}")
-            imxup_gui.main()
-            return
+            from src.gui.main_window import ImxUploadGUI, check_single_instance
+
+            # Check for existing instance
+            folders_to_add = []
+            if len(sys.argv) > 1:
+                for arg in sys.argv[1:]:
+                    if os.path.isdir(arg):
+                        folders_to_add.append(arg)
+                if folders_to_add and check_single_instance(folders_to_add[0]):
+                    splash.finish_and_hide()
+                    return
+            else:
+                if check_single_instance():
+                    print(f"{timestamp()} INFO: ImxUp GUI already running, bringing existing instance to front.")
+                    splash.finish_and_hide()
+                    return
+
+            splash.set_status("Creating main window")
+
+            # Create main window (pass splash for progress updates)
+            window = ImxUploadGUI(splash)
+
+            # Add folders from command line if provided
+            if folders_to_add:
+                window.add_folders(folders_to_add)
+
+            # Hide splash and show main window
+            splash.finish_and_hide()
+            window.show()
+
+            sys.exit(app.exec())
+
         except ImportError as e:
             print(f"{timestamp()} ERROR: Import error: {e}")
             print(f"Could not import PyQt6, required for GUI mode. Install with: pip install PyQt6")
-            
             sys.exit(1)
         except Exception as e:
             print(f"{timestamp()} CRITICAL: Error launching GUI: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
     
     # Handle secure setup

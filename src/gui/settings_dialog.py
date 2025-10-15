@@ -277,12 +277,12 @@ class ComprehensiveSettingsDialog(QDialog):
         storage_layout.addWidget(location_label, 2, 0, 1, 3)
         
         # Import path functions
-        from imxup import get_central_store_base_path, get_default_central_store_base_path
-        
+        from imxup import get_central_store_base_path, get_default_central_store_base_path, get_project_root
+
         # Get current path and determine mode
         current_path = defaults.get('central_store_path') or get_central_store_base_path()
         home_path = get_default_central_store_base_path()
-        app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        app_root = get_project_root()  # Use centralized function that handles frozen exe correctly
         portable_path = os.path.join(app_root, '.imxup')
         
         # Radio buttons for location selection
@@ -334,11 +334,11 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Theme setting
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["system", "light", "dark"])
-        
+        self.theme_combo.addItems(["light", "dark"])
+
         # Load current theme from QSettings
         if self.parent and hasattr(self.parent, 'settings'):
-            current_theme = self.parent.settings.value('ui/theme', 'system')
+            current_theme = self.parent.settings.value('ui/theme', 'dark')
             index = self.theme_combo.findText(current_theme)
             if index >= 0:
                 self.theme_combo.setCurrentIndex(index)
@@ -947,6 +947,11 @@ class ComprehensiveSettingsDialog(QDialog):
         method_layout.addStretch()
         strategy_layout.addLayout(method_layout)
 
+        # Create button group for sampling method (Fixed vs Percentage)
+        self.sampling_method_group = QButtonGroup(self)
+        self.sampling_method_group.addButton(self.sampling_fixed_radio)
+        self.sampling_method_group.addButton(self.sampling_percent_radio)
+
         # Connect radio buttons to enable/disable spinboxes
         self.sampling_fixed_radio.toggled.connect(lambda checked: self.sampling_fixed_spin.setEnabled(checked))
         self.sampling_fixed_radio.toggled.connect(lambda checked: self.sampling_percent_spin.setEnabled(not checked))
@@ -1008,13 +1013,9 @@ class ComprehensiveSettingsDialog(QDialog):
         strategy_layout.addWidget(stats_label)
 
         stats_layout = QHBoxLayout()
-        self.stats_all_radio = QRadioButton("Average all sampled images")
-        self.stats_all_radio.setChecked(True)
-        stats_layout.addWidget(self.stats_all_radio)
-
-        self.stats_exclude_outliers_radio = QRadioButton("Exclude outliers (±1.5 IQR)")
-        self.stats_exclude_outliers_radio.setToolTip("Remove images with dimensions outside 1.5x interquartile range")
-        stats_layout.addWidget(self.stats_exclude_outliers_radio)
+        self.stats_exclude_outliers_check = QCheckBox("Exclude outliers (±1.5 IQR)")
+        self.stats_exclude_outliers_check.setToolTip("Remove images with dimensions outside 1.5x interquartile range")
+        stats_layout.addWidget(self.stats_exclude_outliers_check)
         stats_layout.addStretch()
         strategy_layout.addLayout(stats_layout)
 
@@ -1023,14 +1024,21 @@ class ComprehensiveSettingsDialog(QDialog):
         avg_layout.addWidget(QLabel("Average method:"))
         self.avg_mean_radio = QRadioButton("Mean")
         self.avg_mean_radio.setToolTip("Arithmetic mean (sum / count)")
-        self.avg_mean_radio.setChecked(True)
+        # Default is median, not mean
         avg_layout.addWidget(self.avg_mean_radio)
 
         self.avg_median_radio = QRadioButton("Median")
         self.avg_median_radio.setToolTip("Middle value (more robust to outliers)")
+        self.avg_median_radio.setChecked(True)
         avg_layout.addWidget(self.avg_median_radio)
         avg_layout.addStretch()
         strategy_layout.addLayout(avg_layout)
+        
+
+        # Create button group for average method (Mean vs Median)
+        self.avg_method_group = QButtonGroup(self)
+        self.avg_method_group.addButton(self.avg_mean_radio)
+        self.avg_method_group.addButton(self.avg_median_radio)
         
         # Performance info
         perf_info = QLabel("Fast mode uses imghdr for corruption detection and PIL for dimension calculations and to rescan images that fail imghdr test.")
@@ -1059,8 +1067,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.exclude_patterns_edit.textChanged.connect(lambda: self.mark_tab_dirty(6))
 
         # Connect stats calculation controls
-        self.stats_all_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
-        self.stats_exclude_outliers_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
+        self.stats_exclude_outliers_check.toggled.connect(lambda: self.mark_tab_dirty(6))
         self.avg_mean_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
         self.avg_median_radio.toggled.connect(lambda: self.mark_tab_dirty(6))
         
@@ -1292,8 +1299,8 @@ class ComprehensiveSettingsDialog(QDialog):
                     self.fast_scan_check, self.sampling_fixed_radio, self.sampling_percent_radio,
                     self.sampling_fixed_spin, self.sampling_percent_spin, self.exclude_first_check,
                     self.exclude_last_check, self.exclude_small_check, self.exclude_small_spin,
-                    self.exclude_patterns_check, self.exclude_patterns_edit, self.stats_all_radio,
-                    self.stats_exclude_outliers_radio, self.avg_mean_radio, self.avg_median_radio
+                    self.exclude_patterns_check, self.exclude_patterns_edit, 
+                    self.stats_exclude_outliers_check, self.avg_mean_radio, self.avg_median_radio
                 ]
                 for control in controls_to_block:
                     control.blockSignals(True)
@@ -1329,19 +1336,15 @@ class ComprehensiveSettingsDialog(QDialog):
                     self.parent.settings.value('scanning/exclude_patterns_text', '', type=str))
 
                 # Load statistics calculation setting
-                exclude_outliers = self.parent.settings.value('scanning/stats_exclude_outliers', False, type=bool)
-                if exclude_outliers:
-                    self.stats_exclude_outliers_radio.setChecked(True)
-                else:
-                    self.stats_all_radio.setChecked(True)
+                self.stats_exclude_outliers_check.setChecked(
+                    self.parent.settings.value('scanning/stats_exclude_outliers', False, type=bool))
 
                 # Load average method setting
-                use_median = self.parent.settings.value('scanning/use_median', False, type=bool)
+                use_median = self.parent.settings.value('scanning/use_median', True, type=bool)
                 if use_median:
                     self.avg_median_radio.setChecked(True)
                 else:
                     self.avg_mean_radio.setChecked(True)
-
                 # Unblock signals
                 for control in controls_to_block:
                     control.blockSignals(False)
@@ -1427,7 +1430,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.parent.settings.setValue('scanning/exclude_patterns_text', self.exclude_patterns_edit.text())
 
                 # Save statistics calculation setting
-                self.parent.settings.setValue('scanning/stats_exclude_outliers', self.stats_exclude_outliers_radio.isChecked())
+                self.parent.settings.setValue('scanning/stats_exclude_outliers', self.stats_exclude_outliers_check.isChecked())
 
                 # Save average method setting
                 self.parent.settings.setValue('scanning/use_median', self.avg_median_radio.isChecked())
@@ -1489,7 +1492,7 @@ class ComprehensiveSettingsDialog(QDialog):
             self.store_in_central_check.setChecked(True)
             
             # Reset theme
-            self.theme_combo.setCurrentText("system")
+            self.theme_combo.setCurrentText("dark")
             
             # Reset font size
             self.font_size_spin.setValue(9)
@@ -1819,7 +1822,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Reload theme
         if self.parent and hasattr(self.parent, 'settings'):
-            current_theme = self.parent.settings.value('ui/theme', 'system')
+            current_theme = self.parent.settings.value('ui/theme', 'dark')
             index = self.theme_combo.findText(current_theme)
             if index >= 0:
                 self.theme_combo.setCurrentIndex(index)
@@ -1898,7 +1901,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 new_path = get_default_central_store_base_path()
             elif self.portable_radio.isChecked():
                 storage_mode = 'portable'
-                app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                from imxup import get_project_root
+                app_root = get_project_root()  # Use centralized function that handles frozen exe correctly
                 new_path = os.path.join(app_root, '.imxup')
             elif self.custom_radio.isChecked():
                 storage_mode = 'custom'
@@ -2303,11 +2307,11 @@ class ComprehensiveSettingsDialog(QDialog):
             
             # Get theme state from combo
             theme_text = self.theme_preview_combo.currentText()
-            is_dark_theme = "Dark" in theme_text
+            theme_mode = 'dark' if "Dark" in theme_text else 'light'
             is_selected = "Selected" in theme_text
-            
+
             # Get icon based on current theme settings
-            icon = icon_manager.get_icon(icon_key, None, is_dark_theme, is_selected)
+            icon = icon_manager.get_icon(icon_key, theme_mode=theme_mode, is_selected=is_selected)
             
             if not icon.isNull():
                 # Display icon
@@ -2383,7 +2387,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.config_type_label.setStyleSheet("font-weight: bold; font-size: 10px; color: #cc0000; padding: 5px;")
             
             # Update light theme preview (unselected light theme)
-            light_icon = icon_manager.get_icon(icon_key, None, is_dark_theme=False, is_selected=False, requested_size=96)
+            light_icon = icon_manager.get_icon(icon_key, theme_mode='light', is_selected=False, requested_size=96)
             if not light_icon.isNull():
                 pixmap = light_icon.pixmap(96, 96)  # Match the label size
                 self.light_icon_label.setPixmap(pixmap)
@@ -2391,12 +2395,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Check if this is inverted from original
                 if isinstance(icon_config, str):
                     # Single icon - check if this would be inverted
-                    if icon_manager._needs_inversion(is_dark_theme=False, is_selected=False):
-                        self.light_status_label.setText("Original (inverted)")
-                        self.light_status_label.setStyleSheet("font-size: 9px; color: #cc6600;")
-                    else:
-                        self.light_status_label.setText("Original")
-                        self.light_status_label.setStyleSheet("font-size: 9px; color: #006600;")
+                    self.light_status_label.setText("Original")
+                    self.light_status_label.setStyleSheet("font-size: 9px; color: #006600;")
                 else:
                     self.light_status_label.setText("Light variant")
                     self.light_status_label.setStyleSheet("font-size: 9px; color: #006600;")
@@ -2406,20 +2406,16 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.light_status_label.setStyleSheet("font-size: 9px; color: #cc0000;")
             
             # Update dark theme preview (unselected dark theme) 
-            dark_icon = icon_manager.get_icon(icon_key, None, is_dark_theme=True, is_selected=False, requested_size=96)
+            dark_icon = icon_manager.get_icon(icon_key, theme_mode='dark', is_selected=False, requested_size=96)
             if not dark_icon.isNull():
                 pixmap = dark_icon.pixmap(96, 96)  # Match the label size
                 self.dark_icon_label.setPixmap(pixmap)
                 
                 # Check if this is inverted from original
                 if isinstance(icon_config, str):
-                    # Single icon - check if this would be inverted
-                    if icon_manager._needs_inversion(is_dark_theme=True, is_selected=False):
-                        self.dark_status_label.setText("Original (inverted)")
-                        self.dark_status_label.setStyleSheet("font-size: 9px; color: #cc6600;")
-                    else:
-                        self.dark_status_label.setText("Original")
-                        self.dark_status_label.setStyleSheet("font-size: 9px; color: #006600;")
+                    # Single icon - original file used directly
+                    self.dark_status_label.setText("Original")
+                    self.dark_status_label.setStyleSheet("font-size: 9px; color: #006600;")
                 else:
                     self.dark_status_label.setText("Dark variant")
                     self.dark_status_label.setStyleSheet("font-size: 9px; color: #006600;")
@@ -2462,12 +2458,12 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Light/dark pair - check each file
                 light_path = os.path.join(icon_manager.assets_dir, icon_config[0])
                 dark_path = os.path.join(icon_manager.assets_dir, icon_config[1]) if len(icon_config) > 1 else None
-                
+
                 light_backup_exists = os.path.exists(light_path + ".backup")
-                dark_backup_exists = dark_path and os.path.exists(dark_path + ".backup")
-                
+                dark_backup_exists = bool(dark_path and os.path.exists(dark_path + ".backup"))
+
                 self.light_reset_btn.setEnabled(light_backup_exists)
-                self.dark_reset_btn.setEnabled(dark_backup_exists if dark_path else False)
+                self.dark_reset_btn.setEnabled(dark_backup_exists)
             else:
                 # Invalid config
                 self.light_reset_btn.setEnabled(False)

@@ -84,7 +84,7 @@ class UploadWorker(QThread):
         else:
             try:
                 from src.processing.rename_worker import RenameWorker
-                self.rename_worker = RenameWorker(self.uploader)
+                self.rename_worker = RenameWorker()
                 log("RenameWorker initialized successfully", level="debug")
             except Exception as e:
                 log(f"Failed to initialize RenameWorker: {e}", level="error")
@@ -229,7 +229,7 @@ class UploadWorker(QThread):
         """Try to auto-rename unnamed galleries"""
         try:
             if self.uploader and self.uploader.session:
-                renamed = rename_all_unnamed_with_session(self.uploader.session)
+                renamed = rename_all_unnamed_with_session(self.uploader)
                 if renamed:
                     for gallery_id, new_name in renamed:
                         self.gallery_renamed.emit(gallery_id, new_name)
@@ -335,8 +335,8 @@ class CompletionWorker(QThread):
                 is_renamed = check_gallery_renamed(gallery_id)
                 if not is_renamed:
                     # Check if already in unnamed tracking
-                    existing_unnamed = get_unnamed_galleries()
-                    if gallery_id not in [g['gallery_id'] for g in existing_unnamed]:
+                    existing_unnamed = get_unnamed_galleries()  # Returns Dict[str, str]
+                    if gallery_id not in existing_unnamed:
                         save_unnamed_gallery(gallery_id, gallery_name)
                         log(f"Tracking gallery for auto-rename: {gallery_name}", level="debug", category="renaming")
             except Exception:

@@ -1065,12 +1065,14 @@ class QueueStore:
                     "INSERT INTO tabs (name, tab_type, display_order, color_hint) VALUES (?, 'user', ?, ?)",
                     (name, display_order, color_hint)
                 )
-                return cursor.lastrowid
-                
+                return cursor.lastrowid or 0
+
             except sqlite3.IntegrityError as e:
                 if "UNIQUE constraint failed" in str(e):
                     raise sqlite3.IntegrityError(f"Tab name '{name}' already exists") from e
                 raise
+
+        return False  # Should not reach here, but satisfies type checker
 
     def update_tab(self, tab_id: int, name: Optional[str] = None, display_order: Optional[int] = None, color_hint: Optional[str] = None) -> bool:
         """Update an existing tab.
@@ -1130,18 +1132,18 @@ class QueueStore:
                     row = cursor.fetchone()
                     if row:
                         old_name = row[0]
-                        
+
                         # Update the tab
                         sql = f"UPDATE tabs SET {', '.join(updates)} WHERE id = ?"
                         cursor = conn.execute(sql, params)
-                        
+
                         if cursor.rowcount > 0:
                             # Update all galleries assigned to this tab (both tab_name and tab_id if exists)
                             # Check if tab_id column exists first
                             cursor = conn.execute("PRAGMA table_info(galleries)")
                             columns = [column[1] for column in cursor.fetchall()]
                             has_tab_id = 'tab_id' in columns
-                            
+
                             if has_tab_id:
                                 # Update tab_name for galleries with this tab_id
                                 conn.execute(
@@ -1156,6 +1158,7 @@ class QueueStore:
                                 )
                             return True
                         return False
+                    return False  # Tab not found
                 else:
                     # No name change, just update other fields
                     sql = f"UPDATE tabs SET {', '.join(updates)} WHERE id = ?"

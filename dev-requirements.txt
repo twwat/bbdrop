@@ -1,0 +1,10 @@
+# Development dependencies for improved IDE support and type checking
+# Install with: pip install -r dev-requirements.txt
+
+# Type stubs for PyQt6 - enables Pylance/mypy to understand Qt signals and methods
+PyQt6-stubs==6.9.1.0
+
+# Optional: Add other dev tools as needed
+# pytest==8.0.0  # For running tests when implemented
+# mypy==1.8.0    # For static type checking
+# black==24.1.0  # For code formatting

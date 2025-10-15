@@ -19,12 +19,13 @@ from imxup import get_config_path, encrypt_password, decrypt_password
 
 class CredentialSetupDialog(QDialog):
     """Dialog for setting up secure credentials"""
-    
-    def __init__(self, parent=None):
+
+    def __init__(self, parent=None, standalone=False):
         super().__init__(parent)
         self.setWindowTitle("Setup Secure Credentials")
         self.setModal(True)
         self.resize(500, 430)
+        self.standalone = standalone
         
         layout = QVBoxLayout(self)
 
@@ -36,8 +37,9 @@ class CredentialSetupDialog(QDialog):
             is_dark = parent._get_cached_theme()
 
         # Status label colors for inline styling
-        self.success_color = "#1e7e34" if is_dark else "#27ae60"
-        self.error_color = "#a71d2a" if is_dark else "#c0392b"
+        #self.success_color = "#1e7e34" if is_dark else "#27ae60"
+        self.success_color = "#0fd66b" if is_dark else "#0ba653"
+        self.error_color = "#c0392b" if is_dark else "#c0392b"
         self.muted_color = "#aaa" if is_dark else "#666"
 
         # Legacy colors (keep for backward compatibility)
@@ -45,68 +47,20 @@ class CredentialSetupDialog(QDialog):
         self._text_color = "#dddddd" if is_dark else "#333333"
         self._panel_bg = "#2e2e2e" if is_dark else "#f0f8ff"
         self._panel_border = "#444444" if is_dark else "#cccccc"
-        
-        # Info text
-        info_text = QLabel(
-            "<b>IMX.to authorization:</b><br><br>"
-            "<b>API Key:</b> <u>Required</u> for uploading files<br>"
-            "• Get your API key from <a style=\"color:#0078d4\" href=\"https://imx.to/user/api\">https://imx.to/user/api</a>)<br><br>"
-            "<b>Username/Password <u>or</u> cookies:</b> Required for renaming galleries<br>"
-            "• Without this, all galleries will be named \"untitled gallery\"<br><br>"
-            "Credentials are stored in your home directory, encrypted with <b>AES-128-CBC via Fernet</b> using system's hostname/username as the encryption key. This means:<br><br>"
-            "• The encrypted data won't work on other computers<br>"
-            "• Credentials are obfuscated from other users on this system<br><br>"
-        )
-        info_text.setWordWrap(True)
-        info_text.setProperty("class", "info-panel")
-        layout.addWidget(info_text)
-        
 
-        
-        # Credential status display
-        status_group = QGroupBox("Current Credentials")
-        status_layout = QVBoxLayout(status_group)
-        
-        # Username status
-        username_status_layout = QHBoxLayout()
-        username_status_layout.addWidget(QLabel("<b>Username</b>: "))
-        self.username_status_label = QLabel("NOT SET")
-        self.username_status_label.setProperty("class", "status-muted")
-        self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
-        username_status_layout.addWidget(self.username_status_label)
-        username_status_layout.addStretch()
-        self.username_change_btn = QPushButton("Set")
-        if not self.username_change_btn.text().startswith(" "):
-            self.username_change_btn.setText(" " + self.username_change_btn.text())
-        self.username_change_btn.clicked.connect(self.change_username)
-        username_status_layout.addWidget(self.username_change_btn)
-        self.username_remove_btn = QPushButton("Unset")
-        if not self.username_remove_btn.text().startswith(" "):
-            self.username_remove_btn.setText(" " + self.username_remove_btn.text())
-        self.username_remove_btn.clicked.connect(self.remove_username)
-        username_status_layout.addWidget(self.username_remove_btn)
-        status_layout.addLayout(username_status_layout)
-        
-        # Password status
-        password_status_layout = QHBoxLayout()
-        password_status_layout.addWidget(QLabel("<b>Password</b>: "))
-        self.password_status_label = QLabel("NOT SET")
-        self.password_status_label.setProperty("class", "status-muted")
-        self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
-        password_status_layout.addWidget(self.password_status_label)
-        password_status_layout.addStretch()
-        self.password_change_btn = QPushButton("Set")
-        if not self.password_change_btn.text().startswith(" "):
-            self.password_change_btn.setText(" " + self.password_change_btn.text())
-        self.password_change_btn.clicked.connect(self.change_password)
-        password_status_layout.addWidget(self.password_change_btn)
-        self.password_remove_btn = QPushButton("Unset")
-        if not self.password_remove_btn.text().startswith(" "):
-            self.password_remove_btn.setText(" " + self.password_remove_btn.text())
-        self.password_remove_btn.clicked.connect(self.remove_password)
-        password_status_layout.addWidget(self.password_remove_btn)
-        status_layout.addLayout(password_status_layout)
-        
+        # ========== API KEY SECTION ==========
+        api_key_group = QGroupBox("API Key")
+        api_key_layout = QVBoxLayout(api_key_group)
+
+        # API Key info text
+        api_key_info = QLabel(
+            "<b>Required</b> for uploading files.<br>"
+            "Get your API key from <a style=\"color:#0078d4\" href=\"https://imx.to/user/api\">https://imx.to/user/api</a>"
+        )
+        api_key_info.setWordWrap(True)
+        api_key_info.setProperty("class", "info-panel")
+        api_key_layout.addWidget(api_key_info)
+
         # API Key status
         api_key_status_layout = QHBoxLayout()
         api_key_status_layout.addWidget(QLabel("<b>API Key</b>: "))
@@ -125,7 +79,76 @@ class CredentialSetupDialog(QDialog):
             self.api_key_remove_btn.setText(" " + self.api_key_remove_btn.text())
         self.api_key_remove_btn.clicked.connect(self.remove_api_key)
         api_key_status_layout.addWidget(self.api_key_remove_btn)
-        status_layout.addLayout(api_key_status_layout)
+        api_key_layout.addLayout(api_key_status_layout)
+
+        # Add API Key group to main layout
+        layout.addWidget(api_key_group)
+
+        # ========== LOGIN / PASSWORD SECTION ==========
+        login_group = QGroupBox("Login / Password")
+        login_layout = QVBoxLayout(login_group)
+
+        # Login info text
+        login_info = QLabel(
+            "<b>Required</b> for renaming galleries (or use Firefox cookies below).<br>"
+            "Without this, all galleries will be named \"untitled gallery\"."
+        )
+        login_info.setWordWrap(True)
+        login_info.setProperty("class", "info-panel")
+        login_layout.addWidget(login_info)
+
+        # Username status
+        username_status_layout = QHBoxLayout()
+        username_status_layout.addWidget(QLabel("<b>Username</b>: "))
+        self.username_status_label = QLabel("NOT SET")
+        self.username_status_label.setProperty("class", "status-muted")
+        self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+        username_status_layout.addWidget(self.username_status_label)
+        username_status_layout.addStretch()
+        self.username_change_btn = QPushButton("Set")
+        if not self.username_change_btn.text().startswith(" "):
+            self.username_change_btn.setText(" " + self.username_change_btn.text())
+        self.username_change_btn.clicked.connect(self.change_username)
+        username_status_layout.addWidget(self.username_change_btn)
+        self.username_remove_btn = QPushButton("Unset")
+        if not self.username_remove_btn.text().startswith(" "):
+            self.username_remove_btn.setText(" " + self.username_remove_btn.text())
+        self.username_remove_btn.clicked.connect(self.remove_username)
+        username_status_layout.addWidget(self.username_remove_btn)
+        login_layout.addLayout(username_status_layout)
+
+        # Password status
+        password_status_layout = QHBoxLayout()
+        password_status_layout.addWidget(QLabel("<b>Password</b>: "))
+        self.password_status_label = QLabel("NOT SET")
+        self.password_status_label.setProperty("class", "status-muted")
+        self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
+        password_status_layout.addWidget(self.password_status_label)
+        password_status_layout.addStretch()
+        self.password_change_btn = QPushButton("Set")
+        if not self.password_change_btn.text().startswith(" "):
+            self.password_change_btn.setText(" " + self.password_change_btn.text())
+        self.password_change_btn.clicked.connect(self.change_password)
+        password_status_layout.addWidget(self.password_change_btn)
+        self.password_remove_btn = QPushButton("Unset")
+        if not self.password_remove_btn.text().startswith(" "):
+            self.password_remove_btn.setText(" " + self.password_remove_btn.text())
+        self.password_remove_btn.clicked.connect(self.remove_password)
+        password_status_layout.addWidget(self.password_remove_btn)
+        login_layout.addLayout(password_status_layout)
+
+        # ========== FIREFOX COOKIES SUBSECTION (nested) ==========
+        cookies_group = QGroupBox("Firefox Cookies")
+        cookies_layout = QVBoxLayout(cookies_group)
+
+        # Cookies info text
+        cookies_info = QLabel(
+            "Attempts to login using existing Firefox cookies.<br>"
+            "If it fails, will fall back to username/password if set."
+        )
+        cookies_info.setWordWrap(True)
+        cookies_info.setProperty("class", "info-panel")
+        cookies_layout.addWidget(cookies_info)
 
         # Firefox cookies toggle status
         cookies_status_layout = QHBoxLayout()
@@ -145,11 +168,24 @@ class CredentialSetupDialog(QDialog):
             self.cookies_disable_btn.setText(" " + self.cookies_disable_btn.text())
         self.cookies_disable_btn.clicked.connect(self.disable_cookies_setting)
         cookies_status_layout.addWidget(self.cookies_disable_btn)
-        status_layout.addLayout(cookies_status_layout)
-        
-        layout.addWidget(status_group)
-        
-        # Remove all button under the status group
+        cookies_layout.addLayout(cookies_status_layout)
+
+        # Add cookies group to login group (nested)
+        login_layout.addWidget(cookies_group)
+
+        # Add login group to main layout
+        layout.addWidget(login_group)
+
+        # Encryption note at bottom
+        encryption_note = QLabel(
+            "<small>Credentials are encrypted with <b>AES-128-CBC via Fernet</b> using your system's hostname/username. "
+            "The encrypted data won't work on other computers and is obfuscated from other users on this system.</small>"
+        )
+        encryption_note.setWordWrap(True)
+        encryption_note.setStyleSheet(f"color: {self.muted_color}; margin-top: 8px;")
+        layout.addWidget(encryption_note)
+
+        # Remove all button at bottom
         destructive_layout = QHBoxLayout()
         # Place on bottom-left to reduce accidental clicks
         destructive_layout.addStretch()  # we'll remove this and add after button to push left
@@ -170,13 +206,24 @@ class CredentialSetupDialog(QDialog):
         
         # Load current credentials
         self.load_current_credentials()
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        
-        
-        layout.addLayout(button_layout)
+
+        # OK button (only for standalone mode)
+        if self.standalone:
+            button_layout = QHBoxLayout()
+            button_layout.addStretch()
+
+            ok_btn = QPushButton("OK")
+            style = self.style()
+            if style:
+                ok_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogOkButton))
+            ok_btn.setIconSize(QSize(16, 16))
+            if not ok_btn.text().startswith(" "):
+                ok_btn.setText(" " + ok_btn.text())
+            ok_btn.clicked.connect(self.accept)
+            ok_btn.setDefault(True)
+            button_layout.addWidget(ok_btn)
+
+            layout.addLayout(button_layout)
         
 
     
@@ -196,7 +243,9 @@ class CredentialSetupDialog(QDialog):
                     self.username_status_label.setText(username)
                     self.username_status_label.setProperty("class", "status-success")
                     self.username_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
-                    self.username_status_label.style().polish(self.username_status_label)
+                    style = self.username_status_label.style()
+                    if style:
+                        style.polish(self.username_status_label)
                     # Buttons: Change/Unset
                     try:
                         txt = " Change"
@@ -210,7 +259,9 @@ class CredentialSetupDialog(QDialog):
                     self.username_status_label.setText("NOT SET")
                     self.username_status_label.setProperty("class", "status-muted")
                     self.username_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
-                    self.username_status_label.style().polish(self.username_status_label)
+                    style = self.username_status_label.style()
+                    if style:
+                        style.polish(self.username_status_label)
                     try:
                         txt = " Set"
                         if not txt.startswith(" "):
@@ -221,10 +272,12 @@ class CredentialSetupDialog(QDialog):
                     self.username_remove_btn.setEnabled(False)
                 
                 if password:
-                    self.password_status_label.setText("********")
+                    self.password_status_label.setText("********************************")
                     self.password_status_label.setProperty("class", "status-success")
                     self.password_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
-                    self.password_status_label.style().polish(self.password_status_label)
+                    style = self.password_status_label.style()
+                    if style:
+                        style.polish(self.password_status_label)
                     try:
                         txt = " Change"
                         if not txt.startswith(" "):
@@ -237,7 +290,9 @@ class CredentialSetupDialog(QDialog):
                     self.password_status_label.setText("NOT SET")
                     self.password_status_label.setProperty("class", "status-muted")
                     self.password_status_label.setStyleSheet(f"color: {self.muted_color}; font-style: italic;")
-                    self.password_status_label.style().polish(self.password_status_label)
+                    style = self.password_status_label.style()
+                    if style:
+                        style.polish(self.password_status_label)
                     try:
                         txt = " Set"
                         if not txt.startswith(" "):
@@ -253,11 +308,13 @@ class CredentialSetupDialog(QDialog):
                     try:
                         api_key = decrypt_password(encrypted_api_key)
                         if api_key and len(api_key) > 8:
-                            masked_key = api_key[:4] + "*" * 20 + api_key[-4:]
+                            masked_key = api_key[:4] + "*" * 24 + api_key[-4:]
                             self.api_key_status_label.setText(masked_key)
                             self.api_key_status_label.setProperty("class", "status-success")
                             self.api_key_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
-                            self.api_key_status_label.style().polish(self.api_key_status_label)
+                            style = self.api_key_status_label.style()
+                            if style:
+                                style.polish(self.api_key_status_label)
                             try:
                                 txt = " Change"
                                 if not txt.startswith(" "):
@@ -270,7 +327,9 @@ class CredentialSetupDialog(QDialog):
                             self.api_key_status_label.setText("SET")
                             self.api_key_status_label.setProperty("class", "status-success")
                             self.api_key_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
-                            self.api_key_status_label.style().polish(self.api_key_status_label)
+                            style = self.api_key_status_label.style()
+                            if style:
+                                style.polish(self.api_key_status_label)
                             try:
                                 txt = " Change"
                                 if not txt.startswith(" "):
@@ -314,12 +373,16 @@ class CredentialSetupDialog(QDialog):
                     self.cookies_status_label.setText("Enabled")
                     self.cookies_status_label.setProperty("class", "status-success")
                     self.cookies_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
-                    self.cookies_status_label.style().polish(self.cookies_status_label)
+                    style = self.cookies_status_label.style()
+                    if style:
+                        style.polish(self.cookies_status_label)
                 else:
                     self.cookies_status_label.setText("Disabled")
                     self.cookies_status_label.setProperty("class", "status-error")
                     self.cookies_status_label.setStyleSheet(f"color: {self.error_color}; font-weight: bold;")
-                    self.cookies_status_label.style().polish(self.cookies_status_label)
+                    style = self.cookies_status_label.style()
+                    if style:
+                        style.polish(self.cookies_status_label)
                 # Toggle button states
                 self.cookies_enable_btn.setEnabled(not cookies_enabled)
                 self.cookies_disable_btn.setEnabled(cookies_enabled)
@@ -328,7 +391,9 @@ class CredentialSetupDialog(QDialog):
             self.cookies_status_label.setText("Enabled")
             self.cookies_status_label.setProperty("class", "status-success")
             self.cookies_status_label.setStyleSheet(f"color: {self.success_color}; font-weight: bold;")
-            self.cookies_status_label.style().polish(self.cookies_status_label)
+            style = self.cookies_status_label.style()
+            if style:
+                style.polish(self.cookies_status_label)
             self.cookies_enable_btn.setEnabled(False)
             self.cookies_disable_btn.setEnabled(True)
     
@@ -353,15 +418,18 @@ class CredentialSetupDialog(QDialog):
         button_layout.addStretch()
         
         save_btn = QPushButton("Save")
-        save_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
+        style = self.style()
+        if style:
+            save_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
         save_btn.setIconSize(QSize(16, 16))
         if not save_btn.text().startswith(" "):
             save_btn.setText(" " + save_btn.text())
         save_btn.clicked.connect(dialog.accept)
         button_layout.addWidget(save_btn)
-        
+
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
+        if style:
+            cancel_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
         cancel_btn.setIconSize(QSize(16, 16))
         if not cancel_btn.text().startswith(" "):
             cancel_btn.setText(" " + cancel_btn.text())
@@ -427,15 +495,18 @@ class CredentialSetupDialog(QDialog):
         button_layout.addStretch()
         
         save_btn = QPushButton("Save")
-        save_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
+        style = self.style()
+        if style:
+            save_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
         save_btn.setIconSize(QSize(16, 16))
         if not save_btn.text().startswith(" "):
             save_btn.setText(" " + save_btn.text())
         save_btn.clicked.connect(dialog.accept)
         button_layout.addWidget(save_btn)
-        
+
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
+        if style:
+            cancel_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
         cancel_btn.setIconSize(QSize(16, 16))
         if not cancel_btn.text().startswith(" "):
             cancel_btn.setText(" " + cancel_btn.text())

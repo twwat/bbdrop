@@ -11,6 +11,7 @@ import logging
 import socket
 import threading
 import time
+import traceback
 import configparser
 from pathlib import Path
 from datetime import datetime
@@ -37,14 +38,14 @@ from PyQt6.QtWidgets import (
     QProgressDialog, QListView, QTreeView
 )
 from PyQt6.QtCore import (
-    Qt, QThread, pyqtSignal, QTimer, QMimeData, QUrl, 
+    Qt, QThread, pyqtSignal, QTimer, QMimeData, QUrl,
     QMutex, QMutexLocker, QSettings, QSize, QObject, pyqtSlot,
-    QRunnable, QThreadPool, QPoint
+    QRunnable, QThreadPool, QPoint, QDir
 )
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup, QDrag
 
 # Import the core uploader functionality
-from imxup import ImxToUploader, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from imxup import ImxToUploader, get_project_root, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
 from imxup import create_windows_context_menu, remove_windows_context_menu
 from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
 from src.utils.logger import log, set_main_window
@@ -63,7 +64,7 @@ from src.gui.settings_dialog import ComprehensiveSettingsDialog
 from src.gui.tab_manager import TabManager
 
 # Import widget classes from module - starting with just TableProgressWidget
-from src.gui.widgets.custom_widgets import TableProgressWidget
+from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget
 from src.gui.widgets.context_menu_helper import GalleryContextMenuHelper
 
 # Import queue manager classes - adding one at a time
@@ -106,81 +107,24 @@ COMMUNICATION_PORT = 27849
 def get_assets_dir():
     """Get the correct path to the assets directory from anywhere in the module structure"""
     # Get the project root directory (go up from src/gui/ to root)
-    current_dir = os.path.dirname(os.path.abspath(__file__))  # src/gui/
-    project_root = os.path.dirname(os.path.dirname(current_dir))  # go up to root
-    return os.path.join(project_root, "assets")
+    #current_dir = os.path.dirname(os.path.abspath(__file__))  # src/gui/
+    #project_root = os.path.dirname(os.path.dirname(current_dir))  # go up to root
+    return os.path.join(get_project_root(), "assets")
 
-# Central icon configuration - easily configurable icon mapping
-# Legacy icon config - kept for backward compatibility but deprecated
-# Use IconManager instead
-ICON_CONFIG = {
-    # Status icons
-    'completed': ['check.png', 'check16.png'],
-    'failed': ['error.png'],
-    'uploading': ['start.png'],
-    'paused': ['pause.png'],
-    'ready': ['ready.png', 'pending.png'],  
-    'pending': ['pending.png'],
-    'scan_failed': ['scan_failed.png'],
-    'incomplete': ['incomplete.png'],
-    # Action button icons
-    'start': ['play.png', 'start.png'], #ready
-    'stop': ['stop.png'],               #uploading
-    'view': ['view.png'],               #completed
-    'view_error': ['view_error.png', 'error.png'], #failed1/2
-    'cancel': ['pause.png'],            #queued
-    
-    # Other icons
-    'templates': ['templates.svg'],
-    'credentials': ['credentials.svg'],
-    'main_window': ['imxup.png', 'imxup.ico', 'imx.ico'],  # Application icons
-}
+# Simple icon helper - just passes through to IconManager
+def get_icon(icon_key: str, theme_mode: str | None = None) -> QIcon:
+    """Get an icon from IconManager.
 
-def get_icon(icon_type: str, fallback_std: Optional[QStyle.StandardPixmap] = None, style_instance=None) -> QIcon:
-    """Get an icon by type - now uses IconManager"""
+    Args:
+        icon_key: Icon identifier (supports legacy names like 'start', 'completed')
+        theme_mode: Optional theme mode ('light'/'dark'), None = auto-detect
+
+    Returns:
+        QIcon instance
+    """
     icon_mgr = get_icon_manager()
     if icon_mgr:
-        # Map old icon types to new icon keys
-        icon_key_map = {
-            'completed': 'status_completed',
-            'failed': 'status_failed',
-            'uploading': 'status_uploading',
-            'paused': 'status_paused',
-            'ready': 'status_ready',
-            'pending': 'status_pending',
-            'scan_failed': 'status_scan_failed',
-            'incomplete': 'status_incomplete',
-            'start': 'action_start',
-            'stop': 'action_stop',
-            'view': 'action_view',
-            'view_error': 'action_view_error',
-            'cancel': 'action_cancel',
-            'templates': 'templates',
-            'credentials': 'credentials',
-            'main_window': 'main_window',
-            'renamed_true': 'renamed_true',
-            'renamed_false': 'renamed_false',
-        }
-        icon_key = icon_key_map.get(icon_type, icon_type)
-        return icon_mgr.get_icon(icon_key, style_instance, is_dark_theme=None, is_selected=False)
-    
-    # Fallback to old method if IconManager not initialized
-    if icon_type not in ICON_CONFIG:
-        if fallback_std and style_instance:
-            return style_instance.standardIcon(fallback_std)
-        return QIcon()
-    
-    assets_dir = get_assets_dir()
-    icon_names = ICON_CONFIG[icon_type]
-    
-    for name in icon_names:
-        icon_path = os.path.join(assets_dir, name)
-        if os.path.exists(icon_path):
-            return QIcon(icon_path)
-    
-    # If no icon file found, use fallback
-    if fallback_std and style_instance:
-        return style_instance.standardIcon(fallback_std)
+        return icon_mgr.get_icon(icon_key, theme_mode=theme_mode)
     return QIcon()
 
 def check_stored_credentials():
@@ -271,12 +215,13 @@ class CompletionWorker(QThread):
                 is_renamed = check_gallery_renamed(gallery_id)
                 if not is_renamed:
                     # Check if already in unnamed tracking
-                    existing_unnamed = get_unnamed_galleries()
-                    if gallery_id not in [g['gallery_id'] for g in existing_unnamed]:
+                    existing_unnamed = get_unnamed_galleries()  # Returns Dict[str, str]
+                    if gallery_id not in existing_unnamed:
                         save_unnamed_gallery(gallery_id, gallery_name)
                         log(f" [rename] Tracking gallery for auto-rename: {gallery_name}")
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
                 
             # Use cached template functions to avoid blocking import
             generate_bbcode_from_template = getattr(self, '_generate_bbcode_from_template', lambda *args, **kwargs: "")
@@ -356,8 +301,9 @@ class CompletionWorker(QThread):
                         parts.append(f"folder: {os.path.dirname(list(written['uploaded'].values())[0])}")
                     if parts:
                         log(f" [fileio] INFO: Saved gallery files to {', '.join(parts)}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
             except Exception as e:
                 log(f" ERROR: Artifact save error: {e}")
                 
@@ -542,7 +488,6 @@ class TabbedGalleryWidget(QWidget):
         
         tab_widget = QWidget()
         tab_widget.setLayout(tab_container)
-        # Height set in styles.qss
         
         layout.addWidget(tab_widget)
         
@@ -1252,17 +1197,7 @@ class TabbedGalleryWidget(QWidget):
             source_index = self._find_tab_index(source_tab)
             if source_index >= 0:
                 self._delete_tab(source_index, source_tab)
-    
-    def _find_tab_index(self, tab_name):
-        """Find the index of a tab by name"""
-        for i in range(self.tab_bar.count()):
-            tab_text = self.tab_bar.tabText(i)
-            # Extract base tab name (remove count if present)
-            base_tab_name = tab_text.split(' (')[0] if ' (' in tab_text else tab_text
-            if base_tab_name == tab_name:
-                return i
-        return -1
-    
+
     def refresh_filter(self):
         """Refresh the current filter (call after gallery assignments change)"""
         if not self.current_tab:
@@ -1307,16 +1242,9 @@ class TabbedGalleryWidget(QWidget):
         if index >= 0:
             self.tab_bar.setCurrentIndex(index)
     
-    def _setup_tab_styling(self):
+    def _setup_tab_styling(self, theme_mode='dark'):
         """Setup special tab data attributes not handled by styles.qss"""
-        # Check if we're in dark mode for special attributes only
-        app = QApplication.instance()
-        is_dark = False
-        if app:
-            palette = app.palette()
-            window_color = palette.color(palette.ColorRole.Window)
-            is_dark = window_color.lightness() < 128
-        
+
         # Only apply special data attribute styling - main styling comes from styles.qss
         special_style = """
             QTabBar::tab[data-tab-type="system"] {
@@ -1330,17 +1258,19 @@ class TabbedGalleryWidget(QWidget):
                 background: %s;
             }
         """ % (
-            "#f39c12" if is_dark else "#e67e22",  # modified color
-            "#404040" if is_dark else "#e3f2fd"   # drag highlight background
+            "#f39c12" if theme_mode == 'dark' else "#e67e22",  # modified color
+            "#404040" if theme_mode == 'dark' else "#e3f2fd"   # drag highlight background
         )
 
         self.tab_bar.setStyleSheet(special_style)
-        self._update_new_tab_button_style(is_dark)
+        self._update_new_tab_button_style(theme_mode == 'dark')
     
     def _update_new_tab_button_style(self, is_dark=False):
         """Update the new tab button styling to match current theme"""
         # Force style update to apply theme from styles.qss
-        self.new_tab_btn.style().polish(self.new_tab_btn)
+        style = self.new_tab_btn.style()
+        if style:
+            style.polish(self.new_tab_btn)
     
     def update_theme(self):
         """Update tab styling when theme changes"""
@@ -1749,8 +1679,40 @@ class TabbedGalleryWidget(QWidget):
 
 
 class GalleryTableWidget(QTableWidget):
-    """Table widget for gallery queue with resizable columns, sorting, and action buttons"""
-    
+    """Table widget for gallery queue with resizable columns, sorting, and action buttons
+    """
+
+    # Type hints for attributes set externally by parent (ImxUploadGUI)
+    queue_manager: 'QueueManager'  # Set by parent after instantiation
+    tab_manager: Optional['TabManager']  # Set by parent after instantiation
+    icon_manager: Optional['IconManager']  # Set by parent after instantiation
+
+    # Column definitions - single source of truth for all column metadata
+    COLUMNS = [
+        # (index, name, header_label, default_width, resize_mode, hidden_by_default, header_align_left)
+        (0,  'ORDER',      '#',            40,  'Fixed',       False, False),
+        (1,  'NAME',       'gallery name', 300, 'Interactive', False, True),
+        (2,  'UPLOADED',   'uploaded',     100, 'Interactive', False, False),
+        (3,  'PROGRESS',   'progress',     200, 'Interactive', False, False),
+        (4,  'STATUS',     'status',       60,  'Interactive', False, False),
+        (5,  'ADDED',      'added',        120, 'Interactive', False, False),
+        (6,  'FINISHED',   'finished',     120, 'Interactive', False, False),
+        (7,  'ACTION',     'action',       60,  'Interactive', False, False),
+        (8,  'SIZE',       'size',         110, 'Interactive', False, False),
+        (9,  'TRANSFER',   'transfer',     120, 'Interactive', False, False),
+        (10, 'TEMPLATE',   'template',     140, 'Interactive', False, False),
+        (11, 'RENAMED',    'renamed',      90,  'Interactive', False, False),
+        (12, 'GALLERY_ID', 'gallery_id',   90,  'Interactive', True,  True),
+        (13, 'CUSTOM1',    'Custom1',      100, 'Interactive', False, True),
+        (14, 'CUSTOM2',    'Custom2',      100, 'Interactive', False, True),
+        (15, 'CUSTOM3',    'Custom3',      100, 'Interactive', False, True),
+        (16, 'CUSTOM4',    'Custom4',      100, 'Interactive', False, True),
+    ]
+
+    # Create class attributes dynamically from COLUMNS definition
+    for idx, name, *_ in COLUMNS:
+        locals()[f'COL_{name}'] = idx
+
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -1764,14 +1726,9 @@ class GalleryTableWidget(QTableWidget):
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         
-        # Setup table
-        # Columns: 0 #, 1 gallery name, 2 uploaded, 3 progress, 4 status, 5 added, 6 finished, 7 action,
-        #          8 size, 9 transfer, 10 template, 11 renamed, 12 gallery_id, 13 custom1, 14 custom2, 15 custom3, 16 custom4
-        self.setColumnCount(17)
-        self.setHorizontalHeaderLabels([
-            "#", "gallery name", "uploaded", "progress", "status", "added", "finished", "action",
-            "size", "transfer", "template", "renamed", "gallery_id", "Custom1", "Custom2", "Custom3", "Custom4"
-        ])
+        # Setup table from COLUMNS definition
+        self.setColumnCount(len(self.COLUMNS))
+        self.setHorizontalHeaderLabels([col[2] for col in self.COLUMNS])
         
         # Set icon size for Status column icons
         self.setIconSize(QSize(20, 20))
@@ -1783,63 +1740,49 @@ class GalleryTableWidget(QTableWidget):
                 # Gallery name column gets slightly larger font
                 hn.setFont(QFont(hn.font().family(), 9))
             
-            # Left-align the gallery_id and Custom column headers
-            for custom_col in [12, 13, 14, 15, 16]:  # gallery_id=12, Custom1=13, Custom2=14, Custom3=15, Custom4=16
-                custom_header = self.horizontalHeaderItem(custom_col)
-                if custom_header:
-                    custom_header.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        except Exception:
-            pass
+            # Left-align headers as specified in COLUMNS definition
+            for idx, name, label, width, resize_mode, hidden, align_left in self.COLUMNS:
+                if align_left:
+                    header_item = self.horizontalHeaderItem(idx)
+                    if header_item:
+                        header_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
-        # Configure columns
+        # Configure columns from COLUMNS definition
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
         try:
             header.setCascadingSectionResizes(True)
-        except Exception:
-            pass
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)         # Order - fixed
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)   # Gallery Name - user-resizable
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)   # Uploaded - resizable
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)   # Progress - resizable
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)   # Status - resizable
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)   # Added - resizable
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)   # Finished - resizable
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)   # action - resizable
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Interactive)   # size - resizable
-        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Interactive)   # transfer - resizable
-        header.setSectionResizeMode(10, QHeaderView.ResizeMode.Interactive)  # template - resizable
-        header.setSectionResizeMode(11, QHeaderView.ResizeMode.Interactive)  # title - resizable
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
+
+        # Set resize modes from COLUMNS definition
+        for idx, _, _, _, resize_mode, _, _ in self.COLUMNS:
+            mode = getattr(QHeaderView.ResizeMode, resize_mode)
+            header.setSectionResizeMode(idx, mode)
         try:
             # Allow headers to shrink more
             header.setMinimumSectionSize(24)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         # Keep widths fixed unless user drags; prevent automatic shuffling
         try:
             header.setSectionsClickable(True)
             header.setHighlightSections(False)
             header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
-        # Set initial column widths
-        self.setColumnWidth(0, 40)   # Order (narrow)
-        self.setColumnWidth(1, 300)  # Gallery Name (wider)
-        self.setColumnWidth(2, 100)  # Uploaded (wider)
-        self.setColumnWidth(3, 200)  # Progress (slightly narrower)
-        self.setColumnWidth(4, 60)   # Status (fixed for icon only)
-        self.setColumnWidth(5, 120)  # Added (YYYY-MM-DD HH:MM format)
-        self.setColumnWidth(6, 120)  # Finished (YYYY-MM-DD HH:MM format)
-        self.setColumnWidth(7, 60)   # action (fixed for icon buttons)
-        self.setColumnWidth(8, 110)  # size
-        self.setColumnWidth(9, 120)  # transfer
-        self.setColumnWidth(10, 140) # template
-        self.setColumnWidth(11, 90)  # renamed
-        self.setColumnWidth(12, 90)  # gallery_id
-
-        # Hide gallery_id column by default (user can show via right-click)
-        self.setColumnHidden(12, True)
+        # Set column widths and visibility from COLUMNS definition
+        for idx, _, _, width, _, hidden, _ in self.COLUMNS:
+            self.setColumnWidth(idx, width)
+            if hidden:
+                self.setColumnHidden(idx, True)
 
         # Make Status and Action columns non-resizable
         header = self.horizontalHeader()
@@ -1864,23 +1807,10 @@ class GalleryTableWidget(QTableWidget):
             header.setSectionsMovable(True)
             header.setStretchLastSection(False)
             self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
-    # Remove auto-expansion/resize coupling to keep Excel-like behavior
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        
-        # Enable multi-selection
-        self.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
-        
-        # Set focus policy to ensure keyboard events work
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        
-        # Enable context menu on the viewport to get coordinates in viewport space
-        self.viewport().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.viewport().customContextMenuRequested.connect(self.show_context_menu)
-    
     def keyPressEvent(self, event):
         """Handle key press events"""
         if event.key() == Qt.Key.Key_Delete:
@@ -2036,8 +1966,9 @@ class GalleryTableWidget(QTableWidget):
             target = max(min_width, available)
             if target != current and target > 0:
                 self.setColumnWidth(name_col_index, target)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
     
     def handle_enter_or_double_click(self):
         """Handle Enter key or double-click for viewing items (BBCode for completed, file manager for others)"""
@@ -2135,17 +2066,17 @@ class GalleryTableWidget(QTableWidget):
         if tabbed_widget and hasattr(tabbed_widget, 'tab_manager') and tabbed_widget.tab_manager:
             try:
                 moved_count = tabbed_widget.tab_manager.move_galleries_to_tab(gallery_paths, target_tab)
-                #print(f"DEBUG: Right-click move_galleries_to_tab returned moved_count={moved_count}", flush=True)
+                log(f"Right-click move_galleries_to_tab returned moved_count={moved_count}", level="debug", category="queue")
                 
                 # Update queue manager's in-memory items to match database
-                #print(f"DEBUG: Checking conditions - moved_count={moved_count}, has_queue_manager={hasattr(tabbed_widget, 'queue_manager')}, has_tab_manager={bool(tabbed_widget.tab_manager)}", flush=True)
+                log(f"Checking conditions - moved_count={moved_count}, has_queue_manager={hasattr(tabbed_widget, 'queue_manager')}, has_tab_manager={bool(tabbed_widget.tab_manager)}", level="debug", category="queue")
                 
                 # Find the widget with queue_manager
                 queue_widget = tabbed_widget
                 while queue_widget and not hasattr(queue_widget, 'queue_manager'):
                     queue_widget = queue_widget.parent()
                 
-                #print(f"DEBUG: Found queue_widget={bool(queue_widget)}, has_queue_manager={hasattr(queue_widget, 'queue_manager') if queue_widget else False}", flush=True)
+                log(f"Found queue_widget={bool(queue_widget)}, has_queue_manager={hasattr(queue_widget, 'queue_manager') if queue_widget else False}", level="debug", category="queue")
                 
                 if moved_count > 0 and queue_widget and hasattr(queue_widget, 'queue_manager') and tabbed_widget.tab_manager:
                     # Get the tab_id for the target tab
@@ -2158,16 +2089,16 @@ class GalleryTableWidget(QTableWidget):
                             old_tab = item.tab_name
                             item.tab_name = target_tab
                             item.tab_id = tab_id
-                            print(f"DEBUG: Right-click updated item {path} tab: '{old_tab}' -> '{target_tab}' (item.tab_name is now '{item.tab_name}')", flush=True)
+                            log(f"Right-click updated item {path} tab: '{old_tab}' -> '{target_tab}' (item.tab_name is now '{item.tab_name}')", level="debug", category="ui")
                 
                 # Invalidate caches and refresh display
                 if moved_count > 0:
-                    #print(f"DEBUG: RIGHT-CLICK calling invalidate_tab_cache() on {type(tabbed_widget).__name__}", flush=True)
+                    #log(f"RIGHT-CLICK calling invalidate_tab_cache() on {type(tabbed_widget).__name__}", level="debug", category="ui")
                     
                     # Check database counts BEFORE cache invalidation
                     #main_count_before = len(tabbed_widget.tab_manager.load_tab_galleries('Main'))
                     #target_count_before = len(tabbed_widget.tab_manager.load_tab_galleries(target_tab))
-                    #print(f"DEBUG: RIGHT-CLICK BEFORE invalidate - Main={main_count_before}, {target_tab}={target_count_before}", flush=True)
+                    #log(f"RIGHT-CLICK BEFORE invalidate - Main={main_count_before}, {target_tab}={target_count_before}", level="debug", category="ui")
                     
                     tabbed_widget.tab_manager.invalidate_tab_cache()
 
@@ -2180,13 +2111,12 @@ class GalleryTableWidget(QTableWidget):
                     # Update tab tooltips to reflect new counts
                     if hasattr(tabbed_widget, '_update_tab_tooltips'):
                         tabbed_widget._update_tab_tooltips()
-
-                    # Show feedback message
-                    gallery_word = "gallery" if moved_count == 1 else "galleries"
-                    #print(f"DEBUG: RIGHT-CLICK PATH - Moved {moved_count} {gallery_word} to '{target_tab}' tab")
+                    log(f"RIGHT-CLICK PATH - Moved {moved_count} galler{'y' if moved_count == 1 else 'ies'} to '{target_tab}' tab", level="debug", category="ui")
                     
             except Exception as e:
+                print(e)
                 log(f"Error moving galleries to tab '{target_tab}': {e}", level="error")
+                
     
     def manage_gallery_files(self, path: str):
         """Open the file manager dialog for a gallery"""
@@ -2651,8 +2581,9 @@ class GalleryTableWidget(QTableWidget):
                 # Status bar brief message
                 if hasattr(widget, 'statusBar') and widget.statusBar():
                     widget.statusBar().showMessage(message, 2500)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
         else:
             # Inform user nothing was copied
             try:
@@ -2660,8 +2591,9 @@ class GalleryTableWidget(QTableWidget):
                 log(f"{message}", level="warning")
                 if hasattr(widget, 'statusBar') and widget.statusBar():
                     widget.statusBar().showMessage(message, 2500)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
 
     def open_gallery_links_via_menu(self, paths):
         """Open gallery link(s) in the system browser for completed items."""
@@ -2709,8 +2641,9 @@ class GalleryTableWidget(QTableWidget):
                 try:
                     QDesktopServices.openUrl(QUrl(url))
                     opened += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
         # Brief user feedback
         try:
             if opened:
@@ -2720,228 +2653,10 @@ class GalleryTableWidget(QTableWidget):
                 log(f"{message}", level="debug")
             if hasattr(widget, 'statusBar') and widget.statusBar():
                 widget.statusBar().showMessage(message, 2500)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
-class ActionButtonWidget(QWidget):
-    """Action buttons widget for table cells"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 1, 4, 1)  # Better horizontal padding, minimal vertical
-        layout.setSpacing(3)  # Slightly better spacing between buttons
-        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)  # left-align and center vertically
-        
-        # Set consistent minimum height for the widget to match table row height
-        self.setProperty("class", "status-row")
-        
-        self.start_btn = QPushButton("Start")
-        self.start_btn.setFixedSize(22, 22)  # smaller icon-only buttons
-        # Set icon and hover style
-        try:
-            self.start_btn.setIcon(get_icon('start', QStyle.StandardPixmap.SP_MediaPlay, self.style()))
-            self.start_btn.setIconSize(QSize(18, 18))
-            self.start_btn.setText("")
-            self.start_btn.setToolTip("Start")
-            self.start_btn.setProperty("class", "icon-btn")
-        except Exception:
-            pass
-        
-        #self.start_btn.setStyleSheet("""
-        #    QPushButton {
-        #        background-color: #d8f0e2;
-        #        border: 1px solid #85a190;
-        #        border-radius: 3px;
-        #        font-size: 12px;
-        #    }
-        #    QPushButton:hover {
-        #        background-color: #bee6cf;
-        #        border: 1px solid #85a190;
-        #    }
-        #    QPushButton:pressed {
-        #        background-color: #6495ed;
-        #        border: 1px solid #1e2c47;
-        #    }
-        #""")
-        
-        self.stop_btn = QPushButton("Stop")
-        
-        self.stop_btn.setFixedSize(22, 22)  # smaller icon-only buttons
-        self.stop_btn.setVisible(False)
-        try:
-            self.stop_btn.setIcon(get_icon('stop', QStyle.StandardPixmap.SP_MediaStop, self.style()))
-            self.stop_btn.setIconSize(QSize(18, 18))
-            self.stop_btn.setText("")
-            self.stop_btn.setToolTip("Stop")
-            self.stop_btn.setProperty("class", "icon-btn")
-        except Exception:
-            pass
-        #self.stop_btn.setStyleSheet("""
-        #    QPushButton {
-        #        background-color: #f0938a;
-
-        #        border: 1px solid #cf4436;
-        #        border-radius: 3px;
-        #        font-size: 12px;
-
-        #    }
-        #    QPushButton:hover {
-        #        background-color: #c0392b;
-        #    }
-        #    QPushButton:pressed {
-        #        background-color: #a93226;
-        #        border: 1px solid #8b291a;
-        #    }
-        #""")
-        
-        self.view_btn = QPushButton("View")
-        self.view_btn.setFixedSize(22, 22)  # smaller icon-only buttons
-        self.view_btn.setVisible(False)
-        try:
-            self.view_btn.setIcon(get_icon('view', QStyle.StandardPixmap.SP_DirOpenIcon, self.style()))
-            self.view_btn.setIconSize(QSize(18, 18))
-            self.view_btn.setText("")
-            self.view_btn.setToolTip("View")
-            self.view_btn.setProperty("class", "icon-btn")
-        except Exception:
-            pass
-        #self.view_btn.setStyleSheet("""
-        #    QPushButton {
-        #        background-color: #dfe9fb;
-        #        border: 1px solid #999;
-        #        border-radius: 3px;
-        #        font-size: 12px;
-
-        #    }
-        #    QPushButton:hover {
-        #        background-color: #c8d9f8;
-        #        border: 1px solid #7b8dac;
-        #    }
-        #    QPushButton:pressed {
-        #        background-color: #072213;
-        #    }
-        #""")
-        
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setFixedSize(22, 22)  # smaller icon-only buttons
-        self.cancel_btn.setVisible(False)
-        try:
-            # Use pause.png as requested
-            self.cancel_btn.setIcon(get_icon('cancel', QStyle.StandardPixmap.SP_MediaPause, self.style()))
-            self.cancel_btn.setIconSize(QSize(18, 18))
-            self.cancel_btn.setText("")
-            self.cancel_btn.setToolTip("Pause/Cancel queued item")
-            self.cancel_btn.setProperty("class", "icon-btn")
-        except Exception:
-            pass    
-        #self.cancel_btn.setStyleSheet("""
-        #    QPushButton {
-        #        background-color: #f7c370;
-        #        border: 1px solid #aa6d0c;
-        #        border-radius: 3px;
-        #        font-size: 12px;
-        #    }
-        #    QPushButton:hover {
-        #        background-color: #f5af41;
-        #        border: 1px solid #794e09;
-        #    }
-        #    QPushButton:pressed {
-        #        background-color: #f39c12;
-        #        border: 1px solid #482e05;
-        #    }
-        #""")
-        
-        layout.addWidget(self.start_btn)
-        layout.addWidget(self.stop_btn)
-        layout.addWidget(self.view_btn)
-        layout.addWidget(self.cancel_btn)
-        # Default to left alignment; will auto-center only if content fits
-        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-
-        self._layout = layout
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        try:
-            # Auto-center actions only if all visible buttons fit in the available width
-            visible_buttons = [b for b in (self.start_btn, self.stop_btn, self.view_btn, self.cancel_btn) if b.isVisible()]
-            if not visible_buttons:
-                return
-            spacing = self._layout.spacing() or 3
-            content_width = sum(btn.width() for btn in visible_buttons) + spacing * (len(visible_buttons) - 1)
-            if content_width <= self.width():
-                self._layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-            else:
-                self._layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        except Exception:
-            pass
-    
-    def update_buttons(self, status: str):
-        """Update button visibility based on status"""
-        if status == "ready":
-            self.start_btn.setVisible(True)
-            self.start_btn.setToolTip("Start")
-            self.stop_btn.setVisible(False)
-            self.view_btn.setVisible(False)
-            self.cancel_btn.setVisible(False)
-        elif status == "queued":
-            self.start_btn.setVisible(False)
-            self.stop_btn.setVisible(False)
-            self.view_btn.setVisible(False)
-            self.cancel_btn.setVisible(True)
-        elif status == "uploading":
-            self.start_btn.setVisible(False)
-            self.stop_btn.setVisible(True)
-            self.stop_btn.setToolTip("Stop")
-            self.view_btn.setVisible(False)
-            self.cancel_btn.setVisible(False)
-        elif status == "paused":
-            self.start_btn.setVisible(True)
-            self.start_btn.setToolTip("Resume")
-            self.stop_btn.setVisible(False)
-            self.view_btn.setVisible(False)
-            self.cancel_btn.setVisible(False)
-        elif status == "incomplete":
-            self.start_btn.setVisible(True)
-            self.start_btn.setToolTip("Resume")
-            self.stop_btn.setVisible(False)
-            self.view_btn.setVisible(False)
-            self.cancel_btn.setVisible(False)
-        elif status == "completed":
-            self.start_btn.setVisible(False)
-            self.stop_btn.setVisible(False)
-            self.view_btn.setVisible(True)
-            self.view_btn.setIcon(get_icon('view', QStyle.StandardPixmap.SP_DirOpenIcon, self.style()))
-            self.view_btn.setToolTip("View BBCode")
-            self.cancel_btn.setVisible(False)
-        elif status == "failed":
-            self.start_btn.setVisible(False)
-            self.stop_btn.setVisible(False)
-            self.view_btn.setVisible(True)
-            self.view_btn.setIcon(get_icon('view_error', QStyle.StandardPixmap.SP_MessageBoxWarning, self.style()))
-            self.view_btn.setToolTip("View error details")
-            self.cancel_btn.setVisible(False)
-        else:  # other statuses
-            self.start_btn.setVisible(False)
-            self.stop_btn.setVisible(False)
-            self.view_btn.setVisible(False)
-            self.cancel_btn.setVisible(False)
-
-    def refresh_icons(self):
-        """Refresh all button icons for theme changes"""
-        try:
-            # Refresh all button icons
-            self.start_btn.setIcon(get_icon('start', QStyle.StandardPixmap.SP_MediaPlay, self.style()))
-            self.stop_btn.setIcon(get_icon('stop', QStyle.StandardPixmap.SP_MediaStop, self.style()))
-            self.view_btn.setIcon(get_icon('view', QStyle.StandardPixmap.SP_DirOpenIcon, self.style()))
-            self.cancel_btn.setIcon(get_icon('cancel', QStyle.StandardPixmap.SP_MediaPause, self.style()))
-
-            # If view button is currently showing error icon, update that too
-            if self.view_btn.isVisible() and self.view_btn.toolTip() == "View error details":
-                self.view_btn.setIcon(get_icon('view_error', QStyle.StandardPixmap.SP_MessageBoxWarning, self.style()))
-        except Exception:
-            pass
 
 class LogTextEdit(QTextEdit):
     """Text edit for logs that emits a signal on double-click."""
@@ -2951,8 +2666,9 @@ class LogTextEdit(QTextEdit):
         if event.button() == Qt.MouseButton.LeftButton:
             try:
                 self.doubleClicked.emit()
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
         super().mouseDoubleClickEvent(event)
 
 class NumericTableWidgetItem(QTableWidgetItem):
@@ -3024,6 +2740,8 @@ class ImxUploadGUI(QMainWindow):
             self.splash.set_status("Icon Manager")
         try:
             assets_dir = get_assets_dir()
+            # Setup Qt search path for stylesheet image URLs
+            QDir.addSearchPath('assets', assets_dir)
             icon_mgr = init_icon_manager(assets_dir)
             # Validate icons and report any issues
             validation_result = icon_mgr.validate_icons(report=True)
@@ -3036,8 +2754,9 @@ class ImxUploadGUI(QMainWindow):
             icon = get_icon('main_window')
             if not icon.isNull():
                 self.setWindowIcon(icon)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         if self.splash:
             self.splash.set_status("SQLite database")
         self.queue_manager = QueueManager()
@@ -3080,8 +2799,6 @@ class ImxUploadGUI(QMainWindow):
         # Cache expensive operations to improve responsiveness
         if self.splash:
             self.splash.set_status("cache")
-        self._cached_is_dark_mode = False
-        self._theme_cache_time = 0
         self._format_functions_cached = False
         
         # Pre-cache formatting functions to avoid blocking imports during progress updates
@@ -3215,8 +2932,9 @@ class ImxUploadGUI(QMainWindow):
         # Ensure initial filter is applied once UI is ready
         try:
             self.refresh_filter()
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Initialize update timer for automatic updates
         self.update_timer = QTimer()
@@ -3229,21 +2947,24 @@ class ImxUploadGUI(QMainWindow):
                     self._last_queue_version = current
                     try:
                         self._update_scanned_rows()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log(f"Exception in main_window: {e}", level="error", category="ui")
+                        raise
                     try:
                         if hasattr(self.gallery_table, '_update_tab_tooltips'):
                             self.gallery_table._update_tab_tooltips()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log(f"Exception in main_window: {e}", level="error", category="ui")
+                        raise
                 
                 # Progress display will update via tab_changed signal and status change events
 
                 # Scan status
                 try:
                     self._update_scan_status()
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
                 
             except Exception as e:
                 print(f"Timer error: {e}")
@@ -3264,8 +2985,9 @@ class ImxUploadGUI(QMainWindow):
         try:
             if hasattr(self, 'gallery_table') and hasattr(self.gallery_table, 'refresh_filter'):
                 self.gallery_table.refresh_filter()
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
     
     def on_galleries_moved_to_tab(self, new_tab_name, gallery_paths):
         """Handle galleries being moved to a different tab - DATABASE ALREADY UPDATED BY DRAG-DROP HANDLER"""
@@ -3383,8 +3105,9 @@ class ImxUploadGUI(QMainWindow):
                 if window_width > 0:
                     max_width = int(window_width * 0.5)
                     self.right_panel.setMaximumWidth(max_width)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
     
     def _format_rate_consistent(self, rate_kbps, precision=2):
         """Consistent rate formatting everywhere"""
@@ -3406,17 +3129,8 @@ class ImxUploadGUI(QMainWindow):
         else:
             return f"{size_bytes} B"
         # Lazy-loaded status icons (check/pending/uploading/failed)
-        self._icon_check = None
         # Theme cache
-        self._current_theme_mode = str(self.settings.value('ui/theme', 'system'))
-        self._icon_pending = None
-        self._icon_up = None
-        self._icon_stop = None
-        # Preload icons so first render has them
-        try:
-            self._load_status_icons_if_needed()
-        except Exception:
-            pass
+        self._current_theme_mode = str(self.settings.value('ui/theme', 'dark'))
     
     def _update_scan_status(self):
         """Update the scanning status indicator in the status bar."""
@@ -3433,131 +3147,6 @@ class ImxUploadGUI(QMainWindow):
         except Exception:
             # Hide on error
             self.scan_status_label.setVisible(False)
-    
-
-    def _load_status_icons_if_needed(self):
-        try:
-            if self._icon_check is None or self._icon_pending is None or self._icon_up is None or self._icon_stop is None:
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                try:
-                    import sys as _sys
-                    app_dir = os.path.dirname(os.path.abspath(_sys.argv[0]))
-                except Exception:
-                    app_dir = None
-                candidates = [
-                    os.path.join(base_dir, "check16.png"),
-                    os.path.join(os.getcwd(), "check16.png"),
-                    os.path.join(base_dir, "assets", "check16.png"),
-                    os.path.join(app_dir, "check16.png") if app_dir else None,
-                    os.path.join(app_dir, "assets", "check16.png") if app_dir else None,
-                ]
-                candidates_pending = [
-                    os.path.join(base_dir, "pending.png"),
-                    os.path.join(os.getcwd(), "pending.png"),
-                    os.path.join(base_dir, "assets", "pending.png"),
-                    os.path.join(app_dir, "pending.png") if app_dir else None,
-                    os.path.join(app_dir, "assets", "pending.png") if app_dir else None,
-                ]
-                candidates_up = [
-                    os.path.join(base_dir, "up.png"),
-                    os.path.join(os.getcwd(), "up.png"),
-                    os.path.join(base_dir, "assets", "up.png"),
-                    os.path.join(app_dir, "up.png") if app_dir else None,
-                    os.path.join(app_dir, "assets", "up.png") if app_dir else None,
-                ]
-                candidates_stop = [
-                    os.path.join(base_dir, "error.png"),
-                    os.path.join(os.getcwd(), "error.png"),
-                    os.path.join(base_dir, "assets", "error.png"),
-                    os.path.join(app_dir, "error.png") if app_dir else None,
-                    os.path.join(app_dir, "assets", "error.png") if app_dir else None,
-                ]
-                chk = QPixmap()
-                for p in candidates:
-                    if not p:
-                        continue
-                    if os.path.exists(p):
-                        chk = QPixmap(p)
-                        if not chk.isNull():
-                            break
-                pen = QPixmap()
-                for p in candidates_pending:
-                    if not p:
-                        continue
-                    if os.path.exists(p):
-                        pen = QPixmap(p)
-                        if not pen.isNull():
-                            break
-                upm = QPixmap()
-                for p in candidates_up:
-                    if not p:
-                        continue
-                    if os.path.exists(p):
-                        upm = QPixmap(p)
-                        if not upm.isNull():
-                            break
-                stm = QPixmap()
-                for p in candidates_stop:
-                    if not p:
-                        continue
-                    if os.path.exists(p):
-                        stm = QPixmap(p)
-                        if not stm.isNull():
-                            break
-                self._icon_check = chk if not chk.isNull() else None
-                self._icon_pending = pen if not pen.isNull() else None
-                self._icon_up = upm if not upm.isNull() else None
-                self._icon_stop = stm if not stm.isNull() else None
-
-                # Fallback: draw simple vector icons if PNG loading fails (e.g., missing imageformat plugins)
-                if self._icon_check is None:
-                    try:
-                        pm = QPixmap(24, 24)
-                        pm.fill(Qt.GlobalColor.transparent)
-                        painter = QPainter(pm)
-                        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-                        painter.setBrush(QColor(46, 204, 113))  # green
-                        painter.setPen(Qt.PenStyle.NoPen)
-                        painter.drawEllipse(0, 0, 24, 24)
-                        painter.setPen(QColor(255, 255, 255))
-                        painter.setBrush(Qt.BrushStyle.NoBrush)
-                        painter.setPen(QColor(255, 255, 255))
-                        painter.setPen(Qt.PenStyle.SolidLine)
-                        painter.setPen(QColor(255, 255, 255))
-                        # Draw a simple checkmark
-                        path = QPainterPath()
-                        path.moveTo(6, 13)
-                        path.lineTo(10, 17)
-                        path.lineTo(18, 8)
-                        painter.setPen(QPen(QColor(255, 255, 255), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-                        painter.drawPath(path)
-                        painter.end()
-                        self._icon_check = pm
-                    except Exception:
-                        self._icon_check = None
-                if self._icon_pending is None:
-                    try:
-                        pm = QPixmap(24, 24)
-                        pm.fill(Qt.GlobalColor.transparent)
-                        painter = QPainter(pm)
-                        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-                        painter.setBrush(QColor(241, 196, 15))  # yellow
-                        painter.setPen(Qt.PenStyle.NoPen)
-                        painter.drawEllipse(0, 0, 24, 24)
-                        # clock hands
-                        painter.setPen(QPen(QColor(0, 0, 0), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                        painter.drawLine(12, 12, 12, 6)
-                        painter.drawLine(12, 12, 17, 12)
-                        painter.end()
-                        self._icon_pending = pm
-                    except Exception:
-                        self._icon_pending = None
-        except Exception:
-            # Leave icons as None if loading fails
-            self._icon_check = self._icon_check or None
-            self._icon_pending = self._icon_pending or None
-            self._icon_up = self._icon_up or None
-            self._icon_stop = self._icon_stop or None
 
     def _set_status_cell_icon(self, row: int, status: str):
         """Render the Status column as an icon only, without background/text.
@@ -3569,76 +3158,26 @@ class ImxUploadGUI(QMainWindow):
             return
         
         try:
-            # Determine theme and selection state
-            is_dark_theme = self._get_cached_theme()
-            
-            # Check if this row is selected - use inner table for tabbed system consistency  
+            # Check if this row is selected - use inner table for tabbed system consistency
             table_widget = getattr(self.gallery_table, 'gallery_table', self.gallery_table)
             selected_rows = {item.row() for item in table_widget.selectedItems()}
             is_selected = row in selected_rows
 
             icon_mgr = get_icon_manager()
-            if icon_mgr:
-                # Use IconManager with theme and selection awareness
-                icon = icon_mgr.get_status_icon(status, self.style(), is_dark_theme, is_selected)
-                tooltip = icon_mgr.get_status_tooltip(status)
-            else:
-                # Fallback to old method if IconManager not available
-                icon, tooltip = self._get_legacy_status_icon(status)
+            if not icon_mgr:
+                log(f"ERROR: IconManager not initialized, cannot set icon for status: {status}", level="error")
+                return
+
+            # Use IconManager with explicit theme and selection awareness
+            icon = icon_mgr.get_status_icon(status, theme_mode=self._current_theme_mode, is_selected=is_selected)
+            tooltip = icon_mgr.get_status_tooltip(status)
             
             # Apply the icon to the table cell
             self._apply_icon_to_cell(row, 4, icon, tooltip, status)
             
         except Exception as e:
             print(f"Warning: Failed to set status icon for {status}: {e}")
-            
-    def _get_legacy_status_icon(self, status: str):
-        """Legacy status icon handling (fallback)."""
-        icon = QIcon()
-        tooltip = ""
-        
-        # Explicit handling for each status - no hidden fallbacks
-        if status == "completed":
-            icon = get_icon('completed', QStyle.StandardPixmap.SP_DialogApplyButton, self.style())
-            tooltip = "Completed"
-        elif status == "failed":
-            icon = get_icon('failed', QStyle.StandardPixmap.SP_DialogCancelButton, self.style())
-            tooltip = "Failed"
-        elif status == "scan_failed":
-            icon = get_icon('scan_failed', QStyle.StandardPixmap.SP_MessageBoxWarning, self.style())
-            tooltip = "Scan Failed - Click to rescan"
-        elif status == "upload_failed":
-            icon = get_icon('failed', QStyle.StandardPixmap.SP_MessageBoxCritical, self.style())
-            tooltip = "Upload Failed - Click to retry"
-        elif status == "uploading":
-            icon = get_icon('uploading', QStyle.StandardPixmap.SP_MediaPlay, self.style())
-            tooltip = "Uploading"
-        elif status == "paused":
-            icon = get_icon('paused', QStyle.StandardPixmap.SP_MediaPause, self.style())
-            tooltip = "Paused"
-        elif status == "ready":
-            icon = get_icon('ready', QStyle.StandardPixmap.SP_DialogOkButton, self.style())
-            tooltip = "Ready"
-        elif status == "queued":
-            icon = get_icon('pending', QStyle.StandardPixmap.SP_FileIcon, self.style())
-            tooltip = "Queued"
-        elif status == "incomplete":
-            icon = get_icon('incomplete', QStyle.StandardPixmap.SP_BrowserReload, self.style())
-            tooltip = "Incomplete - Resume to continue"
-        elif status == "scanning":
-            icon = get_icon('pending', QStyle.StandardPixmap.SP_BrowserReload, self.style())
-            tooltip = "Scanning"
-        elif status == "pending":
-            icon = get_icon('pending', QStyle.StandardPixmap.SP_FileIcon, self.style())
-            tooltip = "Pending"
-        else:
-            # Unknown status - use warning icon
-            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
-            tooltip = f"Unknown status: {status}"
-            print(f"Warning: Unknown status '{status}' - using warning icon")
-        
-        return icon, tooltip
-    
+  
     def _on_selection_changed(self, selected, deselected):
         """Handle gallery table selection changes to refresh icons"""
         try:
@@ -3719,8 +3258,9 @@ class ImxUploadGUI(QMainWindow):
             
             self.gallery_table.setItem(row, col, item)
             
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def _show_failed_gallery_details(self, row: int):
         """Show detailed error information for a failed gallery."""
@@ -3780,7 +3320,7 @@ class ImxUploadGUI(QMainWindow):
             
             # Determine icon and tooltip based on rename status
             if is_renamed is True:
-                icon = get_icon('renamed_true', QStyle.StandardPixmap.SP_DialogApplyButton, self.style())
+                icon = get_icon('renamed_true')
                 tooltip = "Renamed"
                 if icon is not None and not icon.isNull():
                     item.setIcon(icon)
@@ -3789,7 +3329,7 @@ class ImxUploadGUI(QMainWindow):
                     item.setText("✓")
                     log(f"Using fallback text for renamed_true", level="debug")
             elif is_renamed is False:
-                icon = get_icon('renamed_false', QStyle.StandardPixmap.SP_ComputerIcon, self.style())
+                icon = get_icon('renamed_false')
                 tooltip = "Pending rename"
                 #print(f"DEBUG: renamed_false icon - isNull: {icon.isNull() if icon else 'None'}")
                 if icon is not None and not icon.isNull():
@@ -3814,25 +3354,29 @@ class ImxUploadGUI(QMainWindow):
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.gallery_table.setItem(row, col, item)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
 
     def showEvent(self, event):
         try:
             super().showEvent(event)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         # Post-show pass no longer needed - targeted updates handle icon refreshes
         try:
             pass  # Removed deprecated update_queue_display call that overwrites correct rename status
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Refresh button icons with correct theme now that palette is ready
         try:
             self._refresh_button_icons()
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
     
     def _cache_format_functions(self):
         """Pre-cache ALL imxup functions to avoid blocking imports during runtime"""
@@ -3899,16 +3443,18 @@ class ImxUploadGUI(QMainWindow):
         try:
             main_layout.setContentsMargins(6, 6, 6, 6)
             main_layout.setSpacing(6)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Top section with queue and settings - using splitter for resizable divider
         self.top_splitter = QSplitter(Qt.Orientation.Horizontal)
         try:
             self.top_splitter.setContentsMargins(0, 0, 0, 0)
             self.top_splitter.setHandleWidth(6)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Left panel - Queue and controls (wider now)
         left_panel = QWidget()
@@ -3916,8 +3462,9 @@ class ImxUploadGUI(QMainWindow):
         try:
             left_layout.setContentsMargins(0, 0, 0, 0)
             left_layout.setSpacing(6)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Queue section
         queue_group = QGroupBox("Upload Queue")
@@ -3925,8 +3472,9 @@ class ImxUploadGUI(QMainWindow):
         try:
             queue_layout.setContentsMargins(10, 10, 10, 10)
             queue_layout.setSpacing(8)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Drag-and-drop is handled at the window level; no dedicated drop label
         # (Moved Browse button into controls row below)
@@ -3944,8 +3492,9 @@ class ImxUploadGUI(QMainWindow):
             header.customContextMenuRequested.connect(self.show_header_context_menu)
             header.sectionResized.connect(self._on_header_section_resized)
             header.sectionMoved.connect(self._on_header_section_moved)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Add keyboard shortcut hint
         shortcut_hint = QLabel("💡 Tips: <b>Ctrl-C</b>: Copy BBCode | <b>F2</b>: Rename | <b>Ctrl</b>+<b>Tab</b>: Next Tab | <b>Drag-and-drop</b>: Add folders")
@@ -3980,9 +3529,7 @@ class ImxUploadGUI(QMainWindow):
         controls_layout.addWidget(self.clear_completed_btn)
 
         # Browse button (moved here to be to the right of Clear Completed)
-        self.browse_btn = QPushButton("Browse")
-        if not self.browse_btn.text().startswith(" "):
-            self.browse_btn.setText(" " + self.browse_btn.text())
+        self.browse_btn = QPushButton(" Browse ")
         self.browse_btn.clicked.connect(self.browse_for_folders)
         self.browse_btn.setProperty("class", "main-action-btn")
         controls_layout.addWidget(self.browse_btn)
@@ -4005,14 +3552,16 @@ class ImxUploadGUI(QMainWindow):
             window_width = self.width() if self.width() > 0 else 1000  # fallback for initial sizing
             max_width = int(window_width * 0.5)
             self.right_panel.setMaximumWidth(max_width)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         try:
             right_layout.setContentsMargins(0, 0, 0, 0)
             right_layout.setSpacing(6)
             right_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         
         # Settings section
@@ -4023,8 +3572,9 @@ class ImxUploadGUI(QMainWindow):
             settings_layout.setContentsMargins(10, 10, 10, 10)
             settings_layout.setHorizontalSpacing(12)
             settings_layout.setVerticalSpacing(8)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         settings_layout.setVerticalSpacing(5)
         settings_layout.setHorizontalSpacing(10)
@@ -4140,7 +3690,7 @@ class ImxUploadGUI(QMainWindow):
         self.central_store_path_value = defaults.get('central_store_path', None)
         
         # Comprehensive Settings button
-        self.comprehensive_settings_btn = QPushButton("Comprehensive Settings") # ⚙️ 
+        self.comprehensive_settings_btn = QPushButton("Settings && Preferences") # ⚙️ 
         if not self.comprehensive_settings_btn.text().startswith(" "):
             self.comprehensive_settings_btn.setText(" " + self.comprehensive_settings_btn.text())
         self.comprehensive_settings_btn.clicked.connect(self.open_comprehensive_settings)
@@ -4161,37 +3711,37 @@ class ImxUploadGUI(QMainWindow):
         settings_layout.addWidget(self.save_settings_btn, 5, 0, 1, 2)
 
         # Manage templates and credentials buttons (same row)
-        self.manage_templates_btn = QPushButton("Templates")
-        self.manage_credentials_btn = QPushButton("Credentials")
+        self.manage_templates_btn = QPushButton(" Templates")
+        self.manage_credentials_btn = QPushButton(" Credentials")
         
         # Add icons if available
     
         try:
             icon_mgr = get_icon_manager()
             if icon_mgr:
-                is_dark_theme = self._get_cached_theme()
-                templates_icon = icon_mgr.get_icon('templates', self.style(), is_dark_theme)
+                templates_icon = icon_mgr.get_icon('templates')
                 if not templates_icon.isNull():
                     self.manage_templates_btn.setIcon(templates_icon)
                     self.manage_templates_btn.setIconSize(QSize(16, 16))
-                    
-                credentials_icon = icon_mgr.get_icon('credentials', self.style(), is_dark_theme)
+
+                credentials_icon = icon_mgr.get_icon('credentials')
                 if not credentials_icon.isNull():
                     self.manage_credentials_btn.setIcon(credentials_icon)
                     self.manage_credentials_btn.setIconSize(QSize(16, 16))
-                    
-                settings_icon = icon_mgr.get_icon('settings', self.style(), is_dark_theme)
+
+                settings_icon = icon_mgr.get_icon('settings')
                 if not settings_icon.isNull():
                     self.comprehensive_settings_btn.setIcon(settings_icon)
                     self.comprehensive_settings_btn.setIconSize(QSize(18, 18))
                 
-        except Exception:
-            pass       
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         self.manage_templates_btn.clicked.connect(self.manage_templates)
         self.manage_credentials_btn.clicked.connect(self.manage_credentials)
         
         for btn in [self.manage_templates_btn, self.manage_credentials_btn]:
-            btn.setProperty("class", "settings-btn")
+            btn.setProperty("class", "quick-settings-btn")
         
         settings_layout.addWidget(self.manage_templates_btn, 9, 0)
         settings_layout.addWidget(self.manage_credentials_btn, 9, 1)
@@ -4202,14 +3752,15 @@ class ImxUploadGUI(QMainWindow):
         try:
             log_layout.setContentsMargins(10, 10, 10, 10)
             log_layout.setSpacing(8)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Use QListWidget instead of QTextEdit for simpler, more reliable log display
-        from PyQt6.QtWidgets import QListWidget
-        self.log_text = QListWidget()
-        self.log_text.setAlternatingRowColors(True)
-        self.log_text.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        from src.gui.widgets.custom_widgets import CopyableLogListWidget
+        self.log_text = CopyableLogListWidget()
+        self.log_text.setAlternatingRowColors(False)
+        self.log_text.setSelectionMode(CopyableLogListWidget.SelectionMode.ExtendedSelection)
 
         # Set monospace font
         _log_font = QFont("Consolas", 9)
@@ -4223,14 +3774,12 @@ class ImxUploadGUI(QMainWindow):
         # Double-click to open popout viewer
         try:
             self.log_text.doubleClicked.connect(self.open_log_viewer_popup)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
-        # Keep a long history in the GUI log
-        try:
-            self.log_text.document().setMaximumBlockCount(200000)  # ~200k lines
-        except Exception:
-            pass
+        # QListWidget manages items differently than QTextEdit - no document() method needed
+        # The item count is naturally limited by memory, not a block count setting
         log_layout.addWidget(self.log_text)
         
         right_layout.addWidget(self.settings_group)
@@ -4254,8 +3803,9 @@ class ImxUploadGUI(QMainWindow):
         try:
             bottom_layout.setContentsMargins(0, 0, 0, 0)
             bottom_layout.setSpacing(6)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         # Current tab progress group (left)
         progress_group = QGroupBox("Current Tab Progress")
@@ -4263,8 +3813,9 @@ class ImxUploadGUI(QMainWindow):
         try:
             progress_layout.setContentsMargins(10, 10, 10, 10)
             progress_layout.setSpacing(8)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         overall_layout = QHBoxLayout()
         overall_layout.addWidget(QLabel("Progress:"))
@@ -4297,8 +3848,9 @@ class ImxUploadGUI(QMainWindow):
             stats_layout.setContentsMargins(10, 8, 10, 8)
             stats_layout.setHorizontalSpacing(10)
             stats_layout.setVerticalSpacing(6)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Detailed stats labels (split into label and value for right-aligned values)
         self.stats_unnamed_text_label = QLabel("Unnamed galleries:")
@@ -4316,21 +3868,21 @@ class ImxUploadGUI(QMainWindow):
         self.stats_total_galleries_value_label = QLabel("0")
         self.stats_total_images_text_label = QLabel("Images uploaded:")
         self.stats_total_images_value_label = QLabel("0")
-        # Let styles.qss handle the colors for these labels
         for lbl in (
             self.stats_unnamed_value_label,
             self.stats_total_galleries_value_label,
             self.stats_total_images_value_label,
         ):
-            # Let styles.qss handle the colors for these value labels
             try:
                 lbl.setProperty("class", "console")
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
             try:
                 lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
         # Arrange in two columns, three rows
         stats_layout.addWidget(self.stats_unnamed_text_label, 0, 0)
         stats_layout.addWidget(self.stats_unnamed_value_label, 0, 1)
@@ -4345,8 +3897,9 @@ class ImxUploadGUI(QMainWindow):
         stats_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         try:
             stats_group.setFixedWidth(230)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         stats_group.setMinimumWidth(160)
         stats_group.setProperty("class", "stats-group")
 
@@ -4358,8 +3911,9 @@ class ImxUploadGUI(QMainWindow):
             speed_layout.setContentsMargins(10, 10, 10, 10)
             speed_layout.setHorizontalSpacing(12)
             speed_layout.setVerticalSpacing(8)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Detailed speed labels (split into label and value for right-aligned values)
         self.speed_current_text_label = QLabel("Current:")
@@ -4368,27 +3922,28 @@ class ImxUploadGUI(QMainWindow):
         self.speed_fastest_value_label = QLabel("0.0 KiB/s")
         self.speed_transferred_text_label = QLabel("Transferred:")
         self.speed_transferred_value_label = QLabel("0 B")
-        # Let styles.qss handle the colors for Speed box text labels
         for lbl in (
             self.speed_current_value_label,
             self.speed_fastest_value_label,
             self.speed_transferred_value_label,
         ):
-            # Let styles.qss handle the colors for Speed box value labels
             try:
                 lbl.setProperty("class", "console")
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
             try:
                 lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
 
         # Make current transfer speed value 1px larger than others
         try:
             self.speed_current_value_label.setProperty("class", "console-large")
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         speed_layout.addWidget(self.speed_current_text_label, 0, 0)
         speed_layout.addWidget(self.speed_current_value_label, 0, 1)
@@ -4401,8 +3956,9 @@ class ImxUploadGUI(QMainWindow):
         speed_group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         try:
             speed_group.setFixedWidth(230)  # Increased from 200 to 240 to prevent digit truncation
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         speed_group.setProperty("class", "speed-group")
         bottom_layout.addWidget(speed_group, 1)
 
@@ -4411,8 +3967,9 @@ class ImxUploadGUI(QMainWindow):
         try:
             main_layout.setStretch(0, 1)  # top_layout
             main_layout.setStretch(1, 0)  # bottom_layout
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def open_central_store_folder(self):
         """Open the central store folder in the OS file manager"""
@@ -4463,26 +4020,20 @@ class ImxUploadGUI(QMainWindow):
             theme_menu = view_menu.addMenu("Theme")
             theme_group = QActionGroup(self)
             theme_group.setExclusive(True)
-            self._theme_action_system = theme_menu.addAction("System")
-            self._theme_action_system.setCheckable(True)
             self._theme_action_light = theme_menu.addAction("Light")
             self._theme_action_light.setCheckable(True)
             self._theme_action_dark = theme_menu.addAction("Dark")
             self._theme_action_dark.setCheckable(True)
-            theme_group.addAction(self._theme_action_system)
             theme_group.addAction(self._theme_action_light)
             theme_group.addAction(self._theme_action_dark)
-            self._theme_action_system.triggered.connect(lambda: self.set_theme_mode('system'))
             self._theme_action_light.triggered.connect(lambda: self.set_theme_mode('light'))
             self._theme_action_dark.triggered.connect(lambda: self.set_theme_mode('dark'))
             # Initialize checked state from settings
-            current_theme = str(self.settings.value('ui/theme', 'system'))
+            current_theme = str(self.settings.value('ui/theme', 'dark'))
             if current_theme == 'light':
                 self._theme_action_light.setChecked(True)
-            elif current_theme == 'dark':
-                self._theme_action_dark.setChecked(True)
             else:
-                self._theme_action_system.setChecked(True)
+                self._theme_action_dark.setChecked(True)
 
             # Tools menu
             tools_menu = menu_bar.addMenu("Tools")
@@ -4544,7 +4095,7 @@ class ImxUploadGUI(QMainWindow):
         
         # Add logo at top
         try:
-            logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'assets', 'imxup.png')
+            logo_path = os.path.join(get_project_root(), 'assets', 'imxup.png')
             logo_pixmap = QPixmap(logo_path)
             if not logo_pixmap.isNull():
                 logo_label = QLabel()
@@ -4553,8 +4104,9 @@ class ImxUploadGUI(QMainWindow):
                 logo_label.setPixmap(scaled_logo)
                 logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 layout.addWidget(logo_label)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Add title
         title_label = QLabel("IMXup")
@@ -4653,10 +4205,12 @@ class ImxUploadGUI(QMainWindow):
         """Prompt to set credentials only if API key is not set."""
         if not api_key_is_set():
             log(f"No API key set. Showing credential dialog...", level="warning", category="auth")
-            dialog = CredentialSetupDialog(self)
+            self.credential_dialog = CredentialSetupDialog(self, standalone=True)
             # Use non-blocking show() instead of blocking exec() to prevent GUI freezing
-            dialog.show()
-            dialog.finished.connect(lambda result: self._handle_credential_dialog_result(result))
+            self.credential_dialog.show()
+            self.credential_dialog.finished.connect(lambda result: self._handle_credential_dialog_result(result))
+            # Auto-cleanup when dialog is destroyed
+            self.credential_dialog.finished.connect(lambda: setattr(self, 'credential_dialog', None))
         else:
             log(f"API key found", category="auth", level="info")
         
@@ -4689,8 +4243,9 @@ class ImxUploadGUI(QMainWindow):
         except Exception as e:
             try:
                 log(f"Failed to invalidate session: {e}", category="auth", level="debug")
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
 
     def install_context_menu(self):
         """Install Windows Explorer context menu integration."""
@@ -4721,8 +4276,9 @@ class ImxUploadGUI(QMainWindow):
             QMessageBox.warning(self, "Context Menu", f"Error removing context menu: {e}")
             try:
                 log(f"Error removing context menu: {e}", category="system", level="error")
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
     
     def manage_templates(self):
         """Open comprehensive settings to templates tab"""
@@ -4794,39 +4350,38 @@ class ImxUploadGUI(QMainWindow):
         dialog.show()
 
     def set_theme_mode(self, mode: str):
-        """Switch theme mode and persist. mode in {'system','light','dark'}."""
+        """Switch theme mode and persist. mode in {'light','dark'}."""
         try:
-            mode = mode if mode in ('system','light','dark') else 'system'
+            mode = mode if mode in ('light','dark') else 'dark'
             self.settings.setValue('ui/theme', mode)
+            self._current_theme_mode = mode  # Update cached theme state
             self.apply_theme(mode)
-            
+
             # Update tabbed gallery widget theme
             if hasattr(self, 'gallery_table') and hasattr(self.gallery_table, 'update_theme'):
                 self.gallery_table.update_theme()
-            
+
             # Refresh all icons to use correct light/dark variants for new theme
             self.refresh_all_status_icons()
-            
+
             # Update checked menu items if available
             try:
                 if mode == 'light':
                     self._theme_action_light.setChecked(True)
-                elif mode == 'dark':
-                    self._theme_action_dark.setChecked(True)
                 else:
-                    self._theme_action_system.setChecked(True)
-            except Exception:
-                pass
-        except Exception:
-            pass
+                    self._theme_action_dark.setChecked(True)
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def _load_base_stylesheet(self) -> str:
         """Load the base QSS stylesheet for consistent fonts and styling."""
         try:
-            # First try to load from project root styles.qss
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(script_dir))
-            qss_path = os.path.join(project_root, "styles.qss")
+            # Load styles.qss file from assets directory
+            qss_path = os.path.join(get_assets_dir(), "styles.qss")
             if os.path.exists(qss_path):
                 with open(qss_path, 'r', encoding='utf-8') as f:
                     full_content = f.read()
@@ -4839,22 +4394,8 @@ class ImxUploadGUI(QMainWindow):
                     if dark_start != -1:
                         return full_content[:dark_start].strip()
                     return full_content
-            
-            # Fallback: try styles.qss in same directory as this script
-            qss_path = os.path.join(script_dir, "styles.qss")
-            if os.path.exists(qss_path):
-                with open(qss_path, 'r', encoding='utf-8') as f:
-                    full_content = f.read()
-                    # Extract base styles (everything before LIGHT_THEME_START)
-                    light_start = full_content.find('/* LIGHT_THEME_START')
-                    if light_start != -1:
-                        return full_content[:light_start].strip()
-                    # Fallback: everything before DARK_THEME_START
-                    dark_start = full_content.find('/* DARK_THEME_START')
-                    if dark_start != -1:
-                        return full_content[:dark_start].strip()
-                    return full_content
-        except Exception:
+        except Exception as e:
+            log(f"Error loading styles.qss: {e}", level="error", category="ui")
             pass
         
         # Fallback: minimal inline QSS for font consistency
@@ -4874,10 +4415,8 @@ class ImxUploadGUI(QMainWindow):
         end_marker = f'/* {theme_type.upper()}_THEME_END */'
         
         try:
-            # First try to load from project root styles.qss
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(script_dir))
-            qss_path = os.path.join(project_root, "styles.qss")
+            # Load styles.qss from assets directory
+            qss_path = os.path.join(get_assets_dir(), "styles.qss")
             if os.path.exists(qss_path):
                 with open(qss_path, 'r', encoding='utf-8') as f:
                     full_content = f.read()
@@ -4888,21 +4427,9 @@ class ImxUploadGUI(QMainWindow):
                         theme_content = full_content[theme_start:theme_end]
                         lines = theme_content.split('\n') # Remove the marker comment line
                         return '\n'.join(lines[1:])
-            
-            # Fallback: try styles.qss in same directory as this script
-            qss_path = os.path.join(script_dir, "styles.qss")
-            if os.path.exists(qss_path):
-                with open(qss_path, 'r', encoding='utf-8') as f:
-                    full_content = f.read()
-                    # Extract theme styles (between START and END markers)
-                    theme_start = full_content.find(start_marker)
-                    theme_end = full_content.find(end_marker)
-                    if theme_start != -1 and theme_end != -1:
-                        theme_content = full_content[theme_start:theme_end]
-                        lines = theme_content.split('\n') # Remove the marker comment line
-                        return '\n'.join(lines[1:])
-        except Exception:
-            pass
+
+        except Exception as e:
+            log(f"Error loading styles.qss: {e}", level="error", category="ui")
         
         # Fallback: inline theme styles
         if theme_type == 'dark':
@@ -4933,8 +4460,8 @@ class ImxUploadGUI(QMainWindow):
             """
 
     def apply_theme(self, mode: str):
-        """Apply theme. 'system' uses palette-based inference; 'light'/'dark' set an application stylesheet.
-        Only adjusts high-level palette/stylesheet so existing widgets that consult palette keep working.
+        """Apply theme. Only 'light' and 'dark' modes supported.
+        Sets application palette and stylesheet for consistent theming.
         """
         try:
             app = QApplication.instance()
@@ -4956,8 +4483,9 @@ class ImxUploadGUI(QMainWindow):
                     palette.setColor(palette.ColorRole.ButtonText, QColor(230,230,230))
                     palette.setColor(palette.ColorRole.Highlight, QColor(47,106,160))
                     palette.setColor(palette.ColorRole.HighlightedText, QColor(255,255,255))
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
                 app.setPalette(palette)
                 
                 # Load dark theme styles from styles.qss
@@ -4974,17 +4502,18 @@ class ImxUploadGUI(QMainWindow):
                     palette.setColor(palette.ColorRole.ButtonText, QColor(33,33,33))
                     palette.setColor(palette.ColorRole.Highlight, QColor(41,128,185))
                     palette.setColor(palette.ColorRole.HighlightedText, QColor(255,255,255))
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
                 app.setPalette(palette)
                 
                 # Load light theme styles from styles.qss
                 theme_qss = self._load_theme_styles('light')
                 app.setStyleSheet(base_qss + "\n" + theme_qss)
             else:
-                # system: apply base stylesheet but use system palette
-                app.setStyleSheet(base_qss)
-                # Leave palette as-is (system)
+                # Default to dark if unknown mode
+                return self.apply_theme('dark')
+
             self._current_theme_mode = mode
             # Trigger a light refresh on key widgets
             try:
@@ -4995,10 +4524,13 @@ class ImxUploadGUI(QMainWindow):
                 
                 # Refresh all button icons that use the icon manager for theme changes
                 self._refresh_button_icons()
-            except Exception:
-                pass
-        except Exception:
-            pass
+                self.refresh_all_status_icons()
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
     
     def apply_font_size(self, font_size: int):
         """Apply the specified font size throughout the application"""
@@ -5034,8 +4566,9 @@ class ImxUploadGUI(QMainWindow):
                 log_font.setPointSize(log_font_size)
                 try:
                     log_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 98.0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
                 self.log_text.setFont(log_font)
 
             # Save the current font size
@@ -5111,8 +4644,9 @@ class ImxUploadGUI(QMainWindow):
             # Propagate auto-rename preference to worker
             try:
                 self.worker.auto_rename_enabled = self.auto_rename_check.isChecked()
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
 
     def on_bandwidth_updated(self, kbps: float):
         """Receive current aggregate bandwidth from worker (KB/s)."""
@@ -5733,18 +5267,6 @@ class ImxUploadGUI(QMainWindow):
             # If update fails, try full table refresh as last resort
             QTimer.singleShot(0, self.update_queue_display)
     
-    def _get_cached_theme(self):
-        """Get cached theme info to avoid expensive palette calculations"""
-        current_time = time.time()
-        if current_time - self._theme_cache_time > 1.0:  # Cache for 1 second
-            try:
-                pal = self.palette()
-                _bg = pal.window().color()
-                self._cached_is_dark_mode = (0.2126 * _bg.redF() + 0.7152 * _bg.greenF() + 0.0722 * _bg.blueF()) < 0.5
-                self._theme_cache_time = current_time
-            except Exception:
-                pass
-        return self._cached_is_dark_mode
     
     def _refresh_button_icons(self):
         """Refresh all button icons that use the icon manager for correct theme"""
@@ -5753,10 +5275,6 @@ class ImxUploadGUI(QMainWindow):
             if not icon_mgr:
                 return
                 
-            # Clear theme cache to force recalculation
-            self._theme_cache_time = 0
-            is_dark_theme = self._get_cached_theme()
-            
             # Map of button attributes to their icon keys
             button_icon_map = [
                 ('manage_templates_btn', 'templates'),
@@ -5768,9 +5286,16 @@ class ImxUploadGUI(QMainWindow):
             for button_attr, icon_key in button_icon_map:
                 if hasattr(self, button_attr):
                     button = getattr(self, button_attr)
-                    icon = icon_mgr.get_icon(icon_key, self.style(), is_dark_theme)
+                    icon = icon_mgr.get_icon(icon_key)
                     if not icon.isNull():
                         button.setIcon(icon)
+
+            # Refresh renamed column icons
+            for row in range(self.gallery_table.rowCount()):
+                item = self.gallery_table.item(row, 11)
+                if item and not item.icon().isNull():
+                    is_renamed = item.toolTip() == "Renamed"
+                    self._set_renamed_cell_icon(row, is_renamed)
         except Exception as e:
             log(f"Error refreshing button icons: {e}", level="debug")
 
@@ -5780,8 +5305,9 @@ class ImxUploadGUI(QMainWindow):
         if hasattr(self, 'splash') and self.splash:
             try:
                 self.splash.update_status(f"Populating row {row}")
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
 
         # CRITICAL: Verify row is still valid for this item (table may have changed due to deletions)
         # Always use the current mapping as the source of truth
@@ -5797,7 +5323,7 @@ class ImxUploadGUI(QMainWindow):
             log(f"Row adjusted for {os.path.basename(item.path)}: {row} → {actual_row}", level="debug")
             row = actual_row
 
-        _is_dark_mode = self._get_cached_theme()
+        theme_mode = self._current_theme_mode
 
         # Order number (numeric-sorting item)
         order_item = NumericTableWidgetItem(item.insertion_order)
@@ -5883,9 +5409,9 @@ class ImxUploadGUI(QMainWindow):
         xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
         if item.status == "uploading" and transfer_text:
-            xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
+            xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
         elif item.status in ("completed", "failed") and transfer_text:
-            xfer_item.setForeground(QColor(255, 255, 255, 230) if _is_dark_mode else QColor(0, 0, 0, 190))
+            xfer_item.setForeground(QColor(255, 255, 255, 230) if theme_mode == 'dark' else QColor(0, 0, 0, 190))
         self.gallery_table.setItem(row, 9, xfer_item)
         
         # Template name
@@ -5941,7 +5467,7 @@ class ImxUploadGUI(QMainWindow):
         try:
             existing_widget = self.gallery_table.cellWidget(row, 7)
             if not isinstance(existing_widget, ActionButtonWidget):
-                action_widget = ActionButtonWidget()
+                action_widget = ActionButtonWidget(parent=self)
                 # Connect button signals with proper closure capture
                 action_widget.start_btn.setEnabled(item.status != "scanning")
                 action_widget.start_btn.clicked.connect(lambda checked, path=item.path: self.start_single_item(path))
@@ -5954,8 +5480,10 @@ class ImxUploadGUI(QMainWindow):
                 # Update existing widget status
                 existing_widget.update_buttons(item.status)
                 existing_widget.start_btn.setEnabled(item.status != "scanning")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"ERROR: Failed to create action buttons for row {row}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _populate_table_row_detailed(self, row: int, item: GalleryQueueItem):
         """Complete row formatting in background - TRULY NON-BLOCKING"""
@@ -6013,8 +5541,9 @@ class ImxUploadGUI(QMainWindow):
                 if uploaded_item:
                     uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
                 
-            except Exception:
-                pass  # Fail silently
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise  # Fail silently
         
         # Execute formatting in background, then apply on main thread
         task = BackgroundTask(format_row_data)
@@ -6027,10 +5556,10 @@ class ImxUploadGUI(QMainWindow):
         size_item_existing = self.gallery_table.item(row, 8)
         if (item.scan_complete and hasattr(item, 'total_size') and item.total_size > 0 and 
             (not size_item_existing or not size_item_existing.text().strip())):
-            _is_dark_mode = self._get_cached_theme()
-            self._update_size_and_transfer_columns(row, item, _is_dark_mode)
+            theme_mode = self._current_theme_mode
+            self._update_size_and_transfer_columns(row, item, theme_mode)
     
-    def _update_size_and_transfer_columns(self, row: int, item: GalleryQueueItem, _is_dark_mode: bool):
+    def _update_size_and_transfer_columns(self, row: int, item: GalleryQueueItem, theme_mode: str):
         """Update size and transfer columns with proper formatting"""
         # Size (column 8)
         size_bytes = int(getattr(item, 'total_size', 0) or 0)
@@ -6071,12 +5600,13 @@ class ImxUploadGUI(QMainWindow):
         xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
         try:
             if item.status == "uploading" and transfer_text:
-                xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
+                xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
             else:
                 if transfer_text:
                     xfer_item.setForeground(QColor(0, 0, 0, 160))
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         self.gallery_table.setItem(row, 9, xfer_item)
     
 
@@ -6199,8 +5729,9 @@ class ImxUploadGUI(QMainWindow):
                     path = name_item.data(Qt.ItemDataRole.UserRole)
                     if path:
                         selected_paths.add(path)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Clear the table first
         self.gallery_table.clearContents()
@@ -6303,14 +5834,16 @@ class ImxUploadGUI(QMainWindow):
             xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             try:
                 # Active transfers bold and full opacity; completed/failed semi-opaque and not bold
+                theme_mode = self._current_theme_mode
                 if item.status == "uploading" and transfer_text:
                     # Highlight active transfer in blue-ish to match header accent, keep contrast in both themes
-                    xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
+                    xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
                 elif item.status in ("completed", "failed") and transfer_text:
                     # Slightly more opaque for finished items (+0.2 alpha)
-                    xfer_item.setForeground(QColor(255, 255, 255, 230) if _is_dark_mode else QColor(0, 0, 0, 190))
-            except Exception:
-                pass
+                    xfer_item.setForeground(QColor(255, 255, 255, 230) if theme_mode == 'dark' else QColor(0, 0, 0, 190))
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
             self.gallery_table.setItem(row, 9, xfer_item)
 
             # Template name: center only if it fits; otherwise left-align so the start is visible
@@ -6334,7 +5867,7 @@ class ImxUploadGUI(QMainWindow):
             # No need to duplicate the logic here
 
             # Action buttons - always create fresh widget to avoid sorting issues
-            action_widget = ActionButtonWidget()
+            action_widget = ActionButtonWidget(parent=self)
             # Connect button signals with proper closure capture
             # Disable Start while scanning
             action_widget.start_btn.setEnabled(item.status != "scanning")
@@ -6353,8 +5886,9 @@ class ImxUploadGUI(QMainWindow):
                     name_item = self.gallery_table.item(row, 1)
                     if name_item and name_item.data(Qt.ItemDataRole.UserRole) in selected_paths:
                         self.gallery_table.selectRow(row)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
         
         # Restore scroll position
         scrollbar = self.gallery_table.verticalScrollBar()
@@ -6367,9 +5901,9 @@ class ImxUploadGUI(QMainWindow):
             count_completed = sum(1 for item in items if item.status == "completed")
 
             # Update button texts with counts (preserve leading space for visual alignment)
-            self.start_all_btn.setText(f" Start All ({count_startable})")
-            self.pause_all_btn.setText(f" Pause All ({count_pausable})")
-            self.clear_completed_btn.setText(f" Clear Completed ({count_completed})")
+            self.start_all_btn.setText(" Start All " + (f"({count_startable})" if count_startable else ""))
+            self.pause_all_btn.setText(" Pause All " + (f"({count_pausable})" if count_pausable else ""))
+            self.clear_completed_btn.setText(" Clear Completed " + (f"({count_completed})" if count_completed else ""))
 
             # Enable/disable based on counts
             self.start_all_btn.setEnabled(count_startable > 0)
@@ -6381,8 +5915,9 @@ class ImxUploadGUI(QMainWindow):
             has_uploading = any(item.status == "uploading" for item in items)
             try:
                 self.settings_group.setEnabled(not (count_queued > 0 or has_uploading))
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
         except Exception:
             # Controls may not be initialized yet during early calls
             pass
@@ -6392,8 +5927,9 @@ class ImxUploadGUI(QMainWindow):
                 self.gallery_table.blockSignals(False)
                 self.gallery_table.setSortingEnabled(prev_sorting_enabled)
                 self.gallery_table.setUpdatesEnabled(prev_updates_enabled)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
     
     def _get_current_tab_items(self):
         """Get items filtered by current tab"""
@@ -6448,9 +5984,9 @@ class ImxUploadGUI(QMainWindow):
             count_completed = sum(1 for item in visible_items if item.status == "completed")
 
             # Update button texts with counts (preserve leading space for visual alignment)
-            self.start_all_btn.setText(f" Start All ({count_startable})")
-            self.pause_all_btn.setText(f" Pause All ({count_pausable})")
-            self.clear_completed_btn.setText(f" Clear Completed ({count_completed})")
+            self.start_all_btn.setText(" Start All " + (f"({count_startable})" if count_startable else ""))
+            self.pause_all_btn.setText(" Pause All " + (f"({count_pausable})" if count_pausable else ""))
+            self.clear_completed_btn.setText(" Clear Completed " + (f"({count_completed})" if count_completed else ""))
 
             # Enable/disable based on counts
             self.start_all_btn.setEnabled(count_startable > 0)
@@ -6550,8 +6086,9 @@ class ImxUploadGUI(QMainWindow):
         # Show transferred in Speed
         try:
             self.speed_transferred_value_label.setText(f"{total_size_str}")
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         # Current transfer speed: calculate from ALL uploading items (not tab-filtered)
         all_items = self.queue_manager.get_all_items()
         current_kibps = 0.0
@@ -6591,8 +6128,9 @@ class ImxUploadGUI(QMainWindow):
         # Also ensure settings are disabled while uploads are active
         try:
             self.settings_group.setEnabled(False)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         for row in range(self.gallery_table.rowCount()):
             name_item = self.gallery_table.item(row, 1)
@@ -6635,8 +6173,9 @@ class ImxUploadGUI(QMainWindow):
                         # Estimate uploaded bytes from progress percentage and total size
                         estimated_uploaded = (progress_percent / 100.0) * item.total_size
                         item.current_kibps = (estimated_uploaded / elapsed) / 1024.0
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
 
         # Add to batched progress updates for non-blocking GUI updates
         self._progress_batcher.add_update(path, completed, total, progress_percent, current_image)
@@ -6687,8 +6226,8 @@ class ImxUploadGUI(QMainWindow):
                 xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
                 # Use live transfer color
-                _is_dark_mode = self._get_cached_theme()
-                xfer_item.setForeground(QColor(173, 216, 255, 255) if _is_dark_mode else QColor(20, 90, 150, 255))
+                theme_mode = self._current_theme_mode
+                xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
                 self.gallery_table.setItem(matched_row, 9, xfer_item)
             
             # Handle completion when all images uploaded OR progress reaches 100%
@@ -6727,8 +6266,9 @@ class ImxUploadGUI(QMainWindow):
                     elapsed = max(float(item.finished_time or time.time()) - float(item.start_time or item.finished_time), 0.001)
                     item.final_kibps = (float(getattr(item, 'uploaded_bytes', 0) or 0) / elapsed) / 1024.0
                     item.current_kibps = 0.0
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
                 
                 # Render Transfer column (9) - use cached function
                 try:
@@ -6744,15 +6284,17 @@ class ImxUploadGUI(QMainWindow):
                 try:
                     if final_text:
                         xfer_item.setForeground(QColor(0, 0, 0, 160))
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
                 self.gallery_table.setItem(matched_row, 9, xfer_item)
                 
             # Update overall progress bar and info/speed displays after individual table updates
             self.update_progress_display()
                 
-        except Exception:
-            pass  # Fail silently to prevent blocking
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise  # Fail silently to prevent blocking
     
     def on_gallery_completed(self, path: str, results: dict):
         """Handle gallery completion - minimal GUI thread work, everything else deferred"""
@@ -6775,8 +6317,9 @@ class ImxUploadGUI(QMainWindow):
                     elapsed = max(float(item.finished_time or time.time()) - float(item.start_time or item.finished_time), 0.001)
                     item.final_kibps = (float(results.get('uploaded_size', 0) or 0) / elapsed) / 1024.0
                     item.current_kibps = 0.0
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
         
         # Force final progress update to show 100% completion
         if path in self.queue_manager.items:
@@ -6802,8 +6345,9 @@ class ImxUploadGUI(QMainWindow):
                 if path in self.queue_manager.items:
                     item = self.queue_manager.items[path]
                     item.final_kibps = self._current_transfer_kbps
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Re-enable settings if no remaining active items (defer to avoid blocking)
         QTimer.singleShot(5, self._check_and_enable_settings)
@@ -6833,8 +6377,9 @@ class ImxUploadGUI(QMainWindow):
             remaining = self.queue_manager.get_all_items()
             any_active = any(i.status in ("queued", "uploading") for i in remaining)
             self.settings_group.setEnabled(not any_active)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
     
     def _update_unnamed_count_background(self):
         """Update unnamed gallery count in background"""
@@ -6873,8 +6418,9 @@ class ImxUploadGUI(QMainWindow):
             settings.sync()
             # Refresh progress display to show updated stats
             self.update_progress_display()
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
     
     
     def on_completion_processed(self, path: str):
@@ -6923,8 +6469,9 @@ class ImxUploadGUI(QMainWindow):
             
             if found_row is not None:
                 self._set_renamed_cell_icon(found_row, True)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def on_gallery_failed(self, path: str, error_message: str):
         """Handle gallery failure"""
@@ -6939,8 +6486,9 @@ class ImxUploadGUI(QMainWindow):
             remaining = self.queue_manager.get_all_items()
             any_active = any(i.status in ("queued", "uploading") for i in remaining)
             self.settings_group.setEnabled(not any_active)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         # Update display when status changes  
         self._update_specific_gallery_display(path)
@@ -6957,8 +6505,9 @@ class ImxUploadGUI(QMainWindow):
             vbar = self.log_text.verticalScrollBar()
             if vbar:
                 vbar.setValue(vbar.maximum())
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def add_log_message(self, message: str):
         """Add message to log"""
@@ -6988,8 +6537,9 @@ class ImxUploadGUI(QMainWindow):
                 bits = token.split(":")
                 category = bits[0] or "general"
                 subtype = bits[1] if len(bits) > 1 else None
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         # GUI visibility based on settings
         show_in_gui = True
@@ -7002,8 +6552,9 @@ class ImxUploadGUI(QMainWindow):
                     show_in_gui = False
                 if subtype == "gallery" and not logger.should_log_upload_gallery_success("gui"):
                     show_in_gui = False
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         # Append to GUI log without category tags and auto-follow
         if show_in_gui:
@@ -7034,8 +6585,9 @@ class ImxUploadGUI(QMainWindow):
         try:
             if getattr(self, "_log_viewer_dialog", None) is not None and self._log_viewer_dialog.isVisible():
                 self._log_viewer_dialog.append_message(message)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def open_log_viewer(self):
         """Open comprehensive settings to logs tab"""
@@ -7363,13 +6915,15 @@ class ImxUploadGUI(QMainWindow):
         try:
             self.clear_completed_btn.setEnabled(False)
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         # Pause periodic updates to avoid contention
         try:
             self.update_timer.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         try:
             # Pre-check counts for diagnostics
             items_snapshot = self._get_current_tab_items()
@@ -7405,8 +6959,9 @@ class ImxUploadGUI(QMainWindow):
                 self.update_timer.start(500)
                 QApplication.restoreOverrideCursor()
                 self.clear_completed_btn.setEnabled(True)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
     
     def delete_selected_items(self):
         """Delete selected items from the queue"""
@@ -7521,8 +7076,9 @@ class ImxUploadGUI(QMainWindow):
             # Delete from database to prevent reloading
             try:
                 self.queue_manager.store._executor.submit(self.queue_manager.store.delete_by_paths, selected_paths)
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Exception in main_window: {e}", level="error", category="ui")
+                raise
             
             # Display updated by row removal above
             log(f"Updated display", level="debug")
@@ -7567,10 +7123,11 @@ class ImxUploadGUI(QMainWindow):
         self.restore_table_settings()
         # Apply saved theme
         try:
-            theme = str(self.settings.value('ui/theme', 'system'))
+            theme = str(self.settings.value('ui/theme', 'dark'))
             self.apply_theme(theme)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         
         # Apply saved font size
         try:
@@ -7601,8 +7158,9 @@ class ImxUploadGUI(QMainWindow):
             self.settings.setValue("table/column_widths", json.dumps(widths))
             self.settings.setValue("table/column_visible", json.dumps(visibility))
             self.settings.setValue("table/column_order", json.dumps(order))
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def restore_table_settings(self):
         """Restore table column widths, visibility, and order from settings"""
@@ -7617,15 +7175,17 @@ class ImxUploadGUI(QMainWindow):
                     for i in range(min(column_count, len(widths))):
                         if isinstance(widths[i], int) and widths[i] > 0:
                             self.gallery_table.setColumnWidth(i, widths[i])
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
             if visible_raw:
                 try:
                     visible = json.loads(visible_raw)
                     for i in range(min(column_count, len(visible))):
                         self.gallery_table.setColumnHidden(i, not bool(visible[i]))
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
             if order_raw:
                 try:
                     header = self.gallery_table.horizontalHeader()
@@ -7641,10 +7201,12 @@ class ImxUploadGUI(QMainWindow):
                         current_visual = header.visualIndex(logical)
                         if current_visual != target_visual:
                             header.moveSection(current_visual, target_visual)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    log(f"Exception in main_window: {e}", level="error", category="ui")
+                    raise
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def _on_header_section_resized(self, logicalIndex, oldSize, newSize):
         """Save widths on resize events"""
@@ -7674,15 +7236,17 @@ class ImxUploadGUI(QMainWindow):
             current = self.gallery_table.columnWidth(name_col)
             if available > current and available > 0:
                 self.gallery_table.setColumnWidth(name_col, available)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def _on_header_section_moved(self, logicalIndex, oldVisualIndex, newVisualIndex):
         """Persist order when user drags columns."""
         try:
             self.save_table_settings()
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
     def show_header_context_menu(self, position):
         """Right-click on header: toggle column visibility"""
@@ -7705,8 +7269,9 @@ class ImxUploadGUI(QMainWindow):
         # Let our name-column auto-expand handle whitespace on next layout pass
         try:
             self.gallery_table.auto_expand_name_column()
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
         self.save_table_settings()
     
     def on_setting_changed(self):
@@ -7835,8 +7400,9 @@ class ImxUploadGUI(QMainWindow):
                 if reply == QMessageBox.StandardButton.No:
                     event.ignore()
                     return
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
 
         self.save_settings()
 
@@ -7873,8 +7439,8 @@ class ImxUploadGUI(QMainWindow):
     def on_gallery_cell_clicked(self, row, column):
         """Handle clicks on gallery table cells for template editing and custom column editing."""
        
-        # Handle custom columns (12-15) with single-click editing
-        if 12 <= column <= 15:
+        # Handle custom columns (13-16) with single-click editing
+        if GalleryTableWidget.COL_CUSTOM1 <= column <= GalleryTableWidget.COL_CUSTOM4:
             # Get the correct table and trigger edit mode
             table = getattr(self.gallery_table, 'gallery_table', self.gallery_table)
             if table:
@@ -7883,20 +7449,20 @@ class ImxUploadGUI(QMainWindow):
                     table.editItem(item)
             return
             
-        # Only handle clicks on template column (column 10) for template editing
-        if column != 10:
+        # Only handle clicks on template column for template editing
+        if column != GalleryTableWidget.COL_TEMPLATE:
             return
-        
+
         # Get the table widget
         if hasattr(self.gallery_table, 'gallery_table'):
             table = self.gallery_table.gallery_table
         else:
             table = self.gallery_table
 
-        # Get gallery path the same way as context menu - from column 1 UserRole data
-        name_item = table.item(row, 1)  # Gallery name column
+        # Get gallery path the same way as context menu - from name column UserRole data
+        name_item = table.item(row, GalleryTableWidget.COL_NAME)
         if not name_item:
-            log(f"Mouseclick -> No item found at row {row}, column 1", category="ui", level="debug")
+            log(f"Mouseclick -> No item found at row {row}, column {GalleryTableWidget.COL_NAME}", category="ui", level="debug")
             return
         
         gallery_path = name_item.data(Qt.ItemDataRole.UserRole)
@@ -7905,7 +7471,7 @@ class ImxUploadGUI(QMainWindow):
             return
 
         # Get current template
-        template_item = table.item(row, 10)
+        template_item = table.item(row, GalleryTableWidget.COL_TEMPLATE)
         current_template = template_item.text() if template_item else "default"
         
         # Show simple dialog instead of inline combo
@@ -8142,9 +7708,9 @@ class ImxUploadGUI(QMainWindow):
     def _on_table_item_changed(self, item):
         """Handle table item changes to persist custom columns"""
         try:
-            # Only handle custom columns (12-15: Custom1, Custom2, Custom3, Custom4)
+            # Only handle custom columns (13-16: Custom1, Custom2, Custom3, Custom4)
             column = item.column()
-            if column < 12 or column > 15:
+            if column < GalleryTableWidget.COL_CUSTOM1 or column > GalleryTableWidget.COL_CUSTOM4:
                 return
             
             # Skip if this is just table population/refresh (signals should be blocked during those operations)
@@ -8158,7 +7724,7 @@ class ImxUploadGUI(QMainWindow):
             
             # Get the gallery path from the name column (UserRole data)
             row = item.row()
-            name_item = table.item(row, 1)  # Name column
+            name_item = table.item(row, GalleryTableWidget.COL_NAME)
             if not name_item:
                 return
                 
@@ -8167,7 +7733,12 @@ class ImxUploadGUI(QMainWindow):
                 return
             
             # Map column to field name
-            field_names = {12: 'custom1', 13: 'custom2', 14: 'custom3', 15: 'custom4'}
+            field_names = {
+                GalleryTableWidget.COL_CUSTOM1: 'custom1',
+                GalleryTableWidget.COL_CUSTOM2: 'custom2',
+                GalleryTableWidget.COL_CUSTOM3: 'custom3',
+                GalleryTableWidget.COL_CUSTOM4: 'custom4'
+            }
             field_name = field_names.get(column)
             if not field_name:
                 return

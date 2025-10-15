@@ -6,6 +6,7 @@ PyQt6_sip==13.10.2
 pillow==11.3.0
 tqdm==4.67.1
 cryptography==45.0.5
+standard-imghdr==3.10.14
 
 # Windows-specific
 colorama==0.4.6

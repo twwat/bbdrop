@@ -8,10 +8,10 @@ from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QProgressBar,
     QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QStyle, QMenu, QMessageBox, QTabBar
+    QHeaderView, QStyle, QMenu, QMessageBox, QTabBar, QListWidget, QApplication
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMimeData, QPoint
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QDragEnterEvent, QDropEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMimeData, QPoint, QSize
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QDragEnterEvent, QDropEvent, QKeyEvent
 
 from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
@@ -68,114 +68,226 @@ class TableProgressWidget(QWidget):
 
 
 class ActionButtonWidget(QWidget):
-    """Widget containing action buttons for table rows"""
+    """Action buttons widget for table cells"""
     
-    # Signals
-    start_clicked = pyqtSignal(str)
-    pause_clicked = pyqtSignal(str)
-    stop_clicked = pyqtSignal(str)
-    remove_clicked = pyqtSignal(str)
-    view_clicked = pyqtSignal(str)
-    
-    def __init__(self, gallery_path: str, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.gallery_path = gallery_path
-        self.current_state = QUEUE_STATE_READY
-        self.setup_ui()
-    
-    def setup_ui(self):
-        """Initialize the UI"""
-        layout = QHBoxLayout()
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(2)
+        from src.gui.icon_manager import get_icon_manager
+        self.icon_manager = get_icon_manager()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 1, 4, 1)  # Better horizontal padding, minimal vertical
+        layout.setSpacing(3)  # Slightly better spacing between buttons
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)  # left-align and center vertically
         
-        # Start/Resume button
-        self.start_btn = QPushButton()
-        self.start_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
-        self.start_btn.setToolTip("Start Upload")
-        self.start_btn.setMaximumWidth(30)
-        self.start_btn.clicked.connect(lambda: self.start_clicked.emit(self.gallery_path))
+        # Set consistent minimum height for the widget to match table row height
+        self.setProperty("class", "status-row")
         
-        # Pause button
-        self.pause_btn = QPushButton()
-        self.pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
-        self.pause_btn.setToolTip("Pause Upload")
-        self.pause_btn.setMaximumWidth(30)
-        self.pause_btn.setEnabled(False)
-        self.pause_btn.clicked.connect(lambda: self.pause_clicked.emit(self.gallery_path))
+        self.start_btn = QPushButton("Start")
+        self.start_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        # Set icon and hover style
+        try:
+            self.start_btn.setIcon(self.icon_manager.get_icon('start'))
+            self.start_btn.setIconSize(QSize(18, 18))
+            self.start_btn.setText("")
+            self.start_btn.setToolTip("Start")
+            self.start_btn.setProperty("class", "icon-btn")
+        except Exception:
+            pass
         
-        # Stop button
-        self.stop_btn = QPushButton()
-        self.stop_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
-        self.stop_btn.setToolTip("Stop Upload")
-        self.stop_btn.setMaximumWidth(30)
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.clicked.connect(lambda: self.stop_clicked.emit(self.gallery_path))
+        #self.start_btn.setStyleSheet("""
+        #    QPushButton {
+        #        background-color: #d8f0e2;
+        #        border: 1px solid #85a190;
+        #        border-radius: 3px;
+        #        font-size: 12px;
+        #    }
+        #    QPushButton:hover {
+        #        background-color: #bee6cf;
+        #        border: 1px solid #85a190;
+        #    }
+        #    QPushButton:pressed {
+        #        background-color: #6495ed;
+        #        border: 1px solid #1e2c47;
+        #    }
+        #""")
         
-        # Remove button
-        self.remove_btn = QPushButton()
-        self.remove_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
-        self.remove_btn.setToolTip("Remove from Queue")
-        self.remove_btn.setMaximumWidth(30)
-        self.remove_btn.clicked.connect(lambda: self.remove_clicked.emit(self.gallery_path))
+        self.stop_btn = QPushButton("Stop")
         
-        # View button
-        self.view_btn = QPushButton()
-        self.view_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
-        self.view_btn.setToolTip("View Details")
-        self.view_btn.setMaximumWidth(30)
-        self.view_btn.clicked.connect(lambda: self.view_clicked.emit(self.gallery_path))
+        self.stop_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        self.stop_btn.setVisible(False)
+        try:
+            self.stop_btn.setIcon(self.icon_manager.get_icon('stop'))
+            self.stop_btn.setIconSize(QSize(18, 18))
+            self.stop_btn.setText("")
+            self.stop_btn.setToolTip("Stop")
+            self.stop_btn.setProperty("class", "icon-btn")
+        except Exception:
+            pass
+        #self.stop_btn.setStyleSheet("""
+        #    QPushButton {
+        #        background-color: #f0938a;
+
+        #        border: 1px solid #cf4436;
+        #        border-radius: 3px;
+        #        font-size: 12px;
+
+        #    }
+        #    QPushButton:hover {
+        #        background-color: #c0392b;
+        #    }
+        #    QPushButton:pressed {
+        #        background-color: #a93226;
+        #        border: 1px solid #8b291a;
+        #    }
+        #""")
+        
+        self.view_btn = QPushButton("View")
+        self.view_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        self.view_btn.setVisible(False)
+        try:
+            self.view_btn.setIcon(self.icon_manager.get_icon('view'))
+            self.view_btn.setIconSize(QSize(18, 18))
+            self.view_btn.setText("")
+            self.view_btn.setToolTip("View")
+            self.view_btn.setProperty("class", "icon-btn")
+        except Exception:
+            pass
+        #self.view_btn.setStyleSheet("""
+        #    QPushButton {
+        #        background-color: #dfe9fb;
+        #        border: 1px solid #999;
+        #        border-radius: 3px;
+        #        font-size: 12px;
+
+        #    }
+        #    QPushButton:hover {
+        #        background-color: #c8d9f8;
+        #        border: 1px solid #7b8dac;
+        #    }
+        #    QPushButton:pressed {
+        #        background-color: #072213;
+        #    }
+        #""")
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        self.cancel_btn.setVisible(False)
+        try:
+            # Use pause.png as requested
+            self.cancel_btn.setIcon(self.icon_manager.get_icon('cancel'))
+            self.cancel_btn.setIconSize(QSize(18, 18))
+            self.cancel_btn.setText("")
+            self.cancel_btn.setToolTip("Pause/Cancel queued item")
+            self.cancel_btn.setProperty("class", "icon-btn")
+        except Exception:
+            pass    
+        #self.cancel_btn.setStyleSheet("""
+        #    QPushButton {
+        #        background-color: #f7c370;
+        #        border: 1px solid #aa6d0c;
+        #        border-radius: 3px;
+        #        font-size: 12px;
+        #    }
+        #    QPushButton:hover {
+        #        background-color: #f5af41;
+        #        border: 1px solid #794e09;
+        #    }
+        #    QPushButton:pressed {
+        #        background-color: #f39c12;
+        #        border: 1px solid #482e05;
+        #    }
+        #""")
         
         layout.addWidget(self.start_btn)
-        layout.addWidget(self.pause_btn)
         layout.addWidget(self.stop_btn)
-        layout.addWidget(self.remove_btn)
         layout.addWidget(self.view_btn)
-        layout.addStretch()
-        
-        self.setLayout(layout)
+        layout.addWidget(self.cancel_btn)
+        # Default to left alignment; will auto-center only if content fits
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        self._layout = layout
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        try:
+            # Auto-center actions only if all visible buttons fit in the available width
+            visible_buttons = [b for b in (self.start_btn, self.stop_btn, self.view_btn, self.cancel_btn) if b.isVisible()]
+            if not visible_buttons:
+                return
+            spacing = self._layout.spacing() or 3
+            content_width = sum(btn.width() for btn in visible_buttons) + spacing * (len(visible_buttons) - 1)
+            if content_width <= self.width():
+                self._layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            else:
+                self._layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        except Exception:
+            pass
     
-    def update_state(self, state: str):
-        """Update button states based on gallery state"""
-        self.current_state = state
-        
-        if state == QUEUE_STATE_READY:
-            self.start_btn.setEnabled(True)
-            self.pause_btn.setEnabled(False)
-            self.stop_btn.setEnabled(False)
-            self.remove_btn.setEnabled(True)
-            
-        elif state == QUEUE_STATE_QUEUED:
-            self.start_btn.setEnabled(False)
-            self.pause_btn.setEnabled(False)
-            self.stop_btn.setEnabled(True)
-            self.remove_btn.setEnabled(False)
-            
-        elif state == QUEUE_STATE_UPLOADING:
-            self.start_btn.setEnabled(False)
-            self.pause_btn.setEnabled(True)
-            self.stop_btn.setEnabled(True)
-            self.remove_btn.setEnabled(False)
-            
-        elif state == QUEUE_STATE_PAUSED:
-            self.start_btn.setEnabled(True)
-            self.start_btn.setToolTip("Resume Upload")
-            self.pause_btn.setEnabled(False)
-            self.stop_btn.setEnabled(True)
-            self.remove_btn.setEnabled(True)
-            
-        elif state in [QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED]:
-            self.start_btn.setEnabled(False)
-            self.pause_btn.setEnabled(False)
-            self.stop_btn.setEnabled(False)
-            self.remove_btn.setEnabled(True)
-            
-        elif state == QUEUE_STATE_INCOMPLETE:
-            self.start_btn.setEnabled(True)
-            self.start_btn.setToolTip("Retry Upload")
-            self.pause_btn.setEnabled(False)
-            self.stop_btn.setEnabled(False)
-            self.remove_btn.setEnabled(True)
+    def update_buttons(self, status: str):
+        """Update button visibility based on status"""
+        if status == "ready":
+            self.start_btn.setVisible(True)
+            self.start_btn.setToolTip("Start")
+            self.stop_btn.setVisible(False)
+            self.view_btn.setVisible(False)
+            self.cancel_btn.setVisible(False)
+        elif status == "queued":
+            self.start_btn.setVisible(False)
+            self.stop_btn.setVisible(False)
+            self.view_btn.setVisible(False)
+            self.cancel_btn.setVisible(True)
+        elif status == "uploading":
+            self.start_btn.setVisible(False)
+            self.stop_btn.setVisible(True)
+            self.stop_btn.setToolTip("Stop")
+            self.view_btn.setVisible(False)
+            self.cancel_btn.setVisible(False)
+        elif status == "paused":
+            self.start_btn.setVisible(True)
+            self.start_btn.setToolTip("Resume")
+            self.stop_btn.setVisible(False)
+            self.view_btn.setVisible(False)
+            self.cancel_btn.setVisible(False)
+        elif status == "incomplete":
+            self.start_btn.setVisible(True)
+            self.start_btn.setToolTip("Resume")
+            self.stop_btn.setVisible(False)
+            self.view_btn.setVisible(False)
+            self.cancel_btn.setVisible(False)
+        elif status == "completed":
+            self.start_btn.setVisible(False)
+            self.stop_btn.setVisible(False)
+            self.view_btn.setVisible(True)
+            self.view_btn.setIcon(self.icon_manager.get_icon('view'))
+            self.view_btn.setToolTip("View BBCode")
+            self.cancel_btn.setVisible(False)
+        elif status == "failed":
+            self.start_btn.setVisible(False)
+            self.stop_btn.setVisible(False)
+            self.view_btn.setVisible(True)
+            self.view_btn.setIcon(self.icon_manager.get_icon('view_error'))
+            self.view_btn.setToolTip("View error details")
+            self.cancel_btn.setVisible(False)
+        else:  # other statuses
+            self.start_btn.setVisible(False)
+            self.stop_btn.setVisible(False)
+            self.view_btn.setVisible(False)
+            self.cancel_btn.setVisible(False)
+
+    def refresh_icons(self):
+        """Refresh all button icons for theme changes"""
+        try:
+            # Refresh all button icons
+            self.start_btn.setIcon(self.icon_manager.get_icon('start'))
+            self.stop_btn.setIcon(self.icon_manager.get_icon('stop'))
+            self.view_btn.setIcon(self.icon_manager.get_icon('view'))
+            self.cancel_btn.setIcon(self.icon_manager.get_icon('cancel'))
+
+            # If view button is currently showing error icon, update that too
+            if self.view_btn.isVisible() and self.view_btn.toolTip() == "View error details":
+                self.view_btn.setIcon(self.icon_manager.get_icon('view_error'))
+        except Exception:
+            pass
 
 
 class StatusIconWidget(QWidget):
@@ -423,7 +535,7 @@ class GalleryTableWidget(QTableWidget):
         self.setItem(row, 8, QTableWidgetItem(gallery_data.get('template_name', 'default')))
         
         # Actions
-        actions_widget = ActionButtonWidget(gallery_data.get('path', ''))
+        actions_widget = ActionButtonWidget()
         actions_widget.update_state(gallery_data.get('status', QUEUE_STATE_READY))
         self.setCellWidget(row, 9, actions_widget)
         
@@ -468,3 +580,144 @@ class GalleryTableWidget(QTableWidget):
             if path_item and path_item.text() == path:
                 return row
         return None
+
+
+class CopyableLogListWidget(QListWidget):
+    """QListWidget with copy support for log messages"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        """Handle Ctrl+C to copy selected log entries"""
+        if event.key() == Qt.Key.Key_C and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self.copy_selected_items()
+        else:
+            super().keyPressEvent(event)
+
+    def copy_selected_items(self):
+        """Copy selected log entries to clipboard"""
+        selected_items = self.selectedItems()
+        if not selected_items:
+            return
+
+        # Get text from all selected items
+        texts = [item.text() for item in selected_items]
+
+        # Join with newlines and copy to clipboard
+        content = "\n".join(texts)
+        clipboard = QApplication.clipboard()
+        clipboard.setText(content)
+
+        # Show status bar feedback
+        count = len(selected_items)
+        entry_word = "entry" if count == 1 else "entries"
+        message = f"Copied {count} log {entry_word} to clipboard"
+
+        # Find parent window with status bar
+        widget = self.parent()
+        while widget:
+            if hasattr(widget, 'statusBar') and widget.statusBar():
+                widget.statusBar().showMessage(message, 2500)
+                break
+            widget = widget.parent() if hasattr(widget, 'parent') else None
+
+    def show_context_menu(self, position):
+        """Show context menu with copy option"""
+        selected_items = self.selectedItems()
+        if not selected_items:
+            return
+
+        menu = QMenu(self)
+        copy_action = menu.addAction("Copy")
+        copy_action.setShortcut("Ctrl+C")
+
+        action = menu.exec(self.mapToGlobal(position))
+        if action == copy_action:
+            self.copy_selected_items()
+
+
+class CopyableLogTableWidget(QTableWidget):
+    """QTableWidget with copy support for log viewer"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        """Handle Ctrl+C to copy selected log entries"""
+        if event.key() == Qt.Key.Key_C and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self.copy_selected_rows()
+        else:
+            super().keyPressEvent(event)
+
+    def copy_selected_rows(self):
+        """Copy selected log rows to clipboard as plain text"""
+        selected_rows = set()
+        for item in self.selectedItems():
+            selected_rows.add(item.row())
+
+        if not selected_rows:
+            return
+
+        # Sort rows in display order
+        sorted_rows = sorted(selected_rows)
+
+        # Build text from selected rows (timestamp + category + message)
+        lines = []
+        for row in sorted_rows:
+            row_parts = []
+
+            # Get timestamp (column 0)
+            timestamp_item = self.item(row, 0)
+            if timestamp_item and timestamp_item.text():
+                row_parts.append(timestamp_item.text())
+
+            # Get category (column 1) in brackets
+            category_item = self.item(row, 1)
+            if category_item and category_item.text():
+                row_parts.append(f"[{category_item.text()}]")
+
+            # Get message (column 2)
+            message_item = self.item(row, 2)
+            if message_item:
+                row_parts.append(message_item.text())
+
+            # Join parts with space and add to lines
+            if row_parts:
+                lines.append(" ".join(row_parts))
+
+        # Join all lines and copy to clipboard
+        content = "\n".join(lines)
+        clipboard = QApplication.clipboard()
+        clipboard.setText(content)
+
+        # Show status bar feedback
+        count = len(sorted_rows)
+        entry_word = "entry" if count == 1 else "entries"
+        message = f"Copied {count} log {entry_word} to clipboard"
+
+        # Find parent window with status bar
+        widget = self.parent()
+        while widget:
+            if hasattr(widget, 'statusBar') and widget.statusBar():
+                widget.statusBar().showMessage(message, 2500)
+                break
+            widget = widget.parent() if hasattr(widget, 'parent') else None
+
+    def show_context_menu(self, position):
+        """Show context menu with copy option"""
+        selected_items = self.selectedItems()
+        if not selected_items:
+            return
+
+        menu = QMenu(self)
+        copy_action = menu.addAction("Copy")
+        copy_action.setShortcut("Ctrl+C")
+
+        action = menu.exec(self.mapToGlobal(position))
+        if action == copy_action:
+            self.copy_selected_rows()
