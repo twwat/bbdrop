@@ -5,9 +5,8 @@ Centralized management of all application icons with validation and clear mappin
 
 import os
 from typing import Dict, Optional, List, Set, Union
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QStyle
-from PyQt6.QtCore import QSize
 
 
 class IconManager:
@@ -45,6 +44,9 @@ class IconManager:
         'settings':             ['settings-light.png',          'settings-dark.png'],
         'templates':            ['templates-light.png',         'templates-dark.png'],
         'credentials':          ['credentials-light.png',       'credentials-dark.png'],
+        'toggle_theme':         ['toggle_theme-light.png',      'toggle_theme-dark.png'],
+        'radio_check':          ['radio_check-light.png',       'radio_check-dark.png'],
+        'checkbox_check':       ['checkbox_check-light.png',    'checkbox_check-dark.png'],
         'main_window':          ['imxup.png', 'imxup.png'],
         'app_icon':             'imxup.ico',
         # Alternative sizes (optional)
@@ -81,13 +83,7 @@ class IconManager:
         self._icon_cache: Dict[str, QIcon] = {}
         self._missing_icons: Set[str] = set()
         self._validated = False
-        
-        # Cache for inverted icons to avoid repeated processing
-        self._inverted_cache: Dict[str, QIcon] = {}
-        
-        # Auto-generate dark variants for all single-icon configs
-        self._create_missing_dark_variants()
-        
+
         # Force convert status icons to use dark variants since they exist
         #status_conversions = {
         #    'status_completed':     ['status_completed-light.png',  'status_completed-dark.png'],
@@ -256,131 +252,6 @@ class IconManager:
             print(f"Warning: Invalid icon configuration: {config}")
             return None
     
-    def _needs_inversion(self, is_dark_theme: bool, is_selected: bool) -> bool:
-        """
-        Determine if a single icon needs color inversion.
-        
-        Args:
-            is_dark_theme: Whether current theme is dark  
-            is_selected: Whether icon is for selected row
-            
-        Returns:
-            True if icon should be inverted
-        """
-        # Invert when we need light content on dark background
-        return (is_dark_theme and not is_selected) or (not is_dark_theme and is_selected)
-    
-    def _invert_icon(self, icon: QIcon, original_path: str, requested_size: int = 96) -> QIcon:
-        """
-        Create an inverted version of an icon at the requested size.
-        
-        Args:
-            icon: Original QIcon
-            original_path: Path to original icon file (for caching)
-            requested_size: Size to generate the inverted icon at
-            
-        Returns:
-            Inverted QIcon at the requested size
-        """
-        # Check inverted cache first with size-specific key
-        cache_key = f"inverted_{original_path}_{requested_size}"
-        if cache_key in self._inverted_cache:
-            return self._inverted_cache[cache_key]
-        
-        # Get the original pixmap at the requested size
-        original_pixmap = icon.pixmap(requested_size, requested_size)
-        if original_pixmap.isNull():
-            return icon  # Return original if we can't process it
-        
-        # Create inverted pixmap at the same size
-        inverted_pixmap = QPixmap(requested_size, requested_size)
-        inverted_pixmap.fill(QColor(0, 0, 0, 0))  # Transparent background
-        
-        painter = QPainter(inverted_pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        
-        # Draw the original pixmap (scale to fill the requested size)
-        painter.drawPixmap(0, 0, requested_size, requested_size, original_pixmap)
-        
-        # Apply color inversion by using different composition mode
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Difference)
-        painter.fillRect(0, 0, requested_size, requested_size, QColor(255, 255, 255))
-        
-        painter.end()
-        
-        # Create new icon from inverted pixmap
-        inverted_icon = QIcon(inverted_pixmap)
-        
-        # Cache the result
-        self._inverted_cache[cache_key] = inverted_icon
-        
-        return inverted_icon
-    
-    def _create_missing_dark_variants(self):
-        """Auto-generate dark variants for all single-icon configs at startup"""
-        import os
-        import shutil
-        
-        for icon_key, config in self.ICON_MAP.items():
-            if isinstance(config, str):  # Single icon config
-                light_filename = config
-                light_path = os.path.join(self.assets_dir, light_filename)
-                
-                # Generate dark variant filename
-                base, ext = os.path.splitext(light_filename)
-                dark_filename = f"{base}-dark{ext}"
-                dark_path = os.path.join(self.assets_dir, dark_filename)
-                
-                # Create dark variant if it doesn't exist and light exists
-                if os.path.exists(light_path) and not os.path.exists(dark_path):
-                    try:
-                        # Load original pixmap directly to preserve size and transparency
-                        from PyQt6.QtGui import QPixmap, QPainter
-                        light_pixmap = QPixmap(light_path)
-                        if not light_pixmap.isNull():
-                            # Create inverted version preserving original size and alpha
-                            # Convert to QImage for pixel-level manipulation to preserve transparency
-                            light_image = light_pixmap.toImage()
-                            if light_image.format() != light_image.Format.Format_ARGB32:
-                                light_image = light_image.convertToFormat(light_image.Format.Format_ARGB32)
-                            
-                            # Create dark image with same format
-                            dark_image = light_image.copy()
-                            
-                            # Invert RGB channels while preserving alpha
-                            for y in range(dark_image.height()):
-                                for x in range(dark_image.width()):
-                                    pixel = dark_image.pixel(x, y)
-                                    # Extract ARGB components
-                                    alpha = (pixel >> 24) & 0xFF
-                                    red = (pixel >> 16) & 0xFF
-                                    green = (pixel >> 8) & 0xFF  
-                                    blue = pixel & 0xFF
-                                    
-                                    # Invert RGB, keep alpha unchanged
-                                    inverted_red = 255 - red
-                                    inverted_green = 255 - green
-                                    inverted_blue = 255 - blue
-                                    
-                                    # Reconstruct pixel
-                                    new_pixel = (alpha << 24) | (inverted_red << 16) | (inverted_green << 8) | inverted_blue
-                                    dark_image.setPixel(x, y, new_pixel)
-                            
-                            # Convert back to pixmap and save
-                            dark_pixmap = QPixmap.fromImage(dark_image)
-                            dark_pixmap.save(dark_path)
-                            
-                            # Convert config to light/dark pair
-                            self.ICON_MAP[icon_key] = [light_filename, dark_filename]
-                            print(f"Created dark variant: {dark_filename} for {icon_key}")
-                    except Exception as e:
-                        print(f"ERROR: Failed to create dark variant for {icon_key}: {e}")
-                        import traceback
-                        traceback.print_exc()
-    
     def get_status_icon(self, status: str, theme_mode: Optional[str] = None, is_selected: bool = False, requested_size: int = 32) -> QIcon:
         """
         Get icon for a specific status with theme/selection awareness.
@@ -504,7 +375,6 @@ class IconManager:
     def refresh_cache(self):
         """Clear the icon cache to force reloading."""
         self._icon_cache.clear()
-        self._inverted_cache.clear()
         self._missing_icons.clear()
     
     def get_status_tooltip(self, status: str) -> str:

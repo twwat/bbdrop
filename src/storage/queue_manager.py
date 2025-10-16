@@ -21,6 +21,7 @@ from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
     QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED, QUEUE_STATE_SCAN_FAILED,
     QUEUE_STATE_UPLOAD_FAILED, QUEUE_STATE_PAUSED, QUEUE_STATE_INCOMPLETE,
+    QUEUE_STATE_SCANNING, QUEUE_STATE_VALIDATING,
     IMAGE_EXTENSIONS
 )
 
@@ -108,12 +109,12 @@ class QueueManager(QObject):
             QUEUE_STATE_READY: 0,
             QUEUE_STATE_PAUSED: 0,
             QUEUE_STATE_INCOMPLETE: 0,
-            "scanning": 0,
+            QUEUE_STATE_SCANNING: 0,
             QUEUE_STATE_UPLOADING: 0,
             QUEUE_STATE_QUEUED: 0,
             QUEUE_STATE_COMPLETED: 0,
             QUEUE_STATE_FAILED: 0,
-            "validating": 0
+            QUEUE_STATE_VALIDATING: 0
         }
         
         # Sequential scan worker
@@ -152,7 +153,7 @@ class QueueManager(QObject):
                 #print(f"DEBUG: About to scan path: {path}")
                 self._comprehensive_scan_item(path)
                 #log(f" Scan completed for {path}")
-                log(f"Scan Worker: Scan completed for {path}", category="scan")
+                log(f"Scan Worker: Scan completed for {path}", category="scan", level="debug")
                 self._scan_queue.task_done()
                 
             except queue.Empty:
@@ -194,7 +195,7 @@ class QueueManager(QObject):
                 # No longer silently failing duplicates here
                 
                 item.total_images = len(files)
-                item.status = "scanning"
+                item.status = QUEUE_STATE_SCANNING
             
             # Scan images
             scan_result = self._scan_images(path, files)
@@ -221,7 +222,7 @@ class QueueManager(QObject):
                     item.min_height = scan_result['min_height']
                     item.scan_complete = True
                     
-                    if item.status == "scanning":
+                    if item.status == QUEUE_STATE_SCANNING:
                         log(f"Scan Worker: Scan complete, updating status to ready for {path}", level="debug", category="scan")
                         #print(f"DEBUG: Item tab_name is still: '{item.tab_name}'")
                         old_status = item.status
@@ -282,6 +283,8 @@ class QueueManager(QObject):
     
     def _scan_images(self, path: str, files: List[str]) -> dict:
         """Scan images for validation and metadata"""
+        gallery_name = os.path.basename(path)
+
         result = {
             'total_size': 0,
             'failed_files': [],
@@ -292,45 +295,70 @@ class QueueManager(QObject):
             'min_width': 0.0,
             'min_height': 0.0
         }
-        
+
         # Get scan configuration
         config = self._get_scanning_config()
         use_fast = config.get('fast_scan', True)
         sampling = config.get('pil_sampling', 2)
+
+        log(f"Scan Worker: Starting scan of {len(files)} files for '{gallery_name}' (fast_scan={use_fast}, sampling={sampling})", level="debug", category="scan")
         
         # Scan files
         if use_fast:
-            import imghdr
+            # Try to import imghdr, fall back to PIL-only if unavailable
+            try:
+                import imghdr
+                has_imghdr = True
+            except ImportError:
+                has_imghdr = False
+                log("imghdr not available, using PIL-only validation", level="debug", category="scan")
+
             from PIL import Image
 
             for i, f in enumerate(files):
                 fp = os.path.join(path, f)
                 try:
                     result['total_size'] += os.path.getsize(fp)
-                    # Quick validation with imghdr first
-                    with open(fp, 'rb') as img:
-                        if not imghdr.what(img):
-                            # imghdr failed - verify with PIL (more robust for some formats)
-                            try:
-                                with Image.open(fp) as pil_img:
-                                    pil_img.verify()  # Checks image integrity, raises exception for corrupt/truncated
-                                # PIL validation passed - image is valid
-                            except Exception as pil_error:
-                                # Both imghdr and PIL failed - mark as invalid
-                                result['failed_files'].append((f, f"Invalid image: {str(pil_error)}"))
+
+                    # Validate with imghdr if available, otherwise use PIL directly
+                    if has_imghdr:
+                        with open(fp, 'rb') as img:
+                            if not imghdr.what(img):
+                                # imghdr failed - verify with PIL (more robust for some formats)
+                                try:
+                                    with Image.open(fp) as pil_img:
+                                        pil_img.verify()  # Checks image integrity
+                                except Exception as pil_error:
+                                    # Both imghdr and PIL failed - mark as invalid
+                                    result['failed_files'].append((f, f"Invalid image: {str(pil_error)}"))
+                    else:
+                        # No imghdr - use PIL-only validation
+                        try:
+                            with Image.open(fp) as pil_img:
+                                pil_img.verify()  # Checks image integrity
+                        except Exception as pil_error:
+                            result['failed_files'].append((f, f"Invalid image: {str(pil_error)}"))
+
                 except Exception as e:
                     result['failed_files'].append((f, str(e)))
 
                 if i % 10 == 0:
                     time.sleep(0.001)  # Yield
-        
+
+        # Log validation results
+        failed_count = len(result['failed_files'])
+        if failed_count > 0:
+            log(f"Scan Worker: Validation complete for '{gallery_name}': {failed_count}/{len(files)} files failed", level="warning", category="scan")
+        else:
+            log(f"Scan Worker: Validation complete for '{gallery_name}': All {len(files)} files valid, total size: {result['total_size'] / 1024 / 1024:.2f} MB", level="debug", category="scan")
+
         # Calculate dimensions with sampling
         if not result['failed_files']:
             dims = self._calculate_dimensions(path, files, sampling)
             if dims:
                 # Use the outlier exclusion utility if configured
                 from src.utils.sampling_utils import calculate_dimensions_with_outlier_exclusion
-                settings = QSettings()
+                settings = QSettings("ImxUploader", "ImxUploadGUI")
                 exclude_outliers = settings.value('scanning/stats_exclude_outliers', False, type=bool)
                 use_median = settings.value('scanning/use_median', True, type=bool)
 
@@ -346,16 +374,17 @@ class QueueManager(QObject):
     
     def _calculate_dimensions(self, path: str, files: List[str], sampling: int) -> List[tuple]:
         """Calculate image dimensions with sampling"""
+        gallery_name = os.path.basename(path)
         dims = []
-        
+
         try:
             from PIL import Image
-            
+
             # Use new sampling utility
             from src.utils.sampling_utils import get_sample_indices, calculate_dimensions_with_outlier_exclusion
 
-            # Get enhanced config from settings
-            settings = QSettings()
+            # Get enhanced config from settings (use same location as main GUI)
+            settings = QSettings("ImxUploader", "ImxUploadGUI")
             enhanced_config = {
                 'sampling_method': settings.value('scanning/sampling_method', 0, type=int),
                 'sampling_fixed_count': settings.value('scanning/sampling_fixed_count', 25, type=int),
@@ -368,9 +397,13 @@ class QueueManager(QObject):
                 'exclude_patterns_text': settings.value('scanning/exclude_patterns_text', '', type=str),
             }
 
+            log(f"Scan Worker: Dimension sampling: method={enhanced_config['sampling_method']}, fixed={enhanced_config['sampling_fixed_count']}, pct={enhanced_config['sampling_percentage']}% for '{gallery_name}'", level="debug", category="scan")
+
             # Get sample indices using new logic
             sample_indices = get_sample_indices(files, enhanced_config, path)
             samples = [files[i] for i in sample_indices]
+
+            log(f"Scan Worker: Sampling {len(samples)} of {len(files)} files for dimensions for '{gallery_name}'", level="debug", category="scan")
 
             # Process samples
             for f in samples:
@@ -380,10 +413,14 @@ class QueueManager(QObject):
                         dims.append(img.size)
                 except:
                     continue
-                    
-        except ImportError:
-            pass
-        
+
+            log(f"Scan Worker: Successfully read dimensions from {len(dims)}/{len(samples)} sampled files for '{gallery_name}'", level="debug", category="scan")
+
+        except ImportError as e:
+            log(f"Scan Worker: Import error in dimension calculation for '{gallery_name}': {e}", level="error", category="scan")
+        except Exception as e:
+            log(f"Scan Worker: Error calculating dimensions for '{gallery_name}': {e}", level="error", category="scan")
+
         return dims
     
     def _mark_item_failed(self, path: str, error: str, failed_files: list | None = None):
@@ -567,7 +604,7 @@ class QueueManager(QObject):
                 old_status = item.status
                 
                 # Nuclear reset - clear everything
-                item.status = "scanning"
+                item.status = QUEUE_STATE_SCANNING
                 item.gallery_id = ""
                 item.gallery_url = ""
                 item.uploaded_images = 0
@@ -587,7 +624,7 @@ class QueueManager(QObject):
                 
                 # Emit status change signal
                 if hasattr(self, 'status_changed'):
-                    QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, "scanning"))
+                    QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, QUEUE_STATE_SCANNING))
                 
                 # Trigger full rescan
                 QTimer.singleShot(100, lambda: self._initiate_scan(path))
@@ -745,26 +782,26 @@ class QueueManager(QObject):
             #print(f"DEBUG: Mutex acquired, preparing items list")
             if specific_paths:
                 items = [self.items[p] for p in specific_paths if p in self.items]
-                log(f" Found {len(items)} items for specific paths")
+                log(f"Found {len(items)} items for specific paths", level="debug", category="db")
             else:
                 items = list(self.items.values())
                 #print(f"DEBUG: Saving all {len(items)} items")
             
             queue_data = []
-            log(f" Mutex acquired, building queue data for {len(items)} items")
+            log(f"Mutex acquired, building queue data for {len(items)} items", level="debug", category="db")
             for item in items:
                 if item.status in [QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
                                   QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
-                                  "scanning", QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED]:
+                                  QUEUE_STATE_SCANNING, QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED]:
                     queue_data.append(self._item_to_dict(item))
             #print(f"DEBUG: Built queue data with {len(queue_data)} items to save")
             
             try:
                 #print(f"DEBUG: About to call store.bulk_upsert_async")
                 self.store.bulk_upsert_async(queue_data)
-                print(f"{timestamp()} SQLite: bulk_upsert_async database save completed")
+                log(f"SQLite: bulk_upsert_async database save completed", level="debug", category="db")
             except Exception as e:
-                log(f" Database save failed: {e}", level="error", category="db")
+                log(f"Database save failed: {e}", level="error", category="db")
                 pass
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
@@ -897,7 +934,7 @@ class QueueManager(QObject):
             item = GalleryQueueItem(
                 path=path,
                 name=gallery_name,
-                status="validating",
+                status=QUEUE_STATE_VALIDATING,
                 insertion_order=self._next_order,
                 added_time=time.time(),
                 template_name=template_name,
@@ -908,7 +945,7 @@ class QueueManager(QObject):
             
             self.items[path] = item
             #print(f"DEBUG: Item added to dict, updating status count...")
-            self._update_status_count("", "validating")
+            self._update_status_count("", QUEUE_STATE_VALIDATING)
             #print(f"DEBUG: Scheduling deferred database save...")
             # Use QTimer to defer database save to prevent blocking GUI thread
             from PyQt6.QtCore import QTimer

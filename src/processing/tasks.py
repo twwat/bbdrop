@@ -161,15 +161,16 @@ class TableUpdateQueue:
         """Queue a table update"""
         if path not in self._path_to_row:
             return
-        
+
         row = self._path_to_row[path]
-        
-        # Skip hidden rows for performance
-        if self._tabbed_widget and self._is_row_likely_hidden(row):
+
+        # Skip hidden rows ONLY for incremental progress updates, not for full updates (scan completion)
+        # This ensures scan results appear even if visibility cache is stale
+        if update_type == 'progress' and self._tabbed_widget and self._is_row_likely_hidden(row):
             return
-        
+
         self._pending_updates[path] = TableRowUpdateTask(row, item, update_type)
-        
+
         if not self._processing and not self._timer.isActive():
             self._timer.start(TABLE_UPDATE_INTERVAL)
     
@@ -227,8 +228,8 @@ class TableUpdateQueue:
             if time.time() - start_time > TIME_BUDGET:
                 break
             
-            # Skip hidden rows
-            if self._tabbed_widget and task.row < table.rowCount():
+            # Skip hidden rows ONLY for progress updates, not for full updates
+            if task.update_type == 'progress' and self._tabbed_widget and task.row < table.rowCount():
                 if table.isRowHidden(task.row):
                     del self._pending_updates[path]
                     continue

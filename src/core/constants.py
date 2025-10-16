@@ -81,6 +81,8 @@ QUEUE_STATE_SCAN_FAILED = "scan_failed"
 QUEUE_STATE_UPLOAD_FAILED = "upload_failed"
 QUEUE_STATE_PAUSED = "paused"
 QUEUE_STATE_INCOMPLETE = "incomplete"
+QUEUE_STATE_SCANNING = "scanning"
+QUEUE_STATE_VALIDATING = "validating"
 
 
 # Logging

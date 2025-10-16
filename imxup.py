@@ -4,7 +4,37 @@ imx.to gallery uploader
 Upload image folders to imx.to as galleries
 """
 
+import sys
 import os
+from datetime import datetime
+
+# Console hiding moved to after GUI window appears (see line ~2220)
+
+# Check for --debug flag early (before heavy imports)
+DEBUG_MODE = '--debug' in sys.argv
+
+def debug_print(msg):
+    """Print debug message if DEBUG_MODE is enabled, otherwise print on same line"""
+    # Skip printing if no console exists (console=False build)
+    if sys.stdout is None:
+        return
+
+    try:
+        if DEBUG_MODE:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"{timestamp} {msg}")
+            sys.stdout.flush()
+        else:
+            # Print on same line, overwriting previous output
+            try:
+                terminal_width = os.get_terminal_size().columns
+            except (OSError, AttributeError):
+                terminal_width = 80  # Fallback for no terminal
+            print(f"\r{msg:<{terminal_width}}", end='', flush=True)
+    except (OSError, AttributeError):
+        # Console operations failed, silently ignore
+        pass
+
 import requests
 from requests.adapters import HTTPAdapter
 import json
@@ -13,7 +43,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Any
 
-from datetime import datetime
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import concurrent.futures
 import time
@@ -28,16 +58,16 @@ import sqlite3
 import glob
 import winreg
 
-__version__ = "0.5.02"  # Application version number
+__version__ = "0.5.03"  # Application version number
 
-# Build User-Agent string once at module load
+# Build User-Agent string (defer debug_print until after console allocation)
 _system = platform.system()
 _release = platform.release()
 _machine = platform.machine()
 _version = platform.version()
 USER_AGENT = f"Mozilla/5.0 (ImxUp {__version__}; {_system} {_release} {_version}; {_machine}; rv:141.0) Gecko/20100101 Firefox/141.0"
 
-def timestamp():
+def timestamp() -> str:
     """Return current timestamp for logging"""
     return datetime.now().strftime("%H:%M:%S")
 
@@ -319,7 +349,11 @@ class NestedProgressBar:
 def get_encryption_key():
     """Generate encryption key from system info"""
     # Use username and hostname to create a consistent key
-    system_info = f"{os.getenv('USERNAME', '')}{platform.node()}"
+    # NOTE: platform.node() can HANG on systems with WMI/network issues
+    # Use COMPUTERNAME environment variable instead (Windows-specific but safer)
+    hostname = os.getenv('COMPUTERNAME') or os.getenv('HOSTNAME') or 'localhost'
+    username = os.getenv('USERNAME') or os.getenv('USER') or 'user'
+    system_info = f"{username}{hostname}"
     key = hashlib.sha256(system_info.encode()).digest()
     return base64.urlsafe_b64encode(key)
 
@@ -2012,6 +2046,21 @@ class ImxToUploader:
         return results
 
 def main():
+    # Auto-launch GUI if double-clicked (no arguments, no other console processes)
+    if len(sys.argv) == 1:  # No arguments provided
+        try:
+            # Check if this is the only process attached to the console
+            import ctypes
+            kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+            process_array = (ctypes.c_uint * 1)()
+            num_processes = kernel32.GetConsoleProcessList(process_array, 1)
+            # If num_processes <= 2, likely double-clicked (only this process and conhost)
+            # If num_processes > 2, launched from terminal (cmd.exe/powershell also attached)
+            if num_processes <= 2:
+                sys.argv.append('--gui')
+        except:
+            pass  # Not Windows or check failed, don't auto-launch GUI
+
     # Load user defaults
     user_defaults = load_user_defaults()
 
@@ -2025,19 +2074,12 @@ def main():
     parser.add_argument('--format', type=int, choices=[1, 2, 3, 4], 
                        default=user_defaults.get('thumbnail_format', 2),
                        help='Thumbnail format: 1=Fixed width, 2=Proportional, 3=Square, 4=Fixed height (default: 2)')
-    parser.add_argument('--max-retries', type=int, 
-                       default=user_defaults.get('max_retries', 3), 
+    parser.add_argument('--max-retries', type=int,
+                       default=user_defaults.get('max_retries', 3),
                        help='Maximum retry attempts for failed uploads (default: 3)')
-    parser.add_argument('--public-gallery', type=int, choices=[0, 1], 
-                       default=1,
-                       help='DEPRECATED: Gallery visibility (kept for compatibility)')
-    parser.add_argument('--parallel', type=int, 
+    parser.add_argument('--parallel', type=int,
                        default=user_defaults.get('parallel_batch_size', 4),
                        help='Number of images to upload simultaneously (default: 4)')
-    parser.add_argument('--private', action='store_true',
-                       help='DEPRECATED: Gallery visibility (kept for compatibility)')
-    parser.add_argument('--public', action='store_true',
-                       help='DEPRECATED: Gallery visibility (kept for compatibility)')
     parser.add_argument('--setup-secure', action='store_true',
                        help='Set up secure password storage (interactive)')
     parser.add_argument('--rename-unnamed', action='store_true',
@@ -2067,7 +2109,9 @@ def main():
             os.environ['IMXUP_GUI_MODE'] = '1'
 
             # Import only lightweight PyQt6 basics for splash screen FIRST
+            debug_print("Importing PyQt6.QtWidgets...")
             from PyQt6.QtWidgets import QApplication
+            debug_print("Importing splash_screen...")
             from src.gui.splash_screen import SplashScreen
 
             # Check if folder paths were provided for GUI
@@ -2079,11 +2123,27 @@ def main():
                 sys.argv = [sys.argv[0]]
 
             # Create QApplication and show splash IMMEDIATELY (before heavy imports)
+            debug_print("Creating QApplication...")
             app = QApplication(sys.argv)
             app.setStyle("Fusion")
             app.setQuitOnLastWindowClosed(True)
+            debug_print("Setting setQuitOnLastWindowClosed to True")
+
+            # Install Qt message handler to suppress QPainter warnings
+            from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
+            def qt_message_handler(msg_type, context, message):
+                del context  # Required by Qt signature but unused
+                # Suppress QPainter warnings - they're handled gracefully in code
+                if "QPainter" in message:
+                    return
+                # Allow other Qt warnings through
+                if msg_type == QtMsgType.QtWarningMsg:
+                    print(f"Qt Warning: {message}")
+
+            qInstallMessageHandler(qt_message_handler)
 
             # Install global exception handler for Qt event loop
+            debug_print("Installing exception hook...")
             def qt_exception_hook(exctype, value, traceback_obj):
                 import traceback as tb_module
                 tb_lines = tb_module.format_exception(exctype, value, traceback_obj)
@@ -2106,16 +2166,28 @@ def main():
                     pass
 
             sys.excepthook = qt_exception_hook
+            #debug_print("Exception hook installed")
 
+            debug_print("Creating splash screen...")
             splash = SplashScreen()
+            debug_print("Showing splash screen...")
             splash.show()
             splash.update_status("Starting ImxUp...")
+            debug_print("Processing events...")
             app.processEvents()  # Force splash to appear NOW
+            debug_print("Events processed")
 
             # NOW import the heavy main_window module (while splash is visible)
             splash.set_status("Loading modules")
-            print(f"{timestamp()} INFO: Launching GUI for ImxUp v{__version__}")
+            debug_print(f"{timestamp()} INFO: Launching GUI for ImxUp v{__version__}")
+            if sys.stdout is not None:
+                try:
+                    sys.stdout.flush()
+                except (OSError, AttributeError):
+                    pass
+            #debug_print("About to import main_window...")
             from src.gui.main_window import ImxUploadGUI, check_single_instance
+            #debug_print("main_window imported successfully")
 
             # Check for existing instance
             folders_to_add = []
@@ -2137,6 +2209,9 @@ def main():
             # Create main window (pass splash for progress updates)
             window = ImxUploadGUI(splash)
 
+            # Now set Fusion style after widgets are initialized
+            app.setStyle("Fusion")
+
             # Add folders from command line if provided
             if folders_to_add:
                 window.add_folders(folders_to_add)
@@ -2144,6 +2219,21 @@ def main():
             # Hide splash and show main window
             splash.finish_and_hide()
             window.show()
+
+            # Now that GUI is visible, hide the console window (unless --debug)
+            if os.name == 'nt' and '--debug' not in sys.argv:
+                try:
+                    import ctypes
+                    kernel32 = ctypes.WinDLL('kernel32')
+                    user32 = ctypes.WinDLL('user32')
+                    console_window = kernel32.GetConsoleWindow()
+                    if console_window:
+                        # Try multiple methods to hide the console
+                        user32.ShowWindow(console_window, 0)  # SW_HIDE
+                        # Also try moving it off-screen
+                        user32.SetWindowPos(console_window, 0, -32000, -32000, 0, 0, 0x0001)  # SWP_NOSIZE
+                except:
+                    pass
 
             sys.exit(app.exec())
 
@@ -2236,7 +2326,8 @@ def main():
     
     # Check if folder paths are provided (required for upload)
     if not args.folder_paths:
-        parser.error("folder_paths is required for upload operations")
+        parser.print_help()
+        return 0
     
     # Expand wildcards in folder paths
     expanded_paths = []
@@ -2400,9 +2491,20 @@ if __name__ == "__main__":
         log("KeyboardInterrupt: Exiting gracefully...", level="debug", category="ui")
         sys.exit(0)
     except SystemExit:
-        # Handle argparse errors gracefully in PyInstaller
+        # Handle argparse errors gracefully
         pass
     except Exception as e:
-        print(e)
-        log(f"Error: {e}", level="critical", category="ui")
+        # Log crash to file when running with --noconsole (so we can debug it)
+        try:
+            import traceback
+            with open('imxup_crash.log', 'w') as f:
+                f.write(f"ImxUp crashed:\n")
+                f.write(f"{traceback.format_exc()}\n")
+        except:
+            pass
+        # Also try to log it normally
+        try:
+            log(f"Fatal Error: {e}", level="critical", category="ui")
+        except:
+            pass
         sys.exit(1)

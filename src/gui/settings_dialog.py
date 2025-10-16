@@ -69,14 +69,14 @@ class ComprehensiveSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
-        
+
         # Track dirty state per tab
         self.tab_dirty_states = {}
         self.current_tab_index = 0
-        
+
         self.setup_ui()
         self.load_settings()
-        
+
         # Connect tab change signal to check for unsaved changes
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
         
@@ -92,7 +92,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.tab_widget = QTabWidget()
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
         layout.addWidget(self.tab_widget)
-        
+
         # Create tabs
         self.setup_general_tab()
         self.setup_credentials_tab()
@@ -925,6 +925,7 @@ class ComprehensiveSettingsDialog(QDialog):
         method_layout.addWidget(method_label)
 
         self.sampling_fixed_radio = QRadioButton("Fixed count")
+        self.sampling_fixed_radio.setProperty("class", "scanning-radio")
         self.sampling_fixed_radio.setChecked(True)
         method_layout.addWidget(self.sampling_fixed_radio)
 
@@ -935,6 +936,7 @@ class ComprehensiveSettingsDialog(QDialog):
         method_layout.addWidget(self.sampling_fixed_spin)
 
         self.sampling_percent_radio = QRadioButton("Percentage")
+        self.sampling_percent_radio.setProperty("class", "scanning-radio")
         method_layout.addWidget(self.sampling_percent_radio)
 
         self.sampling_percent_spin = QSpinBox()
@@ -1023,11 +1025,13 @@ class ComprehensiveSettingsDialog(QDialog):
         avg_layout = QHBoxLayout()
         avg_layout.addWidget(QLabel("Average method:"))
         self.avg_mean_radio = QRadioButton("Mean")
+        self.avg_mean_radio.setProperty("class", "scanning-radio")
         self.avg_mean_radio.setToolTip("Arithmetic mean (sum / count)")
         # Default is median, not mean
         avg_layout.addWidget(self.avg_mean_radio)
 
         self.avg_median_radio = QRadioButton("Median")
+        self.avg_median_radio.setProperty("class", "scanning-radio")
         self.avg_median_radio.setToolTip("Middle value (more robust to outliers)")
         self.avg_median_radio.setChecked(True)
         avg_layout.addWidget(self.avg_median_radio)
@@ -1313,8 +1317,12 @@ class ComprehensiveSettingsDialog(QDialog):
                 sampling_method = self.parent.settings.value('scanning/sampling_method', 0, type=int)
                 if sampling_method == 0:
                     self.sampling_fixed_radio.setChecked(True)
+                    self.sampling_fixed_spin.setEnabled(True)
+                    self.sampling_percent_spin.setEnabled(False)
                 else:
                     self.sampling_percent_radio.setChecked(True)
+                    self.sampling_fixed_spin.setEnabled(False)
+                    self.sampling_percent_spin.setEnabled(True)
 
                 self.sampling_fixed_spin.setValue(
                     self.parent.settings.value('scanning/sampling_fixed_count', 25, type=int))
@@ -1326,8 +1334,9 @@ class ComprehensiveSettingsDialog(QDialog):
                     self.parent.settings.value('scanning/exclude_first', False, type=bool))
                 self.exclude_last_check.setChecked(
                     self.parent.settings.value('scanning/exclude_last', False, type=bool))
-                self.exclude_small_check.setChecked(
-                    self.parent.settings.value('scanning/exclude_small_images', False, type=bool))
+                exclude_small = self.parent.settings.value('scanning/exclude_small_images', False, type=bool)
+                self.exclude_small_check.setChecked(exclude_small)
+                self.exclude_small_spin.setEnabled(exclude_small)
                 self.exclude_small_spin.setValue(
                     self.parent.settings.value('scanning/exclude_small_threshold', 50, type=int))
                 self.exclude_patterns_check.setChecked(
@@ -1381,9 +1390,14 @@ class ComprehensiveSettingsDialog(QDialog):
                 
                 # Save theme
                 if hasattr(self.parent, 'settings'):
-                    self.parent.settings.setValue('ui/theme', self.theme_combo.currentText())
-                    self.parent.apply_theme(self.theme_combo.currentText())
-                
+                    theme = self.theme_combo.currentText()
+                    self.parent.settings.setValue('ui/theme', theme)
+                    self.parent.apply_theme(theme)
+                    # Update theme toggle button tooltip
+                    if hasattr(self.parent, 'theme_toggle_btn'):
+                        tooltip = "Switch to light theme" if theme == 'dark' else "Switch to dark theme"
+                        self.parent.theme_toggle_btn.setToolTip(tooltip)
+
                 # Save font size
                 if hasattr(self.parent, 'settings'):
                     font_size = self.font_size_spin.value()
@@ -1977,12 +1991,17 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Save theme and font size to QSettings
                 if hasattr(self.parent, 'settings'):
                     font_size = self.font_size_spin.value()
+                    theme = self.theme_combo.currentText()
                     #print(f"_save_general_tab: Saving font size to settings: {font_size}")
-                    self.parent.settings.setValue('ui/theme', self.theme_combo.currentText())
+                    self.parent.settings.setValue('ui/theme', theme)
                     self.parent.settings.setValue('ui/font_size', font_size)
-                    
+
                     # Apply theme and font size immediately
-                    self.parent.apply_theme(self.theme_combo.currentText())
+                    self.parent.apply_theme(theme)
+                    # Update theme toggle button tooltip
+                    if hasattr(self.parent, 'theme_toggle_btn'):
+                        tooltip = "Switch to light theme" if theme == 'dark' else "Switch to dark theme"
+                        self.parent.theme_toggle_btn.setToolTip(tooltip)
                     if hasattr(self.parent, 'apply_font_size'):
                         #print(f"_save_general_tab: Applying font size: {font_size}")
                         self.parent.apply_font_size(font_size)

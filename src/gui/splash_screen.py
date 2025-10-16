@@ -67,21 +67,27 @@ class SplashScreen(QSplashScreen):
     
     def setWindowShape(self):
         """Set the window to have rounded corners"""
+        # Use QRegion constructor that takes QPainterPath directly
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), 75, 75)
-        region = QRegion(path.toFillPolygon().toPolygon())
+        # Convert path to region without double polygon conversion
+        from PyQt6.QtGui import QTransform
+        region = QRegion(path.toFillPolygon(QTransform()).toPolygon())
         self.setMask(region)
     
     def paintEvent(self, event):
         """Custom paint event to draw text and layout"""
         super().paintEvent(event)
-        
+
         license_lines = [
             "Software distributed under the license is on an \"as is\"",
             "basis without warranties or conditions of any kind.",
         ]
-        
+
         painter = QPainter(self)
+        if not painter.isActive():
+            # QPainter failed to begin - widget not ready for painting
+            return
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Draw rounded border with 2px thickness, 20px radius

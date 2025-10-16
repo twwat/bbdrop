@@ -159,10 +159,10 @@ class RenameWorker:
 
                 # Check if login was successful
                 if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-                    log("Authenticated using credentials", category="auth")
+                    log("Authenticated using credentials", category="auth", level="info")
                     return True
                 else:
-                    log("Login failed", level="warning", category="auth")
+                    log("Login failed (probably just hit DDoS-Guard, don't worry about this if you're sure the credentials are correct)", level="debug", category="auth")
                     if attempt < max_retries - 1:
                         continue
                     else:

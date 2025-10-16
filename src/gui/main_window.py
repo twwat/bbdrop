@@ -405,13 +405,16 @@ class DropEnabledTabBar(QTabBar):
     def paintEvent(self, event):
         """Custom paint to show drag highlight"""
         super().paintEvent(event)
-        
+
         # Draw drag highlight if needed
         if self._drag_highlight_index >= 0:
             from PyQt6.QtGui import QPainter, QPen
             painter = QPainter(self)
+            if not painter.isActive():
+                # QPainter failed to begin - widget not ready for painting
+                return
             painter.setPen(QPen(QColor(52, 152, 219), 3))  # Blue highlight
-            
+
             rect = self.tabRect(self._drag_highlight_index)
             painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 4, 4)
             painter.end()
@@ -1812,6 +1815,28 @@ class GalleryTableWidget(QTableWidget):
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
 
+        # Connect vertical scrollbar to refresh icons when scrolling
+        self.verticalScrollBar().valueChanged.connect(self._on_scroll)
+
+        # Track if we need full icon refresh (after theme change)
+        self._needs_full_icon_refresh = False
+
+    def _on_scroll(self):
+        """Refresh icons for newly visible rows when scrolling (only if needed after theme change)"""
+        if self._needs_full_icon_refresh:
+            # Find parent ImxUploadGUI to call refresh
+            parent = self.parent()
+            while parent and not isinstance(parent, QWidget):
+                parent = parent.parent()
+            if parent:
+                # Refresh both status icons and renamed icons for newly visible rows
+                if hasattr(parent, 'refresh_all_status_icons'):
+                    parent.refresh_all_status_icons()
+                if hasattr(parent, '_refresh_button_icons'):
+                    parent._refresh_button_icons()
+                # Note: flag stays True so scrolling continues to refresh new rows
+                # It will be cleared when all rows are eventually visible or manually cleared
+
     def keyPressEvent(self, event):
         """Handle key press events"""
         if event.key() == Qt.Key.Key_Delete:
@@ -3197,8 +3222,24 @@ class ImxUploadGUI(QMainWindow):
                 if hasattr(self.gallery_table, 'gallery_table'):
                     table = self.gallery_table.gallery_table
 
-                # Update all visible status icons and action button icons in the table
-                for row in range(table.rowCount()):
+                # Only update VISIBLE rows for fast theme switching
+                # Get visible row range
+                viewport = table.viewport()
+                first_visible = table.rowAt(0)
+                last_visible = table.rowAt(viewport.height())
+
+                # Handle edge cases
+                if first_visible == -1:
+                    first_visible = 0
+                if last_visible == -1:
+                    last_visible = table.rowCount() - 1
+
+                # Add buffer rows above and below visible area for smooth scrolling
+                first_visible = max(0, first_visible - 5)
+                last_visible = min(table.rowCount() - 1, last_visible + 5)
+
+                # Update only visible status icons and action button icons
+                for row in range(first_visible, last_visible + 1):
                     # Get the gallery path from the name column (UserRole data)
                     name_item = table.item(row, 1)
                     if name_item:
@@ -3212,6 +3253,32 @@ class ImxUploadGUI(QMainWindow):
                     action_widget = table.cellWidget(row, 7)
                     if action_widget and hasattr(action_widget, 'refresh_icons'):
                         action_widget.refresh_icons()
+
+                # Set flag so scrolling will refresh newly visible rows
+                if hasattr(table, '_needs_full_icon_refresh'):
+                    table._needs_full_icon_refresh = True
+
+                # Refresh quick settings button icons
+                if hasattr(self, 'comprehensive_settings_btn'):
+                    settings_icon = icon_mgr.get_icon('settings')
+                    if not settings_icon.isNull():
+                        self.comprehensive_settings_btn.setIcon(settings_icon)
+
+                if hasattr(self, 'manage_templates_btn'):
+                    templates_icon = icon_mgr.get_icon('templates')
+                    if not templates_icon.isNull():
+                        self.manage_templates_btn.setIcon(templates_icon)
+
+                if hasattr(self, 'manage_credentials_btn'):
+                    credentials_icon = icon_mgr.get_icon('credentials')
+                    if not credentials_icon.isNull():
+                        self.manage_credentials_btn.setIcon(credentials_icon)
+
+                if hasattr(self, 'theme_toggle_btn'):
+                    theme_icon = icon_mgr.get_icon('toggle_theme')
+                    if not theme_icon.isNull():
+                        self.theme_toggle_btn.setIcon(theme_icon)
+
         except Exception as e:
             print(f"Error refreshing icons: {e}")
     
@@ -3287,10 +3354,11 @@ class ImxUploadGUI(QMainWindow):
         """Set the Renamed column cell to an icon (check/pending) if available; fallback to text.
         is_renamed=True -> check, False -> pending, None -> blank
         """
-        import traceback
-        stack = traceback.extract_stack()
-        caller_chain = " -> ".join([frame.name for frame in stack[-4:-1]])
-        #print(f"DEBUG: _set_renamed_cell_icon: {caller_chain}: row={row}, is_renamed={is_renamed}")
+        # NOTE: Traceback extraction disabled for performance (was taking 700ms for 48 rows during theme changes)
+        # import traceback
+        # stack = traceback.extract_stack()
+        # caller_chain = " -> ".join([frame.name for frame in stack[-4:-1]])
+        # print(f"DEBUG: _set_renamed_cell_icon: {caller_chain}: row={row}, is_renamed={is_renamed}")
         try:
             col = 11
             
@@ -3642,19 +3710,13 @@ class ImxUploadGUI(QMainWindow):
             self._template_watcher = None # If watcher isn't available, we simply won't auto-refresh
         
         # Public gallery setting moved to comprehensive settings only
-        
-        # Confirm delete
-        self.confirm_delete_check = QCheckBox("Confirm before deleting")
-        self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))  # Load from defaults
-        self.confirm_delete_check.toggled.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.confirm_delete_check, 3, 1)
 
-        # Auto-rename unnamed galleries after successful login
-        self.auto_rename_check = QCheckBox("Auto-rename galleries")
-        # Default enabled
-        self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
-        self.auto_rename_check.toggled.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.auto_rename_check, 3, 0)
+        # Auto-start uploads checkbox
+        self.auto_start_upload_check = QCheckBox("Auto-start uploads")
+        self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
+        self.auto_start_upload_check.setToolTip("Automatically start uploads when scanning completes instead of waiting for manual start")
+        self.auto_start_upload_check.toggled.connect(self.on_setting_changed)
+        settings_layout.addWidget(self.auto_start_upload_check, 3, 0)
 
         # Artifact storage location options (moved to dialog; keep hidden for persistence wiring)
         self.store_in_uploaded_check = QCheckBox("Save artifacts in .uploaded folder")
@@ -3680,21 +3742,12 @@ class ImxUploadGUI(QMainWindow):
         self.comprehensive_settings_btn.setProperty("class", "comprehensive-settings")
         settings_layout.addWidget(self.comprehensive_settings_btn, 6, 0, 1, 2)
         
-        # Save settings button
-        self.save_settings_btn = QPushButton("Save Settings")
-        if not self.save_settings_btn.text().startswith(" "):
-            self.save_settings_btn.setText(" " + self.save_settings_btn.text())
-        self.save_settings_btn.clicked.connect(self.save_upload_settings)
-        self.save_settings_btn.setProperty("class", "save-settings-btn")
-        self.save_settings_btn.setEnabled(False)  # Initially disabled
-        self.save_settings_btn.setVisible(False)  # Initially hidden
-
-        settings_layout.addWidget(self.save_settings_btn, 5, 0, 1, 2)
-
         # Manage templates and credentials buttons (same row)
         self.manage_templates_btn = QPushButton(" Templates")
+        self.manage_templates_btn.setToolTip("Manage BBCode templates for gallery output")
         self.manage_credentials_btn = QPushButton(" Credentials")
-        
+        self.manage_credentials_btn.setToolTip("Configure imx.to login credentials")
+
         # Add icons if available
     
         try:
@@ -3720,12 +3773,37 @@ class ImxUploadGUI(QMainWindow):
             raise
         self.manage_templates_btn.clicked.connect(self.manage_templates)
         self.manage_credentials_btn.clicked.connect(self.manage_credentials)
-        
+
         for btn in [self.manage_templates_btn, self.manage_credentials_btn]:
             btn.setProperty("class", "quick-settings-btn")
-        
-        settings_layout.addWidget(self.manage_templates_btn, 9, 0)
-        settings_layout.addWidget(self.manage_credentials_btn, 9, 1)
+
+        # Theme toggle button (icon-only, small)
+        self.theme_toggle_btn = QPushButton()
+        self.theme_toggle_btn.setProperty("class", "theme-toggle-btn")
+        # Set initial tooltip based on current theme
+        current_theme = str(self.settings.value('ui/theme', 'dark'))
+        initial_tooltip = "Switch to light theme" if current_theme == 'dark' else "Switch to dark theme"
+        self.theme_toggle_btn.setToolTip(initial_tooltip)
+        try:
+            icon_mgr = get_icon_manager()
+            if icon_mgr:
+                theme_icon = icon_mgr.get_icon('toggle_theme')
+                if not theme_icon.isNull():
+                    self.theme_toggle_btn.setIcon(theme_icon)
+                    self.theme_toggle_btn.setIconSize(QSize(20, 20))
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
+        self.theme_toggle_btn.clicked.connect(self.toggle_theme)
+
+        # Create horizontal layout for Templates, Credentials, and Theme Toggle
+        templates_creds_layout = QHBoxLayout()
+        templates_creds_layout.addWidget(self.manage_templates_btn)
+        templates_creds_layout.addWidget(self.manage_credentials_btn)
+        templates_creds_layout.addWidget(self.theme_toggle_btn)
+        templates_creds_layout.setSpacing(6)
+
+        settings_layout.addLayout(templates_creds_layout, 9, 0, 1, 2)
         
         # Log section (add first)
         log_group = QGroupBox("Log")
@@ -4321,6 +4399,10 @@ class ImxUploadGUI(QMainWindow):
         """Handle settings dialog result without blocking GUI"""
         if result == QDialog.DialogCode.Accepted:
             log(f"Comprehensive settings updated successfully",level="debug")
+            # Reload settings into quick settings UI
+            from imxup import load_user_defaults
+            defaults = load_user_defaults()
+            self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
         else:
             log(f"Comprehensive settings cancelled", level="debug", category="ui")
 
@@ -4329,6 +4411,12 @@ class ImxUploadGUI(QMainWindow):
         dialog = HelpDialog(self)
         # Use non-blocking show() for help dialog
         dialog.show()
+
+    def toggle_theme(self):
+        """Toggle between light and dark theme."""
+        current_theme = self._current_theme_mode
+        new_theme = 'dark' if current_theme == 'light' else 'light'
+        self.set_theme_mode(new_theme)
 
     def set_theme_mode(self, mode: str):
         """Switch theme mode and persist. mode in {'light','dark'}."""
@@ -4345,6 +4433,11 @@ class ImxUploadGUI(QMainWindow):
             # Refresh all icons to use correct light/dark variants for new theme
             self.refresh_all_status_icons()
 
+            # Update theme toggle button tooltip
+            if hasattr(self, 'theme_toggle_btn'):
+                tooltip = "Switch to light theme" if mode == 'dark' else "Switch to dark theme"
+                self.theme_toggle_btn.setToolTip(tooltip)
+
             # Update checked menu items if available
             try:
                 if mode == 'light':
@@ -4360,6 +4453,10 @@ class ImxUploadGUI(QMainWindow):
 
     def _load_base_stylesheet(self) -> str:
         """Load the base QSS stylesheet for consistent fonts and styling."""
+        # Cache the base stylesheet to avoid repeated disk I/O
+        if hasattr(self, '_cached_base_qss'):
+            return self._cached_base_qss
+
         try:
             # Load styles.qss file from assets directory
             qss_path = os.path.join(get_assets_dir(), "styles.qss")
@@ -4369,12 +4466,15 @@ class ImxUploadGUI(QMainWindow):
                     # Extract base styles (everything before LIGHT_THEME_START)
                     light_start = full_content.find('/* LIGHT_THEME_START')
                     if light_start != -1:
-                        return full_content[:light_start].strip()
+                        self._cached_base_qss = full_content[:light_start].strip()
+                        return self._cached_base_qss
                     # Fallback: everything before DARK_THEME_START
                     dark_start = full_content.find('/* DARK_THEME_START')
                     if dark_start != -1:
-                        return full_content[:dark_start].strip()
-                    return full_content
+                        self._cached_base_qss = full_content[:dark_start].strip()
+                        return self._cached_base_qss
+                    self._cached_base_qss = full_content
+                    return self._cached_base_qss
         except Exception as e:
             log(f"Error loading styles.qss: {e}", level="error", category="ui")
             pass
@@ -4392,9 +4492,14 @@ class ImxUploadGUI(QMainWindow):
 
     def _load_theme_styles(self, theme_type: str) -> str:
         """Load theme styles from styles.qss file."""
+        # Cache theme stylesheets to avoid repeated disk I/O
+        cache_key = f'_cached_{theme_type}_qss'
+        if hasattr(self, cache_key):
+            return getattr(self, cache_key)
+
         start_marker = f'/* {theme_type.upper()}_THEME_START'
         end_marker = f'/* {theme_type.upper()}_THEME_END */'
-        
+
         try:
             # Load styles.qss from assets directory
             qss_path = os.path.join(get_assets_dir(), "styles.qss")
@@ -4407,7 +4512,9 @@ class ImxUploadGUI(QMainWindow):
                     if theme_start != -1 and theme_end != -1:
                         theme_content = full_content[theme_start:theme_end]
                         lines = theme_content.split('\n') # Remove the marker comment line
-                        return '\n'.join(lines[1:])
+                        cached_content = '\n'.join(lines[1:])
+                        setattr(self, cache_key, cached_content)
+                        return cached_content
 
         except Exception as e:
             log(f"Error loading styles.qss: {e}", level="error", category="ui")
@@ -4498,14 +4605,24 @@ class ImxUploadGUI(QMainWindow):
             self._current_theme_mode = mode
             # Trigger a light refresh on key widgets
             try:
+                #import time
+                #t1 = time.time()
                 # Just apply font sizes instead of full refresh when changing theme
                 if hasattr(self, 'gallery_table') and self.gallery_table:
                     font_size = self._get_current_font_size()
                     self.apply_font_size(font_size)
-                
+                #t2 = time.time()
+                #log(f"apply_font_size took {(t2-t1)*1000:.1f}ms", level="debug", category="ui")
+
                 # Refresh all button icons that use the icon manager for theme changes
                 self._refresh_button_icons()
+                #t3 = time.time()
+                #log(f"_refresh_button_icons took {(t3-t2)*1000:.1f}ms", level="debug", category="ui")
+
                 self.refresh_all_status_icons()
+                #t4 = time.time()
+                #log(f"refresh_all_status_icons took {(t4-t3)*1000:.1f}ms", level="debug", category="ui")
+                #log(f"TOTAL widget refresh: {(t4-t1)*1000:.1f}ms", level="debug", category="ui")
             except Exception as e:
                 log(f"Exception in main_window: {e}", level="error", category="ui")
                 raise
@@ -4622,12 +4739,6 @@ class ImxUploadGUI(QMainWindow):
             self.worker.start()
             log(f"Worker.isRunning(): {self.worker.isRunning()}", level="debug")
             log(f"Worker thread started", level="debug")
-            # Propagate auto-rename preference to worker
-            try:
-                self.worker.auto_rename_enabled = self.auto_rename_check.isChecked()
-            except Exception as e:
-                log(f"Exception in main_window: {e}", level="error", category="ui")
-                raise
 
     def on_bandwidth_updated(self, kbps: float):
         """Receive current aggregate bandwidth from worker (KB/s)."""
@@ -5142,6 +5253,11 @@ class ImxUploadGUI(QMainWindow):
         if hasattr(self.gallery_table, 'tab_manager') and item.tab_name:
             self.gallery_table.tab_manager.invalidate_tab_cache(item.tab_name)
             log(f"Invalidated TabManager cache for tab {item.tab_name}", level="debug")
+
+        # CRITICAL FIX: Invalidate table update queue visibility cache so new visible rows get updates
+        if hasattr(self, '_table_update_queue') and self._table_update_queue:
+            self._table_update_queue.invalidate_visibility_cache()
+            log(f"Invalidated table update queue visibility cache after adding row {row}", level="debug")
     
     def _remove_gallery_from_table(self, path: str):
         """Remove a gallery from the table and update mappings"""
@@ -5252,17 +5368,23 @@ class ImxUploadGUI(QMainWindow):
     def _refresh_button_icons(self):
         """Refresh all button icons that use the icon manager for correct theme"""
         try:
+            #import time
+            #t_start = time.time()
+
             icon_mgr = get_icon_manager()
             if not icon_mgr:
                 return
-                
+            #t1 = time.time()
+            #log(f"  get_icon_manager: {(t1-t_start)*1000:.1f}ms", level="debug", category="ui")
+
             # Map of button attributes to their icon keys
             button_icon_map = [
                 ('manage_templates_btn', 'templates'),
                 ('manage_credentials_btn', 'credentials'),
+                ('theme_toggle_btn', 'toggle_theme'),
                 # Add more buttons here as needed when they get icon manager support
             ]
-            
+
             # Update each button's icon if it exists
             for button_attr, icon_key in button_icon_map:
                 if hasattr(self, button_attr):
@@ -5270,13 +5392,57 @@ class ImxUploadGUI(QMainWindow):
                     icon = icon_mgr.get_icon(icon_key)
                     if not icon.isNull():
                         button.setIcon(icon)
+            #t2 = time.time()
+            #log(f"  button icons updated: {(t2-t1)*1000:.1f}ms", level="debug", category="ui")
 
-            # Refresh renamed column icons
-            for row in range(self.gallery_table.rowCount()):
-                item = self.gallery_table.item(row, 11)
+            # Refresh renamed column icons - ONLY VISIBLE ROWS for fast theme switching
+            table = self.gallery_table
+            if hasattr(self.gallery_table, 'gallery_table'):
+                table = self.gallery_table.gallery_table
+
+            # Get visible row range
+            viewport = table.viewport()
+            viewport_height = viewport.height()
+            total_rows = table.rowCount()
+            first_visible = table.rowAt(0)
+            last_visible = table.rowAt(viewport_height - 1)  # -1 to stay within bounds
+
+            #log(f"  Table has {total_rows} rows, viewport height={viewport_height}px", level="debug", category="ui")
+            #log(f"  rowAt(0)={first_visible}, rowAt({viewport_height-1})={last_visible}", level="debug", category="ui")
+
+            # Handle edge cases
+            if first_visible == -1:
+                first_visible = 0
+            if last_visible == -1:
+                # Viewport extends past last row - just use the actual last row
+                last_visible = min(total_rows - 1, first_visible + 20)  # Max 20 visible rows
+
+            # Add buffer rows for smooth scrolling
+            first_visible = max(0, first_visible - 5)
+            last_visible = min(total_rows - 1, last_visible + 5)
+            #t3 = time.time()
+            #log(f"  Final visible range ({first_visible}-{last_visible}) = {last_visible - first_visible + 1} rows: {(t3-t2)*1000:.1f}ms", level="debug", category="ui")
+
+            # Only refresh renamed icons for visible rows (not hidden by tab filtering)
+            row_count = 0
+            for row in range(first_visible, last_visible + 1):
+                # Skip rows hidden by tab filtering
+                if table.isRowHidden(row):
+                    continue
+
+                item = table.item(row, 11)
                 if item and not item.icon().isNull():
                     is_renamed = item.toolTip() == "Renamed"
                     self._set_renamed_cell_icon(row, is_renamed)
+                    row_count += 1
+            #t4 = time.time()
+            #log(f"  refreshed {row_count} renamed icons: {(t4-t3)*1000:.1f}ms", level="debug", category="ui")
+
+            # Set flag so scrolling will refresh newly visible renamed icons
+            if hasattr(table, '_needs_full_icon_refresh'):
+                table._needs_full_icon_refresh = True
+
+            #log(f"  TOTAL _refresh_button_icons: {(t4-t_start)*1000:.1f}ms", level="debug", category="ui")
         except Exception as e:
             log(f"Error refreshing button icons: {e}", level="debug")
 
@@ -6976,8 +7142,9 @@ class ImxUploadGUI(QMainWindow):
             log(f"No valid paths found", level="debug", category="queue")
             return
         
-        # Check if confirmation is needed
-        if self.confirm_delete_check.isChecked():
+        # Check if confirmation is needed (setting managed by comprehensive settings)
+        from imxup import load_user_defaults
+        if load_user_defaults().get('confirm_delete', True):
             if len(selected_paths) == 1:
                 message = f"Delete '{selected_names[0]}'?"
             else:
@@ -7094,12 +7261,7 @@ class ImxUploadGUI(QMainWindow):
         
         # Load settings from .ini file
         defaults = load_user_defaults()
-        
-        # Restore confirm delete setting from .ini file
-        confirm_delete = defaults.get('confirm_delete', True)
-        if isinstance(confirm_delete, str):
-            confirm_delete = confirm_delete.lower() == 'true'
-        self.confirm_delete_check.setChecked(confirm_delete)
+
         # Restore table columns (widths and visibility)
         self.restore_table_settings()
         # Apply saved theme
@@ -7121,7 +7283,6 @@ class ImxUploadGUI(QMainWindow):
     def save_settings(self):
         """Save window settings"""
         self.settings.setValue("geometry", self.saveGeometry())
-        self.settings.setValue("confirm_delete", self.confirm_delete_check.isChecked())
         # Save splitter state for resizable divider between queue and settings
         if hasattr(self, 'top_splitter'):
             self.settings.setValue("splitter/state", self.top_splitter.saveState())
@@ -7256,9 +7417,8 @@ class ImxUploadGUI(QMainWindow):
         self.save_table_settings()
     
     def on_setting_changed(self):
-        """Handle when any setting is changed"""
-        self.save_settings_btn.setEnabled(True)
-        self.save_settings_btn.setVisible(True)  # Show button when settings change
+        """Handle when any quick setting is changed - auto-save immediately"""
+        self.save_upload_settings()
     
     def save_upload_settings(self):
         """Save upload settings to .ini file"""
@@ -7275,31 +7435,29 @@ class ImxUploadGUI(QMainWindow):
             max_retries = defaults.get('max_retries', 3)
             parallel_batch_size = defaults.get('parallel_batch_size', 4)
             template_name = self.template_combo.currentText()
-            confirm_delete = self.confirm_delete_check.isChecked()
-            auto_rename = self.auto_rename_check.isChecked()
+            auto_start_upload = self.auto_start_upload_check.isChecked()
             store_in_uploaded = self.store_in_uploaded_check.isChecked()
             store_in_central = self.store_in_central_check.isChecked()
             central_store_path = (self.central_store_path_value or "").strip()
-            
+
             # Load existing config
             config = configparser.ConfigParser()
             config_file = get_config_path()
-            
+
             if os.path.exists(config_file):
                 config.read(config_file)
-            
+
             # Ensure DEFAULTS section exists
             if 'DEFAULTS' not in config:
                 config['DEFAULTS'] = {}
-            
+
             # Update settings
             config['DEFAULTS']['thumbnail_size'] = str(thumbnail_size)
             config['DEFAULTS']['thumbnail_format'] = str(thumbnail_format)
             config['DEFAULTS']['max_retries'] = str(max_retries)
             config['DEFAULTS']['parallel_batch_size'] = str(parallel_batch_size)
             config['DEFAULTS']['template_name'] = template_name
-            config['DEFAULTS']['confirm_delete'] = str(confirm_delete)
-            config['DEFAULTS']['auto_rename'] = str(auto_rename)
+            config['DEFAULTS']['auto_start_upload'] = str(auto_start_upload)
             config['DEFAULTS']['store_in_uploaded'] = str(store_in_uploaded)
             config['DEFAULTS']['store_in_central'] = str(store_in_central)
             # Persist central store path (empty string implies default)
@@ -7308,13 +7466,9 @@ class ImxUploadGUI(QMainWindow):
             # Save to file
             with open(config_file, 'w') as f:
                 config.write(f)
-            
-            # Disable and hide save button
-            self.save_settings_btn.setEnabled(False)
-            self.save_settings_btn.setVisible(False)
-            
-            # Show success message
-            log(f"Settings saved successfully",level="info", category="ui")
+
+            # Quick settings auto-saved (no button to update)
+            log(f"Quick settings saved successfully",level="info", category="ui")
             
         except Exception as e:
             log(f"Error saving settings: {str(e)}")
