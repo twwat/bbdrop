@@ -33,7 +33,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
     # Check cache first
     if _firefox_cookie_cache and (time.time() - _firefox_cache_time) < _cache_duration:
         elapsed = time.time() - start_time
-        log(f"Using cached Firefox cookies (took {elapsed:.3f}s)", level="debug")
+        log(f"Using cached Firefox cookies (took {elapsed:.3f}s)", level="debug", category="auth")
         return _firefox_cookie_cache.copy()
     
     try:
@@ -57,7 +57,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
         profile_dir = os.path.join(firefox_dir, profiles[0])
         cookie_file = os.path.join(profile_dir, 'cookies.sqlite')
         if not os.path.exists(cookie_file):
-            log(f"Firefox cookie file not found: {cookie_file}", level="debug")
+            log(f"Firefox cookie file not found: {cookie_file}", level="debug", category="auth")
             return {}
 
         cookies = {}
@@ -66,7 +66,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
         # Set a 1-second timeout to prevent long waits on locked Firefox databases
         conn = sqlite3.connect(cookie_file, timeout=1.0)
         sqlite_connect_time = time.time() - sqlite_start
-        log(f"SQLite connect took {sqlite_connect_time:.4f}s", level="debug")
+        #log(f"SQLite connect took {sqlite_connect_time:.4f}s", level="debug")
         
         cursor = conn.cursor()
         query_start = time.time()
@@ -79,7 +79,7 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
             (f'%{domain}%',),
         )
         query_time = time.time() - query_start
-        log(f"SQLite query took {query_time:.4f}s", level="debug")
+        #log(f"SQLite query took {query_time:.4f}s", level="debug", category="auth")
         for row in cursor.fetchall():
             name, value, host, path, _expiry, secure = row
             cookies[name] = {
@@ -95,11 +95,11 @@ def get_firefox_cookies(domain: str = "imx.to") -> dict:
         _firefox_cache_time = time.time()
         
         elapsed = time.time() - start_time
-        log(f"get_firefox_cookies() completed in {elapsed:.3f}s, found {len(cookies)} {domain} cookies (cached)", level="debug")
+        log(f"get_firefox_cookies() completed in {elapsed:.3f}s (SQLite: connect took {sqlite_connect_time:.3f}s, query took {query_time:.3f}s), found {len(cookies)} {domain} cookies (cached)", level="debug", category="auth")
         return cookies
     except Exception as e:
         elapsed = time.time() - start_time
-        log(f"Error extracting Firefox cookies: {e} (took {elapsed:.3f}s)", level="warning")
+        log(f"Error extracting Firefox cookies: {e} (took {elapsed:.3f}s)", level="warning", category="auth")
         # Cache empty result to avoid repeated failures
         _firefox_cookie_cache = {}
         _firefox_cache_time = time.time()
@@ -126,11 +126,11 @@ def load_cookies_from_file(cookie_file: str = "cookies.txt") -> dict:
                                 'path': path,
                                 'secure': secure == 'TRUE',
                             }
-            log(f"Loaded {len(cookies)} cookies from {cookie_file}", level="info")
+            log(f"Loaded {len(cookies)} cookies from {cookie_file}", level="info", category="auth")
         #else:
         #    print(f"{_timestamp()} Cookie file not found: {cookie_file}")
     except Exception as e:
-        log(f"Error loading cookies: {e}", level="error")
+        log(f"Error loading cookies: {e}", level="error", category="auth")
     return cookies
 
 

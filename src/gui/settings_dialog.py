@@ -2,6 +2,41 @@
 """
 Settings management module for imxup GUI
 Contains all settings-related dialogs and configuration management
+
+SETTINGS STORAGE ARCHITECTURE:
+==============================
+This application uses TWO separate settings storage systems with clear separation of concerns:
+
+1. QSettings (Qt's built-in system) - FOR UI STATE ONLY:
+   - Window geometry/position
+   - Column widths/visibility
+   - Splitter positions
+   - Last active tab
+   - Theme choice
+   - Font size
+   - Sort order
+   - Any transient "where did I leave the UI" state
+
+   Location: Platform-specific (Windows Registry, macOS plist, Linux conf files)
+   Managed by: Qt automatically via QSettings("ImxUploader", "ImxUploadGUI")
+
+2. INI File (~/.imxup/imxup.ini) - FOR USER CONFIGURATION:
+   - Credentials (username, password, API key)
+   - Templates
+   - Scanning settings (fast scan, sampling, exclusions, etc.)
+   - Upload behavior (timeouts, retries, batch size)
+   - Storage paths
+   - Auto-start/auto-clear preferences
+   - Thumbnail settings
+
+   Location: ~/.imxup/imxup.ini (portable, human-editable)
+   Managed by: ConfigParser (manual read/write)
+
+WHY THIS SEPARATION:
+- Portability: INI file can be copied to other machines
+- Transparency: Users can manually edit INI settings
+- Qt Best Practice: QSettings handles platform-specific UI state
+- Clear semantics: "How it looks" (QSettings) vs "How it behaves" (INI)
 """
 
 import os
@@ -277,28 +312,34 @@ class ComprehensiveSettingsDialog(QDialog):
         storage_layout.addWidget(location_label, 2, 0, 1, 3)
         
         # Import path functions
-        from imxup import get_central_store_base_path, get_default_central_store_base_path, get_project_root
+        from imxup import get_central_store_base_path, get_default_central_store_base_path, get_project_root, get_base_path
 
-        # Get current path and determine mode
-        current_path = defaults.get('central_store_path') or get_central_store_base_path()
+        # Get ACTUAL current path from QSettings (source of truth)
+        current_path = get_base_path()
         home_path = get_default_central_store_base_path()
-        app_root = get_project_root()  # Use centralized function that handles frozen exe correctly
+        app_root = get_project_root()
         portable_path = os.path.join(app_root, '.imxup')
-        
+
         # Radio buttons for location selection
         self.home_radio = QRadioButton(f"Home folder: {home_path}")
         self.portable_radio = QRadioButton(f"App folder (portable): {portable_path}")
         self.custom_radio = QRadioButton("Custom location:")
-        
-        # Determine which radio to check based on current path
-        storage_mode = defaults.get('storage_mode', 'home')
-        if storage_mode == 'portable':
+
+        # Determine which radio to check based on ACTUAL current path
+        current_norm = os.path.normpath(current_path)
+        home_norm = os.path.normpath(home_path)
+        portable_norm = os.path.normpath(portable_path)
+
+        if current_norm == portable_norm:
             self.portable_radio.setChecked(True)
-        elif storage_mode == 'custom':
-            self.custom_radio.setChecked(True)
-        else:
+            storage_mode = 'portable'
+        elif current_norm == home_norm:
             self.home_radio.setChecked(True)
-        
+            storage_mode = 'home'
+        else:
+            self.custom_radio.setChecked(True)
+            storage_mode = 'custom'
+
         # Custom path input and browse button
         self.path_edit = QLineEdit(current_path if storage_mode == 'custom' else '')
         self.path_edit.setReadOnly(True)
@@ -1258,7 +1299,7 @@ class ComprehensiveSettingsDialog(QDialog):
         # self.light_icon_frame.icon_dropped.connect(lambda: self.mark_tab_dirty(6))
         # self.dark_icon_frame.icon_dropped.connect(lambda: self.mark_tab_dirty(6))
         
-        self.tab_widget.addTab(icons_widget, "Icon Manager")
+        self.tab_widget.addTab(icons_widget, "Icons")
         
     def browse_central_store(self):
         """Browse for central store directory"""
@@ -1295,68 +1336,74 @@ class ComprehensiveSettingsDialog(QDialog):
         self._load_tabs_settings()
     
     def _load_scanning_settings(self):
-        """Load scanning settings from QSettings"""
+        """Load scanning settings from INI file"""
         try:
-            if self.parent and hasattr(self.parent, 'settings'):
-                # Block ALL signals during loading to prevent marking tab as dirty
-                controls_to_block = [
-                    self.fast_scan_check, self.sampling_fixed_radio, self.sampling_percent_radio,
-                    self.sampling_fixed_spin, self.sampling_percent_spin, self.exclude_first_check,
-                    self.exclude_last_check, self.exclude_small_check, self.exclude_small_spin,
-                    self.exclude_patterns_check, self.exclude_patterns_edit, 
-                    self.stats_exclude_outliers_check, self.avg_mean_radio, self.avg_median_radio
-                ]
-                for control in controls_to_block:
-                    control.blockSignals(True)
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
 
-                # Load fast scan setting
-                fast_scan = self.parent.settings.value('scanning/fast_scan', True, type=bool)
-                self.fast_scan_check.setChecked(fast_scan)
+            if os.path.exists(config_file):
+                config.read(config_file)
 
-                # Load sampling method and values
-                sampling_method = self.parent.settings.value('scanning/sampling_method', 0, type=int)
-                if sampling_method == 0:
-                    self.sampling_fixed_radio.setChecked(True)
-                    self.sampling_fixed_spin.setEnabled(True)
-                    self.sampling_percent_spin.setEnabled(False)
-                else:
-                    self.sampling_percent_radio.setChecked(True)
-                    self.sampling_fixed_spin.setEnabled(False)
-                    self.sampling_percent_spin.setEnabled(True)
+            # Block ALL signals during loading to prevent marking tab as dirty
+            controls_to_block = [
+                self.fast_scan_check, self.sampling_fixed_radio, self.sampling_percent_radio,
+                self.sampling_fixed_spin, self.sampling_percent_spin, self.exclude_first_check,
+                self.exclude_last_check, self.exclude_small_check, self.exclude_small_spin,
+                self.exclude_patterns_check, self.exclude_patterns_edit,
+                self.stats_exclude_outliers_check, self.avg_mean_radio, self.avg_median_radio
+            ]
+            for control in controls_to_block:
+                control.blockSignals(True)
 
-                self.sampling_fixed_spin.setValue(
-                    self.parent.settings.value('scanning/sampling_fixed_count', 25, type=int))
-                self.sampling_percent_spin.setValue(
-                    self.parent.settings.value('scanning/sampling_percentage', 10, type=int))
+            # Load fast scan setting
+            fast_scan = config.getboolean('SCANNING', 'fast_scanning', fallback=True)
+            self.fast_scan_check.setChecked(fast_scan)
 
-                # Load exclusion settings
-                self.exclude_first_check.setChecked(
-                    self.parent.settings.value('scanning/exclude_first', False, type=bool))
-                self.exclude_last_check.setChecked(
-                    self.parent.settings.value('scanning/exclude_last', False, type=bool))
-                exclude_small = self.parent.settings.value('scanning/exclude_small_images', False, type=bool)
-                self.exclude_small_check.setChecked(exclude_small)
-                self.exclude_small_spin.setEnabled(exclude_small)
-                self.exclude_small_spin.setValue(
-                    self.parent.settings.value('scanning/exclude_small_threshold', 50, type=int))
-                self.exclude_patterns_check.setChecked(
-                    self.parent.settings.value('scanning/exclude_patterns', False, type=bool))
-                self.exclude_patterns_edit.setText(
-                    self.parent.settings.value('scanning/exclude_patterns_text', '', type=str))
+            # Load sampling method and values
+            sampling_method = config.getint('SCANNING', 'sampling_method', fallback=0)
+            if sampling_method == 0:
+                self.sampling_fixed_radio.setChecked(True)
+                self.sampling_fixed_spin.setEnabled(True)
+                self.sampling_percent_spin.setEnabled(False)
+            else:
+                self.sampling_percent_radio.setChecked(True)
+                self.sampling_fixed_spin.setEnabled(False)
+                self.sampling_percent_spin.setEnabled(True)
 
-                # Load statistics calculation setting
-                self.stats_exclude_outliers_check.setChecked(
-                    self.parent.settings.value('scanning/stats_exclude_outliers', False, type=bool))
+            self.sampling_fixed_spin.setValue(
+                config.getint('SCANNING', 'sampling_fixed_count', fallback=25))
+            self.sampling_percent_spin.setValue(
+                config.getint('SCANNING', 'sampling_percentage', fallback=10))
 
-                # Load average method setting
-                use_median = self.parent.settings.value('scanning/use_median', True, type=bool)
-                if use_median:
-                    self.avg_median_radio.setChecked(True)
-                else:
-                    self.avg_mean_radio.setChecked(True)
-                # Unblock signals
-                for control in controls_to_block:
-                    control.blockSignals(False)
+            # Load exclusion settings
+            self.exclude_first_check.setChecked(
+                config.getboolean('SCANNING', 'exclude_first', fallback=False))
+            self.exclude_last_check.setChecked(
+                config.getboolean('SCANNING', 'exclude_last', fallback=False))
+            exclude_small = config.getboolean('SCANNING', 'exclude_small_images', fallback=False)
+            self.exclude_small_check.setChecked(exclude_small)
+            self.exclude_small_spin.setEnabled(exclude_small)
+            self.exclude_small_spin.setValue(
+                config.getint('SCANNING', 'exclude_small_threshold', fallback=50))
+            self.exclude_patterns_check.setChecked(
+                config.getboolean('SCANNING', 'exclude_patterns', fallback=False))
+            self.exclude_patterns_edit.setText(
+                config.get('SCANNING', 'exclude_patterns_text', fallback=''))
+
+            # Load statistics calculation setting
+            self.stats_exclude_outliers_check.setChecked(
+                config.getboolean('SCANNING', 'stats_exclude_outliers', fallback=False))
+
+            # Load average method setting
+            use_median = config.getboolean('SCANNING', 'use_median', fallback=True)
+            if use_median:
+                self.avg_median_radio.setChecked(True)
+            else:
+                self.avg_mean_radio.setChecked(True)
+
+            # Unblock signals
+            for control in controls_to_block:
+                control.blockSignals(False)
 
         except Exception as e:
             print(f"{timestamp()} WARNING: Failed to load scanning settings: {e}")
@@ -1424,30 +1471,33 @@ class ComprehensiveSettingsDialog(QDialog):
             return False
     
     def _save_scanning_settings(self):
-        """Save scanning settings to QSettings"""
+        """Save scanning settings to INI file"""
         try:
-            if self.parent and hasattr(self.parent, 'settings'):
-                # Save fast scan setting
-                self.parent.settings.setValue('scanning/fast_scan', self.fast_scan_check.isChecked())
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
 
-                # Save sampling method and values
-                self.parent.settings.setValue('scanning/sampling_method', 0 if self.sampling_fixed_radio.isChecked() else 1)
-                self.parent.settings.setValue('scanning/sampling_fixed_count', self.sampling_fixed_spin.value())
-                self.parent.settings.setValue('scanning/sampling_percentage', self.sampling_percent_spin.value())
+            if os.path.exists(config_file):
+                config.read(config_file)
 
-                # Save exclusion settings
-                self.parent.settings.setValue('scanning/exclude_first', self.exclude_first_check.isChecked())
-                self.parent.settings.setValue('scanning/exclude_last', self.exclude_last_check.isChecked())
-                self.parent.settings.setValue('scanning/exclude_small_images', self.exclude_small_check.isChecked())
-                self.parent.settings.setValue('scanning/exclude_small_threshold', self.exclude_small_spin.value())
-                self.parent.settings.setValue('scanning/exclude_patterns', self.exclude_patterns_check.isChecked())
-                self.parent.settings.setValue('scanning/exclude_patterns_text', self.exclude_patterns_edit.text())
+            if 'SCANNING' not in config:
+                config.add_section('SCANNING')
 
-                # Save statistics calculation setting
-                self.parent.settings.setValue('scanning/stats_exclude_outliers', self.stats_exclude_outliers_check.isChecked())
+            # Save all scanning settings
+            config.set('SCANNING', 'fast_scanning', str(self.fast_scan_check.isChecked()))
+            config.set('SCANNING', 'sampling_method', '0' if self.sampling_fixed_radio.isChecked() else '1')
+            config.set('SCANNING', 'sampling_fixed_count', str(self.sampling_fixed_spin.value()))
+            config.set('SCANNING', 'sampling_percentage', str(self.sampling_percent_spin.value()))
+            config.set('SCANNING', 'exclude_first', str(self.exclude_first_check.isChecked()))
+            config.set('SCANNING', 'exclude_last', str(self.exclude_last_check.isChecked()))
+            config.set('SCANNING', 'exclude_small_images', str(self.exclude_small_check.isChecked()))
+            config.set('SCANNING', 'exclude_small_threshold', str(self.exclude_small_spin.value()))
+            config.set('SCANNING', 'exclude_patterns', str(self.exclude_patterns_check.isChecked()))
+            config.set('SCANNING', 'exclude_patterns_text', self.exclude_patterns_edit.text())
+            config.set('SCANNING', 'stats_exclude_outliers', str(self.stats_exclude_outliers_check.isChecked()))
+            config.set('SCANNING', 'use_median', str(self.avg_median_radio.isChecked()))
 
-                # Save average method setting
-                self.parent.settings.setValue('scanning/use_median', self.avg_median_radio.isChecked())
+            with open(config_file, 'w') as f:
+                config.write(f)
 
         except Exception as e:
             print(f"{timestamp()} WARNING: Failed to save scanning settings: {e}")
@@ -1924,6 +1974,37 @@ class ComprehensiveSettingsDialog(QDialog):
             
             # Check if path is actually changing
             if new_path and os.path.normpath(new_path) != os.path.normpath(current_active_path):
+                # Check if NEW location already has a config file
+                new_config_file = os.path.join(new_path, 'imxup.ini')
+                if os.path.exists(new_config_file):
+                    # NEW location already has config - ask what to do
+                    conflict_msg = QMessageBox(self)
+                    conflict_msg.setIcon(QMessageBox.Icon.Warning)
+                    conflict_msg.setWindowTitle("Existing Configuration Found")
+                    conflict_msg.setText(f"The new location already contains an imxup.ini file:\n{new_config_file}")
+                    conflict_msg.setInformativeText("How would you like to handle this?")
+
+                    keep_btn = conflict_msg.addButton("Keep Existing", QMessageBox.ButtonRole.YesRole)
+                    overwrite_btn = conflict_msg.addButton("Overwrite with Current", QMessageBox.ButtonRole.NoRole)
+                    cancel_btn = conflict_msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+
+                    conflict_msg.setDefaultButton(keep_btn)
+                    conflict_msg.exec()
+
+                    if conflict_msg.clickedButton() == cancel_btn:
+                        return True  # Cancel the save
+                    elif conflict_msg.clickedButton() == keep_btn:
+                        # Just update QSettings, don't write new config file
+                        if self.parent and hasattr(self.parent, 'settings'):
+                            if storage_mode == 'home':
+                                self.parent.settings.remove("config/base_path")
+                            else:
+                                self.parent.settings.setValue("config/base_path", new_path)
+                        QMessageBox.information(self, "Restart Required",
+                                              "Please restart the application to use the new storage location.")
+                        return True
+                    # else: overwrite_btn - continue with migration logic below
+
                 # Path is changing - handle migration
                 if os.path.exists(current_active_path):
                     # Ask about migration
@@ -1943,13 +2024,23 @@ class ComprehensiveSettingsDialog(QDialog):
                     if msg_box.clickedButton() == cancel_btn:
                         # Don't save changes
                         return True
-                    
-                    # Save new settings
+
+                    # CRITICAL: Save base path to QSettings FIRST (before writing config file)
+                    if self.parent and hasattr(self.parent, 'settings'):
+                        if storage_mode == 'home':
+                            self.parent.settings.remove("config/base_path")
+                        else:
+                            self.parent.settings.setValue("config/base_path", new_path)
+
+                    # Save new settings to INI file in NEW location
                     config.set('DEFAULTS', 'storage_mode', storage_mode)
                     config.set('DEFAULTS', 'central_store_path', new_path)
-                    with open(config_file, 'w') as f:
+                    # Write to NEW location (not config_file which is old location)
+                    new_config_file = os.path.join(new_path, 'imxup.ini')
+                    os.makedirs(new_path, exist_ok=True)
+                    with open(new_config_file, 'w') as f:
                         config.write(f)
-                    
+
                     if msg_box.clickedButton() == yes_btn:
                         # Perform migration then restart
                         self._perform_migration_and_restart(current_active_path, new_path)
@@ -1959,9 +2050,19 @@ class ComprehensiveSettingsDialog(QDialog):
                                               "Please restart the application to use the new storage location.")
                 else:
                     # Old path doesn't exist, just save
+                    # CRITICAL: Save base path to QSettings FIRST
+                    if self.parent and hasattr(self.parent, 'settings'):
+                        if storage_mode == 'home':
+                            self.parent.settings.remove("config/base_path")
+                        else:
+                            self.parent.settings.setValue("config/base_path", new_path)
+
                     config.set('DEFAULTS', 'storage_mode', storage_mode)
                     config.set('DEFAULTS', 'central_store_path', new_path)
-                    with open(config_file, 'w') as f:
+                    # Write to NEW location
+                    new_config_file = os.path.join(new_path, 'imxup.ini')
+                    os.makedirs(new_path, exist_ok=True)
+                    with open(new_config_file, 'w') as f:
                         config.write(f)
             else:
                 # Path not changing, just save other settings
@@ -1970,6 +2071,15 @@ class ComprehensiveSettingsDialog(QDialog):
                     config.set('DEFAULTS', 'central_store_path', new_path)
                 with open(config_file, 'w') as f:
                     config.write(f)
+
+                # CRITICAL: Save base path to QSettings for bootstrap
+                if self.parent and hasattr(self.parent, 'settings'):
+                    if storage_mode == 'home':
+                        # Clear custom path - use default home folder
+                        self.parent.settings.remove("config/base_path")
+                    elif new_path:
+                        # Save custom/portable path
+                        self.parent.settings.setValue("config/base_path", new_path)
             
             # Update parent GUI controls
             if self.parent:
@@ -2119,30 +2229,6 @@ class ComprehensiveSettingsDialog(QDialog):
             return True
         except Exception as e:
             print(f"{timestamp()} WARNING: Error saving template settings: {e}")
-            return False
-    
-    def _save_scanning_tab(self):
-        """Save Scanning tab settings only"""
-        try:
-            config = configparser.ConfigParser()
-            config_file = get_config_path()
-            
-            if os.path.exists(config_file):
-                config.read(config_file)
-            
-            if 'SCANNING' not in config:
-                config.add_section('SCANNING')
-            
-            # Save scanning settings
-            config.set('SCANNING', 'fast_scanning', str(self.fast_scan_check.isChecked()))
-            config.set('SCANNING', 'pil_sample_count', str(self.pil_sampling_combo.currentIndex()))
-            
-            with open(config_file, 'w') as f:
-                config.write(f)
-            
-            return True
-        except Exception as e:
-            print(f"{timestamp()} WARNING: Error saving scanning settings: {e}")
             return False
     
     def _save_tabs_tab(self):

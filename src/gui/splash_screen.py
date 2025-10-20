@@ -57,10 +57,10 @@ class SplashScreen(QSplashScreen):
        
         # Get version info
         try:
-            from imxup import __version__
-            self.version = f"IMXup {__version__} "
+            from src.core.constants import APP_VERSION
+            self.version = f"v {APP_VERSION} "
         except:
-            self.version = "v69"
+            self.version = "v. unknown"
 
         # Set rounded window shape
         self.setWindowShape()
@@ -78,11 +78,6 @@ class SplashScreen(QSplashScreen):
     def paintEvent(self, event):
         """Custom paint event to draw text and layout"""
         super().paintEvent(event)
-
-        license_lines = [
-            "Software distributed under the license is on an \"as is\"",
-            "basis without warranties or conditions of any kind.",
-        ]
 
         painter = QPainter(self)
         if not painter.isActive():
@@ -105,7 +100,7 @@ class SplashScreen(QSplashScreen):
             y_offset += logo_height
         
         # Draw version
-        version_font = QFont("Courier", 13)
+        version_font = QFont("Courier", 14)
         painter.setFont(version_font)
         painter.setPen(QColor(253, 69, 32))
         version_rect = painter.fontMetrics().boundingRect(self.version)
@@ -123,7 +118,7 @@ class SplashScreen(QSplashScreen):
         y_offset += 36
         
         apache_text = "Licensed under the Apache License, Version 2.0"
-        apache_font = QFont("Courier", 10)
+        apache_font = QFont("Courier", 11)
         painter.setFont(apache_font)
         painter.setPen(QColor(219, 219, 219))
         apache_rect = painter.fontMetrics().boundingRect(apache_text)
@@ -133,9 +128,14 @@ class SplashScreen(QSplashScreen):
         
         # Draw copyright and license info
         painter.setPen(QColor(212, 212, 212))
-        license_font = QFont("Courier", 9)
+        license_font = QFont("Courier", 11)
         painter.setFont(license_font)
-        
+
+        license_lines = [
+            "Distributed on an \"as is\" basis without warranties ",
+            "or conditions of any kind, express or implied.",
+        ]
+
         y_pos = y_offset
         for line in license_lines:
             if line:

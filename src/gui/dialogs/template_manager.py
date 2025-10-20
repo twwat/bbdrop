@@ -116,7 +116,7 @@ class TemplateManagerDialog(QDialog):
         placeholder_widget = QWidget()
         placeholder_widget.setFixedWidth(180)
         placeholder_main_layout = QVBoxLayout(placeholder_widget)
-        placeholder_main_layout.setContentsMargins(8, 0, 0, 0)
+        placeholder_main_layout.setContentsMargins(4, 0, 0, 0)
         
         # Label
         placeholder_label = QLabel("Insert Placeholders:")
@@ -153,9 +153,9 @@ class TemplateManagerDialog(QDialog):
                 btn.clicked.connect(lambda checked, p=placeholder: self.insert_placeholder(p))
                 btn.setStyleSheet("""
                     QPushButton {
-                        padding: 2px 4px;
-                        min-width: 75px;
-                        max-width: 85px;
+                        padding: 2px 2px;
+                        min-width: 70px;
+                        max-width: 70px;
                         max-height: 20px;
                         font-size: 10px;
                     }

@@ -2,7 +2,11 @@
 
 A Python script to upload folders of images as galleries to imx.to
 
-## Setup
+## Quick Start: Windows
+
+1. Run imxup.exe
+
+## Python Setup
 
 1. Install requirements:
    ```

@@ -91,15 +91,31 @@ def get_project_root() -> str:
         # Running as Python script - use imxup.py location
         return os.path.dirname(os.path.abspath(__file__))
 
+def get_base_path() -> str:
+    """Get the base path for all app data (config, galleries, templates).
+
+    Checks QSettings for custom base path (bootstrap), falls back to default ~/.imxup
+    """
+    try:
+        # Check QSettings for custom base path (bootstrap location)
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        custom_base = settings.value("config/base_path", "", type=str)
+
+        if custom_base and os.path.isdir(custom_base):
+            return custom_base
+    except Exception:
+        pass  # QSettings not available (CLI mode)
+
+    # Default location
+    return os.path.join(os.path.expanduser("~"), ".imxup")
+
+
 def get_config_path() -> str:
-    """Return the canonical path to the application's config file (~/.imxup/imxup.ini)."""
-    base_dir = os.path.join(os.path.expanduser("~"), ".imxup")
+    """Return the canonical path to the application's config file."""
+    base_dir = get_base_path()
     os.makedirs(base_dir, exist_ok=True)
     return os.path.join(base_dir, "imxup.ini")
-
-def get_legacy_config_path() -> str:
-    """Return legacy config path (~/.imxup.ini)."""
-    return os.path.join(os.path.expanduser("~"), ".imxup.ini")
 
 def _unique_destination_path(dest_dir: str, filename: str) -> str:
     """Generate a unique destination path within dest_dir.
@@ -116,87 +132,6 @@ def _unique_destination_path(dest_dir: str, filename: str) -> str:
         if not os.path.exists(candidate):
             return candidate
         suffix += 1
-
-def migrate_legacy_storage() -> None:
-    """Migrate legacy folders/files to new structure.
-
-    - Move templates from ~/imxup_galleries files starting with '.template' to ~/.imxup/templates
-    - Move remaining files from ~/imxup_galleries to ~/.imxup/galleries with conflict-safe suffixing
-    - Move ~/.imxup.ini to ~/.imxup/imxup.ini (backup new if both exist)
-    - Remove legacy ~/imxup_galleries when empty
-    """
-    try:
-        home_dir = os.path.expanduser("~")
-        legacy_dir = os.path.join(home_dir, "imxup_galleries")
-        new_base = os.path.join(home_dir, ".imxup")
-        new_galleries = os.path.join(new_base, "galleries")
-        new_templates = os.path.join(new_base, "templates")
-
-        # Ensure new directories exist
-        os.makedirs(new_galleries, exist_ok=True)
-        os.makedirs(new_templates, exist_ok=True)
-
-        # 1) Migrate legacy folder contents (if present)
-        if os.path.isdir(legacy_dir):
-            # Walk recursively and move files only (flatten into destination roots)
-            for root, _dirs, files in os.walk(legacy_dir):
-                for filename in files:
-                    src_path = os.path.join(root, filename)
-                    if filename.startswith(".template") or filename.endswith('.template.txt'):
-                        dest_dir = new_templates
-                    else:
-                        dest_dir = new_galleries
-                    dest_path = _unique_destination_path(dest_dir, filename)
-                    try:
-                        os.replace(src_path, dest_path)
-                        print(f"{timestamp()} Migrated '{src_path}' -> '{dest_path}'")
-                    except Exception as e:
-                        print(f"{timestamp()} Warning: failed to migrate '{src_path}': {e}")
-
-            # Attempt to remove empty directories bottom-up and finally legacy root if empty
-            for root, dirs, files in os.walk(legacy_dir, topdown=False):
-                try:
-                    if not dirs and not files:
-                        os.rmdir(root)
-                except Exception:
-                    pass
-            # Remove legacy root if now empty
-            try:
-                if os.path.isdir(legacy_dir) and not os.listdir(legacy_dir):
-                    os.rmdir(legacy_dir)
-                    print(f"{timestamp()} Removed empty legacy folder '{legacy_dir}'")
-            except Exception as e:
-                pass
-
-        # 2) Migrate config file from legacy path to new path
-        legacy_cfg = get_legacy_config_path()
-        new_cfg = get_config_path()
-
-        if os.path.exists(legacy_cfg):
-            # If new already exists, back it up to imxup.ini.bak (with numeric suffix if needed)
-            if os.path.exists(new_cfg):
-                base_bak = new_cfg + ".bak"
-                bak_path = base_bak
-                idx = 1
-                while os.path.exists(bak_path):
-                    bak_path = f"{base_bak}.{idx}"
-                    idx += 1
-                try:
-                    os.replace(new_cfg, bak_path)
-                    print(f"{timestamp()} Existing new config found. Backed up to '{bak_path}'")
-                except Exception as e:
-                    print(f"{timestamp()} Warning: failed to backup existing config '{new_cfg}': {e}")
-            # Move legacy into place
-            try:
-                os.replace(legacy_cfg, new_cfg)
-                print(f"{timestamp()} Migrated config to '{new_cfg}'")
-            except Exception as e:
-                print(f"{timestamp()} Warning: failed to migrate legacy config '{legacy_cfg}': {e}")
-    except Exception as e:
-        print(f"{timestamp()} Migration error: {e}")
-
-# Perform migration at import time so all subsequent code uses the new locations
-migrate_legacy_storage()
 
 def create_windows_context_menu():
     """Create Windows context menu integration"""
@@ -502,36 +437,13 @@ def save_unnamed_gallery(gallery_id, intended_name):
         log(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'", level="info", category="renaming")
 
 def get_default_central_store_base_path():
-    """Return the default central store BASE path (parent of galleries/templates)."""
+    """Return the default central store BASE path. Alias for get_base_path default."""
     return os.path.join(os.path.expanduser("~"), ".imxup")
 
 
 def get_central_store_base_path():
     """Get the configured central store BASE path (parent of galleries/templates)."""
-    try:
-        import configparser
-        config = configparser.ConfigParser()
-        config_file = get_config_path()
-        base_path = None
-        storage_mode = 'home'
-        
-        if os.path.exists(config_file):
-            config.read(config_file)
-            if 'DEFAULTS' in config:
-                storage_mode = config.get('DEFAULTS', 'storage_mode', fallback='home')
-                if storage_mode == 'portable':
-                    # Use portable path (app root/.imxup)
-                    app_root = get_project_root()  # Use centralized function that handles frozen exe correctly
-                    base_path = os.path.join(app_root, '.imxup')
-                elif storage_mode == 'custom':
-                    # Use custom path from config
-                    base_path = config.get('DEFAULTS', 'central_store_path', fallback=None)
-                # else 'home' mode falls through to default
-        
-        if not base_path:
-            base_path = get_default_central_store_base_path()
-    except Exception:
-        base_path = get_default_central_store_base_path()
+    base_path = get_base_path()
     os.makedirs(base_path, exist_ok=True)
     return base_path
 
@@ -712,8 +624,9 @@ def remove_unnamed_gallery(gallery_id):
 from src.network.cookies import get_firefox_cookies, load_cookies_from_file
 
 def get_template_path():
-    """Get the template directory path (~/.imxup/templates)."""
-    template_path = os.path.join(os.path.expanduser("~"), ".imxup", "templates")
+    """Get the template directory path (uses configured central store location)."""
+    base_path = get_central_store_base_path()  # Use configured path, not hardcoded
+    template_path = os.path.join(base_path, "templates")
     os.makedirs(template_path, exist_ok=True)
     return template_path
 
@@ -958,16 +871,13 @@ class UploadProgressWrapper:
 
     def read(self, size=-1):
         """Read chunk from buffer and invoke callback. Called by requests during upload."""
-        print(f"[BANDWIDTH DEBUG] read() called: size={size}, position={self._bytesio.tell()}/{self.total_size}", flush=True)
         chunk = self._bytesio.read(size)
-        print(f"[BANDWIDTH DEBUG] read {len(chunk) if chunk else 0} bytes, new pos={self._bytesio.tell()}", flush=True)
         if chunk and self.callback:
             try:
                 # Report cumulative bytes sent
                 self.callback(self._bytesio.tell(), self.total_size)
-                print(f"[BANDWIDTH DEBUG] callback invoked successfully", flush=True)
-            except Exception as e:
-                print(f"[BANDWIDTH DEBUG] callback FAILED: {e}", flush=True)
+            except Exception:
+                pass  # Silently ignore callback failures
         return chunk
 
     def __len__(self):
@@ -1634,14 +1544,12 @@ class ImxToUploader:
 
             def curl_progress_callback(download_total, downloaded, upload_total, uploaded):
                 callback_count[0] += 1
-                if callback_count[0] % 10 == 0:  # Log every 10th callback
-                    print(f"[PYCURL] Callback #{callback_count[0]}: {uploaded}/{upload_total} bytes", flush=True)
 
                 if progress_callback and upload_total > 0:
                     try:
                         progress_callback(int(uploaded), int(upload_total))
-                    except Exception as e:
-                        print(f"[PYCURL] Callback error: {e}", flush=True)
+                    except Exception:
+                        pass  # Silently ignore callback errors
                 return 0
 
             # Get or create thread-local curl handle (connection reuse)

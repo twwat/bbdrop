@@ -20,37 +20,106 @@ from src.core.constants import (
 )
 
 
+class OverallProgressWidget(QWidget):
+    """Custom progress bar widget for overall progress with label overlay"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Initialize the UI with progress bar and text label overlay"""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Progress bar (text disabled, we'll use label instead)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setProperty("class", "overall-progress")
+
+        # Text label overlay - parent it to the progress bar so it overlays properly
+        self.text_label = QLabel("Ready", self.progress_bar)
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text_label.setProperty("class", "progress-text-large")  # Different class for larger font
+        self.text_label.setGeometry(0, 0, 100, 25)
+
+        layout.addWidget(self.progress_bar)
+        self.setLayout(layout)
+
+    def resizeEvent(self, event):
+        """Update label size when widget is resized"""
+        super().resizeEvent(event)
+        if hasattr(self, 'text_label') and hasattr(self, 'progress_bar'):
+            self.text_label.setGeometry(0, 0, self.progress_bar.width(), self.progress_bar.height())
+
+    def setValue(self, value: int):
+        """Set progress value"""
+        self.progress_bar.setValue(value)
+
+    def setText(self, text: str):
+        """Set progress text"""
+        self.text_label.setText(text)
+
+    def setProperty(self, name: str, value):
+        """Set property on progress bar"""
+        self.progress_bar.setProperty(name, value)
+        if name == "status":
+            self.progress_bar.style().polish(self.progress_bar)
+
+
 class TableProgressWidget(QWidget):
-    """Custom progress bar widget for table cells"""
-    
+    """Custom progress bar widget for table cells with label overlay for text positioning control"""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.progress = 0
         self.status_text = ""
         self.setup_ui()
-    
+
     def setup_ui(self):
-        """Initialize the UI"""
+        """Initialize the UI with progress bar and text label overlay"""
+        # Main layout
         layout = QVBoxLayout()
         layout.setContentsMargins(2, 2, 2, 2)
-        
+
+        # Progress bar (text disabled, we'll use label instead)
         self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setTextVisible(False)
         self.progress_bar.setProperty("class", "table-progress")
-        
+        self.progress_bar.setMinimumHeight(15)
+
+        # Text label overlay - parent it to the progress bar so it overlays properly
+        self.text_label = QLabel("0%", self.progress_bar)
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text_label.setProperty("class", "progress-text")
+        # Don't set color inline - let styles.qss handle theme-aware colors
+
+        # Initially size the label to match progress bar (will update in resizeEvent)
+        self.text_label.setGeometry(0, 0, 100, 15)
+
         layout.addWidget(self.progress_bar)
         self.setLayout(layout)
+
+    def resizeEvent(self, event):
+        """Update label size when widget is resized"""
+        super().resizeEvent(event)
+        # Make label match progress bar size exactly
+        if hasattr(self, 'text_label') and hasattr(self, 'progress_bar'):
+            self.text_label.setGeometry(0, 0, self.progress_bar.width(), self.progress_bar.height())
     
     def set_progress(self, value: int, text: str = ""):
         """Set progress value and optional text"""
         self.progress = value
         self.status_text = text
         self.progress_bar.setValue(value)
-        
+
+        # Update label text instead of progress bar format
         if text:
-            self.progress_bar.setFormat(f"{text} - {value}%")
+            self.text_label.setText(f"{text} - {value}%")
         else:
-            self.progress_bar.setFormat(f"{value}%")
+            self.text_label.setText(f"{value}%")
     
     def get_progress(self) -> int:
         """Get current progress value"""
@@ -59,10 +128,13 @@ class TableProgressWidget(QWidget):
     def update_progress(self, value: int, status: str = ""):
         """Update progress value with status-based styling"""
         self.progress_bar.setValue(value)
-        
+
+        # Update label text
+        self.text_label.setText(f"{value}%")
+
         # Set CSS class-like properties for theme-based styling via styles.qss
         self.progress_bar.setProperty("status", status)
-        
+
         # Force style update to apply new property
         self.progress_bar.style().polish(self.progress_bar)
 

@@ -49,8 +49,8 @@ class UploadWorker(QThread):
         self.global_byte_counter = AtomicCounter()  # Persistent across ALL galleries (Speed box)
         self.current_gallery_counter: Optional[AtomicCounter] = None  # Per-gallery running average
 
-        # Bandwidth calculation state
-        self._bw_last_bytes = 0
+        # Bandwidth calculation state - initialize to current counter to avoid initial spike
+        self._bw_last_bytes = self.global_byte_counter.get()
         self._bw_last_time = time.time()
         self._bw_last_emit = 0.0
 
@@ -147,7 +147,7 @@ class UploadWorker(QThread):
 
         def poll_bandwidth():
             """Background thread that polls byte counter and emits bandwidth updates"""
-            poll_last_bytes = 0
+            poll_last_bytes = self.global_byte_counter.get()  # Start from current cumulative value
             poll_last_time = time.time()
 
             while not stop_polling.is_set():
