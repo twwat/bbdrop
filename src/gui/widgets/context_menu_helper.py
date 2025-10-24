@@ -262,9 +262,9 @@ class GalleryContextMenuHelper(QObject):
         # First try to find the method on the table widget
         table_widget = None
         if hasattr(self.main_window, 'gallery_table'):
-            if hasattr(self.main_window.gallery_table, 'gallery_table'):
+            if hasattr(self.main_window.gallery_table, 'table'):
                 # Tabbed widget case
-                table_widget = self.main_window.gallery_table.gallery_table
+                table_widget = self.main_window.gallery_table.table
             else:
                 # Direct table case
                 table_widget = self.main_window.gallery_table
@@ -372,8 +372,8 @@ class GalleryContextMenuHelper(QObject):
             
         try:
             # Get table reference (handle both tabbed and direct table)
-            if hasattr(self.main_window.gallery_table, 'gallery_table'):
-                table = self.main_window.gallery_table.gallery_table
+            if hasattr(self.main_window.gallery_table, 'table'):
+                table = self.main_window.gallery_table.table
             else:
                 table = self.main_window.gallery_table
                 
