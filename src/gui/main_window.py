@@ -443,6 +443,29 @@ class ImxUploadGUI(QMainWindow):
         self.completion_worker.start()
         if self.splash:
             self.splash.set_status("Upload Completion Worker")
+
+        # Initialize file host worker manager for background file host uploads
+        if self.splash:
+            self.splash.set_status("File Host Worker Manager")
+        try:
+            from src.processing.file_host_worker_manager import FileHostWorkerManager
+            self.file_host_manager = FileHostWorkerManager(self.queue_manager.store)
+
+            # Connect manager signals to UI handlers
+            self.file_host_manager.test_completed.connect(self.on_file_host_test_completed)
+            self.file_host_manager.upload_started.connect(self.on_file_host_upload_started)
+            self.file_host_manager.upload_progress.connect(self.on_file_host_upload_progress)
+            self.file_host_manager.upload_completed.connect(self.on_file_host_upload_completed)
+            self.file_host_manager.upload_failed.connect(self.on_file_host_upload_failed)
+            self.file_host_manager.bandwidth_updated.connect(self.on_file_host_bandwidth_updated)
+
+
+            # NOTE: init_enabled_hosts() called AFTER GUI shown (see launch_gui())
+            log("FileHostWorkerManager started", level="info", category="file_hosts")
+        except Exception as e:
+            log(f"Failed to start FileHostWorkerManager: {e}", level="error", category="file_hosts")
+            self.file_host_manager = None
+
         self.table_progress_widgets = {}
         self.settings = QSettings("ImxUploader", "ImxUploadGUI")
         
@@ -644,7 +667,7 @@ class ImxUploadGUI(QMainWindow):
         self.update_timer.start(500)  # Start the timer
         self.check_credentials() # Check for stored credentials (only prompt if API key missing)
         self.start_worker() # Start worker thread
-        self._initialize_table_from_queue() # Initial table build with proper path mapping
+        # Gallery loading moved to main() with progress dialog for better perceived performance
         # Button counts and progress will be updated by refresh_filter() after filter is applied
         self.gallery_table.setFocus() # Ensure table has focus for keyboard shortcuts
         self._initializing = False # Clear initialization flag to allow normal tooltip updates
@@ -2296,7 +2319,9 @@ class ImxUploadGUI(QMainWindow):
 
     def open_comprehensive_settings(self, tab_index=0):
         """Open comprehensive settings dialog to specific tab"""
-        dialog = ComprehensiveSettingsDialog(self)
+        # Pass file_host_manager to settings dialog
+        file_host_manager = getattr(self, 'file_host_manager', None)
+        dialog = ComprehensiveSettingsDialog(self, file_host_manager=file_host_manager)
         if 0 <= tab_index < dialog.tab_widget.count():
             dialog.tab_widget.setCurrentIndex(tab_index)
 
@@ -2820,6 +2845,105 @@ class ImxUploadGUI(QMainWindow):
                 self.speed_fastest_value_label.setToolTip(f"Record set: {timestamp}")
         except Exception:
             pass
+
+    # File Host Upload Signal Handlers
+    def on_file_host_upload_started(self, gallery_id: int, host_name: str):
+        """Handle file host upload started"""
+        log(f"File host upload started: {host_name} for gallery {gallery_id}", level="debug", category="file_hosts")
+        # Refresh the row to show uploading status
+        self._refresh_file_host_widgets_for_gallery_id(gallery_id)
+
+    def on_file_host_upload_progress(self, gallery_id: int, host_name: str, uploaded_bytes: int, total_bytes: int):
+        """Handle file host upload progress"""
+        # Progress updates are frequent, so we just update tooltips without full refresh
+        pass
+
+    def on_file_host_upload_completed(self, gallery_id: int, host_name: str, result: dict):
+        """Handle file host upload completed"""
+        log(f"File host upload completed: {host_name} for gallery {gallery_id}", level="info", category="file_hosts")
+        # Refresh the row to show completed status
+        self._refresh_file_host_widgets_for_gallery_id(gallery_id)
+
+    def on_file_host_upload_failed(self, gallery_id: int, host_name: str, error_message: str):
+        """Handle file host upload failed"""
+        log(f"File host upload failed: {host_name} for gallery {gallery_id}: {error_message}", level="warning", category="file_hosts")
+        # Refresh the row to show failed status
+        self._refresh_file_host_widgets_for_gallery_id(gallery_id)
+
+    def on_file_host_bandwidth_updated(self, kbps: float):
+        """Handle file host bandwidth update"""
+        # TODO: Phase 7 - Update file hosts bandwidth display in Speed box
+        pass
+
+    def on_file_host_storage_updated(self, host_id: str, total, left):
+        """Handle file host storage update from worker.
+
+        Args:
+            host_id: Host identifier
+            total: Total storage in bytes
+            left: Free storage in bytes
+        """
+        # Storage updates are handled by FileHostsSettingsWidget if settings dialog is open
+        # Main window doesn't need to display storage info
+        log(
+            f"[Main Window] Storage updated for {host_id}: {left}/{total} bytes",
+            level="debug",
+            category="file_hosts"
+        )
+
+    def on_file_host_test_completed(self, host_id: str, results: dict):
+        """Handle file host test completion from worker.
+
+        Args:
+            host_id: Host identifier
+            results: Test results dictionary
+        """
+        # Test results are handled by FileHostsSettingsWidget if settings dialog is open
+        # Log result for main window
+        tests_passed = sum([
+            results.get('credentials_valid', False),
+            results.get('user_info_valid', False),
+            results.get('upload_success', False),
+            results.get('delete_success', False)
+        ])
+
+    def _refresh_file_host_widgets_for_gallery_id(self, gallery_id: int):
+        """Refresh file host widgets for a specific gallery ID"""
+        try:
+            # Find gallery path from gallery_id
+            gallery_path = None
+            for path, item in self.queue_manager.queue_items.items():
+                if item.gallery_id and str(item.gallery_id) == str(gallery_id):
+                    gallery_path = path
+                    break
+
+            if not gallery_path:
+                return
+
+            # Find row for this gallery
+            row = self.path_to_row.get(gallery_path)
+            if row is None:
+                return
+
+            # Get updated host upload data
+            host_uploads = {}
+            try:
+                uploads_list = self.queue_manager.store.get_file_host_uploads(gallery_path)
+                host_uploads = {upload['host_name']: upload for upload in uploads_list}
+            except Exception as e:
+                log(f"Failed to load file host uploads: {e}", level="warning", category="file_hosts")
+                return
+
+            # Update the HOSTS_STATUS widget
+            from src.gui.widgets.custom_widgets import FileHostsStatusWidget
+            status_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
+            if isinstance(status_widget, FileHostsStatusWidget):
+                status_widget.update_hosts(host_uploads)
+
+        except Exception as e:
+            log(f"Error refreshing file host widgets: {e}", level="error", category="file_hosts")
+            import traceback
+            traceback.print_exc()
 
 
     def browse_for_folders(self):
@@ -3640,7 +3764,44 @@ class ImxUploadGUI(QMainWindow):
             print(f"ERROR: Failed to create action buttons for row {row}: {e}")
             import traceback
             traceback.print_exc()
-    
+
+        # File host widgets - CREATE/UPDATE FILE HOST STATUS AND ACTION WIDGETS
+        try:
+            from src.gui.widgets.custom_widgets import FileHostsStatusWidget, FileHostsActionWidget
+
+            # Get file host upload data from database
+            host_uploads = {}
+            try:
+                uploads_list = self.queue_manager.store.get_file_host_uploads(item.path)
+                host_uploads = {upload['host_name']: upload for upload in uploads_list}
+            except Exception as e:
+                log(f"Failed to load file host uploads for {item.path}: {e}", level="warning", category="file_hosts")
+
+            # HOSTS_STATUS widget (icons)
+            existing_status_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
+            if not isinstance(existing_status_widget, FileHostsStatusWidget):
+                status_widget = FileHostsStatusWidget(item.path, parent=self)
+                status_widget.update_hosts(host_uploads)
+                # Connect signal to show host details dialog
+                status_widget.host_clicked.connect(self._on_file_host_icon_clicked)
+                self.gallery_table.setCellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS, status_widget)
+            else:
+                # Update existing widget
+                existing_status_widget.update_hosts(host_uploads)
+
+            # HOSTS_ACTION widget (manage button)
+            existing_action_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_HOSTS_ACTION)
+            if not isinstance(existing_action_widget, FileHostsActionWidget):
+                action_widget = FileHostsActionWidget(item.path, parent=self)
+                # Connect signal to show file host details dialog
+                action_widget.manage_clicked.connect(self._on_file_hosts_manage_clicked)
+                self.gallery_table.setCellWidget(row, GalleryTableWidget.COL_HOSTS_ACTION, action_widget)
+
+        except Exception as e:
+            log(f"Failed to create file host widgets for row {row}: {e}", level="error", category="file_hosts")
+            import traceback
+            traceback.print_exc()
+
     def _populate_table_row_detailed(self, row: int, item: GalleryQueueItem):
         """Complete row formatting in background - TRULY NON-BLOCKING"""
         # Use background thread for expensive formatting operations
@@ -3766,14 +3927,21 @@ class ImxUploadGUI(QMainWindow):
         self.gallery_table.setItem(row, GalleryTableWidget.COL_TRANSFER, xfer_item)
     
 
-    def _initialize_table_from_queue(self):
-        """Initialize table from existing queue items - called once on startup"""
+    def _initialize_table_from_queue(self, progress_callback=None):
+        """Initialize table from existing queue items - called once on startup
+
+        Args:
+            progress_callback: Optional callable(current, total) for progress updates
+        """
+        log(f"_initialize_table_from_queue() called", level="debug", category="ui")
+
         # Clear any existing mappings
         self.path_to_row.clear()
         self.row_to_path.clear()
 
         # Get all items and build table
         items = self.queue_manager.get_all_items()
+        log(f"Loading {len(items)} galleries from queue", level="info", category="ui")
         self.gallery_table.setRowCount(len(items))
 
         for row, item in enumerate(items):
@@ -3786,6 +3954,10 @@ class ImxUploadGUI(QMainWindow):
 
             # Initialize scan state tracking
             self._last_scan_states[item.path] = item.scan_complete
+
+            # Report progress
+            if progress_callback:
+                progress_callback(row + 1, len(items))
 
         # After building the table, apply the current tab filter and emit tab_changed to update counts
         if hasattr(self.gallery_table, 'refresh_filter'):
@@ -4711,6 +4883,26 @@ class ImxUploadGUI(QMainWindow):
             log(f"ERROR: Exception starting upload for {path}: {e}", level="error", category="queue")
             return False
 
+    def _on_file_host_icon_clicked(self, gallery_path: str, host_name: str):
+        """Handle file host icon click - show details for specific host"""
+        # TODO: Show File Host Details Dialog filtered to this host
+        log(f"File host icon clicked: {host_name} for {os.path.basename(gallery_path)}", level="debug", category="file_hosts")
+
+        # For now, just open the manage dialog
+        self._on_file_hosts_manage_clicked(gallery_path)
+
+    def _on_file_hosts_manage_clicked(self, gallery_path: str):
+        """Handle 'Manage' button click - show File Host Details Dialog"""
+        log(f"File hosts manage clicked for {os.path.basename(gallery_path)}", level="debug", category="file_hosts")
+
+        # TODO: Phase 6 - Implement File Host Details Dialog
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self,
+            "File Hosts",
+            f"File Host Details Dialog will be implemented in Phase 6.\n\nGallery: {os.path.basename(gallery_path)}"
+        )
+
     def handle_view_button(self, path: str):
         """Handle view button click - show BBCode for completed, start upload for ready, retry/file manager for failed"""
         item = self.queue_manager.get_item(path)
@@ -5412,6 +5604,10 @@ class ImxUploadGUI(QMainWindow):
             self.completion_worker.stop()
             self.completion_worker.wait(3000)  # Wait up to 3 seconds for shutdown
 
+        # Stop file host worker manager
+        if hasattr(self, 'file_host_manager') and self.file_host_manager:
+            self.file_host_manager.shutdown_all()
+
         self.server.stop()
 
         # Accept the close event to ensure app exits
@@ -5847,7 +6043,30 @@ def main():
     # Hide splash and show main window
     splash.finish_and_hide()
     window.show()
-    
+
+    # Load saved galleries with blocking progress dialog (moved from __init__ for better UX)
+    print(f"{timestamp()} INFO: Showing gallery loading progress dialog")
+    progress = QProgressDialog("Loading saved galleries...", None, 0, 0, window)
+    progress.setWindowModality(Qt.WindowModality.WindowModal)
+    progress.setMinimumDuration(0)  # Show immediately
+    progress.show()
+    QApplication.processEvents()
+
+    print(f"{timestamp()} INFO: Calling _initialize_table_from_queue()")
+    window._initialize_table_from_queue()
+
+    # Process events to ensure the QTimer.singleShot(0) in _initialize_table_from_queue completes
+    # This ensures the filter is applied and the table is fully updated before closing the dialog
+    print(f"{timestamp()} INFO: Processing final events before closing progress dialog")
+    QApplication.processEvents()
+
+    progress.close()
+    print(f"{timestamp()} INFO: Gallery loading complete")
+
+    # Initialize file host workers AFTER GUI is loaded and displayed
+    if hasattr(window, "file_host_manager") and window.file_host_manager:
+        window.file_host_manager.init_enabled_hosts()
+        log("FileHostWorkerManager workers spawned", level="info", category="file_hosts")
     try:
         sys.exit(app.exec())
     except KeyboardInterrupt:

@@ -1057,7 +1057,7 @@ class TabbedGalleryWidget(QWidget):
                 base_name = current_text.split(' (')[0] if ' (' in current_text else current_text
             
                 if base_name == "All Tabs":
-                    total_galleries = self.table.rowCount() if hasattr(self, 'gallery_table') else 0
+                    total_galleries = self.table.rowCount() if hasattr(self, 'table') else 0
                     # Update tab text with count
                     self.tab_bar.setTabText(i, f"All Tabs ({total_galleries})")
                     self.tab_bar.setTabToolTip(i, 

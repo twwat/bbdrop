@@ -86,10 +86,12 @@ class GalleryTableWidget(QTableWidget):
         (15, 'CUSTOM2',     'Custom2',      100, 'Interactive', True,  True),
         (16, 'CUSTOM3',     'Custom3',      100, 'Interactive', True,  True),
         (17, 'CUSTOM4',     'Custom4',      100, 'Interactive', True,  True),
-        (18, 'EXT1',        'ext1',         100, 'Interactive', True,  True),
-        (19, 'EXT2',        'ext2',         100, 'Interactive', True,  True),
-        (20, 'EXT3',        'ext3',         100, 'Interactive', True,  True),
-        (21, 'EXT4',        'ext4',         100, 'Interactive', True,  True),
+        (18, 'EXT1',          'ext1',         100, 'Interactive', True,  True),
+        (19, 'EXT2',          'ext2',         100, 'Interactive', True,  True),
+        (20, 'EXT3',          'ext3',         100, 'Interactive', True,  True),
+        (21, 'EXT4',          'ext4',         100, 'Interactive', True,  True),
+        (22, 'HOSTS_STATUS',  'file hosts',   150, 'Interactive', False, True),
+        (23, 'HOSTS_ACTION',  'hosts action', 80,  'Interactive', False, True),
     ]
 
     # Create class attributes dynamically from COLUMNS definition

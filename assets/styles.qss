@@ -133,6 +133,21 @@ QProgressBar[status="incomplete"]::chunk { background-color: #f39c12; }
 QProgressBar[status="ready"]             { border: 1px solid #7cbce7; /* rgb(51, 148, 213); */ }
 QProgressBar[status="ready"]::chunk      { background-color: #7cbce7; /* #5cace2; */ }
 
+/* Storage progress bars - plenty of space (green, uses completed colors) */
+QProgressBar[storage_status="plenty"]         { border: 1px solid #caffe2; background-color: #ffcccc; }
+QProgressBar[storage_status="plenty"]::chunk  { background-color: #85d0a5; }
+
+/* Storage progress bars - medium space (blue, uses uploading colors) */
+QProgressBar[storage_status="medium"]         { border: 1px solid #ff3394d5; background-color: #ffb3b3; }
+QProgressBar[storage_status="medium"]::chunk  { background-color: #5cace2; }
+
+/* Storage progress bars - low space (red, uses failed colors) */
+QProgressBar[storage_status="low"]            { border: 1px solid rgb(190, 65, 51); background-color: #ff9999; }
+QProgressBar[storage_status="low"]::chunk     { background-color: #e74c3c; }
+
+/* Storage bars font size */
+QProgressBar[class="storage-bar"] { font-size: 11px; font-weight: bold; }
+
 QProgressBar[class="overall-progress"]      { color: #222222; }
 QLabel[class="progress-text"]               { color: #222222; }
 QLabel[class="progress-text-large"]         { color: #222222; }
@@ -306,6 +321,18 @@ QProgressBar[status="incomplete"]        { border: 1px solid #b8860b; }
 QProgressBar[status="incomplete"]::chunk { background-color: #b8860b; } 
 QProgressBar[status="ready"]             { border: 1px solid #2a6a96; }
 QProgressBar[status="ready"]::chunk      { background-color: #1c5a7e; }
+
+/* Storage progress bars - plenty of space (green, uses completed colors) */
+QProgressBar[storage_status="plenty"]         { border: 1px solid #0a2817; background-color: #8b3a3a; }
+QProgressBar[storage_status="plenty"]::chunk  { background-color: #417d5b; }
+
+/* Storage progress bars - medium space (blue, uses uploading colors) */
+QProgressBar[storage_status="medium"]         { border: 1px solid #1d98de; background-color: #7a2f2f; }
+QProgressBar[storage_status="medium"]::chunk  { background-color: #1d98de; }
+
+/* Storage progress bars - low space (red, uses failed colors) */
+QProgressBar[storage_status="low"]            { border: 1px solid #a71d2a; background-color: #6b2424; }
+QProgressBar[storage_status="low"]::chunk     { background-color: #a71d2a; }
 
 QProgressBar[class="overall-progress"]      { color: #eeeeee; }
 QLabel[class="progress-text"]               { color: #eeeeee; }

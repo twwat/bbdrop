@@ -825,3 +825,164 @@ class CopyableLogTableWidget(QTableWidget):
         action = menu.exec(self.mapToGlobal(position))
         if action == copy_action:
             self.copy_selected_rows()
+
+
+class FileHostsStatusWidget(QWidget):
+    """Widget showing file host upload status icons for a gallery"""
+
+    # Signal emitted when a host icon is clicked
+    host_clicked = pyqtSignal(str, str)  # gallery_path, host_name
+
+    def __init__(self, gallery_path: str, parent=None):
+        super().__init__(parent)
+        self.gallery_path = gallery_path
+        self.host_buttons = {}  # {host_name: QPushButton}
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 1, 4, 1)
+        layout.setSpacing(2)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        self.setLayout(layout)
+
+        # Will be populated by update_hosts()
+        self._initialized = False
+
+    def update_hosts(self, host_uploads: Dict[str, Dict[str, Any]]):
+        """Update host status icons.
+
+        Args:
+            host_uploads: Dict of {host_name: upload_data}
+        """
+        from src.core.file_host_config import get_config_manager
+        from src.gui.icon_manager import get_icon_manager
+
+        config_manager = get_config_manager()
+        icon_manager = get_icon_manager()
+
+        layout = self.layout()
+
+        # Clear existing buttons if reinitializing
+        if self._initialized:
+            for btn in self.host_buttons.values():
+                btn.deleteLater()
+            self.host_buttons.clear()
+
+        # Get all enabled hosts
+        enabled_hosts = config_manager.get_enabled_hosts()
+
+        # Also include hosts that have uploads (even if now disabled)
+        all_hosts_to_show = set(enabled_hosts.keys())
+        all_hosts_to_show.update(host_uploads.keys())
+
+        for host_name in sorted(all_hosts_to_show):
+            # Get host config
+            host_config = config_manager.get_host(host_name)
+            if not host_config:
+                continue
+
+            # Get upload status
+            upload = host_uploads.get(host_name, {})
+            status = upload.get('status', 'pending')
+
+            # Create button
+            btn = QPushButton()
+            btn.setFixedSize(24, 24)
+            btn.setToolTip(f"{host_config.name}: {status}")
+            btn.setProperty("class", "icon-btn")
+
+            # Load host icon (fallback to generic icon)
+            host_icon_path = f"hosts/{host_name}.png"
+            try:
+                # Try to load host-specific icon
+                from pathlib import Path
+                icon_path = Path(icon_manager.assets_dir) / host_icon_path
+                if icon_path.exists():
+                    base_icon = QIcon(str(icon_path))
+                else:
+                    # Fallback to a generic icon
+                    base_icon = icon_manager.get_icon('action_view')
+            except:
+                base_icon = icon_manager.get_icon('action_view')
+
+            # Apply status overlay
+            final_icon = self._apply_status_overlay(base_icon, status, icon_manager)
+
+            btn.setIcon(final_icon)
+            btn.setIconSize(QSize(20, 20))
+
+            # Connect click handler
+            btn.clicked.connect(lambda checked, h=host_name: self.host_clicked.emit(self.gallery_path, h))
+
+            self.host_buttons[host_name] = btn
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        self._initialized = True
+
+    def _apply_status_overlay(self, base_icon: QIcon, status: str, icon_manager) -> QIcon:
+        """Apply status overlay to host icon.
+
+        Args:
+            base_icon: Base host icon
+            status: Upload status ('pending', 'uploading', 'completed', 'failed')
+            icon_manager: IconManager instance
+
+        Returns:
+            QIcon with status overlay applied
+        """
+        # Get base pixmap
+        pixmap = base_icon.pixmap(QSize(24, 24))
+
+        # Create painter for overlays
+        painter = QPainter(pixmap)
+
+        if status == 'pending':
+            # Very transparent overlay
+            painter.setOpacity(0.3)
+            painter.fillRect(pixmap.rect(), QColor(128, 128, 128, 200))
+        elif status == 'uploading':
+            # Blue tint overlay
+            painter.setOpacity(0.3)
+            painter.fillRect(pixmap.rect(), QColor(0, 120, 255, 100))
+        elif status == 'completed':
+            # No overlay - full color
+            pass
+        elif status == 'failed':
+            # Red X overlay
+            painter.setOpacity(1.0)
+            painter.setPen(QPen(QColor(255, 0, 0), 3))
+            painter.drawLine(4, 4, 20, 20)
+            painter.drawLine(20, 4, 4, 20)
+
+        painter.end()
+
+        return QIcon(pixmap)
+
+
+class FileHostsActionWidget(QWidget):
+    """Widget with 'Manage Hosts' button for file host actions"""
+
+    # Signal emitted when manage button is clicked
+    manage_clicked = pyqtSignal(str)  # gallery_path
+
+    def __init__(self, gallery_path: str, parent=None):
+        super().__init__(parent)
+        self.gallery_path = gallery_path
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 1, 4, 1)
+        layout.setSpacing(3)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        # Manage button
+        self.manage_btn = QPushButton("Manage")
+        self.manage_btn.setFixedSize(60, 22)
+        self.manage_btn.setToolTip("Manage file host uploads for this gallery")
+        self.manage_btn.setProperty("class", "icon-btn")
+        self.manage_btn.clicked.connect(lambda: self.manage_clicked.emit(self.gallery_path))
+
+        layout.addWidget(self.manage_btn)
+        layout.addStretch()
+
+        self.setLayout(layout)

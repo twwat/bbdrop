@@ -107,6 +107,36 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS tabs_display_order_idx ON tabs(display_order ASC, created_ts ASC);
         CREATE INDEX IF NOT EXISTS tabs_type_idx ON tabs(tab_type);
         CREATE INDEX IF NOT EXISTS tabs_active_idx ON tabs(is_active, display_order ASC);
+
+        CREATE TABLE IF NOT EXISTS file_host_uploads (
+            id INTEGER PRIMARY KEY,
+            gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+            host_name TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('pending','uploading','completed','failed','cancelled')),
+
+            -- Upload tracking
+            zip_path TEXT,
+            started_ts INTEGER,
+            finished_ts INTEGER,
+            uploaded_bytes INTEGER DEFAULT 0,
+            total_bytes INTEGER DEFAULT 0,
+
+            -- Results
+            download_url TEXT,
+            file_id TEXT,
+            file_name TEXT,
+            error_message TEXT,
+
+            -- Metadata
+            raw_response TEXT,
+            retry_count INTEGER DEFAULT 0,
+            created_ts INTEGER DEFAULT (strftime('%s', 'now')),
+
+            UNIQUE(gallery_fk, host_name)
+        );
+        CREATE INDEX IF NOT EXISTS file_host_uploads_gallery_idx ON file_host_uploads(gallery_fk);
+        CREATE INDEX IF NOT EXISTS file_host_uploads_status_idx ON file_host_uploads(status);
+        CREATE INDEX IF NOT EXISTS file_host_uploads_host_idx ON file_host_uploads(host_name);
         """
     )
     # Run migrations after core schema creation (this adds tab_name column and indexes)
@@ -1293,11 +1323,232 @@ class QueueStore:
     
     def ensure_migrations_complete(self) -> None:
         """Ensure all database migrations have been run.
-        
+
         This method can be called explicitly if you need to ensure migrations
         are up to date without creating a new connection.
         """
         with _connect(self.db_path) as conn:
             _run_migrations(conn)
+
+    # ----------------------------- File Host Uploads ----------------------------
+
+    def add_file_host_upload(
+        self,
+        gallery_path: str,
+        host_name: str,
+        status: str = 'pending'
+    ) -> Optional[int]:
+        """Add a new file host upload record for a gallery.
+
+        Args:
+            gallery_path: Path to the gallery folder
+            host_name: Name of the file host (e.g., 'rapidgator', 'gofile')
+            status: Initial status ('pending', 'uploading', 'completed', 'failed', 'cancelled')
+
+        Returns:
+            Upload ID if created, None if failed
+        """
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            # Get gallery ID from path
+            cursor = conn.execute("SELECT id FROM galleries WHERE path = ?", (gallery_path,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            gallery_id = row[0]
+
+            try:
+                cursor = conn.execute(
+                    """
+                    INSERT OR REPLACE INTO file_host_uploads
+                    (gallery_fk, host_name, status, created_ts)
+                    VALUES (?, ?, ?, strftime('%s', 'now'))
+                    """,
+                    (gallery_id, host_name, status)
+                )
+                return cursor.lastrowid
+            except Exception as e:
+                print(f"Error adding file host upload: {e}")
+                return None
+
+    def get_file_host_uploads(self, gallery_path: str) -> List[Dict[str, Any]]:
+        """Get all file host uploads for a gallery.
+
+        Args:
+            gallery_path: Path to the gallery folder
+
+        Returns:
+            List of upload records as dictionaries
+        """
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            cursor = conn.execute(
+                """
+                SELECT
+                    fh.id, fh.gallery_fk, fh.host_name, fh.status,
+                    fh.zip_path, fh.started_ts, fh.finished_ts,
+                    fh.uploaded_bytes, fh.total_bytes,
+                    fh.download_url, fh.file_id, fh.file_name, fh.error_message,
+                    fh.raw_response, fh.retry_count, fh.created_ts
+                FROM file_host_uploads fh
+                JOIN galleries g ON fh.gallery_fk = g.id
+                WHERE g.path = ?
+                ORDER BY fh.created_ts ASC
+                """,
+                (gallery_path,)
+            )
+
+            uploads = []
+            for row in cursor.fetchall():
+                uploads.append({
+                    'id': row[0],
+                    'gallery_fk': row[1],
+                    'host_name': row[2],
+                    'status': row[3],
+                    'zip_path': row[4],
+                    'started_ts': row[5],
+                    'finished_ts': row[6],
+                    'uploaded_bytes': row[7],
+                    'total_bytes': row[8],
+                    'download_url': row[9],
+                    'file_id': row[10],
+                    'file_name': row[11],
+                    'error_message': row[12],
+                    'raw_response': row[13],
+                    'retry_count': row[14],
+                    'created_ts': row[15],
+                })
+
+            return uploads
+
+    def update_file_host_upload(
+        self,
+        upload_id: int,
+        **kwargs
+    ) -> bool:
+        """Update a file host upload record.
+
+        Args:
+            upload_id: ID of the upload record
+            **kwargs: Fields to update (status, uploaded_bytes, total_bytes, download_url, etc.)
+
+        Returns:
+            True if updated successfully, False otherwise
+        """
+        if not kwargs:
+            return False
+
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            # Build UPDATE query dynamically
+            allowed_fields = {
+                'status', 'zip_path', 'started_ts', 'finished_ts',
+                'uploaded_bytes', 'total_bytes', 'download_url',
+                'file_id', 'file_name', 'error_message', 'raw_response', 'retry_count'
+            }
+
+            updates = []
+            values = []
+            for key, value in kwargs.items():
+                if key in allowed_fields:
+                    updates.append(f"{key} = ?")
+                    values.append(value)
+
+            if not updates:
+                return False
+
+            values.append(upload_id)
+
+            try:
+                cursor = conn.execute(
+                    f"UPDATE file_host_uploads SET {', '.join(updates)} WHERE id = ?",
+                    values
+                )
+                return cursor.rowcount > 0
+            except Exception as e:
+                print(f"Error updating file host upload: {e}")
+                return False
+
+    def delete_file_host_upload(self, upload_id: int) -> bool:
+        """Delete a file host upload record.
+
+        Args:
+            upload_id: ID of the upload record
+
+        Returns:
+            True if deleted, False otherwise
+        """
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            try:
+                cursor = conn.execute(
+                    "DELETE FROM file_host_uploads WHERE id = ?",
+                    (upload_id,)
+                )
+                return cursor.rowcount > 0
+            except Exception as e:
+                print(f"Error deleting file host upload: {e}")
+                return False
+
+    def get_pending_file_host_uploads(self, host_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get all pending file host uploads, optionally filtered by host.
+
+        Args:
+            host_name: Optional host name to filter by
+
+        Returns:
+            List of pending upload records with gallery information
+        """
+        with _connect(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            if host_name:
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        fh.id, fh.gallery_fk, fh.host_name, fh.status,
+                        fh.retry_count, fh.created_ts,
+                        g.path, g.name, g.status as gallery_status
+                    FROM file_host_uploads fh
+                    JOIN galleries g ON fh.gallery_fk = g.id
+                    WHERE fh.status = 'pending' AND fh.host_name = ?
+                    ORDER BY fh.created_ts ASC
+                    """,
+                    (host_name,)
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        fh.id, fh.gallery_fk, fh.host_name, fh.status,
+                        fh.retry_count, fh.created_ts,
+                        g.path, g.name, g.status as gallery_status
+                    FROM file_host_uploads fh
+                    JOIN galleries g ON fh.gallery_fk = g.id
+                    WHERE fh.status = 'pending'
+                    ORDER BY fh.created_ts ASC
+                    """
+                )
+
+            uploads = []
+            for row in cursor.fetchall():
+                uploads.append({
+                    'id': row[0],
+                    'gallery_fk': row[1],
+                    'host_name': row[2],
+                    'status': row[3],
+                    'retry_count': row[4],
+                    'created_ts': row[5],
+                    'gallery_path': row[6],
+                    'gallery_name': row[7],
+                    'gallery_status': row[8],
+                })
+
+            return uploads
 
 

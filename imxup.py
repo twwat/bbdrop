@@ -60,7 +60,7 @@ import glob
 import winreg
 import mimetypes
 
-__version__ = "0.5.12"  # Application version number
+__version__ = "0.5.13"  # Application version number
 
 # Build User-Agent string (defer debug_print until after console allocation)
 _system = platform.system()
@@ -153,7 +153,7 @@ def create_windows_context_menu():
             # Running as Python script - use .py files with python.exe
             script_dir = get_project_root()
             cli_script = os.path.join(script_dir, 'imxup.py')
-            gui_script = os.path.join(script_dir, 'launch_gui.py')
+            gui_script = os.path.join(script_dir, 'imxup.py')  # Use imxup.py --gui for consistency
             # Prefer python.exe for CLI and pythonw.exe for GUI
             python_exe = sys.executable or 'python.exe'
             if python_exe.lower().endswith('pythonw.exe'):
@@ -182,8 +182,8 @@ def create_windows_context_menu():
             # For .exe, pass folder path as argument (--gui flag already in gui_script variable)
             gui_command = f'{gui_script} "%V"'
         else:
-            # For Python script, use pythonw.exe with script path
-            gui_command = f'"{pythonw_exe}" "{gui_script}" "%V"'
+            # For Python script, use pythonw.exe with imxup.py --gui
+            gui_command = f'"{pythonw_exe}" "{gui_script}" --gui "%V"'
 
         winreg.SetValue(gui_command_key_dir, "", winreg.REG_SZ, gui_command)
         winreg.CloseKey(gui_command_key_dir)
@@ -2351,7 +2351,8 @@ def main():
 
             # Import only lightweight PyQt6 basics for splash screen FIRST
             debug_print("Importing PyQt6.QtWidgets...")
-            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtWidgets import QApplication, QProgressDialog
+            from PyQt6.QtCore import Qt
             debug_print("Importing splash_screen...")
             from src.gui.splash_screen import SplashScreen
 
@@ -2457,9 +2458,44 @@ def main():
             if folders_to_add:
                 window.add_folders(folders_to_add)
 
-            # Hide splash and show main window
+            # Hide splash BEFORE loading galleries
             splash.finish_and_hide()
+
+            # Get gallery count to set up progress dialog properly
+            gallery_count = len(window.queue_manager.get_all_items())
+
+            # Load saved galleries with progress dialog (window exists but not shown yet)
+            debug_print(f"{timestamp()} INFO: Loading {gallery_count} galleries with progress dialog")
+            progress = QProgressDialog("Loading saved galleries...", None, 0, gallery_count, None)
+            progress.setWindowTitle("ImxUp")
+            progress.setWindowModality(Qt.WindowModality.ApplicationModal)
+            progress.setMinimumDuration(0)  # Show immediately
+            progress.show()
+            QApplication.processEvents()
+
+            debug_print(f"{timestamp()} INFO: Calling _initialize_table_from_queue()")
+            window._initialize_table_from_queue(progress_callback=lambda current, total: (
+                progress.setValue(current),
+                progress.setLabelText(f"Loading gallery {current}/{total}..."),
+                QApplication.processEvents() if current % 10 == 0 else None
+            ))
+
+            # Process events to ensure the QTimer.singleShot(0) in _initialize_table_from_queue completes
+            debug_print(f"{timestamp()} INFO: Processing final events before closing progress dialog")
+            QApplication.processEvents()
+
+            progress.close()
+            debug_print(f"{timestamp()} INFO: Gallery loading complete")
+
+            # NOW show the main window (galleries already loaded)
             window.show()
+
+            # Initialize file host workers AFTER GUI is loaded and displayed
+            if hasattr(window, "file_host_manager") and window.file_host_manager:
+                from src.utils.logger import log
+                log("Initializing file host workers on startup...", level="info", category="file_hosts")
+                window.file_host_manager.init_enabled_hosts()
+                log("File host worker initialization complete", level="info", category="file_hosts")
 
             # Now that GUI is visible, hide the console window (unless --debug)
             if os.name == 'nt' and '--debug' not in sys.argv:
@@ -2479,11 +2515,11 @@ def main():
             sys.exit(app.exec())
 
         except ImportError as e:
-            print(f"{timestamp()} ERROR: Import error: {e}")
-            print(f"Could not import PyQt6, required for GUI mode. Install with: pip install PyQt6")
+            debug_print(f"ERROR: Import error: {e}")
+            debug_print(f"CRITICAL: Could not import PyQt6, required for GUI mode. Install with: pip install PyQt6")
             sys.exit(1)
         except Exception as e:
-            print(f"{timestamp()} CRITICAL: Error launching GUI: {e}")
+            debug_print(f"CRITICAL: Error launching GUI: {e}")
             import traceback
             traceback.print_exc()
             sys.exit(1)
@@ -2491,25 +2527,25 @@ def main():
     # Handle secure setup
     if args.setup_secure:
             if setup_secure_password():
-                print(f"INFO: Setup complete! You can now use the script without storing passwords in plaintext.")
+                debug_print(f"Setup complete! You can now use the script without storing passwords in plaintext.")
             else:
-                print(f"ERROR: Setup failed. Please try again.")
+                debug_print(f"ERROR: Setup failed. Please try again.")
             return
     
     # Handle context menu installation
     if args.install_context_menu:
         if create_windows_context_menu():
-            print(f"INFO: Context menu installed successfully!")
+            debug_print(f"Context Menu: Installed successfully")
         else:
-            print(f"ERROR: Failed to install context menu.")
+            debug_print(f"Context Menu: ERROR: Failed to install context menu.")
         return
     
     # Handle context menu removal
     if args.remove_context_menu:
         if remove_windows_context_menu():
-            log(f"Context menu removed successfully.", level="info", category="ui")
+            debug_print(f"Context Menu: Removed successfully")
         else:
-            log(f"Failed to remove context menu.", level="error", category="ui")
+            debug_print(f"Context Menu: Failed to removeFailed to remove context menu.")
         return
     
     # Handle gallery visibility changes
@@ -2521,16 +2557,16 @@ def main():
         
         if args.public:
             if uploader.set_gallery_visibility(gallery_id, 1):
-                log(f"Gallery {gallery_id} set to public")
+                debug_print(f"Gallery {gallery_id} set to public")
             else:
-                log(f"Failed to set gallery {gallery_id} to public", level="error")
+                debug_print(f"ERROR: Failed to set gallery {gallery_id} to public")
         elif args.private:
             if uploader.set_gallery_visibility(gallery_id, 0):
-                log(f"Gallery {gallery_id} set to private")
+                debug_print(f"Gallery {gallery_id} set to private")
             else:
-                log(f"Failed to set gallery {gallery_id} to private", level="error")
+                debug_print(f"ERROR: Failed to set gallery {gallery_id} to private")
         else:
-            log("Please specify --public or --private", level="warning")
+            debug_print("WARNING: Please specify --public or --private")
         return
     
     # Handle unnamed gallery renaming
@@ -2541,9 +2577,9 @@ def main():
             #log(f" No unnamed galleries found to rename")
             return
 
-        log(f"Found {len(unnamed_galleries)} unnamed galleries to rename:", level="info", category="renaming")
+        debug_print(f"Found {len(unnamed_galleries)} unnamed galleries to rename:")
         for gallery_id, intended_name in unnamed_galleries.items():
-            log(f"   {gallery_id} -> '{intended_name}'")
+            debug_print(f"   {gallery_id} -> '{intended_name}'")
 
         # Use RenameWorker for all web-based rename operations
         try:
@@ -2553,21 +2589,21 @@ def main():
             # Wait for initial login (RenameWorker logs in automatically on init)
             import time
             if not rename_worker.login_complete.wait(timeout=30):
-                log(f"RenameWorker login timeout", level="error", category="auth")
-                log(f" To rename galleries manually:")
-                log(f" 1. Log in to https://imx.to in your browser")
-                log(f" 2. Navigate to each gallery and rename it manually")
-                log(f" Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
+                debug_print(f"RenameWorker: Login timeout")
+                debug_print(f" To rename galleries manually:")
+                debug_print(f" 1. Log in to https://imx.to in your browser")
+                debug_print(f" 2. Navigate to each gallery and rename it manually")
+                debug_print(f" Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
                 return 1
 
             if not rename_worker.login_successful:
-                log(f"RenameWorker login failed", level="error", category="auth")
-                log(f" DDoS-Guard protection may be blocking automated login.")
-                log(f" To rename galleries manually:")
-                log(f" 1. Log in to https://imx.to in your browser")
-                log(f" 2. Navigate to each gallery and rename it manually")
-                log(f" 3. Or export cookies from browser and place in cookies.txt file")
-                log(f" Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
+                debug_print(f"RenameWorker: Login failed")
+                debug_print(f" DDoS-Guard protection may be blocking automated login.")
+                debug_print(f" To rename galleries manually:")
+                debug_print(f" 1. Log in to https://imx.to in your browser")
+                debug_print(f" 2. Navigate to each gallery and rename it manually")
+                debug_print(f" 3. Or export cookies from browser and place in cookies.txt file")
+                debug_print(f" Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
                 return 1
 
             # Queue all renames
@@ -2575,7 +2611,7 @@ def main():
                 rename_worker.queue_rename(gallery_id, intended_name)
 
             # Wait for all renames to complete
-            log(f"Processing {len(unnamed_galleries)} rename requests...", level="info", category="renaming")
+            debug_print(f"Processing {len(unnamed_galleries)} rename requests...")
             while rename_worker.queue_size() > 0:
                 time.sleep(0.1)
 
@@ -2583,7 +2619,7 @@ def main():
             remaining_unnamed = get_unnamed_galleries()
             success_count = len(unnamed_galleries) - len(remaining_unnamed)
 
-            log(f"Successfully renamed {success_count}/{len(unnamed_galleries)} galleries", level="info", category="renaming")
+            debug_print(f"Successfully renamed {success_count}/{len(unnamed_galleries)} galleries")
 
             # Cleanup
             rename_worker.stop()
@@ -2591,7 +2627,7 @@ def main():
             return 0 if success_count == len(unnamed_galleries) else 1
 
         except Exception as e:
-            log(f"Failed to initialize RenameWorker: {e}", level="error", category="renaming")
+            debug_print(f"Failed to initialize RenameWorker: {e}")
             return 1
     
     # Check if folder paths are provided (required for upload)
@@ -2606,13 +2642,13 @@ def main():
             # Expand wildcards
             expanded = glob.glob(path)
             if not expanded:
-                log(f"Warning: No folders found matching pattern: {path}", level="warning")
+                debug_print(f"Warning: No folders found matching pattern: {path}")
             expanded_paths.extend(expanded)
         else:
             expanded_paths.append(path)
     
     if not expanded_paths:
-        log(f"No valid folders found to upload.", level="warning")
+        debug_print(f"No valid folders found to upload.")
         return 1  # No valid folders
     
     # Determine public gallery setting
@@ -2634,9 +2670,9 @@ def main():
         try:
             from src.processing.rename_worker import RenameWorker
             rename_worker = RenameWorker()
-            log(f"Rename Worker: Background worker initialized", level="debug", category="renaming")
+            debug_print(f"Rename Worker: Background worker initialized")
         except Exception as e:
-            log(f"Rename Worker: Failed to initialize RenameWorker: {e}", level="error", category="renaming")
+            debug_print(f"Rename Worker: Error trying to initialize RenameWorker: {e}")
             
         engine = UploadEngine(uploader, rename_worker)
 
@@ -2645,7 +2681,7 @@ def main():
             gallery_name = args.name if args.name else None
 
             try:
-                log(f" Starting upload: {os.path.basename(folder_path)}")
+                debug_print(f" Starting upload: {os.path.basename(folder_path)}")
                 results = engine.run(
                     folder_path=folder_path,
                     gallery_name=gallery_name,
@@ -2664,19 +2700,19 @@ def main():
                         template_name=args.template or "default",
                     )
                 except Exception as e:
-                    log(f"WARNING: Artifact save error: {e}", level="error")
+                    debug_print(f"WARNING: Artifact save error: {e}")
 
                 all_results.append(results)
 
             except KeyboardInterrupt:
-                log("DEBUG: Upload interrupted by user", level="debug")
+                debug_print("DEBUG: Upload interrupted by user")
                 # Cleanup RenameWorker on interrupt
                 if rename_worker:
                     rename_worker.stop()
-                    log(f" Background RenameWorker stopped")
+                    debug_print(f" Background RenameWorker stopped")
                 break
             except Exception as e:
-                log(f"Error uploading {folder_path}: {str(e)}", level="error")
+                debug_print(f"Error uploading {folder_path}: {str(e)}")
                 continue
         
         # Display summary for all galleries
@@ -2729,16 +2765,16 @@ def main():
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                log(f"Rename Worker: Background worker stopped", level="debug", category="renaming")
+                debug_print(f"Rename Worker: Background worker stopped")
                 
             return 0  # Success
         else:
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                log(f"Background RenameWorker stopped", level="debug", category="renaming")
+                debug_print(f"Background RenameWorker stopped")
                 
-            log("No galleries were successfully uploaded.", level="warning")
+            debug_print("No galleries were successfully uploaded.")
             return 1  # No galleries uploaded
             
     except Exception as e:
@@ -2746,10 +2782,10 @@ def main():
         try:
             if 'rename_worker' in locals() and rename_worker:
                 rename_worker.stop()
-                log(f"Rename Worker: Background worker stopped on exception: {e}", level="error", category="renaming")
+                debug_print(f"Rename Worker: Error: Background worker stopped on exception: {e}")
         except Exception:
             pass  # Ignore cleanup errors
-        log(f"Rename Worker: Error: {str(e)}", level="error", category="renaming")
+        debug_print(f"Rename Worker: Error: {str(e)}")
         return 1  # Error occurred
 
 if __name__ == "__main__":

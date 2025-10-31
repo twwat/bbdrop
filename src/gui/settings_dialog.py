@@ -51,15 +51,16 @@ from PyQt6.QtWidgets import (
     QLabel, QGroupBox, QLineEdit, QMessageBox, QFileDialog,
     QListWidget, QListWidgetItem, QPlainTextEdit, QInputDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QButtonGroup, QFrame, QSplitter, QRadioButton, QApplication
+    QButtonGroup, QFrame, QSplitter, QRadioButton, QApplication, QScrollArea,
+    QProgressBar
 )
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal
+from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QTimer
 from PyQt6.QtGui import QIcon, QFont, QColor, QTextCharFormat, QPixmap, QPainter, QPen, QDragEnterEvent, QDropEvent
 from PyQt6.QtGui import QSyntaxHighlighter
 
 # Import local modules
 from imxup import load_user_defaults, get_config_path, encrypt_password, decrypt_password
-from src.utils.format_utils import timestamp
+from src.utils.format_utils import timestamp, format_binary_size
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
 from src.gui.dialogs.credential_setup import CredentialSetupDialog
@@ -98,16 +99,131 @@ class IconDropFrame(QFrame):
         event.ignore()
 
 
+class HostTestDialog(QDialog):
+    """Dialog showing file host test progress with checklist"""
+
+    def __init__(self, host_name: str, parent=None):
+        super().__init__(parent)
+        self.host_name = host_name
+        self.test_items = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup the test dialog UI"""
+        self.setWindowTitle(f"Testing {self.host_name}")
+        self.setModal(True)
+        self.resize(400, 250)
+
+        layout = QVBoxLayout(self)
+
+        # Title
+        title_label = QLabel(f"<b>Testing {self.host_name}</b>")
+        layout.addWidget(title_label)
+
+        layout.addSpacing(10)
+
+        # Test items list
+        self.tests_layout = QVBoxLayout()
+
+        # Add test items
+        test_names = [
+            ("login", "Logging in..."),
+            ("credentials", "Validating credentials..."),
+            ("user_info", "Retrieving account info..."),
+            ("upload", "Testing upload..."),
+            ("cleanup", "Cleaning up test file...")
+        ]
+
+        for test_id, test_name in test_names:
+            test_row = QHBoxLayout()
+
+            status_label = QLabel("⏳")  # Waiting
+            status_label.setFixedWidth(30)
+
+            name_label = QLabel(test_name)
+
+            test_row.addWidget(status_label)
+            test_row.addWidget(name_label)
+            test_row.addStretch()
+
+            self.tests_layout.addLayout(test_row)
+
+            # Store references
+            self.test_items[test_id] = {
+                'status_label': status_label,
+                'name_label': name_label,
+                'row': test_row
+            }
+
+        layout.addLayout(self.tests_layout)
+        layout.addStretch()
+
+        # Close button (initially hidden)
+        self.close_btn = QPushButton("Close")
+        self.close_btn.clicked.connect(self.accept)
+        self.close_btn.setVisible(False)
+        layout.addWidget(self.close_btn)
+
+    def update_test_status(self, test_id: str, status: str, message: str = None):
+        """Update status of a test
+
+        Args:
+            test_id: Test identifier
+            status: 'running', 'success', 'failure', 'skipped'
+            message: Optional status message
+        """
+        if test_id not in self.test_items:
+            return
+
+        item = self.test_items[test_id]
+
+        if status == 'running':
+            item['status_label'].setText("⏳")
+            item['status_label'].setStyleSheet("color: blue;")
+        elif status == 'success':
+            item['status_label'].setText("✓")
+            item['status_label'].setStyleSheet("color: green; font-weight: bold;")
+        elif status == 'failure':
+            item['status_label'].setText("✗")
+            item['status_label'].setStyleSheet("color: red; font-weight: bold;")
+        elif status == 'skipped':
+            item['status_label'].setText("○")
+            item['status_label'].setStyleSheet("color: gray;")
+
+        if message:
+            item['name_label'].setText(message)
+
+        # Force UI update
+        self.repaint()
+        QApplication.processEvents()
+
+    def set_complete(self, success: bool):
+        """Mark testing as complete
+
+        Args:
+            success: True if all tests passed
+        """
+        self.close_btn.setVisible(True)
+        if success:
+            self.setWindowTitle(f"Testing {self.host_name} - Complete ✓")
+        else:
+            self.setWindowTitle(f"Testing {self.host_name} - Failed ✗")
+
+
 class ComprehensiveSettingsDialog(QDialog):
     """Comprehensive settings dialog with tabbed interface"""
-    
-    def __init__(self, parent=None):
+
+    def __init__(self, parent=None, file_host_manager=None):
         super().__init__(parent)
         self.parent = parent
+        self.file_host_manager = file_host_manager
 
         # Track dirty state per tab
         self.tab_dirty_states = {}
         self.current_tab_index = 0
+
+        # Initialize QSettings for storing test results and cache
+        self.settings = QSettings("ImxUploader", "ImxUploadGUI")
 
         self.setup_ui()
         self.load_settings()
@@ -137,7 +253,8 @@ class ComprehensiveSettingsDialog(QDialog):
         self.setup_logs_tab()
         self.setup_scanning_tab()
         self.setup_external_apps_tab()
-        
+        self.setup_file_hosts_tab()
+
         # Buttons
         button_layout = QHBoxLayout()
         
@@ -213,7 +330,7 @@ class ComprehensiveSettingsDialog(QDialog):
         connect_timeout_layout = QHBoxLayout(connect_timeout_widget)
         connect_timeout_layout.setContentsMargins(0, 0, 0, 0)
         self.connect_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.connect_timeout_slider.setRange(10, 120)
+        self.connect_timeout_slider.setRange(10, 180)
         self.connect_timeout_slider.setValue(defaults.get('upload_connect_timeout', 30))
         self.connect_timeout_slider.setToolTip("Maximum time to wait for server connection. Increase if you have slow internet.")
         self.connect_timeout_value = QLabel(str(defaults.get('upload_connect_timeout', 30)))
@@ -228,10 +345,10 @@ class ComprehensiveSettingsDialog(QDialog):
         read_timeout_layout = QHBoxLayout(read_timeout_widget)
         read_timeout_layout.setContentsMargins(0, 0, 0, 0)
         self.read_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.read_timeout_slider.setRange(20, 120)
-        self.read_timeout_slider.setValue(defaults.get('upload_read_timeout', 60))
+        self.read_timeout_slider.setRange(20, 600)
+        self.read_timeout_slider.setValue(defaults.get('upload_read_timeout', 90))
         self.read_timeout_slider.setToolTip("Maximum time to wait for server response. Increase for large images or slow servers.")
-        self.read_timeout_value = QLabel(str(defaults.get('upload_read_timeout', 60)))
+        self.read_timeout_value = QLabel(str(defaults.get('upload_read_timeout', 90)))
         self.read_timeout_value.setMinimumWidth(30)
         read_timeout_layout.addWidget(self.read_timeout_slider)
         read_timeout_layout.addWidget(self.read_timeout_value)
@@ -2019,6 +2136,31 @@ class ComprehensiveSettingsDialog(QDialog):
 
         dialog.exec()
 
+    # ===== File Host Settings (Widget-based) =====
+
+    def setup_file_hosts_tab(self):
+        """Setup the File Hosts tab using dedicated widget"""
+        from src.gui.widgets.file_hosts_settings_widget import FileHostsSettingsWidget
+
+        if not self.file_host_manager:
+            # No manager available - show error
+            error_widget = QWidget()
+            layout = QVBoxLayout(error_widget)
+            error_label = QLabel("File host manager not available. Please restart the application.")
+            error_label.setWordWrap(True)
+            error_label.setStyleSheet("color: red; font-weight: bold;")
+            layout.addWidget(error_label)
+            layout.addStretch()
+            self.tab_widget.addTab(error_widget, "File Hosts")
+            return
+
+        # Create file hosts widget (no signals - reads from QSettings cache)
+        self.file_hosts_widget = FileHostsSettingsWidget(self, self.file_host_manager)
+
+
+        # Add tab
+        self.tab_widget.addTab(self.file_hosts_widget, "File Hosts")
+
     def setup_icons_tab(self):
         """Setup the Icon Manager tab with improved side-by-side light/dark preview"""
         icons_widget = QWidget()
@@ -2240,6 +2382,8 @@ class ComprehensiveSettingsDialog(QDialog):
         self._load_tabs_settings()
         # Load external apps settings
         self._load_external_apps_settings()
+        # Load file hosts settings
+        self._load_file_hosts_settings()
     
     def _load_scanning_settings(self):
         """Load scanning settings from INI file"""
@@ -2393,6 +2537,118 @@ class ComprehensiveSettingsDialog(QDialog):
             print(f"{timestamp()} ERROR: Failed to load external apps settings: {e}")
             traceback.print_exc()
 
+    def _load_file_hosts_settings(self):
+        """Load file hosts settings from INI file and encrypted credentials from QSettings"""
+        try:
+            # Check if widget exists
+            if not hasattr(self, 'file_hosts_widget') or not self.file_hosts_widget:
+                return
+
+            from src.core.file_host_config import get_config_manager
+            from imxup import get_credential, decrypt_password
+
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+
+            if os.path.exists(config_file):
+                config.read(config_file)
+
+            # Prepare settings dict
+            settings_dict = {
+                'global_limit': 3,
+                'per_host_limit': 2,
+                'hosts': {}
+            }
+
+            # Load connection limits
+            if 'FILE_HOSTS' in config:
+                settings_dict['global_limit'] = config.getint('FILE_HOSTS', 'global_limit', fallback=3)
+                settings_dict['per_host_limit'] = config.getint('FILE_HOSTS', 'per_host_limit', fallback=2)
+
+            # Load per-host settings
+            config_manager = get_config_manager()
+            for host_id in config_manager.hosts.keys():
+                host_settings = {
+                    'enabled': False,
+                    'credentials': '',
+                    'trigger_on_added': False,
+                    'trigger_on_started': False,
+                    'trigger_on_completed': False
+                }
+
+                # Load from INI (enabled state and triggers)
+                if 'FILE_HOSTS' in config:
+                    host_settings['enabled'] = config.getboolean('FILE_HOSTS', f'{host_id}_enabled', fallback=False)
+                    host_settings['trigger_on_added'] = config.getboolean('FILE_HOSTS', f'{host_id}_on_added', fallback=False)
+                    host_settings['trigger_on_started'] = config.getboolean('FILE_HOSTS', f'{host_id}_on_started', fallback=False)
+                    host_settings['trigger_on_completed'] = config.getboolean('FILE_HOSTS', f'{host_id}_on_completed', fallback=False)
+
+                # Load encrypted credentials from QSettings
+                encrypted_creds = get_credential(f'file_host_{host_id}_credentials')
+                if encrypted_creds:
+                    decrypted = decrypt_password(encrypted_creds)
+                    if decrypted:
+                        host_settings['credentials'] = decrypted
+
+                settings_dict['hosts'][host_id] = host_settings
+
+            # Apply settings to widget
+            self.file_hosts_widget.load_settings(settings_dict)
+
+        except Exception as e:
+            import traceback
+            print(f"{timestamp()} ERROR: Failed to load file hosts settings: {e}")
+            traceback.print_exc()
+
+    def _save_file_hosts_settings(self):
+        """Save file hosts settings to INI file and encrypt credentials to QSettings"""
+        try:
+            # Get settings from widget if available
+            if not hasattr(self, 'file_hosts_widget') or not self.file_hosts_widget:
+                return
+
+            from imxup import set_credential, encrypt_password
+
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+
+            if os.path.exists(config_file):
+                config.read(config_file)
+
+            if 'FILE_HOSTS' not in config:
+                config.add_section('FILE_HOSTS')
+
+            # Get settings from widget
+            widget_settings = self.file_hosts_widget.get_settings()
+
+            # Save connection limits
+            config.set('FILE_HOSTS', 'global_limit', str(widget_settings['global_limit']))
+            config.set('FILE_HOSTS', 'per_host_limit', str(widget_settings['per_host_limit']))
+
+            # Save per-host settings
+            for host_id, host_settings in widget_settings['hosts'].items():
+                # Save enabled state and triggers to INI
+                config.set('FILE_HOSTS', f'{host_id}_enabled', str(host_settings['enabled']))
+                config.set('FILE_HOSTS', f'{host_id}_on_added', str(host_settings['trigger_on_added']))
+                config.set('FILE_HOSTS', f'{host_id}_on_started', str(host_settings['trigger_on_started']))
+                config.set('FILE_HOSTS', f'{host_id}_on_completed', str(host_settings['trigger_on_completed']))
+
+                # Save encrypted credentials to QSettings
+                creds_text = host_settings.get('credentials', '')
+                if creds_text:
+                    encrypted = encrypt_password(creds_text)
+                    set_credential(f'file_host_{host_id}_credentials', encrypted)
+                else:
+                    # Clear credentials if empty
+                    set_credential(f'file_host_{host_id}_credentials', '')
+
+            # Write INI file
+            with open(config_file, 'w') as f:
+                config.write(f)
+
+        except Exception as e:
+            print(f"{timestamp()} WARNING: Failed to save file hosts settings: {e}")
+
     def save_settings(self):
         """Save all settings"""
         try:
@@ -2436,6 +2692,9 @@ class ComprehensiveSettingsDialog(QDialog):
 
                 # Save external apps settings
                 self._save_external_apps_settings()
+
+                # Save file hosts settings
+                self._save_file_hosts_settings()
 
                 # Save tabs settings
                 self._save_tabs_settings()
@@ -2723,6 +2982,9 @@ class ComprehensiveSettingsDialog(QDialog):
             elif current_index == 5:  # External Apps tab
                 self._save_external_apps_settings()
                 return True
+            elif current_index == 6:  # File Hosts tab
+                self._save_file_hosts_settings()
+                return True
             else:
                 return True
         except Exception as e:
@@ -2761,6 +3023,7 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def closeEvent(self, event):
         """Handle dialog closing with unsaved changes check"""
+        
         # Check for unsaved changes in any tab
         has_unsaved = False
         for i in range(self.tab_widget.count()):
