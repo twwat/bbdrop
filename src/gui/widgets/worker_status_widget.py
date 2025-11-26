@@ -168,7 +168,10 @@ class WorkerStatusWidget(QWidget):
         # Data storage
         self._workers: Dict[str, WorkerStatus] = {}
         self._icon_cache: Dict[str, QIcon] = {}
-        self._worker_row_map: Dict[str, int] = {}  # worker_id -> row index for targeted updates
+        # Worker ID → row index mapping for O(1) row lookups
+        # IMPORTANT: Only valid between full refreshes (_full_table_rebuild)
+        # Becomes stale when workers are added/removed until next refresh
+        self._worker_row_map: Dict[str, int] = {}
 
         # Active columns (user's current selection)
         self._active_columns: List[ColumnConfig] = []
@@ -640,17 +643,24 @@ class WorkerStatusWidget(QWidget):
 
     def _update_worker_cell(self, worker_id: str, column: int, value: Any,
                            formatter: Optional[Callable] = None):
-        """Update a single cell without rebuilding the table.
+        """Update a single cell for a worker - targeted update.
 
         Args:
             worker_id: Worker identifier
-            column: Column index
-            value: New value
-            formatter: Optional function to format value for display
+            column: Column index to update
+            value: New value for the cell
+            formatter: Optional callable to format the value
         """
         row = self._worker_row_map.get(worker_id)
         if row is None:
-            return
+            return  # Worker not in current view
+
+        # Bounds checking - worker may have been removed or columns changed
+        if row < 0 or row >= self.status_table.rowCount():
+            return  # Row out of bounds
+
+        if column < 0 or column >= self.status_table.columnCount():
+            return  # Column out of bounds
 
         item = self.status_table.item(row, column)
         if item:
@@ -853,10 +863,7 @@ class WorkerStatusWidget(QWidget):
 
                         # Apply disabled styling if needed
                         if worker.status == 'disabled':
-                            text_label.setStyleSheet(f"color: {self.palette().color(QPalette.ColorRole.PlaceholderText).name()};")
-                            font = text_label.font()
-                            font.setItalic(True)
-                            text_label.setFont(font)
+                            self._apply_disabled_style(text_label)
 
                         layout.addWidget(text_label)
 
@@ -875,10 +882,7 @@ class WorkerStatusWidget(QWidget):
 
                         # Apply disabled styling
                         if worker.status == 'disabled':
-                            hostname_item.setForeground(self.palette().color(QPalette.ColorRole.PlaceholderText))
-                            font = hostname_item.font()
-                            font.setItalic(True)
-                            hostname_item.setFont(font)
+                            self._apply_disabled_style(hostname_item)
 
                         self.status_table.setItem(row_idx, col_idx, hostname_item)
 
@@ -1433,6 +1437,28 @@ class WorkerStatusWidget(QWidget):
             sort_col_idx = next((i for i, col in enumerate(self._active_columns) if col.id == sort_column_id), -1)
             if sort_col_idx >= 0:
                 self.status_table.sortItems(sort_col_idx, Qt.SortOrder(sort_order))
+
+    def _apply_disabled_style(self, element: Any) -> None:
+        """Apply disabled/grayed-out styling to widget or table item.
+
+        Args:
+            element: Either a QWidget (QLabel) or QTableWidgetItem to style as disabled
+        """
+        from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QLabel
+        from PyQt6.QtGui import QColor
+
+        if isinstance(element, QLabel):
+            # QLabel widget path - use stylesheet and italic font
+            element.setStyleSheet(f"color: {self.palette().color(QPalette.ColorRole.PlaceholderText).name()};")
+            font = element.font()
+            font.setItalic(True)
+            element.setFont(font)
+        elif isinstance(element, QTableWidgetItem):
+            # QTableWidgetItem path - use foreground color and italic font
+            element.setForeground(self.palette().color(QPalette.ColorRole.PlaceholderText))
+            font = element.font()
+            font.setItalic(True)
+            element.setFont(font)
 
     def _reset_column_settings(self):
         """Reset columns to default settings."""
