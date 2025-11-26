@@ -573,7 +573,8 @@ class WorkerStatusWidget(QWidget):
             worker.progress_bytes = progress_bytes
             worker.total_bytes = total_bytes
             worker.last_update = datetime.now().timestamp()
-            self._schedule_refresh()
+            # Use targeted update instead of full rebuild
+            self._update_worker_progress_cell(worker_id, progress_bytes, total_bytes)
 
     @pyqtSlot(str, str)
     def update_worker_error(self, worker_id: str, error_message: str):
@@ -589,7 +590,9 @@ class WorkerStatusWidget(QWidget):
             worker.speed_bps = 0.0
             worker.error_message = error_message
             worker.last_update = datetime.now().timestamp()
-            self._schedule_refresh()
+            # Use targeted updates instead of full rebuild
+            self._update_worker_status_cell(worker_id, 'error')
+            self._update_worker_speed(worker_id, 0.0)
 
     @pyqtSlot(str)
     def remove_worker(self, worker_id: str):
@@ -615,8 +618,20 @@ class WorkerStatusWidget(QWidget):
     # =========================================================================
 
     def _schedule_refresh(self):
-        """Schedule a display refresh for worker add/remove and filter changes only."""
-        # No timer check - just refresh immediately when workers are added/removed
+        """Schedule a display refresh - ONLY for worker add/remove and filter changes.
+
+        This method should ONLY be called when:
+        - Workers are added (new rows needed)
+        - Workers are removed (rows need deletion)
+        - Filters change (visible rows change)
+
+        DO NOT call for worker data updates - use targeted cell updates instead:
+        - _update_worker_status_cell() for status changes
+        - _update_worker_speed() for speed changes
+        - _update_worker_progress_cell() for progress changes
+        - _update_worker_metrics() for metrics changes
+        """
+        # Full table rebuild - only when worker list changes
         self._refresh_display()
 
     # =========================================================================
@@ -696,6 +711,31 @@ class WorkerStatusWidget(QWidget):
             else:
                 # Reset to default color for idle/disabled (theme-aware)
                 item.setForeground(self.palette().color(QPalette.ColorRole.WindowText))
+
+    def _update_worker_progress_cell(self, worker_id: str, progress_bytes: int, total_bytes: int):
+        """Update progress cell for a specific worker - targeted update.
+
+        Args:
+            worker_id: Worker identifier
+            progress_bytes: Bytes uploaded so far
+            total_bytes: Total bytes to upload
+        """
+        row = self._worker_row_map.get(worker_id)
+        if row is None:
+            return
+
+        # Find progress column (if it exists in active columns)
+        col_idx = self._get_column_index('progress')
+        if col_idx >= 0:
+            percentage = (progress_bytes / total_bytes * 100) if total_bytes > 0 else 0
+            text = f"{percentage:.1f}%"
+
+            item = self.status_table.item(row, col_idx)
+            if item and item.text() != text:
+                # Block signals to prevent cascade updates
+                self.status_table.blockSignals(True)
+                item.setText(text)
+                self.status_table.blockSignals(False)
 
     def _refresh_display(self):
         """Refresh the table display with current worker data."""

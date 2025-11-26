@@ -89,7 +89,7 @@ class MetricsStore:
 
             # Thread safety
             self._cache_lock = threading.RLock()
-            self._db_lock = threading.Lock()
+            self._db_lock = threading.RLock()  # ✅ Allows nested acquisition by same thread
 
             # Session cache for fast reads
             # Structure: {host_name: {bytes_uploaded, files_uploaded, files_failed,
