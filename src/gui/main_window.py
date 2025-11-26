@@ -496,6 +496,12 @@ class ImxUploadGUI(QMainWindow):
         if self.splash:
             self.splash.set_status("Upload Completion Worker")
 
+        # Create worker status widget early (before FileHostWorkerManager)
+        # This ensures it exists when manager tries to connect signals
+        if self.splash:
+            self.splash.set_status("Worker Status Widget")
+        self.worker_status_widget = WorkerStatusWidget()
+
         # Initialize file host worker manager for background file host uploads
         if self.splash:
             self.splash.set_status("File Host Worker Manager")
@@ -2258,12 +2264,12 @@ class ImxUploadGUI(QMainWindow):
         settings_layout.setRowStretch(6, 1)
 
         # Worker Status section (add between settings and log)
+        # Note: worker_status_widget was created early in __init__ before FileHostWorkerManager
         worker_status_group = QGroupBox("Upload Workers")
         worker_status_layout = QVBoxLayout(worker_status_group)
         worker_status_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Create worker status widget
-        self.worker_status_widget = WorkerStatusWidget()
+        # Add the already-created worker status widget to the layout
         worker_status_layout.addWidget(self.worker_status_widget)
 
         # Connect worker status widget signals
