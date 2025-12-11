@@ -3517,6 +3517,8 @@ class ImxUploadGUI(QMainWindow):
         # Use QTimer.singleShot(0) to schedule on next event loop iteration
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_gallery_id(gallery_id))
+        # Trigger artifact regeneration if auto-regenerate is enabled (non-blocking, after UI refresh)
+        QTimer.singleShot(100, lambda: self._auto_regenerate_for_gallery_id(gallery_id))
 
     def on_file_host_upload_failed(self, gallery_id: int, host_name: str, error_message: str):
         """Handle file host upload failed - ASYNC to prevent blocking main thread"""
@@ -5591,6 +5593,8 @@ class ImxUploadGUI(QMainWindow):
                                     actual_table.blockSignals(signals_blocked)
 
                                 log(f"Updated ext fields in GUI for {item.name}: {ext_fields}", level="info", category="hooks")
+                                # Trigger artifact regeneration for ext field changes if enabled
+                                QTimer.singleShot(100, lambda p=path: self.regenerate_bbcode_for_gallery(p, force=False) if self._should_auto_regenerate_bbcode(p) else None)
                                 break
                     else:
                         log(f"WARNING: Table is None!", level="debug", category="hooks")
@@ -7234,6 +7238,12 @@ class ImxUploadGUI(QMainWindow):
             return False
 
         return True
+
+    def _auto_regenerate_for_gallery_id(self, gallery_id: int):
+        """Auto-regenerate artifacts for gallery by ID if setting enabled"""
+        path = self._gallery_id_to_path.get(gallery_id)
+        if path and self._should_auto_regenerate_bbcode(path):
+            self.regenerate_bbcode_for_gallery(path, force=False)
 
 def check_single_instance(folder_path=None):
     """Check if another instance is running and send folder if needed"""
