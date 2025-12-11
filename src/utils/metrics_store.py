@@ -255,17 +255,28 @@ class MetricsStore:
             # Update today_cache (initialize empty if not present)
             today = datetime.now().strftime('%Y-%m-%d')
             if host_name not in self._today_cache:
-                # Initialize empty cache - avoid blocking DB query during record
-                # Actual historical data loaded via _populate_initial_metrics() in worker_status_widget
-                self._today_cache[host_name] = {
-                    'bytes_uploaded': 0,
-                    'files_uploaded': 0,
-                    'files_failed': 0,
-                    'total_transfer_time': 0.0,
-                    'peak_speed': 0.0,
-                    'speeds': [],
-                    'avg_speed': 0.0
-                }
+                # Load existing metrics from DB to avoid overwriting historical data
+                db_metrics = self.get_aggregated_metrics(host_name, 'today')
+                if db_metrics:
+                    self._today_cache[host_name] = {
+                        'bytes_uploaded': db_metrics.get('bytes_uploaded', 0),
+                        'files_uploaded': db_metrics.get('files_uploaded', 0),
+                        'files_failed': db_metrics.get('files_failed', 0),
+                        'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
+                        'peak_speed': db_metrics.get('peak_speed', 0.0),
+                        'speeds': [],
+                        'avg_speed': db_metrics.get('avg_speed', 0.0)
+                    }
+                else:
+                    self._today_cache[host_name] = {
+                        'bytes_uploaded': 0,
+                        'files_uploaded': 0,
+                        'files_failed': 0,
+                        'total_transfer_time': 0.0,
+                        'peak_speed': 0.0,
+                        'speeds': [],
+                        'avg_speed': 0.0
+                    }
 
             today_cache = self._today_cache[host_name]
             today_cache['bytes_uploaded'] += bytes_uploaded
@@ -286,17 +297,28 @@ class MetricsStore:
 
             # Update all_time_cache (initialize empty if not present)
             if host_name not in self._all_time_cache:
-                # Initialize empty cache - avoid blocking DB query during record
-                # Actual historical data loaded via _populate_initial_metrics() in worker_status_widget
-                self._all_time_cache[host_name] = {
-                    'bytes_uploaded': 0,
-                    'files_uploaded': 0,
-                    'files_failed': 0,
-                    'total_transfer_time': 0.0,
-                    'peak_speed': 0.0,
-                    'speeds': [],
-                    'avg_speed': 0.0
-                }
+                # Load existing metrics from DB to avoid overwriting historical data
+                db_metrics = self.get_aggregated_metrics(host_name, 'all_time')
+                if db_metrics:
+                    self._all_time_cache[host_name] = {
+                        'bytes_uploaded': db_metrics.get('bytes_uploaded', 0),
+                        'files_uploaded': db_metrics.get('files_uploaded', 0),
+                        'files_failed': db_metrics.get('files_failed', 0),
+                        'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
+                        'peak_speed': db_metrics.get('peak_speed', 0.0),
+                        'speeds': [],
+                        'avg_speed': db_metrics.get('avg_speed', 0.0)
+                    }
+                else:
+                    self._all_time_cache[host_name] = {
+                        'bytes_uploaded': 0,
+                        'files_uploaded': 0,
+                        'files_failed': 0,
+                        'total_transfer_time': 0.0,
+                        'peak_speed': 0.0,
+                        'speeds': [],
+                        'avg_speed': 0.0
+                    }
 
             all_time_cache = self._all_time_cache[host_name]
             all_time_cache['bytes_uploaded'] += bytes_uploaded

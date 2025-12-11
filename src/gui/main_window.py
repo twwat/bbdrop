@@ -3798,8 +3798,9 @@ class ImxUploadGUI(QMainWindow):
 
             # OPTIMIZATION 3: Get widget reference first, skip DB query if widget missing
             from src.gui.widgets.custom_widgets import FileHostsStatusWidget
-            status_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
+            status_widget = self.gallery_table.table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
             if not isinstance(status_widget, FileHostsStatusWidget):
+                log(f"File host status widget not found at row {row} for gallery_id {gallery_id}", level="debug", category="file_hosts")
                 return  # Widget not present, skip expensive DB query
 
             # Only do DB query if we have a valid widget to update

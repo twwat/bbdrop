@@ -979,7 +979,7 @@ class FileHostClient:
                 }
 
                 for key, value in replacements.items():
-                    init_url = init_url.replace(f"{{{key}}}", value)
+                    init_url = init_url.replace(f"{{{key}}}", quote(str(value), safe=''))
 
                 curl.setopt(pycurl.URL, init_url)
                 curl.setopt(pycurl.WRITEDATA, response_buffer)

@@ -4,16 +4,16 @@ File Host Configuration Dialog
 Provides credential setup, testing, and configuration for file host uploads
 """
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QGroupBox,
-    QPushButton, QLineEdit, QCheckBox, QProgressBar, QComboBox, QWidget, QListWidget, QSplitter, QSpinBox
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QGroupBox,
+    QPushButton, QLineEdit, QCheckBox, QProgressBar, QComboBox, QWidget, QListWidget, QSplitter, QSpinBox, QSizePolicy
 )
 from PyQt6.QtCore import QSettings, QTimer, Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QFont
 from datetime import datetime
 from typing import Optional
 import time
 
-from src.utils.format_utils import format_binary_size
+from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.gui.widgets.custom_widgets import CopyableLogListWidget
 
 
@@ -208,7 +208,8 @@ class FileHostConfigDialog(QDialog):
             if self.host_config.auth_type in ["api_key", "bearer"]:
                 # API Key only
                 self.creds_api_key_input = AsteriskPasswordEdit()
-                self.creds_api_key_input.setFixedWidth(450)
+                self.creds_api_key_input.setFont(QFont("Consolas", 10))
+                self.creds_api_key_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_api_key_input.setPlaceholderText("Enter API key...")
                 self.creds_api_key_input.blockSignals(True)
                 self.creds_api_key_input.setText(api_key_val)
@@ -226,14 +227,14 @@ class FileHostConfigDialog(QDialog):
                     lambda checked: self.creds_api_key_input.set_masked(not checked)
                 )
                 api_key_row.addWidget(show_api_btn)
-                api_key_row.addStretch()
 
                 creds_layout.addRow("API Key:", api_key_row)
 
             elif self.host_config.auth_type == "mixed":
                 # Both API key and username/password
                 self.creds_api_key_input = AsteriskPasswordEdit()
-                self.creds_api_key_input.setFixedWidth(450)
+                self.creds_api_key_input.setFont(QFont("Consolas", 10))
+                self.creds_api_key_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_api_key_input.setPlaceholderText("Enter API key...")
                 self.creds_api_key_input.blockSignals(True)
                 self.creds_api_key_input.setText(api_key_val)
@@ -251,12 +252,12 @@ class FileHostConfigDialog(QDialog):
                     lambda checked: self.creds_api_key_input.set_masked(not checked)
                 )
                 api_key_row.addWidget(show_api_btn)
-                api_key_row.addStretch()
 
                 creds_layout.addRow("API Key:", api_key_row)
 
                 self.creds_username_input = QLineEdit()
-                self.creds_username_input.setFixedWidth(450)
+                self.creds_username_input.setFont(QFont("Consolas", 10))
+                self.creds_username_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_username_input.setPlaceholderText("Enter username...")
                 self.creds_username_input.blockSignals(True)
                 self.creds_username_input.setText(username_val)
@@ -264,7 +265,8 @@ class FileHostConfigDialog(QDialog):
                 creds_layout.addRow("Username:", self.creds_username_input)
 
                 self.creds_password_input = AsteriskPasswordEdit()
-                self.creds_password_input.setFixedWidth(450)
+                self.creds_password_input.setFont(QFont("Consolas", 10))
+                self.creds_password_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_password_input.setPlaceholderText("Enter password...")
                 self.creds_password_input.blockSignals(True)
                 self.creds_password_input.setText(password_val)
@@ -282,14 +284,14 @@ class FileHostConfigDialog(QDialog):
                     lambda checked: self.creds_password_input.set_masked(not checked)
                 )
                 password_row.addWidget(show_pass_btn)
-                password_row.addStretch()
 
                 creds_layout.addRow("Password:", password_row)
 
             else:
                 # Username and password only (token_login, session, etc.)
                 self.creds_username_input = QLineEdit()
-                self.creds_username_input.setFixedWidth(450)
+                self.creds_username_input.setFont(QFont("Consolas", 10))
+                self.creds_username_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_username_input.setPlaceholderText("Enter username...")
                 self.creds_username_input.blockSignals(True)
                 self.creds_username_input.setText(username_val)
@@ -297,7 +299,8 @@ class FileHostConfigDialog(QDialog):
                 creds_layout.addRow("Username:", self.creds_username_input)
 
                 self.creds_password_input = AsteriskPasswordEdit()
-                self.creds_password_input.setFixedWidth(450)
+                self.creds_password_input.setFont(QFont("Consolas", 10))
+                self.creds_password_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_password_input.setPlaceholderText("Enter password...")
                 self.creds_password_input.blockSignals(True)
                 self.creds_password_input.setText(password_val)
@@ -315,7 +318,6 @@ class FileHostConfigDialog(QDialog):
                     lambda checked: self.creds_password_input.set_masked(not checked)
                 )
                 password_row.addWidget(show_pass_btn)
-                password_row.addStretch()
 
                 creds_layout.addRow("Password:", password_row)
 
@@ -403,6 +405,11 @@ class FileHostConfigDialog(QDialog):
         self.max_retries_spin.setToolTip("Maximum number of retry attempts for failed uploads")
         self.max_retries_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow("Max retries:", self.max_retries_spin)
+        # Disable max retries when auto-retry is unchecked
+        self.auto_retry_check.toggled.connect(self.max_retries_spin.setEnabled)
+        # Set initial state based on checkbox
+        self.max_retries_spin.setEnabled(self.auto_retry_check.isChecked())
+
 
         # 3. max_connections - QSpinBox
         self.max_connections_spin = QSpinBox()
@@ -474,6 +481,71 @@ class FileHostConfigDialog(QDialog):
         clear_btn.clicked.connect(self.log_list.clear)
         logs_layout.addWidget(clear_btn)
 
+        # Metrics display section with grid layout
+        metrics_group = QGroupBox("Host Metrics")
+        metrics_layout = QVBoxLayout(metrics_group)
+
+        metrics_grid = QGridLayout()
+        metrics_grid.setSpacing(8)
+
+        # Dictionary to store metric value labels for easy updating
+        self._metric_labels = {}
+
+        # Row 0: Headers (bold)
+        header_font = QFont()
+        header_font.setBold(True)
+
+        headers = ["Metric", "Session", "Today", "All Time"]
+        for col, header_text in enumerate(headers):
+            header = QLabel(header_text)
+            header.setFont(header_font)
+            header.setAlignment(Qt.AlignmentFlag.AlignCenter if col > 0 else Qt.AlignmentFlag.AlignLeft)
+            metrics_grid.addWidget(header, 0, col)
+
+        # Row 1: Uploaded bytes
+        metrics_grid.addWidget(QLabel("Uploaded"), 1, 0)
+        for i, period in enumerate(['session', 'today', 'alltime']):
+            label = QLabel("--")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._metric_labels[f'bytes_{period}'] = label
+            metrics_grid.addWidget(label, 1, i + 1)
+
+        # Row 2: Files
+        metrics_grid.addWidget(QLabel("Files"), 2, 0)
+        for i, period in enumerate(['session', 'today', 'alltime']):
+            label = QLabel("--")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._metric_labels[f'files_{period}'] = label
+            metrics_grid.addWidget(label, 2, i + 1)
+
+        # Row 3: Avg Speed
+        metrics_grid.addWidget(QLabel("Avg Speed"), 3, 0)
+        for i, period in enumerate(['session', 'today', 'alltime']):
+            label = QLabel("--")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._metric_labels[f'avg_speed_{period}'] = label
+            metrics_grid.addWidget(label, 3, i + 1)
+
+        # Row 4: Peak Speed
+        metrics_grid.addWidget(QLabel("Peak Speed"), 4, 0)
+        for i, period in enumerate(['session', 'today', 'alltime']):
+            label = QLabel("--")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._metric_labels[f'peak_speed_{period}'] = label
+            metrics_grid.addWidget(label, 4, i + 1)
+
+        # Row 5: Success %
+        metrics_grid.addWidget(QLabel("Success %"), 5, 0)
+        for i, period in enumerate(['session', 'today', 'alltime']):
+            label = QLabel("--")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._metric_labels[f'success_{period}'] = label
+            metrics_grid.addWidget(label, 5, i + 1)
+
+        metrics_layout.addLayout(metrics_grid)
+
+        logs_layout.addWidget(metrics_group)
+
         # Add logs to splitter
         self.content_splitter.addWidget(logs_group)
 
@@ -486,6 +558,9 @@ class FileHostConfigDialog(QDialog):
 
         # Load initial logs (signal connection handled by _connect_worker_signals in constructor)
         self._load_initial_logs()
+
+        # Load initial metrics data (deferred to avoid blocking UI)
+        QTimer.singleShot(100, self._update_metrics_display)
 
         # Button layout
         button_layout = QHBoxLayout()
@@ -970,6 +1045,67 @@ class FileHostConfigDialog(QDialog):
             self.storage_bar.setProperty("storage_status", "medium")
         else:
             self.storage_bar.setProperty("storage_status", "plenty")
+
+    def _update_metrics_display(self):
+        """Update metrics grid labels from MetricsStore."""
+        try:
+            from src.utils.metrics_store import get_metrics_store
+
+            store = get_metrics_store()
+            if not store:
+                return
+
+            # Get metrics for all three periods
+            session = store.get_session_metrics(self.host_id) or {}
+            today = store.get_aggregated_metrics(self.host_id, 'today') or {}
+            all_time = store.get_aggregated_metrics(self.host_id, 'all_time') or {}
+
+            periods = [
+                ('session', session),
+                ('today', today),
+                ('alltime', all_time)
+            ]
+
+            # Update all metric labels
+            for period_key, metrics in periods:
+                # Uploaded bytes
+                bytes_val = metrics.get('bytes_uploaded', 0)
+                bytes_text = format_binary_size(bytes_val) if bytes_val > 0 else "--"
+                self._metric_labels[f'bytes_{period_key}'].setText(bytes_text)
+
+                # Files uploaded
+                files_val = metrics.get('files_uploaded', 0)
+                files_text = str(files_val) if files_val > 0 else "--"
+                self._metric_labels[f'files_{period_key}'].setText(files_text)
+
+                # Avg Speed (convert bytes/s to KiB/s)
+                avg_speed = metrics.get('avg_speed', 0)
+                avg_text = format_binary_rate(avg_speed / 1024) if avg_speed > 0 else "--"
+                self._metric_labels[f'avg_speed_{period_key}'].setText(avg_text)
+
+                # Peak Speed (convert bytes/s to KiB/s)
+                peak_speed = metrics.get('peak_speed', 0)
+                peak_text = format_binary_rate(peak_speed / 1024) if peak_speed > 0 else "--"
+                self._metric_labels[f'peak_speed_{period_key}'].setText(peak_text)
+
+                # Success Rate
+                success_rate = metrics.get('success_rate', 0)
+                files_uploaded = metrics.get('files_uploaded', 0)
+                files_failed = metrics.get('files_failed', 0)
+                total_files = files_uploaded + files_failed
+
+                if total_files > 0:
+                    success_text = f"{success_rate:.1f}%"
+                else:
+                    success_text = "--"
+                self._metric_labels[f'success_{period_key}'].setText(success_text)
+
+        except Exception as e:
+            from src.utils.logger import log
+            log(f"Failed to update metrics display: {e}", level="warning", category="file_hosts")
+            # Set all labels to error state
+            for label in self._metric_labels.values():
+                label.setText("--")
 
     def get_trigger_settings(self):
         """Get trigger setting from dropdown as single string value"""

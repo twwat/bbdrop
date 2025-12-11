@@ -227,6 +227,7 @@ class UploadEngine:
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
             log(f"Uploading first image to create gallery: {first_file}", level="info", category="uploads")
+            first_upload_start = time.time()
             first_response = self.uploader.upload_image(
                 first_image_path,
                 create_gallery=True,
@@ -234,6 +235,7 @@ class UploadEngine:
                 thumbnail_format=thumbnail_format,
                 progress_callback=ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
             )
+            first_upload_duration = time.time() - first_upload_start
             if first_response.get('status') != 'success':
                 raise Exception(f"Failed to create gallery: {first_response}")
             gallery_id = first_response['data'].get('gallery_id')
@@ -241,7 +243,7 @@ class UploadEngine:
             # Log first image success with URL
             try:
                 first_url = first_response['data'].get('image_url', '')
-                log(f"✔ [{gallery_id}] {first_file} uploaded successfully ({first_url})", level="info", category="uploads:file")
+                log(f"Uploaded (in {first_upload_duration:.3f}s): {first_image_path}  ({first_url})", category="uploads:file")
             except Exception:
                 pass
             # First image uploaded - set counters and files_to_upload
@@ -311,7 +313,7 @@ class UploadEngine:
                     thread_sessions[thread_id] = session
                 return thread_sessions[thread_id]
 
-        def upload_single_image(image_file: str) -> Tuple[str, Optional[Dict[str, Any]], Optional[str]]:
+        def upload_single_image(image_file: str) -> Tuple[str, Optional[Dict[str, Any]], Optional[str], Optional[float], str]:
             image_path = os.path.join(folder_path, image_file)
             try:
                 upload_start = time.time()
@@ -328,12 +330,11 @@ class UploadEngine:
                     progress_callback=ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
                 )
                 upload_duration = time.time() - upload_start
-                log(f"{image_file}: Uploaded in {upload_duration:.3f}s:  ({image_path})",category="uploads:file")
                 if response.get('status') == 'success':
-                    return image_file, response['data'], None
-                return image_file, None, f"API error: {response}"
+                    return image_file, response['data'], None, upload_duration, image_path
+                return image_file, None, f"API error: {response}", None, image_path
             except Exception as e:
-                return image_file, None, f"Upload error: {e}"
+                return image_file, None, f"Upload error: {e}", None, image_path
 
         # Concurrency loop
         uploaded_images: List[Tuple[str, Dict[str, Any]]] = []
@@ -369,13 +370,14 @@ class UploadEngine:
                 for fut in done:
                     img = futures_map.pop(fut)
                     active_uploads -= 1
-                    image_file, image_data, error = fut.result()
+                    image_file, image_data, error, upload_duration, image_path = fut.result()
                     if image_data:
                         uploaded_images.append((image_file, image_data))
                         # Per-image success log (categorized)
                         try:
                             img_url = image_data.get('image_url', '')
-                            log(f"✓ {image_file} uploaded successfully ({img_url})", level="debug", category="uploads:file")
+                            duration_str = f"{upload_duration:.3f}" if upload_duration is not None else "?.???"
+                            log(f"Uploaded (in {duration_str}s): {image_path}  ({img_url})", category="uploads:file")
                         except Exception:
                             pass
                         # Per-image callback for resume-aware consumers
@@ -414,7 +416,7 @@ class UploadEngine:
                     done, _ = concurrent.futures.wait(list(futures_map.keys()), return_when=concurrent.futures.FIRST_COMPLETED)
                     for fut in done:
                         img = futures_map.pop(fut)
-                        image_file, image_data, error = fut.result()
+                        image_file, image_data, error, upload_duration, image_path = fut.result()
                         if image_data:
                             uploaded_images.append((image_file, image_data))
                             if on_image_uploaded:
@@ -426,7 +428,8 @@ class UploadEngine:
                             # Per-image success log (retry path)
                             try:
                                 img_url = image_data.get('image_url', '')
-                                log(f"[uploads:file] ✓ [{gallery_id}] {image_file} uploaded successfully ({img_url})", level="info", category="uploads:file")
+                                duration_str = f"{upload_duration:.3f}" if upload_duration is not None else "?.???"
+                                log(f"Uploaded (in {duration_str}s): {image_path}  ({img_url})", category="uploads:file")
                             except Exception:
                                 pass
                             log(f"[uploads] Retry successful: {image_file}", level="info", category="uploads")

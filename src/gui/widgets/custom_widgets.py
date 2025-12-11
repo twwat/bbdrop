@@ -1285,11 +1285,21 @@ class StorageProgressBar(QWidget):
             width: Current widget width in pixels
         """
         if width >= 50:
-            # Show infinity symbol
+            # Show infinity symbol with larger font size
             self.progress_bar.setFormat("∞")
+
+            # Set larger font on the progress bar itself
+            font = self.progress_bar.font()
+            font.setPointSize(16)
+            self.progress_bar.setFont(font)
         else:
             # Very narrow: No text
             self.progress_bar.setFormat("")
+
+            # Reset to normal font size
+            font = self.progress_bar.font()
+            font.setPointSize(10)  # Default size
+            self.progress_bar.setFont(font)
 
     def resizeEvent(self, event):
         """Update text format when widget is resized.

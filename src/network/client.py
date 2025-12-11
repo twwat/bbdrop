@@ -81,8 +81,6 @@ class GUIImxToUploader(ImxToUploader):
                 if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
             ]
             original_total = len(_explorer_sort(names))
-            if self.worker_thread:
-                self.worker_thread.gallery_started.emit(folder_path, original_total)
         except Exception:
             pass
 

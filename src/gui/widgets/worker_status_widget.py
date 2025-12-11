@@ -17,13 +17,19 @@ from PyQt6.QtWidgets import (
     QMenu, QStyle, QStyleOptionHeader, QProgressBar
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QSettings, QTimer, pyqtProperty, QSize, QRect
-from PyQt6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor
+from PyQt6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor, QFontMetrics
 
 from src.utils.format_utils import format_binary_rate
 from src.utils.logger import log
 from src.gui.icon_manager import get_icon_manager
 from src.core.file_host_config import get_config_manager, get_file_host_setting
 from src.gui.widgets.custom_widgets import StorageProgressBar
+from src.core.constants import (
+    METRIC_FONT_SIZE_SMALL,
+    METRIC_FONT_SIZE_DEFAULT,
+    METRIC_CELL_PADDING,
+    METRIC_MIN_FONT_SIZE
+)
 
 
 class MultiLineHeaderView(QHeaderView):
@@ -274,6 +280,13 @@ METRIC_COLUMNS = [
 # Combined list
 AVAILABLE_COLUMNS = {col.id: col for col in CORE_COLUMNS + METRIC_COLUMNS}
 
+# Column IDs that use smaller font (8pt) - derived from metric columns
+# These are the historical metrics: bytes_uploaded, peak_speed, avg_speed across all periods
+SMALL_METRIC_COLUMN_IDS = frozenset(
+    col.id for col in METRIC_COLUMNS
+    if col.metric_key in ('bytes_uploaded', 'peak_speed', 'avg_speed')
+)
+
 
 def format_bytes(value: int) -> str:
     """Format bytes to human readable (e.g., 1.5 GiB).
@@ -356,6 +369,10 @@ class WorkerStatusWidget(QWidget):
         # IMPORTANT: Only valid between full refreshes (_full_table_rebuild)
         # Becomes stale when workers are added/removed until next refresh
         self._worker_row_map: Dict[str, int] = {}
+        # Preserved column widths during column visibility changes
+        self._preserved_widths: Dict[str, int] = {}
+        # Font cache for metric columns (column_id -> (QFont, QFontMetrics))
+        self._column_font_cache: Dict[str, Tuple[QFont, QFontMetrics]] = {}
 
         # Active columns (user's current selection)
         self._active_columns: List[ColumnConfig] = []
@@ -1204,8 +1221,10 @@ class WorkerStatusWidget(QWidget):
                         layout.addStretch()
 
                         # Add auto icon - SCALED from 126x57 to 42x19 (right-aligned)
+                        # Use auto-disabled icon when worker is disabled
                         auto_icon_label = QLabel()
-                        auto_icon = get_icon_manager().get_icon('auto')
+                        auto_icon_key = 'auto-disabled' if worker.status == 'disabled' else 'auto'
+                        auto_icon = get_icon_manager().get_icon(auto_icon_key)
                         auto_icon_label.setPixmap(auto_icon.pixmap(42, 19))
                         layout.addWidget(auto_icon_label)
 
@@ -1229,7 +1248,8 @@ class WorkerStatusWidget(QWidget):
                     speed_item.setData(Qt.ItemDataRole.UserRole + 10, worker.speed_bps)
 
                     # Monospace font for speed
-                    speed_font = QFont("Consolas", 9)
+                    speed_font = QFont("Consolas")
+                    speed_font.setPointSizeF(METRIC_FONT_SIZE_DEFAULT)
                     speed_font.setStyleHint(QFont.StyleHint.Monospace)
                     speed_item.setFont(speed_font)
 
@@ -1278,7 +1298,8 @@ class WorkerStatusWidget(QWidget):
                     files_item = QTableWidgetItem(files_text)
                     files_item.setTextAlignment(col_config.alignment)
                     # Monospace font
-                    files_font = QFont("Consolas", 9)
+                    files_font = QFont("Consolas")
+                    files_font.setPointSizeF(METRIC_FONT_SIZE_DEFAULT)
                     files_font.setStyleHint(QFont.StyleHint.Monospace)
                     files_item.setFont(files_font)
                     self.status_table.setItem(row_idx, col_idx, files_item)
@@ -1290,7 +1311,8 @@ class WorkerStatusWidget(QWidget):
                     bytes_item.setTextAlignment(col_config.alignment)
                     bytes_item.setData(Qt.ItemDataRole.UserRole + 10, worker.bytes_remaining)
                     # Monospace font
-                    bytes_font = QFont("Consolas", 9)
+                    bytes_font = QFont("Consolas")
+                    bytes_font.setPointSizeF(METRIC_FONT_SIZE_DEFAULT)
                     bytes_font.setStyleHint(QFont.StyleHint.Monospace)
                     bytes_item.setFont(bytes_font)
                     self.status_table.setItem(row_idx, col_idx, bytes_item)
@@ -1314,7 +1336,9 @@ class WorkerStatusWidget(QWidget):
                     # Settings button column
                     settings_btn = QPushButton()
                     settings_btn.setIcon(self._icon_cache.get('settings', QIcon()))
-                    settings_btn.setFixedSize(26, 26)
+                    settings_btn.setFixedSize(20, 20)
+                    settings_btn.setIconSize(QSize(14, 14))
+                    settings_btn.setStyleSheet("padding: 2px;")
                     settings_btn.setFlat(True)
                     settings_btn.setToolTip(f"Configure {worker.display_name}")
                     settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1358,18 +1382,42 @@ class WorkerStatusWidget(QWidget):
                     # Monospace font for numeric values
                     # Use 8pt for uploaded/peak/avg speed metrics, 9pt for others
                     if col_config.col_type in (ColumnType.BYTES, ColumnType.SPEED, ColumnType.COUNT, ColumnType.PERCENT):
-                        # Check if this is one of the 9 specific metrics that should use 8pt font
-                        is_small_metric = col_config.id in (
-                            'bytes_session', 'bytes_today', 'bytes_alltime',
-                            'peak_speed_session', 'peak_speed_today', 'peak_speed_alltime',
-                            'avg_speed_session', 'avg_speed_today', 'avg_speed_alltime'
-                        )
-                        metric_font = QFont("Consolas")
-                        metric_font.setStyleHint(QFont.StyleHint.Monospace)
-                        if is_small_metric:
-                            metric_font.setPointSizeF(8.0)  # Slightly smaller than 9pt
-                        else:
-                            metric_font.setPointSize(9)
+                        # Get or create cached base font and metrics for this column
+                        if col_config.id not in self._column_font_cache:
+                            # Check if this is one of the 9 specific metrics that should use 8pt font
+                            is_small_metric = col_config.id in SMALL_METRIC_COLUMN_IDS
+                            base_font = QFont("Consolas")
+                            base_font.setStyleHint(QFont.StyleHint.Monospace)
+                            base_font.setStretch(QFont.Stretch.SemiCondensed)  # Less aggressive than Condensed
+                            if is_small_metric:
+                                base_font.setPointSizeF(METRIC_FONT_SIZE_SMALL)  # Slightly smaller than default
+                            else:
+                                base_font.setPointSizeF(METRIC_FONT_SIZE_DEFAULT)  # Use float variant for consistency
+
+                            # Cache the base font and its metrics
+                            self._column_font_cache[col_config.id] = (base_font, QFontMetrics(base_font))
+
+                        # Retrieve cached base font and metrics
+                        base_font, base_fm = self._column_font_cache[col_config.id]
+
+                        # Clone the base font for this cell (may be scaled)
+                        metric_font = QFont(base_font)
+
+                        # Shrink-to-fit: scale font if text doesn't fit in column width
+                        col_width = self.status_table.columnWidth(col_idx)
+                        padding = METRIC_CELL_PADDING  # Account for cell padding
+                        available_width = max(0, col_width - padding)  # Bug 3: Negative width protection
+
+                        # Use cached metrics for measurement
+                        text_width = base_fm.horizontalAdvance(text)
+
+                        if text_width > available_width and available_width > 0:
+                            # Calculate scale factor and new font size
+                            scale = available_width / text_width
+                            base_size = metric_font.pointSizeF()
+                            new_size = max(METRIC_MIN_FONT_SIZE, base_size * scale)  # Minimum font size for readability
+                            metric_font.setPointSizeF(new_size)
+
                         item.setFont(metric_font)
 
                     self.status_table.setItem(row_idx, col_idx, item)
@@ -1692,6 +1740,11 @@ class WorkerStatusWidget(QWidget):
         """Toggle visibility of a column."""
         log(f"Toggling column '{col_id}' to {'visible' if visible else 'hidden'}", level="debug", category="ui")
 
+        # Preserve current column widths before rebuild
+        self._preserved_widths = {}
+        for i, col in enumerate(self._active_columns):
+            self._preserved_widths[col.id] = self.status_table.columnWidth(i)
+
         if visible:
             # Add column if not present
             if col_id in AVAILABLE_COLUMNS and not self._is_column_visible(col_id):
@@ -1707,6 +1760,9 @@ class WorkerStatusWidget(QWidget):
 
     def _rebuild_table_columns(self):
         """Rebuild table with current active columns."""
+        # Clear font cache when columns change
+        self._column_font_cache.clear()
+
         # Block signals during programmatic setup to prevent spam
         header = self.status_table.horizontalHeader()
         header.blockSignals(True)
@@ -1720,22 +1776,35 @@ class WorkerStatusWidget(QWidget):
 
             # Configure each column
             for i, col in enumerate(self._active_columns):
-                # Hostname column is interactive with 180px width (not stretch)
+                # Determine width: use preserved width if available, otherwise use default
+                if hasattr(self, '_preserved_widths') and self._preserved_widths and col.id in self._preserved_widths:
+                    width = self._preserved_widths[col.id]
+                elif col.id == 'hostname':
+                    # Hostname column has special 180px default
+                    width = 180
+                else:
+                    # Use default from ColumnConfig
+                    width = col.width
+
+                # Set resize mode and width
                 if col.id == 'hostname':
                     header.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
-                    self.status_table.setColumnWidth(i, 180)
+                    self.status_table.setColumnWidth(i, width)
                 elif col.resizable:
                     header.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
-                    self.status_table.setColumnWidth(i, col.width)
+                    self.status_table.setColumnWidth(i, width)
                 else:
                     header.setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
-                    self.status_table.setColumnWidth(i, col.width)
+                    self.status_table.setColumnWidth(i, width)
         finally:
             # Always unblock signals
             header.blockSignals(False)
 
         # Refresh display with new columns
         self._refresh_display()
+
+        # Clear preserved widths after use
+        self._preserved_widths = {}
 
     def _on_column_resized(self, logical_index: int, old_size: int, new_size: int):
         """Handle column resize - save settings."""

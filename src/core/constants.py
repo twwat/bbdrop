@@ -97,6 +97,12 @@ MIN_WINDOW_HEIGHT = 600
 TABLE_UPDATE_INTERVAL = 100  # milliseconds
 ICON_SIZE = 16
 
+# Worker Status Widget - Font Configuration
+METRIC_FONT_SIZE_SMALL = 8.0   # For historical metrics (session/today/alltime bytes, speeds)
+METRIC_FONT_SIZE_DEFAULT = 9.0 # For other metric columns
+METRIC_CELL_PADDING = 8        # Padding in metric cells for shrink-to-fit calculation
+METRIC_MIN_FONT_SIZE = 7.0     # Minimum font size for readability
+
 # Performance Settings
 MAX_CONCURRENT_UPLOADS = 8
 DEFAULT_CHUNK_SIZE = 8192

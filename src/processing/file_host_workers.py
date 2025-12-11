@@ -647,7 +647,7 @@ class FileHostWorker(QThread):
 
             should_retry = (
                 auto_retry and
-                retry_count <= max_retries and
+                retry_count < max_retries and
                 not self._should_stop_current and
                 is_retryable  # Only retry if error is recoverable
             )
@@ -677,9 +677,6 @@ class FileHostWorker(QThread):
                     finished_ts=int(time.time()),
                     error_message=error_msg
                 )
-
-                # Force cleanup ZIP on final failure (no more retries)
-                self.zip_manager.cleanup_gallery(gallery_id)
 
                 # Record failure (fast operation)
                 self.coordinator.record_completion(success=False)
