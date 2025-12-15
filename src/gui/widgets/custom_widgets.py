@@ -936,42 +936,12 @@ class FileHostsStatusWidget(QWidget):
             else:
                 tooltip = f"{host_config.name}: Click to upload"
 
-            # Load host icon with fallback chain
-            # For not_uploaded: try -icon-dim.png → -icon.png → .png → generic
-            # For other states: try -icon.png → .png → generic
+            # Load host icon with status-appropriate dimming
+            # Use dimmed icon for all states except completed
             try:
-                if status == 'not_uploaded':
-                    # Try dimmed variant first
-                    dim_path = Path(icon_manager.assets_dir) / f"hosts/logo/{host_name}-icon-dim.png"
-                    if dim_path.exists():
-                        base_icon = QIcon(str(dim_path))
-                    else:
-                        # Fallback to regular -icon.png
-                        icon_path = Path(icon_manager.assets_dir) / f"hosts/logo/{host_name}-icon.png"
-                        if icon_path.exists():
-                            base_icon = QIcon(str(icon_path))
-                        else:
-                            # Fallback to .png
-                            legacy_path = Path(icon_manager.assets_dir) / f"hosts/logo/{host_name}.png"
-                            if legacy_path.exists():
-                                base_icon = QIcon(str(legacy_path))
-                            else:
-                                # Final fallback to generic icon
-                                base_icon = icon_manager.get_icon('action_view')
-                else:
-                    # For other states, use regular icon
-                    icon_path = Path(icon_manager.assets_dir) / f"hosts/logo/{host_name}-icon.png"
-                    if icon_path.exists():
-                        base_icon = QIcon(str(icon_path))
-                    else:
-                        # Fallback to .png
-                        legacy_path = Path(icon_manager.assets_dir) / f"hosts/logo/{host_name}.png"
-                        if legacy_path.exists():
-                            base_icon = QIcon(str(legacy_path))
-                        else:
-                            # Final fallback to generic icon
-                            base_icon = icon_manager.get_icon('action_view')
-            except (OSError, IOError, ValueError) as e:
+                use_dimmed = (status != 'completed')
+                base_icon = icon_manager.get_file_host_icon(host_name, dimmed=use_dimmed)
+            except Exception as e:
                 log(f"Failed to load icon for {host_name}: {e}", level="warning", category="file_hosts")
                 base_icon = icon_manager.get_icon('action_view')
 

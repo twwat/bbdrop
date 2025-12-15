@@ -41,6 +41,7 @@ desktop.ini
 *.db-shm
 *.log
 crash.log
+logs/
 
 # User config
 .imxup/

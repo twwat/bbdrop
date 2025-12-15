@@ -499,6 +499,11 @@ class WorkerStatusWidget(QWidget):
         self._icon_cache['disabled'] = icon_mgr.get_icon('disabledhost')
         self._icon_cache['settings'] = icon_mgr.get_icon('settings')
 
+        # Map spinup statuses to idle icon
+        self._icon_cache['ready'] = icon_mgr.get_icon('status_idle')
+        self._icon_cache['starting'] = icon_mgr.get_icon('status_idle')
+        self._icon_cache['authenticating'] = icon_mgr.get_icon('status_idle')
+
         # Host type icons (will load dynamically based on host)
 
     def _get_column_index(self, col_id: str) -> int:
@@ -553,12 +558,8 @@ class WorkerStatusWidget(QWidget):
         if worker_type == 'imx':
             icon = icon_mgr.get_icon('imx')
         else:
-            # Load file host icon directly from path
-            host_icon_path = Path(icon_mgr.assets_dir) / "hosts" / "logo" / f"{hostname.lower()}-icon.png"
-            if host_icon_path.exists():
-                icon = QIcon(str(host_icon_path))
-            else:
-                icon = icon_mgr.get_icon('filehosts')  # fallback
+            # Use icon manager's file host icon loading (with fallback chain)
+            icon = icon_mgr.get_file_host_icon(hostname.lower(), dimmed=False)
 
         self._icon_cache[cache_key] = icon
         return icon
@@ -992,9 +993,8 @@ class WorkerStatusWidget(QWidget):
         if icon_col_idx >= 0:
             icon_item = self.status_table.item(row, icon_col_idx)
             if icon_item:
-                # Get icon for status (use 'idle' icon for 'disabled' status)
-                icon_key = 'idle' if status == 'disabled' else status
-                status_icon = self._icon_cache.get(icon_key, QIcon())
+                # Use status directly for icon - no mapping needed
+                status_icon = self._icon_cache.get(status, QIcon())
                 icon_item.setIcon(status_icon)
 
         # Update text column
@@ -1248,9 +1248,8 @@ class WorkerStatusWidget(QWidget):
                 elif col_config.id == 'status':
                     # Status icon column (icon only)
                     status_icon_item = QTableWidgetItem()
-                    # Use dedicated 'disabled' icon for disabled workers (map 'disabled' to 'idle' icon)
-                    icon_key = 'idle' if worker.status == 'disabled' else worker.status
-                    status_icon = self._icon_cache.get(icon_key, QIcon())
+                    # Use status directly for icon - no mapping needed
+                    status_icon = self._icon_cache.get(worker.status, QIcon())
                     status_icon_item.setIcon(status_icon)
                     status_icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     self.status_table.setItem(row_idx, col_idx, status_icon_item)
@@ -1448,8 +1447,8 @@ class WorkerStatusWidget(QWidget):
                 existing_hosts = {w.hostname.lower() for w in all_workers}
 
                 # Add imx.to placeholder if not already present
-                existing_types = {w.worker_type for w in all_workers}
-                if 'imx' not in existing_types:
+                imx_worker_id = "imx"
+                if imx_worker_id not in self._workers:
                     imx_placeholder = WorkerStatus(
                         worker_id="placeholder_imx",
                         worker_type="imx",
@@ -1464,64 +1463,11 @@ class WorkerStatusWidget(QWidget):
 
                 for host_id, host_config in config_manager.hosts.items():
                     if host_id.lower() not in existing_hosts:
-                        is_enabled = get_file_host_setting(host_id, "enabled", "bool")
-                        # Load cached storage data from QSettings for filehost placeholders
-                        settings = QSettings("ImxUploader", "ImxUploadGUI")
-                        total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
-                        left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
-                        try:
-                            storage_total = int(total_str) if total_str else 0
-                            storage_left = int(left_str) if left_str else 0
-                            storage_used = storage_total - storage_left
-                        except (ValueError, TypeError):
-                            storage_used = 0
-                            storage_total = 0
-                        placeholder = WorkerStatus(
-                            worker_id=f"placeholder_{host_id}",
-                            worker_type="filehost",
-                            hostname=host_id,
-                            display_name=host_config.name,
-                            status="disabled",
-                            storage_used_bytes=storage_used,
-                            storage_total_bytes=storage_total
-                        )
-                        if is_enabled:
-                            enabled_hosts.append(placeholder)
-                        else:
-                            disabled_hosts.append(placeholder)
-
-                # Sort: active workers first, then enabled idle, then disabled alphabetically
-                result.extend(enabled_hosts)
-                disabled_hosts.sort(key=lambda w: w.display_name.lower())
-                result.extend(disabled_hosts)
-                return result
-            return all_workers
-
-        elif filter_idx == 1:  # Used This Session
-            return all_workers  # Only workers that have been active
-
-        elif filter_idx == 2:  # Enabled
-            config_manager = get_config_manager()
-            if config_manager and hasattr(config_manager, 'hosts') and config_manager.hosts:
-                result = list(all_workers)
-                existing_hosts = {w.hostname.lower() for w in all_workers}
-
-                # Add imx.to placeholder if not already present (imx.to is always enabled)
-                existing_types = {w.worker_type for w in all_workers}
-                if 'imx' not in existing_types:
-                    imx_placeholder = WorkerStatus(
-                        worker_id="placeholder_imx",
-                        worker_type="imx",
-                        hostname="imx.to",
-                        display_name="IMX.to",
-                        status="disabled"
-                    )
-                    result.append(imx_placeholder)
-
-                for host_id, host_config in config_manager.hosts.items():
-                    if host_id.lower() not in existing_hosts:
-                        if get_file_host_setting(host_id, "enabled", "bool"):
-                            # Load cached storage data from QSettings for enabled filehost placeholders
+                        # Check if worker already exists before creating placeholder
+                        worker_id = f"filehost_{host_id}"
+                        if worker_id not in self._workers:
+                            is_enabled = get_file_host_setting(host_id, "enabled", "bool")
+                            # Load cached storage data from QSettings for filehost placeholders
                             settings = QSettings("ImxUploader", "ImxUploadGUI")
                             total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
                             left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
@@ -1541,7 +1487,66 @@ class WorkerStatusWidget(QWidget):
                                 storage_used_bytes=storage_used,
                                 storage_total_bytes=storage_total
                             )
-                            result.append(placeholder)
+                            if is_enabled:
+                                enabled_hosts.append(placeholder)
+                            else:
+                                disabled_hosts.append(placeholder)
+
+                # Sort: active workers first, then enabled idle, then disabled alphabetically
+                result.extend(enabled_hosts)
+                disabled_hosts.sort(key=lambda w: w.display_name.lower())
+                result.extend(disabled_hosts)
+                return result
+            return all_workers
+
+        elif filter_idx == 1:  # Used This Session
+            return all_workers  # Only workers that have been active
+
+        elif filter_idx == 2:  # Enabled
+            config_manager = get_config_manager()
+            if config_manager and hasattr(config_manager, 'hosts') and config_manager.hosts:
+                result = list(all_workers)
+                existing_hosts = {w.hostname.lower() for w in all_workers}
+
+                # Add imx.to placeholder if not already present (imx.to is always enabled)
+                imx_worker_id = "imx"
+                if imx_worker_id not in self._workers:
+                    imx_placeholder = WorkerStatus(
+                        worker_id="placeholder_imx",
+                        worker_type="imx",
+                        hostname="imx.to",
+                        display_name="IMX.to",
+                        status="disabled"
+                    )
+                    result.append(imx_placeholder)
+
+                for host_id, host_config in config_manager.hosts.items():
+                    if host_id.lower() not in existing_hosts:
+                        if get_file_host_setting(host_id, "enabled", "bool"):
+                            # Check if worker already exists before creating placeholder
+                            worker_id = f"filehost_{host_id}"
+                            if worker_id not in self._workers:
+                                # Load cached storage data from QSettings for enabled filehost placeholders
+                                settings = QSettings("ImxUploader", "ImxUploadGUI")
+                                total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
+                                left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
+                                try:
+                                    storage_total = int(total_str) if total_str else 0
+                                    storage_left = int(left_str) if left_str else 0
+                                    storage_used = storage_total - storage_left
+                                except (ValueError, TypeError):
+                                    storage_used = 0
+                                    storage_total = 0
+                                placeholder = WorkerStatus(
+                                    worker_id=f"placeholder_{host_id}",
+                                    worker_type="filehost",
+                                    hostname=host_id,
+                                    display_name=host_config.name,
+                                    status="disabled",
+                                    storage_used_bytes=storage_used,
+                                    storage_total_bytes=storage_total
+                                )
+                                result.append(placeholder)
                 return result
             return all_workers
 
@@ -1621,11 +1626,14 @@ class WorkerStatusWidget(QWidget):
         if icon_col_idx >= 0:
             icon_item = self.status_table.item(row, icon_col_idx)
             if icon_item:
-                worker_type = icon_item.data(Qt.ItemDataRole.UserRole + 1)
-                hostname = self.status_table.item(row, self._get_column_index('hostname'))
-                if hostname and worker_type == 'filehost':
-                    self.open_host_config_requested.emit(hostname.text().lower())
-                elif worker_type == 'imx':
+                # Get worker_id from icon column
+                worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
+                worker = self._workers.get(worker_id)
+
+                if worker and worker.worker_type == 'filehost':
+                    # Use hostname from worker object (works with both widgets and items)
+                    self.open_host_config_requested.emit(worker.hostname.lower())
+                elif worker and worker.worker_type == 'imx':
                     self.open_settings_tab_requested.emit(1)  # Credentials tab
 
     # =========================================================================

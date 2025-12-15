@@ -8,6 +8,8 @@ from typing import Dict, Optional, List, Set, Union
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QStyle
 
+from src.utils.logger import log
+
 
 class IconManager:
     """Centralized icon management with validation and clear mappings."""
@@ -317,7 +319,83 @@ class IconManager:
         """
         icon_key = f'action_{action}'
         return self.get_icon(icon_key, theme_mode, is_selected)
-    
+
+    def get_file_host_icon(self, host_name: str, dimmed: bool = False) -> QIcon:
+        """
+        Get icon for a file host with caching and fallback chain.
+
+        Args:
+            host_name: Name of the file host (e.g., 'imx', 'pixhost')
+            dimmed: If True, load dimmed variant of the icon
+
+        Returns:
+            QIcon object (fallback to action_view icon if not found)
+        """
+        # Input validation for security
+        if not host_name or not isinstance(host_name, str):
+            log(f"Invalid host_name: {host_name}", level="warning", category="icon_manager")
+            return self.get_icon('action_view')
+
+        # Sanitize: only allow alphanumeric, hyphen, underscore, dot
+        import re
+        if not re.match(r'^[a-zA-Z0-9._-]+$', host_name):
+            log(f"Invalid characters in host_name: {host_name}", level="warning", category="icon_manager")
+            return self.get_icon('action_view')
+
+        # Prevent directory traversal
+        if '..' in host_name or len(host_name) > 100:
+            log(f"Potentially malicious host_name: {host_name}", level="warning", category="icon_manager")
+            return self.get_icon('action_view')
+
+        # Create cache key
+        cache_key = f"file_host_{host_name}_{'dim' if dimmed else 'color'}"
+
+        # Check cache first
+        if cache_key in self._icon_cache:
+            self._cache_hits += 1
+            return self._icon_cache[cache_key]
+
+        # Cache miss
+        self._cache_misses += 1
+
+        try:
+            # Build fallback chain
+            icon_paths = []
+
+            if dimmed:
+                # Try dimmed variant first
+                dimmed_path = os.path.join(self.assets_dir, 'hosts', 'logo', f'{host_name}-icon-dim.png')
+                icon_paths.append(dimmed_path)
+
+            # Try color/normal variant
+            color_path = os.path.join(self.assets_dir, 'hosts', 'logo', f'{host_name}-icon.png')
+            icon_paths.append(color_path)
+
+            # Try legacy path
+            legacy_path = os.path.join(self.assets_dir, 'hosts', 'logo', f'{host_name}.png')
+            icon_paths.append(legacy_path)
+
+            # Try each path in the fallback chain
+            for icon_path in icon_paths:
+                if os.path.exists(icon_path):
+                    self._disk_loads += 1
+                    icon = QIcon(icon_path)
+                    if not icon.isNull():
+                        self._icon_cache[cache_key] = icon
+                        return icon
+
+            # No icon found - log warning
+            log(f"File host icon not found for '{host_name}' (dimmed={dimmed})", level="warning", category="icon_manager")
+            self._missing_icons.add(f"file_host_{host_name}")
+
+        except Exception as e:
+            log(f"Error loading file host icon for '{host_name}': {e}", level="error", category="icon_manager")
+
+        # Final fallback - return action_view icon
+        fallback_icon = self.get_icon('action_view')
+        self._icon_cache[cache_key] = fallback_icon
+        return fallback_icon
+
     def validate_icons(self, report: bool = True) -> Dict[str, List[str]]:
         """
         Validate that all required icons exist.
