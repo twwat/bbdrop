@@ -5841,18 +5841,23 @@ class ImxUploadGUI(QMainWindow):
             else:
                 rest = message
 
-            # ALWAYS strip log level prefix from GUI display (keep in log viewer only)
-            level_prefixes = ["TRACE: ", "DEBUG: ", "INFO: ", "WARNING: ", "ERROR: ", "CRITICAL: "]
-            for level_prefix in level_prefixes:
-                if rest.startswith(level_prefix):
-                    rest = rest[len(level_prefix):]
-                    break
+            # Strip log level prefix if setting is disabled (cached value)
+            if not self._log_show_level:
+                level_prefixes = ["TRACE: ", "DEBUG: ", "INFO: ", "WARNING: ", "ERROR: ", "CRITICAL: "]
+                for level_prefix in level_prefixes:
+                    if rest.startswith(level_prefix):
+                        rest = rest[len(level_prefix):]
+                        break
 
             # Strip [category] or [category:subtype] tag if setting is disabled (cached value)
             if not self._log_show_category:
-                if rest.startswith("[") and "]" in rest:
-                    close_idx = rest.find("]")
-                    rest = rest[close_idx + 1:].lstrip()
+                # Find category tag - could be at start or after level prefix
+                bracket_idx = rest.find("[")
+                if bracket_idx != -1 and "]" in rest:
+                    close_idx = rest.find("]", bracket_idx)
+                    if close_idx != -1:
+                        # Remove the [category] tag and any trailing space
+                        rest = rest[:bracket_idx] + rest[close_idx + 1:].lstrip()
 
             display = prefix + rest
 

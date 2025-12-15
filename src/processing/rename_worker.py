@@ -11,6 +11,93 @@ import os
 from src.utils.logger import log
 
 
+def save_session_cookies_to_keyring(session_cookies):
+    """Save session cookies to OS keyring for reuse across sessions.
+
+    Stores cookies as JSON string under the 'imxup' service with 48-hour expiry.
+    """
+    import json
+    try:
+        import keyring
+        # Extract required cookies
+        required = ["continue", "PHPSESSID", "user_id", "user_key", "user_name"]
+        cookies_dict = {}
+        for cookie in session_cookies:
+            if cookie.name in required:
+                cookies_dict[cookie.name] = {
+                    'value': cookie.value,
+                    'domain': cookie.domain,
+                    'path': cookie.path,
+                    'secure': cookie.secure,
+                    'expiry': int(time.time()) + 172800  # 48 hours
+                }
+        if cookies_dict:
+            keyring.set_password("imxup", "session_cookies", json.dumps(cookies_dict))
+            log("Session cookies saved to keyring", level="debug", category="auth")
+    except ImportError:
+        log("keyring not available, cookies not saved", level="debug", category="auth")
+    except Exception as e:
+        log(f"Failed to save cookies to keyring: {e}", level="debug", category="auth")
+
+
+def load_session_cookies_from_keyring():
+    """Load session cookies from OS keyring.
+
+    Returns dict of valid, non-expired cookie data or empty dict if not found.
+    Validates JSON structure and filters out expired cookies.
+    """
+    import json
+    try:
+        import keyring
+        cookies_json = keyring.get_password("imxup", "session_cookies")
+        if cookies_json:
+            try:
+                cookies = json.loads(cookies_json)
+                if not isinstance(cookies, dict):
+                    log("Invalid keyring cookie format (not a dict), clearing", level="debug", category="auth")
+                    clear_session_cookies_from_keyring()
+                    return {}
+
+                # Validate and filter expired cookies
+                current_time = int(time.time())
+                valid_cookies = {}
+                for name, data in cookies.items():
+                    if not isinstance(data, dict):
+                        continue
+                    if not all(k in data for k in ['value', 'domain', 'path']):
+                        continue
+                    if data.get('expiry', 0) <= current_time:
+                        continue
+                    valid_cookies[name] = data
+
+                if not valid_cookies:
+                    log("All keyring cookies expired, clearing", level="debug", category="auth")
+                    clear_session_cookies_from_keyring()
+                    return {}
+
+                log(f"Loaded {len(valid_cookies)} valid session cookies from keyring", level="debug", category="auth")
+                return valid_cookies
+            except json.JSONDecodeError as e:
+                log(f"Corrupted keyring cookie data (JSON error: {e}), clearing", level="debug", category="auth")
+                clear_session_cookies_from_keyring()
+                return {}
+    except ImportError:
+        pass
+    except Exception as e:
+        log(f"Failed to load cookies from keyring: {e}", level="debug", category="auth")
+    return {}
+
+
+def clear_session_cookies_from_keyring():
+    """Clear stored session cookies from keyring."""
+    try:
+        import keyring
+        keyring.delete_password("imxup", "session_cookies")
+        log("Cleared session cookies from keyring", level="debug", category="auth")
+    except Exception:
+        pass
+
+
 class RenameWorker:
     """Background worker that handles gallery renames using its own web session."""
 
@@ -166,6 +253,30 @@ class RenameWorker:
         REQUIRED_COOKIES = ["continue", "PHPSESSID", "user_id", "user_key", "user_name"]
 
         if not self.username or not self.password:
+            # Try keyring cookies first (from previous successful login)
+            keyring_cookies = load_session_cookies_from_keyring()
+            if keyring_cookies:
+                for name, cookie_data in keyring_cookies.items():
+                    try:
+                        self.session.cookies.set(
+                            name,
+                            cookie_data['value'],
+                            domain=cookie_data['domain'],
+                            path=cookie_data['path'],
+                            secure=cookie_data.get('secure', False)
+                        )
+                    except Exception:
+                        pass
+
+                # Test if keyring cookies work
+                test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
+                if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
+                    log("RenameWorker (no credentials) authenticated using keyring cookies", category="auth", level="info")
+                    return True
+                else:
+                    log("Keyring cookies expired, trying other methods", level="debug", category="auth")
+                    self.session.cookies.clear()  # Clear expired cookies
+
             # Try cookies only
             try:
                 firefox_cookies = get_firefox_cookies("imx.to", cookie_names=REQUIRED_COOKIES)
@@ -205,6 +316,30 @@ class RenameWorker:
                 if attempt > 0:
                     log(f"RenameWorker login retry {attempt + 1}/{max_retries}", level="debug", category="auth")
                     time.sleep(1)
+
+                # Try keyring cookies first (from previous successful login)
+                keyring_cookies = load_session_cookies_from_keyring()
+                if keyring_cookies:
+                    for name, cookie_data in keyring_cookies.items():
+                        try:
+                            self.session.cookies.set(
+                                name,
+                                cookie_data['value'],
+                                domain=cookie_data['domain'],
+                                path=cookie_data['path'],
+                                secure=cookie_data.get('secure', False)
+                            )
+                        except Exception:
+                            pass
+
+                    # Test if keyring cookies work
+                    test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
+                    if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
+                        log("RenameWorker authenticated using keyring cookies", category="auth", level="info")
+                        return True
+                    else:
+                        log("Keyring cookies expired, trying other methods", level="debug", category="auth")
+                        self.session.cookies.clear()  # Clear expired cookies
 
                 # Try cookies first (using same REQUIRED_COOKIES from above)
                 firefox_cookies = get_firefox_cookies("imx.to", cookie_names=REQUIRED_COOKIES)
@@ -262,6 +397,8 @@ class RenameWorker:
                 # Check if login was successful
                 if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
                     log("RenameWorker authenticated using credentials", category="auth", level="info")
+                    # Save session cookies to keyring for next time
+                    save_session_cookies_to_keyring(self.session.cookies)
                     return True
                 else:
                     log("RenameWorker credential login failed", level="debug", category="auth")

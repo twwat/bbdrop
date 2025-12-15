@@ -120,3 +120,5 @@ package-lock.json
 package.json
 pyrightconfig.json
 assets/upload-anim/
+
+*.exe

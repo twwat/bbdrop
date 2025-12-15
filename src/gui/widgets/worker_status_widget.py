@@ -14,7 +14,7 @@ from enum import Enum
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QLabel, QComboBox, QPushButton, QFrame, QSizePolicy,
-    QMenu, QStyle, QStyleOptionHeader, QProgressBar
+    QMenu, QStyle, QStyleOptionHeader, QProgressBar, QAbstractItemView
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QSettings, QTimer, pyqtProperty, QSize, QRect
 from PyQt6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor, QFontMetrics
@@ -30,6 +30,19 @@ from src.core.constants import (
     METRIC_CELL_PADDING,
     METRIC_MIN_FONT_SIZE
 )
+
+
+class NoAutoScrollTable(QTableWidget):
+    """QTableWidget subclass that disables auto-scroll-to-selection behavior.
+
+    Prevents the table from automatically scrolling to make the selected
+    item visible, which can cause unwanted scroll jumps when other widgets
+    trigger focus or selection changes.
+    """
+    def scrollTo(self, index, hint=QAbstractItemView.ScrollHint.EnsureVisible):
+        # Don't auto-scroll - prevents unwanted horizontal scrolling
+        # when selection is restored or focus changes
+        pass
 
 
 class MultiLineHeaderView(QHeaderView):
@@ -438,7 +451,7 @@ class WorkerStatusWidget(QWidget):
         main_layout.addWidget(separator)
 
         # Status table
-        self.status_table = QTableWidget()
+        self.status_table = NoAutoScrollTable()
 
         # Configure table behavior
         self.status_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
