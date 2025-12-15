@@ -32,14 +32,14 @@ class ZIPManager:
 
     def create_or_reuse_zip(
         self,
-        gallery_id: int,
+        db_id: int,
         folder_path: Path,
         gallery_name: Optional[str] = None
     ) -> Path:
         """Create a new ZIP or return existing cached ZIP path.
 
         Args:
-            gallery_id: Unique gallery ID
+            db_id: Unique database ID
             folder_path: Path to gallery folder
             gallery_name: Optional gallery name for ZIP filename
 
@@ -51,14 +51,14 @@ class ZIPManager:
         """
         with self.lock:
             # Check if ZIP already exists in cache
-            if gallery_id in self.zip_cache:
-                zip_path, ref_count = self.zip_cache[gallery_id]
+            if db_id in self.zip_cache:
+                zip_path, ref_count = self.zip_cache[db_id]
 
                 # Verify ZIP still exists on disk
                 if zip_path.exists():
-                    self.zip_cache[gallery_id] = (zip_path, ref_count + 1)
+                    self.zip_cache[db_id] = (zip_path, ref_count + 1)
                     log(
-                        f"Reusing existing ZIP for gallery {gallery_id} (refs: {ref_count + 1}): {zip_path.name}",
+                        f"Reusing existing ZIP for gallery {db_id} (refs: {ref_count + 1}): {zip_path.name}",
                         level="debug",
                         category="file_hosts"
                     )
@@ -70,19 +70,19 @@ class ZIPManager:
                         level="warning",
                         category="file_hosts"
                     )
-                    del self.zip_cache[gallery_id]
+                    del self.zip_cache[db_id]
 
             # Create new ZIP
-            zip_name = self._generate_zip_name(gallery_id, gallery_name)
+            zip_name = self._generate_zip_name(db_id, gallery_name)
             zip_path = self.temp_dir / zip_name
 
-            log(f"Creating ZIP for gallery {gallery_id}: {zip_path.name}", level="info", category="file_hosts")
+            log(f"Creating ZIP for gallery {db_id}: {zip_path.name}", level="info", category="file_hosts")
 
             try:
                 self._create_store_mode_zip(folder_path, zip_path)
 
                 # Add to cache with ref_count = 1
-                self.zip_cache[gallery_id] = (zip_path, 1)
+                self.zip_cache[db_id] = (zip_path, 1)
 
                 file_size_mb = zip_path.stat().st_size / (1024 * 1024)
                 log(
@@ -94,7 +94,7 @@ class ZIPManager:
                 return zip_path
 
             except Exception as e:
-                log(f"Failed to create ZIP for gallery {gallery_id}: {e}", level="error", category="file_hosts")
+                log(f"Failed to create ZIP for gallery {db_id}: {e}", level="error", category="file_hosts")
                 # Clean up partial ZIP if it exists
                 if zip_path.exists():
                     try:
@@ -103,26 +103,26 @@ class ZIPManager:
                         pass
                 raise
 
-    def release_zip(self, gallery_id: int, force_delete: bool = False) -> bool:
+    def release_zip(self, db_id: int, force_delete: bool = False) -> bool:
         """Release a reference to a ZIP file. Deletes when ref_count reaches 0.
 
         Args:
-            gallery_id: Gallery ID
+            db_id: Database ID
             force_delete: If True, delete immediately regardless of ref count
 
         Returns:
             True if ZIP was deleted, False otherwise
         """
         with self.lock:
-            if gallery_id not in self.zip_cache:
+            if db_id not in self.zip_cache:
                 log(
-                    f"Attempted to release non-existent ZIP for gallery {gallery_id}",
+                    f"Attempted to release non-existent ZIP for gallery {db_id}",
                     level="warning",
                     category="file_hosts"
                 )
                 return False
 
-            zip_path, ref_count = self.zip_cache[gallery_id]
+            zip_path, ref_count = self.zip_cache[db_id]
 
             if force_delete:
                 # Force delete the ZIP (explicit cleanup request)
@@ -131,31 +131,31 @@ class ZIPManager:
                     if file_existed:
                         zip_path.unlink()
                         log(
-                            f"Deleted ZIP for gallery {gallery_id}: {zip_path.name}",
+                            f"Deleted ZIP for gallery {db_id}: {zip_path.name}",
                             level="debug",
                             category="file_hosts"
                         )
-                    del self.zip_cache[gallery_id]
+                    del self.zip_cache[db_id]
                     return file_existed
                 except Exception as e:
                     log(f"Failed to delete ZIP {zip_path}: {e}", level="error", category="file_hosts")
                     # Remove from cache anyway
-                    del self.zip_cache[gallery_id]
+                    del self.zip_cache[db_id]
                     return False
             elif ref_count <= 1:
                 # Decrement to 0 but keep in cache for retry reuse
-                self.zip_cache[gallery_id] = (zip_path, 0)
+                self.zip_cache[db_id] = (zip_path, 0)
                 log(
-                    f"Released ZIP reference for gallery {gallery_id} (refs: 0, kept for retry)",
+                    f"Released ZIP reference for gallery {db_id} (refs: 0, kept for retry)",
                     level="debug",
                     category="file_hosts"
                 )
                 return False
             else:
                 # Decrement ref count
-                self.zip_cache[gallery_id] = (zip_path, ref_count - 1)
+                self.zip_cache[db_id] = (zip_path, ref_count - 1)
                 log(
-                    f"Released ZIP reference for gallery {gallery_id} (refs: {ref_count - 1})",
+                    f"Released ZIP reference for gallery {db_id} (refs: {ref_count - 1})",
                     level="debug",
                     category="file_hosts"
                 )

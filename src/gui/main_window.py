@@ -3509,14 +3509,14 @@ class ImxUploadGUI(QMainWindow):
             pass
 
     # File Host Upload Signal Handlers
-    def on_file_host_upload_started(self, gallery_id: int, host_name: str):
+    def on_file_host_upload_started(self, db_id: int, host_name: str):
         """Handle file host upload started - ASYNC to prevent blocking main thread"""
-        log(f"File host upload started: {host_name} for gallery {gallery_id}", level="debug", category="file_hosts")
+        log(f"File host upload started: {host_name} for gallery {db_id}", level="debug", category="file_hosts")
         # Defer UI refresh to avoid blocking signal emission
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_gallery_id(gallery_id))
+        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_db_id(db_id))
 
-    def on_file_host_upload_progress(self, gallery_id: int, host_name: str, uploaded_bytes: int, total_bytes: int, speed_bps: float = 0.0):
+    def on_file_host_upload_progress(self, db_id: int, host_name: str, uploaded_bytes: int, total_bytes: int, speed_bps: float = 0.0):
         """Handle file host upload progress with detailed display"""
         try:
             # Calculate percentage
@@ -3544,22 +3544,22 @@ class ImxUploadGUI(QMainWindow):
         except Exception as e:
             log(f"Error handling file host upload progress: {e}", level="error", category="file_hosts")
 
-    def on_file_host_upload_completed(self, gallery_id: int, host_name: str, result: dict):
+    def on_file_host_upload_completed(self, db_id: int, host_name: str, result: dict):
         """Handle file host upload completed - ASYNC to prevent blocking main thread"""
-        log(f"File host upload completed: {host_name} for gallery {gallery_id}", level="info", category="file_hosts")
+        log(f"File host upload completed: {host_name} for gallery {db_id}", level="info", category="file_hosts")
         # Defer UI refresh to avoid blocking signal emission
         # Use QTimer.singleShot(0) to schedule on next event loop iteration
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_gallery_id(gallery_id))
+        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_db_id(db_id))
         # Trigger artifact regeneration if auto-regenerate is enabled (non-blocking, after UI refresh)
-        QTimer.singleShot(100, lambda: self._auto_regenerate_for_gallery_id(gallery_id))
+        QTimer.singleShot(100, lambda: self._auto_regenerate_for_db_id(db_id))
 
-    def on_file_host_upload_failed(self, gallery_id: int, host_name: str, error_message: str):
+    def on_file_host_upload_failed(self, db_id: int, host_name: str, error_message: str):
         """Handle file host upload failed - ASYNC to prevent blocking main thread"""
-        log(f"File host upload failed: {host_name} for gallery {gallery_id}: {error_message}", level="warning", category="file_hosts")
+        log(f"File host upload failed: {host_name} for gallery {db_id}: {error_message}", level="warning", category="file_hosts")
         # Defer UI refresh to avoid blocking signal emission
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_gallery_id(gallery_id))
+        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_db_id(db_id))
 
     def on_file_host_bandwidth_updated(self, kbps: float):
         """Handle file host bandwidth update with smoothing.
@@ -3708,7 +3708,7 @@ class ImxUploadGUI(QMainWindow):
             status="idle"
         )
 
-    def _on_filehost_worker_started(self, gallery_id: int, host_name: str):
+    def _on_filehost_worker_started(self, db_id: int, host_name: str):
         """Handle file host worker upload started."""
         if not hasattr(self, 'worker_status_widget'):
             return  # Widget disabled, skip update
@@ -3722,7 +3722,7 @@ class ImxUploadGUI(QMainWindow):
             status="uploading"
         )
 
-    def _on_filehost_worker_progress(self, gallery_id: int, host_name: str,
+    def _on_filehost_worker_progress(self, db_id: int, host_name: str,
                                       uploaded: int, total: int, speed_bps: float):
         """Handle file host worker upload progress."""
         if not hasattr(self, 'worker_status_widget'):
@@ -3738,12 +3738,12 @@ class ImxUploadGUI(QMainWindow):
         )
         self.worker_status_widget.update_worker_progress(
             worker_id=worker_id,
-            gallery_id=gallery_id,
+            gallery_id=db_id,
             progress_bytes=uploaded,
             total_bytes=total
         )
 
-    def _on_filehost_worker_completed(self, gallery_id: int, host_name: str, result: dict):
+    def _on_filehost_worker_completed(self, db_id: int, host_name: str, result: dict):
         """Handle file host worker upload completion."""
         if not hasattr(self, 'worker_status_widget'):
             return  # Widget disabled, skip update
@@ -3757,7 +3757,7 @@ class ImxUploadGUI(QMainWindow):
             status="idle"
         )
 
-    def _on_filehost_worker_failed(self, gallery_id: int, host_name: str, error: str):
+    def _on_filehost_worker_failed(self, db_id: int, host_name: str, error: str):
         """Handle file host worker upload failure."""
         if not hasattr(self, 'worker_status_widget'):
             return  # Widget disabled, skip update
@@ -3789,18 +3789,26 @@ class ImxUploadGUI(QMainWindow):
         from src.utils.logger import log
         log(f"Worker {host_id} status: {status_text}", level="debug", category="file_hosts")
 
-        # Update the worker status widget using the proper public method
         worker_id = f"filehost_{host_id.lower().replace(' ', '_')}"
         if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
-            # Get current worker info (if exists)
+            # Get worker if exists, or use defaults for new worker
             worker = self.worker_status_widget._workers.get(worker_id)
             if worker:
-                # Call the public update method with current values + new status
+                # Update existing worker
                 self.worker_status_widget.update_worker_status(
                     worker_id=worker_id,
                     worker_type='filehost',
                     hostname=worker.hostname,
                     speed_bps=worker.speed_bps,
+                    status=status_text
+                )
+            else:
+                # Create new worker with this status
+                self.worker_status_widget.update_worker_status(
+                    worker_id=worker_id,
+                    worker_type='filehost',
+                    hostname=host_id,  # Use host_id as display name
+                    speed_bps=0.0,
                     status=status_text
                 )
 
@@ -3840,42 +3848,70 @@ class ImxUploadGUI(QMainWindow):
         except Exception as e:
             log(f"Error updating worker queue stats: {e}", level="error", category="ui")
 
-    def _refresh_file_host_widgets_for_gallery_id(self, gallery_id: int):
+    def _refresh_file_host_widgets_for_db_id(self, db_id: int):
         """Refresh file host widgets for a specific gallery ID - OPTIMIZED VERSION
 
         This method is called asynchronously via QTimer to avoid blocking signal emission.
         Optimized to use O(1) lookups instead of iterating all items.
         """
         try:
-            # OPTIMIZATION 1: Use cached gallery_id -> path mapping if available
-            # This avoids iterating through all queue items
-            if not hasattr(self, '_gallery_id_to_path'):
-                self._gallery_id_to_path = {}
+            # 1. Entry point logging
+            log(f"_refresh_file_host_widgets_for_db_id called with db_id={db_id}",
+                level="debug", category="file_hosts")
 
-            gallery_path = self._gallery_id_to_path.get(gallery_id)
+            # OPTIMIZATION 1: Use cached db_id -> path mapping if available
+            # This avoids iterating through all queue items
+            if not hasattr(self, '_db_id_to_path'):
+                self._db_id_to_path = {}
+
+            gallery_path = self._db_id_to_path.get(db_id)
+
+            # 2. Log cache lookup result
+            log(f"db_id {db_id} in _db_id_to_path: {db_id in self._db_id_to_path}, "
+                f"mapped path: {gallery_path}", level="debug", category="file_hosts")
 
             # If not cached, fall back to search (only on first miss)
             if not gallery_path:
+                log(f"Cache miss for db_id {db_id}, searching queue items",
+                    level="debug", category="file_hosts")
                 for item in self.queue_manager.get_all_items():
-                    if item.gallery_id and str(item.gallery_id) == str(gallery_id):
+                    if item.db_id and item.db_id == db_id:
                         gallery_path = item.path
                         # Cache for future lookups
-                        self._gallery_id_to_path[gallery_id] = gallery_path
+                        self._db_id_to_path[db_id] = gallery_path
+                        log(f"Found and cached: db_id {db_id} -> path {gallery_path}",
+                            level="debug", category="file_hosts")
                         break
 
             if not gallery_path:
+                log(f"No path found for db_id {db_id}, exiting",
+                    level="debug", category="file_hosts")
                 return
 
             # OPTIMIZATION 2: O(1) row lookup via path_to_row dict
             row = self.path_to_row.get(gallery_path)
+
+            # 3. Log row lookup result
+            log(f"path '{gallery_path}' in path_to_row: {gallery_path in self.path_to_row}, "
+                f"mapped row: {row}", level="debug", category="file_hosts")
+
             if row is None:
+                log(f"No row found for path '{gallery_path}', exiting",
+                    level="debug", category="file_hosts")
                 return
 
             # OPTIMIZATION 3: Get widget reference first, skip DB query if widget missing
             from src.gui.widgets.custom_widgets import FileHostsStatusWidget
             status_widget = self.gallery_table.table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
+
+            # 4. Log widget lookup result
+            widget_type = type(status_widget).__name__ if status_widget else "None"
+            log(f"cellWidget(row={row}, COL_HOSTS_STATUS) returned: {widget_type}, "
+                f"is FileHostsStatusWidget: {isinstance(status_widget, FileHostsStatusWidget)}",
+                level="debug", category="file_hosts")
+
             if not isinstance(status_widget, FileHostsStatusWidget):
-                log(f"File host status widget not found at row {row} for gallery_id {gallery_id}", level="debug", category="file_hosts")
+                log(f"File host status widget not found at row {row} for db_id {db_id}", level="debug", category="file_hosts")
                 return  # Widget not present, skip expensive DB query
 
             # Only do DB query if we have a valid widget to update
@@ -3883,6 +3919,11 @@ class ImxUploadGUI(QMainWindow):
             try:
                 uploads_list = self.queue_manager.store.get_file_host_uploads(gallery_path)
                 host_uploads = {upload['host_name']: upload for upload in uploads_list}
+
+                # 5. Log uploads fetched from database
+                log(f"Fetched {len(uploads_list)} file host uploads from database for path '{gallery_path}': "
+                    f"hosts={list(host_uploads.keys())}", level="debug", category="file_hosts")
+
             except Exception as e:
                 log(f"Failed to load file host uploads: {e}", level="warning", category="file_hosts")
                 return
@@ -3891,7 +3932,14 @@ class ImxUploadGUI(QMainWindow):
             status_widget.update_hosts(host_uploads)
             status_widget.update()  # Force visual refresh
 
+            # 6. Confirm update_hosts was called
+            log(f"Called update_hosts() on widget at row {row} with {len(host_uploads)} hosts",
+                level="debug", category="file_hosts")
+
         except Exception as e:
+            # 7. Log any exceptions
+            log(f"Exception in _refresh_file_host_widgets_for_db_id(db_id={db_id}): {e}",
+                level="debug", category="file_hosts")
             log(f"Error refreshing file host widgets: {e}", level="error", category="file_hosts")
             import traceback
             traceback.print_exc()
@@ -7343,9 +7391,9 @@ class ImxUploadGUI(QMainWindow):
 
         return True
 
-    def _auto_regenerate_for_gallery_id(self, gallery_id: int):
+    def _auto_regenerate_for_db_id(self, db_id: int):
         """Auto-regenerate artifacts for gallery by ID if setting enabled"""
-        path = self._gallery_id_to_path.get(gallery_id)
+        path = self._db_id_to_path.get(db_id)
         if path and self._should_auto_regenerate_bbcode(path):
             self.regenerate_bbcode_for_gallery(path, force=False)
 

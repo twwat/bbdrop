@@ -31,10 +31,10 @@ class FileHostWorker(QThread):
     """
 
     # Signals for communication with GUI
-    upload_started = pyqtSignal(int, str)  # gallery_id, host_name
-    upload_progress = pyqtSignal(int, str, int, int, float)  # gallery_id, host_name, uploaded_bytes, total_bytes, speed_bps
-    upload_completed = pyqtSignal(int, str, dict)  # gallery_id, host_name, result_dict
-    upload_failed = pyqtSignal(int, str, str)  # gallery_id, host_name, error_message
+    upload_started = pyqtSignal(int, str)  # db_id, host_name
+    upload_progress = pyqtSignal(int, str, int, int, float)  # db_id, host_name, uploaded_bytes, total_bytes, speed_bps
+    upload_completed = pyqtSignal(int, str, dict)  # db_id, host_name, result_dict
+    upload_failed = pyqtSignal(int, str, str)  # db_id, host_name, error_message
     bandwidth_updated = pyqtSignal(float)  # Instantaneous KB/s from pycurl
     log_message = pyqtSignal([str], [str, str])  # Overloaded: (message) or (level, message) for backward compatibility
 
@@ -91,8 +91,12 @@ class FileHostWorker(QThread):
         # Current upload tracking
         self.current_upload_id: Optional[int] = None
         self.current_host: Optional[str] = None
-        self.current_gallery_id: Optional[int] = None
+        self.current_db_id: Optional[int] = None
         self._should_stop_current = False
+
+        # Thread-safe upload throttle state
+        self._upload_throttle_state = {}  # {(db_id, host): {'last_emit': time, 'last_progress': (up, total)}}
+        self._throttle_lock = threading.Lock()
 
         # Connect credentials update signal
         self.credentials_update_requested.connect(self._update_credentials)
@@ -136,6 +140,11 @@ class FileHostWorker(QThread):
             # Empty credentials = remove
             self.host_credentials.pop(self.host_id, None)
             self._log("Credentials cleared", level="debug")
+
+    def _cleanup_upload_throttle_state(self, db_id: int, host_name: str):
+        """Clean up throttling state for an upload to prevent memory leaks."""
+        with self._throttle_lock:
+            self._upload_throttle_state.pop((db_id, host_name), None)
 
     def _create_client(self, host_config: HostConfig) -> FileHostClient:
         """Create FileHostClient with session reuse.
@@ -288,7 +297,7 @@ class FileHostWorker(QThread):
         """Cancel the current upload."""
         self._should_stop_current = True
         self._log(
-            f"Cancel requested for current upload: {self.current_host} (gallery {self.current_gallery_id})",
+            f"Cancel requested for current upload: {self.current_host} (gallery {self.current_db_id})",
             level="info"
         )
 
@@ -398,7 +407,7 @@ class FileHostWorker(QThread):
                 # Process next upload
                 upload = pending_uploads[0]
                 host_name = upload['host_name']
-                gallery_id = upload['gallery_fk']
+                db_id = upload['gallery_fk']
                 upload_id = upload['id']
                 gallery_path = upload['gallery_path']
 
@@ -413,7 +422,7 @@ class FileHostWorker(QThread):
 
                     self._log(f"FAIL FAST: {error_msg}", level="error")
                     # CRITICAL: Emit signal FIRST before DB write (fail-fast path)
-                    self.upload_failed.emit(gallery_id, host_name, error_msg)
+                    self.upload_failed.emit(db_id, host_name, error_msg)
                     self.queue_store.update_file_host_upload(
                         upload_id,
                         status='failed',
@@ -426,7 +435,7 @@ class FileHostWorker(QThread):
                     error_msg = f"Path is not a directory: {gallery_path}"
                     self._log(f"FAIL FAST: {error_msg}", level="error")
                     # CRITICAL: Emit signal FIRST before DB write (fail-fast path)
-                    self.upload_failed.emit(gallery_id, host_name, error_msg)
+                    self.upload_failed.emit(db_id, host_name, error_msg)
                     self.queue_store.update_file_host_upload(
                         upload_id,
                         status='failed',
@@ -440,7 +449,7 @@ class FileHostWorker(QThread):
                 host_enabled = get_file_host_setting(host_name, "enabled", "bool")
                 if not host_config or not host_enabled:
                     self._log(
-                        f"Host {host_name} is disabled, skipping upload for gallery {gallery_id}",
+                        f"Host {host_name} is disabled, skipping upload for gallery {db_id}",
                         level="warning")
                     self.queue_store.update_file_host_upload(
                         upload_id,
@@ -459,10 +468,10 @@ class FileHostWorker(QThread):
 
                 # Acquire upload slot and process
                 try:
-                    with self.coordinator.acquire_slot(gallery_id, host_name, timeout=5.0):
+                    with self.coordinator.acquire_slot(db_id, host_name, timeout=5.0):
                         self._process_upload(
                             upload_id=upload_id,
-                            gallery_id=gallery_id,
+                            db_id=db_id,
                             gallery_path=gallery_path,
                             gallery_name=upload['gallery_name'],
                             host_name=host_name,
@@ -485,7 +494,7 @@ class FileHostWorker(QThread):
     def _process_upload(
         self,
         upload_id: int,
-        gallery_id: int,
+        db_id: int,
         gallery_path: str,
         gallery_name: Optional[str],
         host_name: str,
@@ -495,7 +504,7 @@ class FileHostWorker(QThread):
 
         Args:
             upload_id: Database upload record ID
-            gallery_id: Gallery ID
+            db_id: Database ID for the upload
             gallery_path: Path to gallery folder
             gallery_name: Gallery name
             host_name: Host name
@@ -503,7 +512,7 @@ class FileHostWorker(QThread):
         """
         self.current_upload_id = upload_id
         self.current_host = host_name
-        self.current_gallery_id = gallery_id
+        self.current_db_id = db_id
         self._should_stop_current = False
 
         # Initialize timing and size tracking for metrics
@@ -511,13 +520,13 @@ class FileHostWorker(QThread):
         zip_size = 0
 
         self._log(
-            f"Starting upload to {host_name} for gallery {gallery_id} ({gallery_name})",
+            f"Starting upload to {host_name} for gallery {db_id} ({gallery_name})",
             level="info"
         )
 
         # CRITICAL: Emit started signal FIRST before database write
         # This ensures GUI gets immediate notification without waiting for DB
-        self.upload_started.emit(gallery_id, host_name)
+        self.upload_started.emit(db_id, host_name)
 
         # Update status to uploading (AFTER signal emission)
         self.queue_store.update_file_host_upload(
@@ -538,7 +547,7 @@ class FileHostWorker(QThread):
                 raise FileNotFoundError(error_msg)
 
             zip_path = self.zip_manager.create_or_reuse_zip(
-                gallery_id=gallery_id,
+                db_id=db_id,
                 folder_path=folder_path,
                 gallery_name=gallery_name
             )
@@ -558,9 +567,29 @@ class FileHostWorker(QThread):
             def on_progress(uploaded: int, total: int, speed_bps: float = 0.0):
                 """Progress callback from pycurl with speed tracking."""
                 try:
-                    # Emit signal for GUI update - no database write needed here
-                    # The final state is saved in success/failure handlers
-                    self.upload_progress.emit(gallery_id, host_name, uploaded, total, speed_bps)
+                    # Throttle progress signal emissions to max 4 per second using instance-level state
+                    current_time = time.time()
+                    upload_key = (db_id, host_name)
+
+                    should_emit = False
+                    with self._throttle_lock:
+                        state = self._upload_throttle_state.setdefault(upload_key, {
+                            'last_emit': 0,
+                            'last_progress': (0, 0)
+                        })
+
+                        time_elapsed = current_time - state['last_emit']
+                        if time_elapsed >= 0.25:  # Max 4 per second
+                            last_progress = state['last_progress']
+                            # Emit if progress changed or it's been >0.5s (prevent frozen UI)
+                            if (uploaded, total) != last_progress or time_elapsed >= 0.5:
+                                should_emit = True
+                                state['last_emit'] = current_time
+                                state['last_progress'] = (uploaded, total)
+
+                    # Emit outside the lock to avoid deadlocks
+                    if should_emit:
+                        self.upload_progress.emit(db_id, host_name, uploaded, total, speed_bps)
 
                     # Emit bandwidth periodically (speed_bps is bytes/sec, convert to KB/s)
                     if speed_bps > 0:
@@ -569,7 +598,9 @@ class FileHostWorker(QThread):
                     else:
                         self._emit_bandwidth()
                 except Exception as e:
-                    self._log(f"Progress callback error: {e}", level="error")
+                    import traceback
+                    self._log(f"Progress callback error: {e}\n{traceback.format_exc()}", level="error")
+                    self._cleanup_upload_throttle_state(db_id, host_name)
                     # Continue upload - don't abort on display errors
 
             def should_stop():
@@ -596,7 +627,9 @@ class FileHostWorker(QThread):
 
                 # CRITICAL: Emit signal FIRST before any blocking operations
                 # This ensures GUI gets immediate notification without waiting for DB writes
-                self.upload_completed.emit(gallery_id, host_name, result)
+                self.upload_completed.emit(db_id, host_name, result)
+
+                self._cleanup_upload_throttle_state(db_id, host_name)
 
                 # Update database with success (AFTER signal emission)
                 self.queue_store.update_file_host_upload(
@@ -642,7 +675,7 @@ class FileHostWorker(QThread):
         except Exception as e:
             error_msg = str(e)
             self._log(
-                f"Upload failed for gallery {gallery_id}: {error_msg}",
+                f"Upload failed for gallery {db_id}: {error_msg}",
                 level="error")
 
             # Get current retry count
@@ -665,6 +698,7 @@ class FileHostWorker(QThread):
             )
 
             if should_retry:
+                self._cleanup_upload_throttle_state(db_id, host_name)  # ADD THIS LINE
                 # Increment retry count and set back to pending
                 self.queue_store.update_file_host_upload(
                     upload_id,
@@ -680,7 +714,9 @@ class FileHostWorker(QThread):
             else:
                 # CRITICAL: Emit failed signal FIRST before blocking operations
                 # This ensures GUI gets immediate notification
-                self.upload_failed.emit(gallery_id, host_name, error_msg)
+                self.upload_failed.emit(db_id, host_name, error_msg)
+
+                self._cleanup_upload_throttle_state(db_id, host_name)
 
                 # Mark as failed (AFTER signal emission)
                 self.queue_store.update_file_host_upload(
@@ -708,12 +744,12 @@ class FileHostWorker(QThread):
 
         finally:
             # Release ZIP reference
-            self.zip_manager.release_zip(gallery_id)
+            self.zip_manager.release_zip(db_id)
 
             # Clear current upload tracking
             self.current_upload_id = None
             self.current_host = None
-            self.current_gallery_id = None
+            self.current_db_id = None
             self._should_stop_current = False
 
     def _emit_bandwidth(self):
@@ -765,7 +801,7 @@ class FileHostWorker(QThread):
 
         return {
             'upload_id': self.current_upload_id,
-            'gallery_id': self.current_gallery_id,
+            'db_id': self.current_db_id,
             'host_name': self.current_host
         }
 
