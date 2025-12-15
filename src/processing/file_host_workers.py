@@ -43,6 +43,7 @@ class FileHostWorker(QThread):
     test_completed = pyqtSignal(str, dict)  # host_id, results_dict
     spinup_complete = pyqtSignal(str, str)  # host_id, error_message (empty = success)
     credentials_update_requested = pyqtSignal(str)  # credentials (for updating credentials from dialog)
+    status_updated = pyqtSignal(str, str)  # host_id, status_text
 
     def __init__(self, host_id: str, queue_store: QueueStore):
         """Initialize file host worker for a specific host.
@@ -294,6 +295,8 @@ class FileHostWorker(QThread):
     def run(self):
         """Main worker thread loop - process uploads for this host only."""
         self._log("Worker started", level="info")
+        self.status_updated.emit(self.host_id, "starting")
+        log(f"DEBUG: Emitted status signal: {self.host_id} -> starting", level="debug", category="file_hosts")
 
         # Test credentials during spinup (power button paradigm)
         host_config = self.config_manager.get_host(self.host_id)
@@ -307,6 +310,8 @@ class FileHostWorker(QThread):
                 return
 
             self._log("Testing credentials during spinup...", level="debug")
+            self.status_updated.emit(self.host_id, "authenticating")
+            log(f"DEBUG: Emitted status signal: {self.host_id} -> authenticating", level="debug", category="file_hosts")
 
             spinup_success = False
             spinup_error = ""
@@ -335,6 +340,8 @@ class FileHostWorker(QThread):
 
                     self._log("Successfully validated credentials; spinup complete!", level="info")
                     spinup_success = True
+                    self.status_updated.emit(self.host_id, "ready")
+                    log(f"DEBUG: Emitted status signal: {self.host_id} -> ready", level="debug", category="file_hosts")
 
                     # Persist session from first login
                     self._update_session_from_client(client)
@@ -355,6 +362,8 @@ class FileHostWorker(QThread):
                 return
         else:
             # No auth required - immediately signal ready
+            self.status_updated.emit(self.host_id, "ready")
+            log(f"DEBUG: Emitted status signal: {self.host_id} -> ready", level="debug", category="file_hosts")
             self.spinup_complete.emit(self.host_id, "")
 
         while self.running:

@@ -245,7 +245,8 @@ CORE_COLUMNS = [
     ColumnConfig('icon', '', 28, ColumnType.ICON, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('hostname', 'host', 120, ColumnType.TEXT),
     ColumnConfig('speed', 'speed', 90, ColumnType.SPEED, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('status', 'status', 80, ColumnType.TEXT, alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig('status', 'status', 40, ColumnType.ICON, default_visible=True, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig('status_text', 'status text', 100, ColumnType.TEXT, default_visible=True, alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('files_remaining', 'queue (files)', 90, ColumnType.COUNT, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('bytes_remaining', 'queue (bytes)', 110, ColumnType.BYTES, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('storage', 'storage', 140, ColumnType.WIDGET, default_visible=True, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
@@ -976,7 +977,7 @@ class WorkerStatusWidget(QWidget):
             self._update_worker_cell(worker_id, col_idx, speed_bps, self._format_speed)
 
     def _update_worker_status_cell(self, worker_id: str, status: str):
-        """Update only the status cell for a worker.
+        """Update status icon and text cells separately.
 
         Args:
             worker_id: Worker identifier
@@ -986,46 +987,35 @@ class WorkerStatusWidget(QWidget):
         if row is None:
             return
 
-        col_idx = self._get_column_index('status')
-        if col_idx < 0:
-            return
+        # Update icon column
+        icon_col_idx = self._get_column_index('status')
+        if icon_col_idx >= 0:
+            icon_item = self.status_table.item(row, icon_col_idx)
+            if icon_item:
+                # Get icon for status (use 'idle' icon for 'disabled' status)
+                icon_key = 'idle' if status == 'disabled' else status
+                status_icon = self._icon_cache.get(icon_key, QIcon())
+                icon_item.setIcon(status_icon)
 
-        # Status column is now a widget with icon + text (not QTableWidgetItem)
-        widget = self.status_table.cellWidget(row, col_idx)
-        if widget:
-            # Find the icon label and text label inside the widget
-            layout = widget.layout()
-            if layout and layout.count() >= 2:
-                icon_label = layout.itemAt(0).widget()
-                text_label = layout.itemAt(1).widget()
+        # Update text column
+        text_col_idx = self._get_column_index('status_text')
+        if text_col_idx >= 0:
+            text_item = self.status_table.item(row, text_col_idx)
+            if text_item:
+                text_item.setText(status.capitalize())
 
-                # Update icon - map 'disabled' to 'idle' icon
-                status_icon = self._icon_cache.get(
-                    'idle' if status == 'disabled' else status,
-                    QIcon()
-                )
-                if isinstance(icon_label, QLabel):
-                    icon_label.setPixmap(status_icon.pixmap(16, 16))
-
-                # Update text and color
-                if isinstance(text_label, QLabel):
-                    text_label.setText(status.capitalize())
-
-                    # Color coding
-                    if status == 'uploading':
-                        text_label.setStyleSheet("color: darkgreen;")
-                    elif status == 'error':
-                        text_label.setStyleSheet("color: red;")
-                    elif status == 'paused':
-                        text_label.setStyleSheet("color: #B8860B;")  # darkYellow
-                    elif status == 'disabled':
-                        text_label.setStyleSheet(f"color: {self.palette().color(QPalette.ColorRole.PlaceholderText).name()};")
-                        font = text_label.font()
-                        font.setItalic(True)
-                        text_label.setFont(font)
-                    else:
-                        # Reset to default color for idle (theme-aware)
-                        text_label.setStyleSheet(f"color: {self.palette().color(QPalette.ColorRole.WindowText).name()};")
+                # Apply color coding based on status
+                if status == 'uploading':
+                    text_item.setForeground(QColor("darkgreen"))
+                elif status == 'error':
+                    text_item.setForeground(QColor("red"))
+                elif status == 'paused':
+                    text_item.setForeground(QColor("#B8860B"))  # Dark goldenrod
+                elif status == 'disabled':
+                    text_item.setForeground(self.palette().color(QPalette.ColorRole.PlaceholderText))
+                    font = text_item.font()
+                    font.setItalic(True)
+                    text_item.setFont(font)
 
     def _update_worker_progress_cell(self, worker_id: str, progress_bytes: int, total_bytes: int):
         """Update progress cell for a specific worker - targeted update.
@@ -1256,41 +1246,34 @@ class WorkerStatusWidget(QWidget):
                     self.status_table.setItem(row_idx, col_idx, speed_item)
 
                 elif col_config.id == 'status':
-                    # Status column with custom widget for icon padding
-                    # Use a widget container with icon + text to enable 4px left padding
-                    container = QWidget()
-                    layout = QHBoxLayout(container)
-                    layout.setContentsMargins(4, 0, 4, 0)  # 4px left padding for icon
-                    layout.setSpacing(4)
+                    # Status icon column (icon only)
+                    status_icon_item = QTableWidgetItem()
+                    # Use dedicated 'disabled' icon for disabled workers (map 'disabled' to 'idle' icon)
+                    icon_key = 'idle' if worker.status == 'disabled' else worker.status
+                    status_icon = self._icon_cache.get(icon_key, QIcon())
+                    status_icon_item.setIcon(status_icon)
+                    status_icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.status_table.setItem(row_idx, col_idx, status_icon_item)
 
-                    # Add icon
-                    icon_label = QLabel()
-                    # Use dedicated 'disabled' icon for disabled workers
-                    status_icon = self._icon_cache.get(worker.status, QIcon())
-                    icon_label.setPixmap(status_icon.pixmap(16, 16))
-                    layout.addWidget(icon_label)
-
-                    # Add text
-                    text_label = QLabel(worker.status.capitalize())
-                    text_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                elif col_config.id == 'status_text':
+                    # Status text column (text only with color coding)
+                    status_text_item = QTableWidgetItem(worker.status.capitalize())
+                    status_text_item.setTextAlignment(col_config.alignment)
 
                     # Color coding
                     if worker.status == 'uploading':
-                        text_label.setStyleSheet("color: darkgreen;")
+                        status_text_item.setForeground(QColor("darkgreen"))
                     elif worker.status == 'error':
-                        text_label.setStyleSheet("color: red;")
+                        status_text_item.setForeground(QColor("red"))
                     elif worker.status == 'paused':
-                        text_label.setStyleSheet("color: #B8860B;")  # darkYellow
+                        status_text_item.setForeground(QColor("#B8860B"))  # Dark goldenrod
                     elif worker.status == 'disabled':
-                        text_label.setStyleSheet(f"color: {self.palette().color(QPalette.ColorRole.PlaceholderText).name()};")
-                        font = text_label.font()
+                        status_text_item.setForeground(self.palette().color(QPalette.ColorRole.PlaceholderText))
+                        font = status_text_item.font()
                         font.setItalic(True)
-                        text_label.setFont(font)
+                        status_text_item.setFont(font)
 
-                    layout.addWidget(text_label)
-                    layout.addStretch()
-
-                    self.status_table.setCellWidget(row_idx, col_idx, container)
+                    self.status_table.setItem(row_idx, col_idx, status_text_item)
 
                 elif col_config.id == 'files_remaining':
                     # Files remaining column
@@ -1472,7 +1455,7 @@ class WorkerStatusWidget(QWidget):
                         worker_type="imx",
                         hostname="imx.to",
                         display_name="IMX.to",
-                        status="idle"
+                        status="disabled"
                     )
                     result.append(imx_placeholder)
 
@@ -1498,7 +1481,7 @@ class WorkerStatusWidget(QWidget):
                             worker_type="filehost",
                             hostname=host_id,
                             display_name=host_config.name,
-                            status="disabled" if not is_enabled else "idle",
+                            status="disabled",
                             storage_used_bytes=storage_used,
                             storage_total_bytes=storage_total
                         )
@@ -1531,7 +1514,7 @@ class WorkerStatusWidget(QWidget):
                         worker_type="imx",
                         hostname="imx.to",
                         display_name="IMX.to",
-                        status="idle"
+                        status="disabled"
                     )
                     result.append(imx_placeholder)
 
@@ -1554,7 +1537,7 @@ class WorkerStatusWidget(QWidget):
                                 worker_type="filehost",
                                 hostname=host_id,
                                 display_name=host_config.name,
-                                status="idle",
+                                status="disabled",
                                 storage_used_bytes=storage_used,
                                 storage_total_bytes=storage_total
                             )
@@ -1891,8 +1874,16 @@ class WorkerStatusWidget(QWidget):
         visible_ids = settings.value("worker_status/visible_columns", None, type=list)
 
         # Debug logging
-        log("Loading column settings from QSettings", level="debug", category="ui")
+        import traceback
+        caller = traceback.extract_stack()[-2]
+        log(f"Loading column settings from QSettings (called from {caller.filename}:{caller.lineno} in {caller.name})", level="debug", category="ui")
         log(f"Found saved columns: {', '.join(visible_ids) if visible_ids else 'none'}", level="debug", category="ui")
+
+        # Migrate old settings: if "status" column exists but "status_text" doesn't, add it
+        if visible_ids and 'status' in visible_ids and 'status_text' not in visible_ids:
+            status_idx = visible_ids.index('status')
+            visible_ids.insert(status_idx + 1, 'status_text')
+            log("Migrated column settings: added status_text after status", level="debug", category="ui")
 
         if visible_ids:
             # Rebuild active columns from saved IDs (in saved order)

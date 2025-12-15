@@ -23,17 +23,22 @@ import re
 import gzip
 import shutil
 import logging
+import threading
 from logging.handlers import TimedRotatingFileHandler, RotatingFileHandler
 from typing import Optional, Dict, Any
 
 
 _SINGLETON: Optional["AppLogger"] = None
+_SINGLETON_LOCK = threading.Lock()
 
 
 def get_logger() -> "AppLogger":
+    """Get singleton AppLogger instance (thread-safe)."""
     global _SINGLETON
     if _SINGLETON is None:
-        _SINGLETON = AppLogger()
+        with _SINGLETON_LOCK:
+            if _SINGLETON is None:  # Double-check inside lock
+                _SINGLETON = AppLogger()
     return _SINGLETON
 
 
@@ -228,6 +233,20 @@ class AppLogger:
         return os.path.join(self.get_logs_dir(), self._settings.get("filename", self.DEFAULTS["filename"]))
 
     def _ensure_file_handler(self) -> None:
+        """Ensure file handler exists, removing duplicates if necessary."""
+        # Remove duplicate handlers (can happen if logger was initialized multiple times)
+        existing_handlers = self._logger.handlers.copy()  # Copy to avoid modification during iteration
+        handler_types = {}
+
+        for handler in existing_handlers:
+            handler_type = type(handler).__name__
+            if handler_type in handler_types:
+                # Duplicate handler found - remove it
+                self._logger.removeHandler(handler)
+                print(f"Removed duplicate {handler_type} handler from logger")
+            else:
+                handler_types[handler_type] = handler
+
         enabled = str(self._settings.get("enabled", "true")).lower() == "true"
         if not enabled:
             if self._file_handler is not None:

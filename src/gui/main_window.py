@@ -423,8 +423,19 @@ class ImxUploadGUI(QMainWindow):
     _cached_base_qss: str
 
     def __init__(self, splash=None):
-        self._initializing = True  # Block recursive calls during init
+        """Initialize the main GUI window."""
+        from src.utils.logger import log  # Import at function start
+        import traceback  # Import at function start
+
         super().__init__()
+        self._initializing = True  # Block recursive calls during init
+
+        # Guard against double initialization
+        if hasattr(self, '_init_complete'):
+            caller = traceback.extract_stack()[-2]
+            log(f"WARNING: ImxUploadGUI.__init__ called twice! (from {caller.filename}:{caller.lineno} in {caller.name})",
+                level="warning", category="startup")
+            return  # Skip re-initialization
 
         # Initialize log display settings BEFORE set_main_window() to avoid AttributeError
         self._log_show_level = False
@@ -471,8 +482,13 @@ class ImxUploadGUI(QMainWindow):
             raise
         if self.splash:
             self.splash.set_status("SQLite database")
-        self.queue_manager = QueueManager()
-        self.queue_manager.parent = self  # Give QueueManager access to parent for settings
+        # Guard against double initialization
+        if hasattr(self, 'queue_manager') and self.queue_manager is not None:
+            log("QueueManager already initialized, skipping", level="warning", category="startup")
+        else:
+            from src.storage.queue_manager import QueueManager
+            self.queue_manager = QueueManager()
+            self.queue_manager.parent = self  # Give QueueManager access to parent for settings
 
         # Connect queue loaded signal to refresh filter
         self.queue_manager.queue_loaded.connect(self.refresh_filter)
@@ -507,7 +523,12 @@ class ImxUploadGUI(QMainWindow):
         # This ensures it exists when manager tries to connect signals
         if self.splash:
             self.splash.set_status("Worker Status Widget")
-        self.worker_status_widget = WorkerStatusWidget()
+        # Guard against double initialization
+        if hasattr(self, 'worker_status_widget') and self.worker_status_widget is not None:
+            log("WorkerStatusWidget already initialized, skipping", level="warning", category="startup")
+        else:
+            from src.gui.widgets.worker_status_widget import WorkerStatusWidget
+            self.worker_status_widget = WorkerStatusWidget()
 
         # Initialize file host worker manager for background file host uploads
         if self.splash:
@@ -536,6 +557,7 @@ class ImxUploadGUI(QMainWindow):
                 self.file_host_manager.storage_updated.connect(self.worker_status_widget.update_worker_storage)
                 self.file_host_manager.enabled_workers_changed.connect(self._on_file_hosts_enabled_changed)
                 self.file_host_manager.spinup_complete.connect(self._on_file_host_startup_spinup)
+                self.file_host_manager.worker_status_updated.connect(self._on_worker_status_updated)
 
                 # Connect MetricsStore signals for IMX and file host metrics display
                 from src.utils.metrics_store import get_metrics_store
@@ -772,6 +794,9 @@ class ImxUploadGUI(QMainWindow):
         # Refresh log display settings (already initialized early to avoid AttributeError)
         self._refresh_log_display_settings()
         self._initializing = False # Clear initialization flag to allow normal tooltip updates
+
+        # Mark initialization complete
+        self._init_complete = True
         log(f"ImxUploadGUI.__init__ Completed", level="debug")
 
     def _load_galleries_phase1(self):
@@ -3758,6 +3783,26 @@ class ImxUploadGUI(QMainWindow):
                 self._file_host_startup_complete = True
                 log(f"All {self._file_host_startup_expected} workers complete, startup finished",
                     level="info", category="startup")
+
+    def _on_worker_status_updated(self, host_id: str, status_text: str):
+        """Handle worker status updates during spinup."""
+        from src.utils.logger import log
+        log(f"Worker {host_id} status: {status_text}", level="debug", category="file_hosts")
+
+        # Update the worker status widget using the proper public method
+        worker_id = f"filehost_{host_id.lower().replace(' ', '_')}"
+        if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
+            # Get current worker info (if exists)
+            worker = self.worker_status_widget._workers.get(worker_id)
+            if worker:
+                # Call the public update method with current values + new status
+                self.worker_status_widget.update_worker_status(
+                    worker_id=worker_id,
+                    worker_type='filehost',
+                    hostname=worker.hostname,
+                    speed_bps=worker.speed_bps,
+                    status=status_text
+                )
 
     def _update_worker_queue_stats(self):
         """Poll queue manager and update worker status widget with queue statistics.

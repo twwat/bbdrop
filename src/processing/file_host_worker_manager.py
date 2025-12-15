@@ -35,6 +35,7 @@ class FileHostWorkerManager(QObject):
     upload_completed = pyqtSignal(int, str, dict)  # gallery_id, host_name, result
     upload_failed = pyqtSignal(int, str, str)  # gallery_id, host_name, error
     bandwidth_updated = pyqtSignal(float)  # KB/s
+    worker_status_updated = pyqtSignal(str, str)  # host_id, status_text
 
     def __init__(self, queue_store: QueueStore):
         """Initialize worker manager.
@@ -47,7 +48,9 @@ class FileHostWorkerManager(QObject):
         self.workers: Dict[str, FileHostWorker] = {}  # Enabled workers (spinup succeeded)
         self.pending_workers: Dict[str, FileHostWorker] = {}  # Workers spinning up (testing credentials)
 
-        log("File Host Manager initialized", level="debug", category="file_hosts")
+        import traceback
+        caller = traceback.extract_stack()[-2]
+        log(f"File Host Manager initialized (called from {caller.filename}:{caller.lineno} in {caller.name})", level="debug", category="file_hosts")
 
     def init_enabled_hosts(self) -> None:
         """Spawn workers for all enabled file hosts at startup.
@@ -305,6 +308,9 @@ class FileHostWorkerManager(QObject):
 
         # Bandwidth signal
         worker.bandwidth_updated.connect(self.bandwidth_updated)
+
+        # Status signal
+        worker.status_updated.connect(self.worker_status_updated.emit)
 
     def pause_all(self):
         """Pause all workers (stop processing new uploads)."""
