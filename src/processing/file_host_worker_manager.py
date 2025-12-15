@@ -50,7 +50,10 @@ class FileHostWorkerManager(QObject):
         log("File Host Manager initialized", level="debug", category="file_hosts")
 
     def init_enabled_hosts(self) -> None:
-        """Spawn workers for all hosts that are enabled in config.
+        """Spawn workers for all enabled file hosts at startup.
+
+        Reads the INI file ONCE to get all enabled hosts, then initializes workers.
+        Skips redundant persistence writes since values are already in INI.
 
         Called at application startup.
         """
@@ -58,43 +61,50 @@ class FileHostWorkerManager(QObject):
         import configparser
         import os
 
+        log("Initializing file host workers on startup...", level="debug", category="file_hosts")
+
         config_manager = get_config_manager()
 
-        # Load INI file to check which hosts are enabled
-        config = configparser.ConfigParser()
-        config_file = get_config_path()  # Supports custom base paths
-
-        log(f"[File Host Manager] init_enabled_hosts() called, INI path: {config_file}", level="debug", category="file_hosts")
-        log(f"[File Host Manager] INI file exists: {os.path.exists(config_file)}", level="debug", category="file_hosts")
+        # Read INI file ONCE to get all enabled hosts
+        enabled_hosts = []
+        config_file = get_config_path()
 
         if os.path.exists(config_file):
-            config.read(config_file)
-            log(f"[File Host Manager] INI sections: {config.sections()}", level="debug", category="file_hosts")
-            log(f"[File Host Manager] FILE_HOSTS section exists: {config.has_section('FILE_HOSTS')}", level="debug", category="file_hosts")
-            if config.has_section("FILE_HOSTS"):
-                log(f"[File Host Manager] FILE_HOSTS keys: {list(config['FILE_HOSTS'].keys())}", level="debug", category="file_hosts")
+            # Single INI read for all hosts
+            from src.core.file_host_config import _ini_file_lock
+            with _ini_file_lock:
+                config = configparser.ConfigParser()
+                config.read(config_file)
 
-        log(f"[File Host Manager] config_manager.hosts: {list(config_manager.hosts.keys())}", level="debug", category="file_hosts")
+                # Check each host's enabled state from INI
+                for host_id in config_manager.hosts:
+                    try:
+                        if config.has_section("FILE_HOSTS"):
+                            ini_key = f"{host_id}_enabled"
+                            if config.has_option("FILE_HOSTS", ini_key):
+                                if config.getboolean("FILE_HOSTS", ini_key):
+                                    enabled_hosts.append(host_id)
+                    except (ValueError, configparser.Error) as e:
+                        log(f"Invalid enabled value for {host_id} in INI: {e}",
+                            level="warning", category="file_hosts")
+        else:
+            log(f"INI file does not exist at {config_file}, no hosts enabled by default",
+                level="debug", category="file_hosts")
 
-        for host_id, host_config in config_manager.hosts.items():
-            # Check enabled state using new API (handles INI → JSON defaults → hardcoded)
-            from src.core.file_host_config import get_file_host_setting
-            enabled = get_file_host_setting(host_id, "enabled", "bool")
-            log(f"[File Host Manager] {host_id}: enabled={enabled}", level="debug", category="file_hosts")
+        log(f"Found {len(enabled_hosts)} enabled hosts: {enabled_hosts}", level="debug", category="file_hosts")
 
-            if enabled:
-                log(
-                    f"[File Host Manager] Calling enable_host() for {host_id}",
-                    level="debug",
-                    category="file_hosts"
-                )
-                self.enable_host(host_id)
-            else:
-                log(f"[File Host Manager] Skipping {host_id} (disabled)", level="debug", category="file_hosts")
+        # Initialize workers for enabled hosts
+        for host_id in enabled_hosts:
+            try:
+                # enable_host() already handles worker creation and spinup
+                # Skip persistence during startup (values already in INI)
+                self.enable_host(host_id, persist=False)
+            except Exception as e:
+                log(f"Failed to enable host {host_id}: {e}", level="error", category="file_hosts")
 
         log(f"[File Host Manager] After init_enabled_hosts: {len(self.workers)} in workers, {len(self.pending_workers)} pending", level="debug", category="file_hosts")
 
-    def enable_host(self, host_id: str) -> None:
+    def enable_host(self, host_id: str, persist: bool = True) -> None:
         """Spawn and start worker for a host.
 
         Worker tests credentials during its own spinup process.
@@ -102,6 +112,8 @@ class FileHostWorkerManager(QObject):
 
         Args:
             host_id: Host identifier (e.g., 'rapidgator')
+            persist: Whether to persist enabled state to INI (default: True)
+                     Set to False during startup to avoid redundant writes
         """
         if host_id in self.workers:
             log(
@@ -125,6 +137,9 @@ class FileHostWorkerManager(QObject):
 
         # Add to pending_workers (NOT workers yet - not enabled until spinup succeeds)
         self.pending_workers[host_id] = worker
+
+        # Store persist flag for use in _on_spinup_complete
+        worker._persist_on_spinup = persist
 
         log(
             f"[File Host Manager] Starting worker spinup for {host_id}...",
@@ -238,6 +253,9 @@ class FileHostWorkerManager(QObject):
             )
             return
 
+        # Check if we should persist this change (skip during startup)
+        persist = getattr(worker, '_persist_on_spinup', True)
+
         if error:
             # Spinup failed - kill dead worker
             log(
@@ -258,8 +276,9 @@ class FileHostWorkerManager(QObject):
 
             self.workers[host_id] = worker
 
-            # Persist enabled state to INI (worker actually started)
-            self._persist_enabled_state(host_id, enabled=True)
+            # Only persist if requested (skip during startup to avoid redundant writes)
+            if persist:
+                self._persist_enabled_state(host_id, enabled=True)
 
         # Emit enabled workers list change (for tab view and dialog sync)
         self.enabled_workers_changed.emit(list(self.workers.keys()))
