@@ -3,6 +3,7 @@ File host upload client using pycurl for bandwidth tracking and progress callbac
 """
 
 import pycurl
+import certifi
 import json
 import hashlib
 import time
@@ -127,6 +128,13 @@ class FileHostClient:
                     # Fresh login (first time only)
                     self._login_session_based(credentials)
 
+
+    def _configure_ssl(self, curl):
+        """Configure SSL/TLS certificate verification for a curl handle."""
+        curl.setopt(pycurl.CAINFO, certifi.where())
+        curl.setopt(pycurl.SSL_VERIFYPEER, 1)
+        curl.setopt(pycurl.SSL_VERIFYHOST, 2)
+
     def _login_token_based(self, credentials: str) -> str:
         """Login to get authentication token.
 
@@ -159,6 +167,7 @@ class FileHostClient:
 
         # Perform login request
         curl = pycurl.Curl()
+        self._configure_ssl(curl)
         response_buffer = BytesIO()
 
         try:
@@ -243,6 +252,7 @@ class FileHostClient:
 
         # Step 1: GET login page first (establishes initial cookies, extracts CSRF tokens)
         get_curl = pycurl.Curl()
+        self._configure_ssl(get_curl)
         get_buffer = BytesIO()
         get_headers = BytesIO()
 
@@ -342,6 +352,7 @@ class FileHostClient:
 
         # Step 3: POST login credentials
         post_curl = pycurl.Curl()
+        self._configure_ssl(post_curl)
         post_buffer = BytesIO()
         post_headers = BytesIO()
 
@@ -509,6 +520,7 @@ class FileHostClient:
                 upload_page_url = f"{base_url}/upload"
 
             curl = pycurl.Curl()
+            self._configure_ssl(curl)
             buffer = BytesIO()
             try:
                 curl.setopt(pycurl.URL, upload_page_url)
@@ -803,6 +815,7 @@ class FileHostClient:
             upload_url, server_sess_id = self._get_upload_server()
 
         curl = pycurl.Curl()
+        self._configure_ssl(curl)
         response_buffer = BytesIO()
 
         try:
@@ -855,8 +868,9 @@ class FileHostClient:
                         upload_page_url = f"{base_url}/upload"
                     
                     if self._log_callback: self._log_callback(f"Visiting upload page to extract session ID: {upload_page_url}", "debug")
-                    
+
                     page_curl = pycurl.Curl()
+                    self._configure_ssl(page_curl)
                     page_buffer = BytesIO()
                     try:
                         page_curl.setopt(pycurl.URL, upload_page_url)
@@ -950,6 +964,7 @@ class FileHostClient:
         if self._log_callback: self._log_callback(f"Initializing upload of {file_path.name}...", "debug")
 
         curl = pycurl.Curl()
+        self._configure_ssl(curl)
         response_buffer = BytesIO()
 
         try:
@@ -1062,6 +1077,7 @@ class FileHostClient:
         if self._log_callback: self._log_callback("Uploading {file_path.name}...", "debug")
 
         curl = pycurl.Curl()
+        self._configure_ssl(curl)
         response_buffer = BytesIO()
 
         try:
@@ -1119,6 +1135,7 @@ class FileHostClient:
 
             for attempt in range(self.config.upload_poll_retries):
                 curl = pycurl.Curl()
+                self._configure_ssl(curl)
                 response_buffer = BytesIO()
 
                 try:
@@ -1208,6 +1225,7 @@ class FileHostClient:
             get_server_url = get_server_url.replace("{token}", self.auth_token)
 
         curl = pycurl.Curl()
+        self._configure_ssl(curl)
         response_buffer = BytesIO()
 
         try:
@@ -1385,6 +1403,7 @@ class FileHostClient:
         def _delete_impl(**kwargs) -> Dict[str, Any]:
             """Core delete implementation (wrapped for retry)."""
             curl = pycurl.Curl()
+            self._configure_ssl(curl)
             response_buffer = BytesIO()
 
             try:
@@ -1548,6 +1567,7 @@ class FileHostClient:
                 raise ValueError(f"Unsupported auth type for user info: {self.config.auth_type}")
 
             curl = pycurl.Curl()
+            self._configure_ssl(curl)
             response_buffer = BytesIO()
 
             try:
