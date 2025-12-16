@@ -9,6 +9,7 @@ import os
 import sqlite3
 import platform
 import time
+import threading
 from src.utils.logger import log
 from datetime import datetime
 
@@ -17,6 +18,7 @@ from datetime import datetime
 _firefox_cookie_cache: dict[str, dict[str, dict[str, str | bool]]] = {}
 _firefox_cache_time: float = 0.0
 _cache_duration: int = 300  # Cache for 5 minutes
+_cache_lock = threading.Lock()  # Protects _firefox_cookie_cache and _firefox_cache_time
 
 
 def _timestamp() -> str:
@@ -35,17 +37,22 @@ def get_firefox_cookies(domain: str = "imx.to", cookie_names: list[str] | None =
     Returns:
         Dictionary of cookies: {name: {value: str, domain: str, path: str, secure: bool}}
     """
-    import time
     start_time = time.time()
 
     # Create cache key from domain and cookie_names
     cache_key = f"{domain}:{','.join(sorted(cookie_names) if cookie_names else [])}"
 
-    # Check cache
-    if cache_key in _firefox_cookie_cache and (time.time() - _firefox_cache_time) < _cache_duration:
+    # Check cache (thread-safe)
+    cached = None
+    current_time = time.time()
+    with _cache_lock:
+        if cache_key in _firefox_cookie_cache and (current_time - _firefox_cache_time) < _cache_duration:
+            cached = _firefox_cookie_cache[cache_key].copy()
+
+    if cached is not None:
         elapsed = time.time() - start_time
-        log(f"Returning cached Firefox cookies for {domain} ({len(_firefox_cookie_cache[cache_key])} cookies, {elapsed:.3f}s)", level="trace", category="cookies")
-        return _firefox_cookie_cache[cache_key].copy()
+        log(f"Returning cached Firefox cookies for {domain} ({len(cached)} cookies, {elapsed:.3f}s)", level="trace", category="cookies")
+        return cached
 
     # Determine OS-specific Firefox profile location
     system = platform.system()
@@ -123,9 +130,11 @@ def get_firefox_cookies(domain: str = "imx.to", cookie_names: list[str] | None =
                 "expiry": expiry
             }
 
-        # Update cache
-        _firefox_cookie_cache[cache_key] = cookies.copy()
-        _firefox_cache_time = time.time()
+        # Update cache (thread-safe)
+        current_time = time.time()
+        with _cache_lock:
+            _firefox_cookie_cache[cache_key] = cookies.copy()
+            _firefox_cache_time = current_time
 
         elapsed = time.time() - start_time
         log(f"Loaded {len(cookies)} Firefox cookies for {domain} in {elapsed:.3f}s (SQLite: {sqlite_connect_time:.3f}s, query: {query_time:.3f}s)", level="trace", category="cookies")
@@ -133,8 +142,10 @@ def get_firefox_cookies(domain: str = "imx.to", cookie_names: list[str] | None =
     except Exception as e:
         elapsed = time.time() - start_time
         log(f"Error extracting Firefox cookies: {e}", level="debug", category="cookies")
-        # Update cache with empty result to avoid repeated failures
-        _firefox_cache_time = time.time()
+        # Update cache timestamp to avoid repeated failures (thread-safe)
+        current_time = time.time()
+        with _cache_lock:
+            _firefox_cache_time = current_time
         return {}
 
 

@@ -1,7 +1,50 @@
 #!/usr/bin/env python3
-"""
-PyQt6 GUI for imx.to gallery uploader
-Provides drag-and-drop interface with queue management and progress tracking
+"""Main window and application entry point for IMXuploader GUI.
+
+This module provides the primary PyQt6-based graphical user interface for the IMXuploader
+application, which manages batch image uploads to imx.to galleries with support for
+multiple file hosts and advanced queue management.
+
+Key Features:
+    - Drag-and-drop gallery folder management
+    - Multi-threaded upload processing with worker pools
+    - Real-time progress tracking and bandwidth monitoring
+    - Template-based BBCode generation
+    - Database-backed persistent queue storage
+    - Archive extraction support (ZIP, RAR, 7Z)
+    - Tab-based gallery organization
+    - File host integration (Pixeldrain, Bunkr, etc.)
+    - Theme support (light/dark mode)
+    - Single-instance application architecture
+
+Main Classes:
+    ImxUploadGUI: Primary application window and controller
+    CompletionWorker: Background thread for post-upload processing
+    SingleInstanceServer: TCP server for single-instance communication
+    AdaptiveGroupBox: Custom QGroupBox with proper size hint propagation
+    LogTextEdit: QTextEdit subclass with double-click signal support
+    NumericTableWidgetItem: QTableWidgetItem with numeric sorting
+
+Architecture:
+    The GUI follows an MVC-like pattern where:
+    - QueueManager (model) manages gallery queue state and database persistence
+    - ImxUploadGUI (view/controller) handles UI rendering and user interactions
+    - UploadWorker threads (workers) perform actual upload operations
+    - FileHostWorkerManager coordinates parallel file host uploads
+
+    Signal/slot connections enable thread-safe communication between workers
+    and the main GUI thread for progress updates and status changes.
+
+Thread Safety:
+    All database operations are protected by QMutex locks in QueueManager.
+    GUI updates from worker threads use Qt signals to marshal to main thread.
+    Path-to-row mappings use dedicated mutex for concurrent access safety.
+
+See Also:
+    src.storage.queue_manager: Gallery queue state management
+    src.processing.upload_workers: Upload worker thread implementation
+    src.gui.widgets: Custom widget components
+    src.network.client: IMX.to API client implementation
 """
 
 import sys
@@ -130,7 +173,20 @@ from src.utils.system_utils import convert_to_wsl_path, is_wsl2
 
 
 def format_timestamp_for_display(timestamp_value, include_seconds=False):
-    """Format timestamp for table display with optional tooltip"""
+    """Format Unix timestamp for table display with optional tooltip.
+
+    Args:
+        timestamp_value: Unix timestamp (float/int) or None
+        include_seconds: Currently unused, kept for API compatibility
+
+    Returns:
+        tuple: (display_text, tooltip_text) where both are formatted datetime strings,
+               or ("", "") if timestamp is invalid/None
+
+    Note:
+        Display format: "YYYY-MM-DD HH:MM"
+        Tooltip format: "YYYY-MM-DD HH:MM:SS"
+    """
     if not timestamp_value:
         return "", ""
     
@@ -149,7 +205,14 @@ from src.network.client import GUIImxToUploader
 COMMUNICATION_PORT = 27849
 
 def get_assets_dir():
-    """Get the correct path to the assets directory from anywhere in the module structure"""
+    """Get the absolute path to the assets directory.
+
+    Returns:
+        str: Absolute path to project_root/assets directory
+
+    Note:
+        Uses get_project_root() to ensure correct path regardless of CWD.
+    """
     # Get the project root directory (go up from src/gui/ to root)
     #current_dir = os.path.dirname(os.path.abspath(__file__))  # src/gui/
     #project_root = os.path.dirname(os.path.dirname(current_dir))  # go up to root
@@ -172,7 +235,15 @@ def get_icon(icon_key: str, theme_mode: str | None = None) -> QIcon:
     return QIcon()
 
 def check_stored_credentials():
-    """Check if credentials are stored in QSettings (Registry)"""
+    """Check if valid IMX.to credentials exist in Windows Registry (QSettings).
+
+    Returns:
+        bool: True if username+password OR api_key are stored
+
+    Note:
+        Credentials are stored encrypted in Windows Registry under
+        HKEY_CURRENT_USER\\Software\\ImxUploader\\ImxUploadGUI
+    """
     from imxup import get_credential
 
     username = get_credential('username')
@@ -185,7 +256,14 @@ def check_stored_credentials():
     return False
 
 def api_key_is_set() -> bool:
-    """Return True if an API key exists in QSettings (Registry)."""
+    """Check if an API key exists in Windows Registry.
+
+    Returns:
+        bool: True if encrypted API key is stored in QSettings
+
+    Note:
+        API key authentication is preferred over username/password.
+    """
     from imxup import get_credential
     encrypted_api_key = get_credential('api_key')
     return bool(encrypted_api_key)
@@ -193,7 +271,31 @@ def api_key_is_set() -> bool:
     
 
 class CompletionWorker(QThread):
-    """Worker thread for handling gallery completion processing to avoid GUI blocking"""
+    """Background worker thread for post-upload gallery processing.
+
+    Handles time-intensive tasks after gallery upload completes to avoid blocking
+    the main GUI thread. Processes items from a queue sequentially.
+
+    Tasks Performed:
+        - BBCode file generation from templates
+        - Gallery artifact saving (HTML, JSON, BBCode files)
+        - Unnamed gallery tracking for auto-rename feature
+        - Central storage coordination
+
+    Signals:
+        completion_processed(str): Emitted when processing finishes (gallery path)
+        log_message(str): Emitted to send log messages to main thread
+
+    Thread Safety:
+        Uses Queue.Queue for thread-safe task submission from main thread.
+        All heavy I/O and file operations run in this background thread.
+
+    Example:
+        >>> worker = CompletionWorker(parent=self)
+        >>> worker.completion_processed.connect(self.on_completion_done)
+        >>> worker.start()
+        >>> worker.process_completion(path, results, gui_parent)
+    """
     
     # Signals
     completion_processed = pyqtSignal(str)  # path - signals when completion processing is done
@@ -209,7 +311,22 @@ class CompletionWorker(QThread):
         self.completion_queue.put(None)  # Signal to exit
         
     def process_completion(self, path: str, results: dict, gui_parent):
-        """Queue a completion for background processing"""
+        """Queue a gallery completion for background processing.
+
+        Args:
+            path: Absolute filesystem path to the gallery folder
+            results: Upload results dict containing:
+                - gallery_id: IMX.to gallery ID
+                - gallery_name: Gallery display name
+                - images: List of uploaded image data with BBCode
+                - failed_details: List of (filename, error) tuples
+                - total_size: Total bytes uploaded
+                - avg_width/height: Image dimension statistics
+            gui_parent: Reference to ImxUploadGUI for queue_manager access
+
+        Note:
+            This method returns immediately; actual processing happens in background thread.
+        """
         self.completion_queue.put((path, results, gui_parent))
     
     def run(self):
@@ -347,7 +464,13 @@ class CompletionWorker(QThread):
 
 
 class LogTextEdit(QTextEdit):
-    """Text edit for logs that emits a signal on double-click."""
+    """QTextEdit subclass that emits signal on double-click for log viewer popup.
+
+    Signals:
+        doubleClicked(): Emitted when user double-clicks with left mouse button
+
+    Used to open the full log viewer dialog when double-clicking the log panel.
+    """
     doubleClicked = pyqtSignal()
 
     def mouseDoubleClickEvent(self, event):
@@ -360,7 +483,18 @@ class LogTextEdit(QTextEdit):
         super().mouseDoubleClickEvent(event)
 
 class NumericTableWidgetItem(QTableWidgetItem):
-    """Table widget item that sorts numerically based on an integer value."""
+    """Table widget item that sorts numerically instead of lexicographically.
+
+    Stores an integer value internally for proper numeric comparison during
+    table sorting, while displaying the value as a string.
+
+    Example:
+        Without this class: "10" < "2" (lexicographic)
+        With this class: 10 < 2 is False (numeric)
+
+    Attributes:
+        _numeric_value (int): Internal integer value for comparison
+    """
     def __init__(self, value: int):
         super().__init__(str(value))
         try:
@@ -377,7 +511,27 @@ class NumericTableWidgetItem(QTableWidgetItem):
             return super().__lt__(other)
 
 class SingleInstanceServer(QThread):
-    """Server for single instance communication"""
+    """TCP server for single-instance application communication.
+
+    Listens on localhost:COMMUNICATION_PORT for messages from new instances.
+    When a second instance starts, it sends folder paths to this server and exits.
+    This allows handling "Open With" and drag-drop to EXE in Windows Explorer.
+
+    Signals:
+        folder_received(str): Emitted when message received (folder path or empty for focus)
+
+    Port:
+        Default port is 27849 (COMMUNICATION_PORT constant)
+
+    Protocol:
+        Simple UTF-8 text messages over TCP
+        - Non-empty string = folder path to add to queue
+        - Empty string = focus existing window
+
+    Thread Safety:
+        Runs in separate thread to avoid blocking GUI.
+        Uses signal/slot for thread-safe communication with main window.
+    """
     
     folder_received = pyqtSignal(str)
     
@@ -416,14 +570,83 @@ class SingleInstanceServer(QThread):
         self.wait()
 
 class ImxUploadGUI(QMainWindow):
-    """Main GUI application"""
+    """Main application window for IMXuploader GUI.
+
+    This is the primary controller class that coordinates all GUI components,
+    manages upload workers, handles user interactions, and maintains application state.
+
+    Key Responsibilities:
+        - Gallery queue display and management (table view with tabs)
+        - Upload worker lifecycle management (start/pause/stop/cancel)
+        - Progress tracking and bandwidth monitoring
+        - Settings persistence (window geometry, column widths, user preferences)
+        - Theme management (light/dark mode with custom stylesheets)
+        - File host integration and coordination
+        - Archive extraction workflow
+        - Template and BBCode management
+        - System tray integration
+        - Single-instance application coordination
+
+    Architecture:
+        Uses QueueManager for persistent storage and state management.
+        Communicates with worker threads via Qt signals/slots.
+        Updates UI components through event-driven model.
+
+    Major Components:
+        - gallery_table: TabbedGalleryWidget showing queue with tab organization
+        - queue_manager: QueueManager instance for database operations
+        - file_host_manager: FileHostWorkerManager for parallel file host uploads
+        - worker_status_widget: WorkerStatusWidget showing real-time worker status
+        - archive_coordinator: ArchiveCoordinator for ZIP/RAR/7Z extraction
+        - tab_manager: TabManager for tab persistence and organization
+
+    Thread Safety:
+        All worker communication uses Qt signals to marshal to main thread.
+        Path-to-row mapping protected by _path_mapping_mutex.
+        Database operations delegated to QueueManager with internal locking.
+
+    Attributes:
+        queue_manager (QueueManager): Persistent queue storage and state
+        file_host_manager (FileHostWorkerManager): File host upload coordination
+        worker_status_widget (WorkerStatusWidget): Real-time worker display
+        gallery_table (TabbedGalleryWidget): Main table view with tabs
+        settings (QSettings): Persistent settings storage (Windows Registry)
+        path_to_row (dict): Maps gallery path -> table row index
+        row_to_path (dict): Maps table row index -> gallery path
+
+    See Also:
+        src.storage.queue_manager.QueueManager: Queue state management
+        src.processing.upload_workers.UploadWorker: Upload thread implementation
+        src.processing.file_host_worker_manager.FileHostWorkerManager: File host coordination
+        src.gui.widgets.tabbed_gallery.TabbedGalleryWidget: Main table component
+    """
 
     # Type hints for attributes that mypy needs to see
     _current_theme_mode: str
     _cached_base_qss: str
 
     def __init__(self, splash=None):
-        """Initialize the main GUI window."""
+        """Initialize the main GUI window.
+
+        Args:
+            splash: Optional SplashScreen instance for startup progress display
+
+        Initialization Flow:
+            1. Initialize IconManager and load theme icons
+            2. Create QueueManager and restore queue from database
+            3. Initialize file host worker manager
+            4. Create worker status widget
+            5. Build UI components (setup_ui)
+            6. Setup menu bar and system tray
+            7. Restore saved settings (geometry, column widths, theme)
+            8. Connect signal handlers
+            9. Initialize background workers (CompletionWorker, etc.)
+
+        Note:
+            Includes guards against double initialization.
+            Sets up thread pools and progress batchers for performance.
+            Configures single-instance server for IPC.
+        """
         from src.utils.logger import log  # Import at function start
         import traceback  # Import at function start
 
