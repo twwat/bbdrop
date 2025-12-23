@@ -115,6 +115,7 @@ from src.gui.widgets.tabbed_gallery import TabbedGalleryWidget, DropEnabledTabBa
 from src.gui.widgets.adaptive_settings_panel import AdaptiveQuickSettingsPanel
 from src.gui.widgets.worker_status_widget import WorkerStatusWidget
 from src.gui.progress_tracker import ProgressTracker
+from src.gui.worker_signal_handler import WorkerSignalHandler
 
 
 class AdaptiveGroupBox(QGroupBox):
@@ -731,7 +732,7 @@ class ImxUploadGUI(QMainWindow):
         self.tab_manager = TabManager(self.queue_manager.store)
         
         # Connect queue status changes to update table display
-        self.queue_manager.status_changed.connect(self.on_queue_item_status_changed)
+        # Note: connected after worker_signal_handler initialized, see below
         
         self.worker = None
         
@@ -758,6 +759,12 @@ class ImxUploadGUI(QMainWindow):
         # Initialize progress tracker for bandwidth/progress monitoring
         self.progress_tracker = ProgressTracker(self)
 
+        # Initialize worker signal handler for worker lifecycle management
+        self.worker_signal_handler = WorkerSignalHandler(self)
+
+        # Now connect queue status changes (after worker_signal_handler is ready)
+        self.queue_manager.status_changed.connect(self.worker_signal_handler.on_queue_item_status_changed)
+
         # Initialize file host worker manager for background file host uploads
         if self.splash:
             self.splash.set_status("File Host Worker Manager")
@@ -769,23 +776,23 @@ class ImxUploadGUI(QMainWindow):
                 from src.processing.file_host_worker_manager import FileHostWorkerManager
                 self.file_host_manager = FileHostWorkerManager(self.queue_manager.store)
                 self.splash.set_status("Connecting FileHostWorkerManager's signals to UI handlers")
-                # Connect manager signals to UI handlers
-                self.file_host_manager.test_completed.connect(self.on_file_host_test_completed)
-                self.file_host_manager.upload_started.connect(self.on_file_host_upload_started)
-                self.file_host_manager.upload_progress.connect(self.on_file_host_upload_progress)
-                self.file_host_manager.upload_completed.connect(self.on_file_host_upload_completed)
-                self.file_host_manager.upload_failed.connect(self.on_file_host_upload_failed)
-                self.file_host_manager.bandwidth_updated.connect(self.on_file_host_bandwidth_updated)
+                # Connect manager signals to UI handlers (via worker_signal_handler)
+                self.file_host_manager.test_completed.connect(self.worker_signal_handler.on_file_host_test_completed)
+                self.file_host_manager.upload_started.connect(self.worker_signal_handler.on_file_host_upload_started)
+                self.file_host_manager.upload_progress.connect(self.worker_signal_handler.on_file_host_upload_progress)
+                self.file_host_manager.upload_completed.connect(self.worker_signal_handler.on_file_host_upload_completed)
+                self.file_host_manager.upload_failed.connect(self.worker_signal_handler.on_file_host_upload_failed)
+                self.file_host_manager.bandwidth_updated.connect(self.worker_signal_handler.on_file_host_bandwidth_updated)
 
-                # Connect to worker status widget
-                self.file_host_manager.upload_started.connect(self._on_filehost_worker_started)
-                self.file_host_manager.upload_progress.connect(self._on_filehost_worker_progress)
-                self.file_host_manager.upload_completed.connect(self._on_filehost_worker_completed)
-                self.file_host_manager.upload_failed.connect(self._on_filehost_worker_failed)
+                # Connect to worker status widget (via worker_signal_handler)
+                self.file_host_manager.upload_started.connect(self.worker_signal_handler._on_filehost_worker_started)
+                self.file_host_manager.upload_progress.connect(self.worker_signal_handler._on_filehost_worker_progress)
+                self.file_host_manager.upload_completed.connect(self.worker_signal_handler._on_filehost_worker_completed)
+                self.file_host_manager.upload_failed.connect(self.worker_signal_handler._on_filehost_worker_failed)
                 self.file_host_manager.storage_updated.connect(self.worker_status_widget.update_worker_storage)
                 self.file_host_manager.enabled_workers_changed.connect(self._on_file_hosts_enabled_changed)
-                self.file_host_manager.spinup_complete.connect(self._on_file_host_startup_spinup)
-                self.file_host_manager.worker_status_updated.connect(self._on_worker_status_updated)
+                self.file_host_manager.spinup_complete.connect(self.worker_signal_handler._on_file_host_startup_spinup)
+                self.file_host_manager.worker_status_updated.connect(self.worker_signal_handler._on_worker_status_updated)
 
                 # Connect MetricsStore signals for IMX and file host metrics display
                 from src.utils.metrics_store import get_metrics_store
@@ -1014,7 +1021,7 @@ class ImxUploadGUI(QMainWindow):
         self.update_timer.timeout.connect(_tick)
         self.update_timer.start(500)  # Start the timer
         self.check_credentials() # Check for stored credentials (only prompt if API key missing)
-        self.start_worker() # Start worker thread
+        self.worker_signal_handler.start_worker() # Start worker thread
         # Gallery loading moved to main() with progress dialog for better perceived performance
         # Button counts and progress will be updated by refresh_filter() after filter is applied
         self.gallery_table.setFocus() # Ensure table has focus for keyboard shortcuts
@@ -2035,7 +2042,7 @@ class ImxUploadGUI(QMainWindow):
         # Start queue polling for worker status widget (updates Files Left and Remaining columns)
         if hasattr(self, 'worker_status_widget') and hasattr(self, 'queue_manager'):
             self._queue_stats_timer = QTimer()
-            self._queue_stats_timer.timeout.connect(self._update_worker_queue_stats)
+            self._queue_stats_timer.timeout.connect(self.worker_signal_handler._update_worker_queue_stats)
             self._queue_stats_timer.start(2000)  # Poll every 2 seconds
 
         # Refresh button icons with correct theme now that palette is ready
@@ -3592,461 +3599,10 @@ class ImxUploadGUI(QMainWindow):
             self.show()
             self.raise_()
             self.activateWindow()
-    
-    def start_worker(self):
-        """Start the upload worker thread"""
-        if self.worker is None or not self.worker.isRunning():
-            log(f"Creating new UploadWorker (old worker: {id(self.worker) if self.worker else 'None'}{(", running: " and self.worker.isRunning()) if self.worker else ''})", level="debug", category="uploads")
-            self.worker = UploadWorker(self.queue_manager)
-            log(f"New UploadWorker created ({id(self.worker)})", level="debug", category="uploads")
-            self.worker.progress_updated.connect(self.on_progress_updated)
-            self.worker.gallery_started.connect(self.on_gallery_started)
-            self.worker.gallery_completed.connect(self.on_gallery_completed)
-            self.worker.gallery_failed.connect(self.on_gallery_failed)
-            self.worker.gallery_exists.connect(self.on_gallery_exists)
-            self.worker.gallery_renamed.connect(self.on_gallery_renamed)
-            self.worker.ext_fields_updated.connect(self.on_ext_fields_updated)
-            self.worker.log_message.connect(self.add_log_message)
-            self.worker.queue_stats.connect(self.on_queue_stats)
-            self.worker.bandwidth_updated.connect(self.progress_tracker.on_bandwidth_updated)
-
-            # Connect to worker status widget
-            self.worker.gallery_started.connect(self._on_imx_worker_started)
-            self.worker.bandwidth_updated.connect(self._on_imx_worker_speed)
-            self.worker.gallery_completed.connect(self._on_imx_worker_finished)
-            self.worker.gallery_failed.connect(self._on_imx_worker_finished)
-
-            self.worker.start()
-            
-            log(f"DEBUG: Worker.isRunning(): {self.worker.isRunning()}", level="debug")
-            #log(f"Worker thread started", level="debug")
-
-    def on_queue_item_status_changed(self, path: str, old_status: str, new_status: str):
-        """Handle individual queue item status changes"""
-        item = self.queue_manager.get_item(path)
-        scan_status = item.scan_complete if item else "NO_ITEM"
-        in_mapping = path in self.path_to_row
-        log(f"DEBUG: GUI received status change signal: {path} from {old_status} to {new_status}, scan_complete={scan_status}, in_path_to_row={in_mapping}", level="debug", category="ui")
-        
-        # When an item goes from scanning to ready, just update tab counts
-        if old_status == "scanning" and new_status == "ready":
-            #print(f"DEBUG: Item completed scanning, updating tab counts")
-            # Just update the tab counts, don't refresh the filter which hides items
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(150, lambda: self.gallery_table._update_tab_tooltips() if hasattr(self.gallery_table, '_update_tab_tooltips') else None)
-        
-        # Debug the item data before updating table
-        item = self.queue_manager.get_item(path)
-        if item:
-            log(f"DEBUG: Item data: total_images={getattr(item, 'total_images', 'NOT SET')}, progress={getattr(item, 'progress', 'NOT SET')}, status={getattr(item, 'status', 'NOT SET')}, added_time={getattr(item, 'added_time', 'NOT SET')}", level="debug", category="ui")
-        
-        # Update table display for this specific item
-        self._update_specific_gallery_display(path)
-    
-    def on_queue_stats(self, stats: dict):
-        """Render aggregate queue stats beneath the overall progress bar.
-        Example: "1 uploading (100 images / 111 MB) • 12 queued (912 images / 1.9 GB) • 4 ready (192 images / 212 MB) • 63 completed (2245 images / 1.5 GB)"
-        """
-        try:
-            def fmt_section(label: str, s: dict) -> str:
-                count = int(s.get('count', 0) or 0)
-                if count <= 0:
-                    return ""
-                images = int(s.get('images', 0) or 0)
-                by = int(s.get('bytes', 0) or 0)
-                try:
-                    size_str = format_binary_size(by, precision=1)
-                except Exception:
-                    size_str = f"{by} B"
-                return f"{count} {label} ({images} images / {size_str})"
-
-            order = [
-                ('uploading', 'uploading'),
-                ('queued', 'queued'),
-                ('ready', 'ready'),
-                ('incomplete', 'incomplete'),
-                ('paused', 'paused'),
-                ('completed', 'completed'),
-                ('failed', 'failed'),
-            ]
-            parts = []
-            for key, label in order:
-                sec = stats.get(key, {}) if isinstance(stats, dict) else {}
-                txt = fmt_section(label, sec)
-                if txt:
-                    parts.append(txt)
-            self.stats_label.setText(" • ".join(parts) if parts else "No galleries in queue")
-        except Exception:
-            # Fall back to previous text if formatting fails
-            pass
-
-    # File Host Upload Signal Handlers
-    def on_file_host_upload_started(self, db_id: int, host_name: str):
-        """Handle file host upload started - ASYNC to prevent blocking main thread"""
-        log(f"File host upload started: {host_name} for gallery {db_id}", level="debug", category="file_hosts")
-        # Defer UI refresh to avoid blocking signal emission
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_db_id(db_id))
-
-    def on_file_host_upload_progress(self, db_id: int, host_name: str, uploaded_bytes: int, total_bytes: int, speed_bps: float = 0.0):
-        """Handle file host upload progress with detailed display"""
-        try:
-            # Calculate percentage
-            if total_bytes > 0:
-                percent = int((uploaded_bytes / total_bytes) * 100)
-            else:
-                percent = 0
-
-            # Format progress info for tooltip/status
-            from src.utils.format_utils import format_binary_size
-            uploaded_str = format_binary_size(uploaded_bytes)
-            total_str = format_binary_size(total_bytes)
-
-            status = f"{host_name}: {percent}% ({uploaded_str} / {total_str})"
-
-            # Log detailed progress at debug level
-            log(
-                f"File host upload progress: {status}",
-                level="debug",
-                category="file_hosts"
-            )
-
-            # Progress updates are frequent, so we avoid full refresh
-            # The file host widgets will poll status and update themselves
-        except Exception as e:
-            log(f"Error handling file host upload progress: {e}", level="error", category="file_hosts")
-
-    def on_file_host_upload_completed(self, db_id: int, host_name: str, result: dict):
-        """Handle file host upload completed - ASYNC to prevent blocking main thread"""
-        log(f"File host upload completed: {host_name} for gallery {db_id}", level="info", category="file_hosts")
-        # Defer UI refresh to avoid blocking signal emission
-        # Use QTimer.singleShot(0) to schedule on next event loop iteration
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_db_id(db_id))
-        # Trigger artifact regeneration if auto-regenerate is enabled (non-blocking, after UI refresh)
-        QTimer.singleShot(100, lambda: self._auto_regenerate_for_db_id(db_id))
-        # Update queue display for this host (event-driven, not polled)
-        self._update_filehost_queue_for_host(host_name)
-
-    def on_file_host_upload_failed(self, db_id: int, host_name: str, error_message: str):
-        """Handle file host upload failed - ASYNC to prevent blocking main thread"""
-        log(f"File host upload failed: {host_name} for gallery {db_id}: {error_message}", level="warning", category="file_hosts")
-        # Defer UI refresh to avoid blocking signal emission
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._refresh_file_host_widgets_for_db_id(db_id))
-        # Update queue display for this host (event-driven, not polled)
-        self._update_filehost_queue_for_host(host_name)
-
-    def _update_filehost_queue_for_host(self, host_name: str):
-        """Update queue columns for a specific file host after upload state change.
-
-        Event-driven update: called when uploads complete/fail, not on timer.
-        Queries only the affected host's stats for efficiency.
-
-        Args:
-            host_name: Name of the file host (e.g., 'rapidgator', 'keep2share')
-        """
-        try:
-            if self.queue_manager and self.queue_manager.store:
-                stats = self.queue_manager.store.get_file_host_pending_stats(host_name)
-                self.worker_status_widget.update_filehost_queue_columns(
-                    host_name, stats['files'], stats['bytes']
-                )
-        except (AttributeError, KeyError) as e:
-            # AttributeError: queue_manager not initialized; KeyError: missing stats key
-            log(f"Error updating {host_name} queue stats: {e}", level="warning", category="ui")
-
-    def on_file_host_bandwidth_updated(self, kbps: float):
-        """Handle file host bandwidth update with smoothing.
-
-        Uses the same rolling average + compression-style smoothing algorithm
-        as the IMX.to bandwidth handler for consistent display behavior.
-
-        Args:
-            kbps: Instantaneous bandwidth in KB/s
-        """
-        try:
-            # Initialize tracking variables on first call
-            if not hasattr(self, '_fh_bandwidth_samples'):
-                self._fh_bandwidth_samples = []
-                self._fh_current_transfer_kbps = 0.0
-
-            # Add to rolling window (keep last 20 samples = 4 seconds at 200ms polling)
-            self._fh_bandwidth_samples.append(kbps)
-            if len(self._fh_bandwidth_samples) > 20:
-                self._fh_bandwidth_samples.pop(0)
-
-            # Calculate average of recent samples to smooth out file completion spikes
-            if self._fh_bandwidth_samples:
-                averaged_kbps = sum(self._fh_bandwidth_samples) / len(self._fh_bandwidth_samples)
-            else:
-                averaged_kbps = kbps
-
-            # Apply compression-style smoothing to the averaged value
-            if averaged_kbps > self._fh_current_transfer_kbps:
-                # Moderate attack - follow increases reasonably fast
-                alpha = 0.3
-            else:
-                # Very slow release - heavily smooth out drops from file completion
-                alpha = 0.05
-
-            # Exponential moving average with asymmetric alpha
-            self._fh_current_transfer_kbps = alpha * averaged_kbps + (1 - alpha) * self._fh_current_transfer_kbps
-
-            # Convert to MiB/s for display
-            mib_per_sec = self._fh_current_transfer_kbps / 1024.0
-
-            # Aggregate with IMX.to bandwidth for total speed display
-            # The Speed box shows combined upload speed from both IMX.to and file hosts
-            total_kbps = self.progress_tracker._current_transfer_kbps + self._fh_current_transfer_kbps
-            total_mib = total_kbps / 1024.0
-            speed_str = f"{total_mib:.3f} MiB/s"
-
-            # Dim the text if speed is essentially zero
-            if total_mib < 0.001:
-                self.speed_current_value_label.setStyleSheet("opacity: 0.4;")
-            else:
-                self.speed_current_value_label.setStyleSheet("opacity: 1.0;")
-
-            self.speed_current_value_label.setText(speed_str)
-
-            # Update fastest speed record if needed
-            settings = QSettings("ImxUploader", "ImxUploadGUI")
-            fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
-            if total_kbps > fastest_kbps and total_kbps < 10000:  # Sanity check
-                settings.setValue("fastest_kbps", total_kbps)
-                # Save timestamp when new record is set
-                from datetime import datetime
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                settings.setValue("fastest_kbps_timestamp", timestamp)
-                fastest_mib = total_kbps / 1024.0
-                fastest_str = f"{fastest_mib:.3f} MiB/s"
-                self.speed_fastest_value_label.setText(fastest_str)
-                # Update tooltip with timestamp
-                self.speed_fastest_value_label.setToolTip(f"Record set: {timestamp}")
-
-        except Exception as e:
-            log(f"Error updating file host bandwidth: {e}", level="error", category="file_hosts")
-
-    def on_file_host_storage_updated(self, host_id: str, total, left):
-        """Handle file host storage update from worker.
-
-        Args:
-            host_id: Host identifier
-            total: Total storage in bytes
-            left: Free storage in bytes
-        """
-        # Storage updates are handled by FileHostsSettingsWidget if settings dialog is open
-        # Main window doesn't need to display storage info
-        log(
-            f"[Main Window] Storage updated for {host_id}: {left}/{total} bytes",
-            level="debug",
-            category="file_hosts"
-        )
-
-    def on_file_host_test_completed(self, host_id: str, results: dict):
-        """Handle file host test completion from worker.
-
-        Args:
-            host_id: Host identifier
-            results: Test results dictionary
-        """
-        # Test results are handled by FileHostsSettingsWidget if settings dialog is open
-        # Log result for main window
-        tests_passed = sum([
-            results.get('credentials_valid', False),
-            results.get('user_info_valid', False),
-            results.get('upload_success', False),
-            results.get('delete_success', False)
-        ])
 
     # =========================================================================
-    # Worker Status Widget Signal Handlers
+    # Worker signal handling delegated to WorkerSignalHandler
     # =========================================================================
-
-    def _on_imx_worker_started(self, path: str, total_images: int):
-        """Handle imx.to worker upload started."""
-        if not hasattr(self, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
-        self.worker_status_widget.update_worker_status(
-            worker_id="imx_worker_1",
-            worker_type="imx",
-            hostname="imx.to",
-            speed_bps=0.0,
-            status="uploading"
-        )
-
-    def _on_imx_worker_speed(self, speed_kbps: float):
-        """Handle imx.to worker speed update."""
-        if not hasattr(self, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
-        self.worker_status_widget.update_worker_status(
-            worker_id="imx_worker_1",
-            worker_type="imx",
-            hostname="imx.to",
-            speed_bps=speed_kbps * 1024,  # Convert KB/s to bytes/s
-            status="uploading"
-        )
-
-    def _on_imx_worker_finished(self, *args):
-        """Handle imx.to worker upload finished."""
-        if not hasattr(self, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
-        self.worker_status_widget.update_worker_status(
-            worker_id="imx_worker_1",
-            worker_type="imx",
-            hostname="imx.to",
-            speed_bps=0.0,
-            status="idle"
-        )
-
-    def _on_filehost_worker_started(self, db_id: int, host_name: str):
-        """Handle file host worker upload started."""
-        if not hasattr(self, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
-        worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
-        self.worker_status_widget.update_worker_status(
-            worker_id=worker_id,
-            worker_type="filehost",
-            hostname=host_name,
-            speed_bps=0.0,
-            status="uploading"
-        )
-
-    def _on_filehost_worker_progress(self, db_id: int, host_name: str,
-                                      uploaded: int, total: int, speed_bps: float):
-        """Handle file host worker upload progress."""
-        if not hasattr(self, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
-        worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
-        self.worker_status_widget.update_worker_status(
-            worker_id=worker_id,
-            worker_type="filehost",
-            hostname=host_name,
-            speed_bps=speed_bps,
-            status="uploading"
-        )
-        self.worker_status_widget.update_worker_progress(
-            worker_id=worker_id,
-            gallery_id=db_id,
-            progress_bytes=uploaded,
-            total_bytes=total
-        )
-
-    def _on_filehost_worker_completed(self, db_id: int, host_name: str, result: dict):
-        """Handle file host worker upload completion."""
-        if not hasattr(self, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
-        worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
-        self.worker_status_widget.update_worker_status(
-            worker_id=worker_id,
-            worker_type="filehost",
-            hostname=host_name,
-            speed_bps=0.0,
-            status="idle"
-        )
-
-    def _on_filehost_worker_failed(self, db_id: int, host_name: str, error: str):
-        """Handle file host worker upload failure."""
-        if not hasattr(self, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
-        worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
-        self.worker_status_widget.update_worker_error(worker_id, error)
-
-    def _on_file_host_startup_spinup(self, host_id: str, error: str):
-        """Track worker spinup during startup to know when all are ready."""
-        from PyQt6.QtCore import QMutexLocker
-        from src.utils.logger import log
-
-        with QMutexLocker(self._file_host_startup_mutex):
-            log(f"Worker {host_id} spinup complete (error={error}), completed={self._file_host_startup_completed+1}/{self._file_host_startup_expected}",
-                level="debug", category="startup")
-
-            if self._file_host_startup_complete:
-                log(f"Already complete, ignoring {host_id}", level="debug", category="startup")
-                return
-
-            self._file_host_startup_completed += 1
-
-            # Initialize queue display for this host (shows pending uploads from DB)
-            if not error:
-                self._update_filehost_queue_for_host(host_id)
-
-            if self._file_host_startup_completed >= self._file_host_startup_expected:
-                self._file_host_startup_complete = True
-                log(f"All {self._file_host_startup_expected} workers complete, startup finished",
-                    level="info", category="startup")
-
-    def _on_worker_status_updated(self, host_id: str, status_text: str):
-        """Handle worker status updates during spinup."""
-        from src.utils.logger import log
-        log(f"Worker {host_id} status: {status_text}", level="debug", category="file_hosts")
-
-        worker_id = f"filehost_{host_id.lower().replace(' ', '_')}"
-        if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
-            # Get worker if exists, or use defaults for new worker
-            worker = self.worker_status_widget._workers.get(worker_id)
-            if worker:
-                # Update existing worker
-                self.worker_status_widget.update_worker_status(
-                    worker_id=worker_id,
-                    worker_type='filehost',
-                    hostname=worker.hostname,
-                    speed_bps=worker.speed_bps,
-                    status=status_text
-                )
-            else:
-                # Create new worker with this status
-                self.worker_status_widget.update_worker_status(
-                    worker_id=worker_id,
-                    worker_type='filehost',
-                    hostname=host_id,  # Use host_id as display name
-                    speed_bps=0.0,
-                    status=status_text
-                )
-
-    def _update_worker_queue_stats(self):
-        """Poll queue manager and update worker status widget with queue statistics.
-
-        Calculates total files and bytes remaining across all galleries in queue
-        and updates the worker status widget's Files Left and Remaining columns.
-
-        Called by QTimer every 2 seconds.
-        """
-        if not hasattr(self, 'queue_manager') or not hasattr(self, 'worker_status_widget'):
-            return
-
-        try:
-            # Calculate totals from queue
-            total_files_remaining = 0
-            total_bytes_remaining = 0
-
-            for item in self.queue_manager.get_all_items():
-                # Count files/bytes for galleries that are uploading or queued
-                from src.core.constants import QUEUE_STATE_UPLOADING, QUEUE_STATE_QUEUED
-                if item.status in (QUEUE_STATE_UPLOADING, QUEUE_STATE_QUEUED):
-                    # Files remaining = total - uploaded
-                    files_remaining = item.total_images - item.uploaded_images
-                    if files_remaining > 0:
-                        total_files_remaining += files_remaining
-
-                    # Bytes remaining = total - uploaded
-                    bytes_remaining = item.total_size - item.uploaded_bytes
-                    if bytes_remaining > 0:
-                        total_bytes_remaining += bytes_remaining
-
-            # Update worker status widget
-            self.worker_status_widget.update_queue_columns(total_files_remaining, total_bytes_remaining)
-
-        except Exception as e:
-            log(f"Error updating worker queue stats: {e}", level="error", category="ui")
 
     def _refresh_file_host_widgets_for_db_id(self, db_id: int):
         """Refresh file host widgets for a specific gallery ID - OPTIMIZED VERSION
