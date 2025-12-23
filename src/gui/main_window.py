@@ -51,6 +51,7 @@ import sys
 import os
 import json
 import logging
+import re
 import socket
 import threading
 import time
@@ -4994,10 +4995,20 @@ class ImxUploadGUI(QMainWindow):
                     ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
                     ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                     actual_table.setItem(row, col_idx, ext_item)
+
+            # IMX Status column - restore from database
+            if item.imx_status and item.imx_status_checked:
+                # Parse status text like "Online (124/124)" or "Partial (120/124)"
+                match = re.match(r'\w+\s*\((\d+)/(\d+)\)', item.imx_status)
+                if match:
+                    online = int(match.group(1))
+                    total = int(match.group(2))
+                    check_datetime = datetime.fromtimestamp(item.imx_status_checked).strftime('%Y-%m-%d %H:%M')
+                    self.gallery_table.set_online_imx_status(row, online, total, check_datetime)
         finally:
             # Restore original signal state
             actual_table.blockSignals(signals_blocked)
-        
+
         # Action buttons - CREATE MISSING ACTION BUTTONS FOR NEW ITEMS
         try:
             existing_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_ACTION)
@@ -6504,7 +6515,36 @@ class ImxUploadGUI(QMainWindow):
                 log(f"Copied BBCode to clipboard from: {source_file}", level="info", category="fileio")
         else:
             log(f"No BBCode file found for: {folder_name}", level="info", category="fileio")
-    
+
+    def check_image_status_via_menu(self, paths: List[str]):
+        """Check image online status for selected completed galleries.
+
+        Delegates to ImageStatusChecker for the actual implementation.
+
+        Args:
+            paths: List of gallery paths to check
+        """
+        from src.gui.dialogs.image_status_checker import ImageStatusChecker
+
+        if not paths:
+            return
+
+        # Check if rename_worker is available
+        rename_worker = getattr(self.worker, 'rename_worker', None) if self.worker else None
+        if not rename_worker:
+            QMessageBox.warning(self, "Not Available", "Image status checking requires IMX.to login credentials.")
+            return
+
+        # Delegate to ImageStatusChecker
+        # Store reference on self to prevent garbage collection before callbacks fire
+        self._image_status_checker = ImageStatusChecker(
+            parent=self,
+            queue_manager=self.queue_manager,
+            rename_worker=rename_worker,
+            gallery_table=self.gallery_table
+        )
+        self._image_status_checker.check_galleries(paths)
+
     def start_all_uploads(self):
         """Start all ready uploads in currently visible rows"""
         start_time = time.time()

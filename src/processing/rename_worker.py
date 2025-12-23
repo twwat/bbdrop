@@ -1,5 +1,8 @@
 """
-Background worker for gallery renames - uses EXACT working code from ImxToUploader.
+Background worker for gallery renames and image status checking.
+
+Uses EXACT working code from ImxToUploader for renames.
+Extends with image status checking via imx.to/user/moderate endpoint.
 """
 
 import threading
@@ -8,6 +11,7 @@ import time
 import requests
 import configparser
 import os
+from typing import List, Dict, Callable, Optional, Any
 from src.utils.logger import log
 
 
@@ -99,10 +103,22 @@ def clear_session_cookies_from_keyring():
 
 
 class RenameWorker:
-    """Background worker that handles gallery renames using its own web session."""
+    """Background worker that handles gallery renames and image status checking.
+
+    Uses its own web session for authentication to imx.to.
+    Supports both rename operations and image status checking via the /user/moderate endpoint.
+    """
 
     def __init__(self):
-        """Initialize RenameWorker with own web session."""
+        """Initialize RenameWorker with own web session.
+
+        Sets up:
+        - Credential loading from keyring/QSettings
+        - HTTP session with retry strategy
+        - Queue for rename requests
+        - Queue for status check requests
+        - Callbacks for status check progress/completion/error
+        """
         # Import existing functions
         from imxup import (get_config_path, decrypt_password, get_firefox_cookies,
                           load_cookies_from_file, get_unnamed_galleries,
@@ -124,6 +140,17 @@ class RenameWorker:
         # Queue for rename requests
         self.queue = queue.Queue()
         self.running = True
+
+        # Queue for status check requests (separate from renames)
+        self.status_check_queue: queue.Queue = queue.Queue()
+
+        # Callbacks for status check operations (set by caller)
+        self._status_check_progress_callback: Optional[Callable[[int, int], None]] = None
+        self._status_check_completed_callback: Optional[Callable[[Dict[str, Dict[str, Any]]], None]] = None
+        self._status_check_error_callback: Optional[Callable[[str], None]] = None
+
+        # Cancellation flag for status check operations (thread-safe)
+        self._status_check_cancelled = threading.Event()
 
         # Login synchronization
         self.login_complete = threading.Event()
@@ -171,6 +198,12 @@ class RenameWorker:
         # Start background worker thread
         self.thread = threading.Thread(target=self._process_renames, daemon=True, name="RenameWorker")
         self.thread.start()
+
+        # Start status check worker thread
+        self.status_check_thread = threading.Thread(
+            target=self._process_status_checks, daemon=True, name="StatusCheckWorker"
+        )
+        self.status_check_thread.start()
 
         # Login and auto-rename in background
         threading.Thread(target=self._initial_login, daemon=True).start()
@@ -265,8 +298,8 @@ class RenameWorker:
                             path=cookie_data['path'],
                             secure=cookie_data.get('secure', False)
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
 
                 # Test if keyring cookies work
                 test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
@@ -297,8 +330,8 @@ class RenameWorker:
                                 path=cookie_data['path'],
                                 secure=cookie_data.get('secure', False)  # CRITICAL: Match Firefox cookie's secure flag
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
                         log("RenameWorker authenticated using cookies", category="auth", level="info")
@@ -329,8 +362,8 @@ class RenameWorker:
                                 path=cookie_data['path'],
                                 secure=cookie_data.get('secure', False)
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
 
                     # Test if keyring cookies work
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
@@ -361,8 +394,8 @@ class RenameWorker:
                                 path=cookie_data['path'],
                                 secure=cookie_data.get('secure', False)  # CRITICAL: Match Firefox cookie's secure flag
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
                         log("RenameWorker authenticated using cookies", category="auth", level="info")
@@ -484,6 +517,248 @@ class RenameWorker:
         if gallery_id and gallery_name:
             self.queue.put({'gallery_id': gallery_id, 'gallery_name': gallery_name})
 
+    # =========================================================================
+    # Image Status Checking Methods
+    # =========================================================================
+
+    def set_status_check_callbacks(
+        self,
+        on_progress: Optional[Callable[[int, int], None]] = None,
+        on_completed: Optional[Callable[[Dict[str, Dict[str, Any]]], None]] = None,
+        on_error: Optional[Callable[[str], None]] = None
+    ) -> None:
+        """Set callbacks for status check operations.
+
+        Args:
+            on_progress: Called with (current, total) during URL processing
+            on_completed: Called with results dict when check completes
+            on_error: Called with error message string on failure
+        """
+        self._status_check_progress_callback = on_progress
+        self._status_check_completed_callback = on_completed
+        self._status_check_error_callback = on_error
+
+    def cancel_status_check(self) -> None:
+        """Cancel any in-progress status check."""
+        self._status_check_cancelled.set()
+
+    def check_image_status(self, galleries_data: List[Dict[str, Any]]) -> None:
+        """Queue image status check for multiple galleries.
+
+        Collects all image URLs from galleries and checks their online status
+        via imx.to/moderate endpoint. Results are returned via callbacks.
+
+        Args:
+            galleries_data: List of dicts, each containing:
+                - db_id: int - Database ID of gallery
+                - path: str - Gallery path (used as key in results)
+                - name: str - Gallery display name
+                - image_urls: List[str] - List of imx.to image URLs
+
+        Results are delivered via the on_completed callback with structure:
+            {
+                path: {
+                    "db_id": int,
+                    "name": str,
+                    "total": int,
+                    "online": int,
+                    "offline": int,
+                    "online_urls": List[str],
+                    "offline_urls": List[str]
+                },
+                ...
+            }
+        """
+        if not galleries_data:
+            log("check_image_status called with empty galleries_data", level="debug", category="status_check")
+            if self._status_check_completed_callback:
+                self._status_check_completed_callback({})
+            return
+
+        # Queue the status check request
+        self.status_check_queue.put(galleries_data)
+        log(f"Queued status check for {len(galleries_data)} galleries", level="debug", category="status_check")
+
+    def _process_status_checks(self) -> None:
+        """Background thread that processes status check queue.
+
+        Waits for login, then processes status check requests one at a time.
+        Uses the same session as rename operations.
+        """
+        while self.running:
+            try:
+                # Wait for a status check request (timeout allows checking self.running)
+                try:
+                    galleries_data = self.status_check_queue.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+
+                if galleries_data is None:
+                    # Shutdown signal
+                    break
+
+                # Wait for login to complete before processing
+                if not self.login_complete.wait(timeout=30):
+                    log("Status check: Login timeout", level="warning", category="status_check")
+                    if self._status_check_error_callback:
+                        self._status_check_error_callback("Login timeout - please try again later")
+                    self.status_check_queue.task_done()
+                    continue
+
+                if not self.login_successful:
+                    log("Status check: Not authenticated", level="warning", category="status_check")
+                    if self._status_check_error_callback:
+                        self._status_check_error_callback("Not authenticated - please login first")
+                    self.status_check_queue.task_done()
+                    continue
+
+                # Perform the status check
+                try:
+                    results = self._perform_status_check(galleries_data)
+                    if self._status_check_completed_callback:
+                        self._status_check_completed_callback(results)
+                except Exception as e:
+                    log(f"Status check error: {e}", level="error", category="status_check")
+                    if self._status_check_error_callback:
+                        self._status_check_error_callback(str(e))
+
+                self.status_check_queue.task_done()
+
+            except Exception as e:
+                log(f"StatusCheckWorker error: {e}", level="error", category="status_check")
+                continue
+
+    def _perform_status_check(self, galleries_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """Perform the actual status check against imx.to/user/moderate.
+
+        Args:
+            galleries_data: List of gallery dicts with image_urls
+
+        Returns:
+            Dict mapping gallery path to status results
+
+        Raises:
+            Exception: On network or parsing errors
+        """
+        # Reset cancellation flag at start
+        self._status_check_cancelled.clear()
+
+        # Collect all URLs and build mapping back to galleries
+        all_urls: List[str] = []
+        url_to_gallery: Dict[str, str] = {}  # URL -> gallery path
+        gallery_info: Dict[str, Dict[str, Any]] = {}  # path -> {db_id, name, urls}
+
+        for gallery in galleries_data:
+            path = gallery.get('path', '')
+            db_id = gallery.get('db_id', 0)
+            name = gallery.get('name', '')
+            image_urls = gallery.get('image_urls', [])
+
+            if not path or not image_urls:
+                continue
+
+            gallery_info[path] = {
+                'db_id': db_id,
+                'name': name,
+                'urls': image_urls
+            }
+
+            for url in image_urls:
+                if url and isinstance(url, str):
+                    # Normalize URL (strip whitespace)
+                    url = url.strip()
+                    if url:
+                        all_urls.append(url)
+                        url_to_gallery[url] = path
+
+        if not all_urls:
+            log("No valid URLs to check", level="debug", category="status_check")
+            return {}
+
+        total_urls = len(all_urls)
+        log(f"Checking status of {total_urls} URLs from {len(gallery_info)} galleries",
+            level="info", category="status_check")
+
+        # Emit initial progress
+        if self._status_check_progress_callback:
+            self._status_check_progress_callback(0, total_urls)
+
+        # Check if cancelled before making the request
+        if self._status_check_cancelled.is_set():
+            log("Status check cancelled before request", level="debug", category="status_check")
+            return {}
+
+        # POST to imx.to/user/moderate with all URLs
+        form_data = {
+            'imagesid': '\n'.join(all_urls)
+        }
+
+        log(f"POSTing to {self.web_url}/user/moderate with {total_urls} URLs", level="debug", category="status_check")
+
+        response = self.session.post(
+            f"{self.web_url}/user/moderate",
+            data=form_data,
+            timeout=300,  # 5 minute timeout for large requests with thousands of galleries
+            verify=True
+        )
+
+        if response.status_code == 403:
+            # Session expired - try re-auth
+            log("Status check: Session expired (403), attempting re-auth", level="debug", category="status_check")
+            if self._attempt_reauth_with_rate_limit():
+                # Check if cancelled before retry
+                if self._status_check_cancelled.is_set():
+                    log("Status check cancelled before retry", level="debug", category="status_check")
+                    return {}
+                # Retry the request
+                response = self.session.post(
+                    f"{self.web_url}/user/moderate",
+                    data=form_data,
+                    timeout=300,  # 5 minute timeout for large requests
+                    verify=True
+                )
+            else:
+                raise Exception("Authentication expired and re-auth failed")
+
+        if response.status_code != 200:
+            raise Exception(f"Server returned HTTP {response.status_code}")
+
+        if 'DDoS-Guard' in response.text:
+            raise Exception("DDoS-Guard protection active - please try again later")
+
+        # Get response text for URL presence checking
+        response_text = response.text
+
+        # Emit progress (all URLs processed)
+        if self._status_check_progress_callback:
+            self._status_check_progress_callback(total_urls, total_urls)
+
+        # Build results per gallery by checking if each URL appears in the response
+        # URLs that are online will be present in the response textarea
+        results: Dict[str, Dict[str, Any]] = {}
+        total_online = 0
+
+        for path, info in gallery_info.items():
+            gallery_urls = info['urls']
+            online_list = [u for u in gallery_urls if u in response_text]
+            offline_list = [u for u in gallery_urls if u not in response_text]
+            total_online += len(online_list)
+
+            results[path] = {
+                'db_id': info['db_id'],
+                'name': info['name'],
+                'total': len(gallery_urls),
+                'online': len(online_list),
+                'offline': len(offline_list),
+                'online_urls': online_list,
+                'offline_urls': offline_list
+            }
+
+        log(f"Found {total_online} online URLs out of {total_urls} submitted",
+            level="info", category="status_check")
+
+        return results
+
     def _process_renames(self):
         """Background thread that processes rename queue."""
         from imxup import save_unnamed_gallery
@@ -558,14 +833,34 @@ class RenameWorker:
                 continue
 
     def stop(self, timeout: float = 5.0):
-        """Stop the rename worker."""
+        """Stop the rename worker and status check worker.
+
+        Args:
+            timeout: Maximum time to wait for each thread to stop (in seconds)
+        """
         self.running = False
+
+        # Signal rename queue to stop
         try:
             self.queue.put(None)
         except Exception:
             pass
+
+        # Signal status check queue to stop
+        try:
+            self.status_check_queue.put(None)
+        except Exception:
+            pass
+
+        # Wait for rename thread
         if self.thread.is_alive():
             self.thread.join(timeout=timeout)
+
+        # Wait for status check thread
+        if hasattr(self, 'status_check_thread') and self.status_check_thread.is_alive():
+            self.status_check_thread.join(timeout=timeout)
+
+        # Close session
         if self.session:
             try:
                 self.session.close()
@@ -577,5 +872,17 @@ class RenameWorker:
         return self.running and self.thread.is_alive()
 
     def queue_size(self) -> int:
-        """Get queue size."""
+        """Get rename queue size."""
         return self.queue.qsize()
+
+    def status_check_queue_size(self) -> int:
+        """Get status check queue size."""
+        return self.status_check_queue.qsize()
+
+    def is_authenticated(self) -> bool:
+        """Check if worker has successfully authenticated.
+
+        Returns:
+            True if login completed successfully, False otherwise
+        """
+        return self.login_complete.is_set() and self.login_successful

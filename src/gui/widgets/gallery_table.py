@@ -90,6 +90,7 @@ class GalleryTableWidget(QTableWidget):
     COL_EXT4: int
     COL_HOSTS_STATUS: int
     COL_HOSTS_ACTION: int
+    COL_ONLINE_IMX: int
 
     # Column definitions - single source of truth for all column metadata
     COLUMNS = [
@@ -118,6 +119,7 @@ class GalleryTableWidget(QTableWidget):
         (21, 'EXT4',          'ext4',         100, 'Interactive', True,  True),
         (22, 'HOSTS_STATUS',  'file hosts',   150, 'Interactive', False, True),
         (23, 'HOSTS_ACTION',  'hosts action', 80,  'Interactive', False, True),
+        (24, 'ONLINE_IMX',    'online (imx)', 130, 'Interactive', True,  False),
     ]
 
     # Create class attributes dynamically from COLUMNS definition
@@ -198,7 +200,7 @@ class GalleryTableWidget(QTableWidget):
 
         # Apply numeric column delegate for smaller font and right alignment
         numeric_delegate = NumericColumnDelegate(self)
-        for col in [self.COL_UPLOADED, self.COL_ADDED, self.COL_FINISHED, self.COL_SIZE, self.COL_TRANSFER, self.COL_STATUS_TEXT, self.COL_GALLERY_ID, self.COL_CUSTOM1, self.COL_CUSTOM2, self.COL_CUSTOM3, self.COL_CUSTOM4, self.COL_EXT1, self.COL_EXT2, self.COL_EXT3, self.COL_EXT4]:
+        for col in [self.COL_UPLOADED, self.COL_ADDED, self.COL_FINISHED, self.COL_SIZE, self.COL_TRANSFER, self.COL_STATUS_TEXT, self.COL_GALLERY_ID, self.COL_CUSTOM1, self.COL_CUSTOM2, self.COL_CUSTOM3, self.COL_CUSTOM4, self.COL_EXT1, self.COL_EXT2, self.COL_EXT3, self.COL_EXT4, self.COL_ONLINE_IMX]:
             self.setItemDelegateForColumn(col, numeric_delegate)
 
         # Make Status and Action columns non-resizable
@@ -1124,3 +1126,53 @@ class GalleryTableWidget(QTableWidget):
         except Exception as e:
             log(f"Exception in gallery_table: {e}", level="error", category="ui")
             raise
+
+    def set_online_imx_status(self, row: int, online_count: int, total_count: int, check_datetime: Optional[str] = None):
+        """Set the Online (imx) column value for a specific row.
+
+        Args:
+            row: The table row index
+            online_count: Number of images currently online
+            total_count: Total number of images in the gallery
+            check_datetime: ISO format datetime string when the check was performed
+        """
+        if row < 0 or row >= self.rowCount():
+            return
+
+        if total_count == 0:
+            display_text = ""
+            sort_value = -1
+        elif online_count == total_count:
+            display_text = f"Online ({online_count}/{total_count})"
+            sort_value = 100
+        elif online_count == 0:
+            display_text = f"Offline (0/{total_count})"
+            sort_value = 0
+        else:
+            display_text = f"Partial ({online_count}/{total_count})"
+            sort_value = int((online_count / total_count) * 100)
+
+        item = self.item(row, self.COL_ONLINE_IMX)
+        if item is None:
+            item = QTableWidgetItem()
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.setItem(row, self.COL_ONLINE_IMX, item)
+
+        item.setText(display_text)
+        item.setData(Qt.ItemDataRole.UserRole, sort_value)
+
+        if check_datetime:
+            item.setToolTip(f"Checked: {check_datetime}")
+        else:
+            item.setToolTip("")
+
+    def clear_online_imx_status(self, row: int):
+        """Clear the Online (imx) column value for a specific row."""
+        if row < 0 or row >= self.rowCount():
+            return
+
+        item = self.item(row, self.COL_ONLINE_IMX)
+        if item is not None:
+            item.setText("")
+            item.setData(Qt.ItemDataRole.UserRole, -1)
+            item.setToolTip("")

@@ -89,6 +89,10 @@ class GalleryQueueItem:
     source_archive_path: Optional[str] = None
     is_from_archive: bool = False
 
+    # IMX status fields
+    imx_status: str = ""
+    imx_status_checked: Optional[int] = None
+
 
 class QueueManager(QObject):
     """Manages the gallery upload queue with persistence"""
@@ -941,7 +945,8 @@ class QueueManager(QObject):
         for field in ['total_size', 'avg_width', 'avg_height', 'max_width',
                      'max_height', 'min_width', 'min_height', 'scan_complete',
                      'uploaded_bytes', 'final_kibps', 'error_message',
-                     'source_archive_path', 'is_from_archive']:
+                     'source_archive_path', 'is_from_archive',
+                     'imx_status', 'imx_status_checked']:
             if field in data:
                 setattr(item, field, data[field])
 

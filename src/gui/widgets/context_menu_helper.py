@@ -171,6 +171,12 @@ class GalleryContextMenuHelper(QObject):
 
             open_link_action = menu.addAction("Open Gallery Link")
             open_link_action.triggered.connect(lambda: self._delegate_to_main_window('open_gallery_links_via_menu', completed_paths))
+
+            # Check Image Status (verify images still exist on imx.to)
+            check_status_action = menu.addAction("Check Online Status (imx.to)")
+            check_status_action.triggered.connect(
+                lambda: self._delegate_to_main_window('check_image_status_via_menu', completed_paths)
+            )
     
     def _add_move_to_submenu(self, menu, selected_paths):
         """Add Move to... submenu"""

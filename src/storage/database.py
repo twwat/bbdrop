@@ -263,7 +263,21 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                 print(f"Adding {ext_field} column to galleries table...")
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {ext_field} TEXT")
                 print(f"+ Added {ext_field} column")
-            
+
+        # Migration 6: Add IMX status tracking columns
+        cursor = conn.execute("PRAGMA table_info(galleries)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if 'imx_status' not in columns:
+            print("Adding imx_status column to galleries table...")
+            conn.execute("ALTER TABLE galleries ADD COLUMN imx_status TEXT")
+            print("+ Added imx_status column")
+
+        if 'imx_status_checked' not in columns:
+            print("Adding imx_status_checked column to galleries table...")
+            conn.execute("ALTER TABLE galleries ADD COLUMN imx_status_checked INTEGER")
+            print("+ Added imx_status_checked column")
+
     except Exception as e:
         print(f"Warning: Migration failed: {e}")
         # Continue anyway - the app should still work
@@ -511,6 +525,12 @@ class QueueStore:
             columns.insert(0, 'id')
             values.insert(0, db_id)
 
+        # Extract IMX status values
+        imx_status = item.get('imx_status', '')
+        imx_status_checked = item.get('imx_status_checked')
+        if imx_status_checked is not None:
+            imx_status_checked = int(imx_status_checked)
+
         # Optional columns - add if they exist in schema
         optional_fields = {
             'tab_id': tab_id,
@@ -527,7 +547,9 @@ class QueueStore:
             'max_width': max_width,
             'max_height': max_height,
             'min_width': min_width,
-            'min_height': min_height
+            'min_height': min_height,
+            'imx_status': imx_status,
+            'imx_status_checked': imx_status_checked
         }
 
         for col_name, col_value in optional_fields.items():
@@ -625,7 +647,8 @@ class QueueStore:
                     g.uploaded_bytes, g.final_kibps, g.gallery_id, g.gallery_url,
                     g.insertion_order, g.failed_files, g.tab_name, g.tab_id,
                     g.custom1, g.custom2, g.custom3, g.custom4,
-                    g.ext1, g.ext2, g.ext3, g.ext4
+                    g.ext1, g.ext2, g.ext3, g.ext4,
+                    g.imx_status, g.imx_status_checked
                 FROM galleries g
                 ORDER BY g.insertion_order ASC, g.added_ts ASC
                 """
@@ -634,7 +657,7 @@ class QueueStore:
             rows = cur.fetchall()
             items: List[Dict[str, Any]] = []
             for r in rows:
-                # Optimized schema: 27 columns (removed image_files GROUP_CONCAT for 100x speedup)
+                # Optimized schema: 29 columns (removed image_files GROUP_CONCAT for 100x speedup)
                 item: Dict[str, Any] = {
                     'db_id': int(r[0]),  # Database primary key
                     'path': r[1],
@@ -663,6 +686,8 @@ class QueueStore:
                     'ext2': r[24] or '',
                     'ext3': r[25] or '',
                     'ext4': r[26] or '',
+                    'imx_status': r[27] or '',
+                    'imx_status_checked': int(r[28]) if r[28] else None,
                     'uploaded_files': [],  # Load separately when needed, not in gallery list query
                 }
                 items.append(item)
@@ -829,7 +854,8 @@ class QueueStore:
                             g.total_images, g.uploaded_images, g.total_size, g.scan_complete,
                             g.uploaded_bytes, g.final_kibps, g.gallery_id, g.gallery_url,
                             g.insertion_order, g.failed_files, g.tab_name,
-                            g.custom1, g.custom2, g.custom3, g.custom4
+                            g.custom1, g.custom2, g.custom3, g.custom4,
+                            g.imx_status, g.imx_status_checked
                         FROM galleries g
                         WHERE IFNULL(g.tab_id, 1) = ?
                         ORDER BY g.insertion_order ASC, g.added_ts ASC
@@ -845,7 +871,8 @@ class QueueStore:
                             g.total_images, g.uploaded_images, g.total_size, g.scan_complete,
                             g.uploaded_bytes, g.final_kibps, g.gallery_id, g.gallery_url,
                             g.insertion_order, g.failed_files, g.tab_name,
-                            g.custom1, g.custom2, g.custom3, g.custom4
+                            g.custom1, g.custom2, g.custom3, g.custom4,
+                            g.imx_status, g.imx_status_checked
                         FROM galleries g
                         WHERE IFNULL(g.tab_name, 'Main') = ?
                         ORDER BY g.insertion_order ASC, g.added_ts ASC
@@ -890,7 +917,7 @@ class QueueStore:
             items: List[Dict[str, Any]] = []
             for r in rows:
                 if has_failed_files:
-                    # New schema - 23 columns (id at index 0, custom1-4 at 17-20, image_files at index 22)
+                    # New schema - 24 columns (id at index 0, custom1-4 at 18-21, imx_status at 22-23)
                     item: Dict[str, Any] = {
                         'path': r[1],
                         'name': r[2],
@@ -913,6 +940,8 @@ class QueueStore:
                         'custom2': r[19] or '',
                         'custom3': r[20] or '',
                         'custom4': r[21] or '',
+                        'imx_status': r[22] or '',
+                        'imx_status_checked': int(r[23]) if r[23] else None,
                         'uploaded_files': [],  # Load separately when needed for speed
                     }
                 else:
@@ -1658,4 +1687,94 @@ class QueueStore:
             row = cursor.fetchone()
             return {'files': row[0], 'bytes': row[1]} if row else {'files': 0, 'bytes': 0}
 
+    # ----------------------------- IMX Status Tracking ----------------------------
+
+    def get_image_urls_for_galleries(self, gallery_paths: List[str]) -> Dict[str, List[Dict[str, str]]]:
+        """Get image URLs for multiple galleries in a single batch query.
+
+        Optimized for checking gallery status on imx.to by fetching all image
+        URLs for the specified galleries in one database query.
+
+        Args:
+            gallery_paths: List of gallery paths to retrieve image URLs for
+
+        Returns:
+            Dictionary mapping gallery_path to list of image dictionaries.
+            Each image dictionary contains:
+            - 'filename': The image filename
+            - 'url': The imx.to image URL (e.g., 'https://imx.to/i/xxxxx')
+
+        Example:
+            {
+                '/path/to/gallery1': [
+                    {'filename': 'image1.jpg', 'url': 'https://imx.to/i/abc123'},
+                    {'filename': 'image2.jpg', 'url': 'https://imx.to/i/def456'},
+                ],
+                '/path/to/gallery2': [...]
+            }
+        """
+        if not gallery_paths:
+            return {}
+
+        result: Dict[str, List[Dict[str, str]]] = {}
+
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            # Build parameterized query for batch lookup
+            placeholders = ','.join(['?'] * len(gallery_paths))
+            cursor = conn.execute(
+                f"""
+                SELECT g.path, i.filename, i.url
+                FROM images i
+                JOIN galleries g ON i.gallery_fk = g.id
+                WHERE g.path IN ({placeholders})
+                  AND i.url IS NOT NULL
+                  AND i.url != ''
+                ORDER BY g.path, i.filename
+                """,
+                tuple(gallery_paths)
+            )
+
+            for row in cursor.fetchall():
+                path, filename, url = row[0], row[1], row[2]
+                if path not in result:
+                    result[path] = []
+                result[path].append({
+                    'filename': filename,
+                    'url': url
+                })
+
+        return result
+
+    def update_gallery_imx_status(self, gallery_path: str, status_text: str, checked_timestamp: int) -> bool:
+        """Update the IMX status for a gallery.
+
+        Updates the imx_status and imx_status_checked columns for a gallery,
+        used for tracking whether images are still online on imx.to.
+
+        Args:
+            gallery_path: Path to the gallery to update
+            status_text: Status text (e.g., 'Online (342/342)', 'Partial (242/342)', 'Offline (0/342)')
+            checked_timestamp: Unix timestamp of when the check was performed
+
+        Returns:
+            True if the gallery was updated, False if not found or update failed
+        """
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            try:
+                cursor = conn.execute(
+                    """
+                    UPDATE galleries
+                    SET imx_status = ?, imx_status_checked = ?
+                    WHERE path = ?
+                    """,
+                    (status_text, checked_timestamp, gallery_path)
+                )
+                return cursor.rowcount > 0
+            except Exception as e:
+                print(f"Error updating IMX status for {gallery_path}: {e}")
+                return False
 
