@@ -218,7 +218,8 @@ class MultiLineHeaderView(QHeaderView):
             True if event was handled, False otherwise
         """
         if event.type() == QEvent.Type.ToolTip:
-            pos = event.position().toPoint()
+            # QHelpEvent uses pos() for local position, globalPos() for screen position
+            pos = event.pos()
             logical_index = self.logicalIndexAt(pos)
 
             # Use stored reference (parent traversal unreliable with Qt scroll areas)
@@ -229,7 +230,7 @@ class MultiLineHeaderView(QHeaderView):
                     # Build tooltip: use tooltip field or fall back to full column name
                     tooltip_text = col_config.tooltip or col_config.name
                     if tooltip_text:
-                        QToolTip.showText(event.globalPosition().toPoint(), tooltip_text, self)
+                        QToolTip.showText(event.globalPos(), tooltip_text, self)
                         return True
 
         return super().event(event)
@@ -332,7 +333,7 @@ SMALL_METRIC_COLUMN_IDS = frozenset(
 
 
 def format_bytes(value: int) -> str:
-    """Format bytes to human readable (e.g., 1.5 GiB).
+    """Format bytes to human readable (e.g., 1.5 G).
 
     Args:
         value: Byte count to format
@@ -342,11 +343,11 @@ def format_bytes(value: int) -> str:
     """
     if value <= 0:
         return "—"
-    for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
+    for unit in ['B', 'K', 'M', 'G', 'T']:
         if abs(value) < 1024.0:
             return f"{value:.1f} {unit}"
         value /= 1024.0
-    return f"{value:.1f} PiB"
+    return f"{value:.1f} P"
 
 
 def format_percent(value: float) -> str:
@@ -384,7 +385,7 @@ class WorkerStatusWidget(QWidget):
     Widget to display real-time status of upload workers.
 
     Features:
-    - Table with columns: Icon | Hostname | Speed (MiB/s) | Status
+    - Table with columns: Icon | Hostname | Speed (M/s) | Status
     - Support for both imx.to and file host workers
     - Group workers by host type
     - Visual indicators for worker state (icons, colors)
@@ -608,13 +609,61 @@ class WorkerStatusWidget(QWidget):
             return QIcon()
 
         if worker_type == 'imx':
-            icon = icon_mgr.get_icon('imx')
+            icon = icon_mgr.get_file_host_icon('imx.to', dimmed=False)
         else:
             # Use icon manager's file host icon loading (with fallback chain)
             icon = icon_mgr.get_file_host_icon(hostname.lower(), dimmed=False)
 
         self._icon_cache[cache_key] = icon
         return icon
+
+    def _should_show_worker_logos(self) -> bool:
+        """Check if file host logos should be shown instead of text.
+
+        Returns:
+            True if logos should be shown, False for text display
+        """
+        settings = QSettings()
+        return settings.value('ui/show_worker_logos', True, type=bool)
+
+    def _load_host_logo(self, host_id: str, height: int = 20) -> Optional[QLabel]:
+        """Load file host logo as a QLabel.
+
+        Uses IconManager to get the logo path, ensuring consistent naming
+        conventions and security validation across the application.
+
+        Args:
+            host_id: Host identifier (e.g., 'rapidgator', 'fileboom', 'imx')
+            height: Logo height in pixels (default 20, slightly smaller than settings tab's 22)
+
+        Returns:
+            QLabel with logo pixmap, or None if not found
+        """
+        from PyQt6.QtGui import QPixmap
+
+        # Use IconManager for consistent path resolution and security validation
+        icon_mgr = get_icon_manager()
+        if not icon_mgr:
+            return None
+
+        logo_path = icon_mgr.get_file_host_logo_path(host_id)
+        if not logo_path:
+            return None
+
+        try:
+            pixmap = QPixmap(logo_path)
+            if pixmap.isNull():
+                return None
+
+            # Scale to height, maintaining aspect ratio
+            scaled_pixmap = pixmap.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
+
+            logo_label = QLabel()
+            logo_label.setPixmap(scaled_pixmap)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            return logo_label
+        except Exception:
+            return None
 
     def _create_storage_progress_widget(self, used_bytes: int, total_bytes: int, worker_id: str) -> QWidget:
         """Create storage progress bar widget using reusable StorageProgressBar class.
@@ -1259,56 +1308,74 @@ class WorkerStatusWidget(QWidget):
             # Render each column based on its configuration
             for col_idx, col_config in enumerate(self._active_columns):
                 if col_config.id == 'icon':
-                    # Icon column
+                    # Icon column - stores worker_id as key for _workers dict lookup
                     icon_item = QTableWidgetItem()
                     icon_item.setIcon(self._get_host_icon(worker.hostname, worker.worker_type))
                     icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
-                    icon_item.setData(Qt.ItemDataRole.UserRole + 1, worker.worker_type)
-                    icon_item.setData(Qt.ItemDataRole.UserRole + 2, worker.hostname)
                     icon_item.setToolTip(worker.display_name)
                     self.status_table.setItem(row_idx, col_idx, icon_item)
 
                 elif col_config.id == 'hostname':
-                    # Hostname column with auto-upload indicator
+                    # Hostname column with auto-upload indicator and optional logo
                     # Check if this host has automatic uploads enabled
                     has_auto_upload = False
                     if worker.worker_type == 'filehost':
                         trigger = get_file_host_setting(worker.hostname.lower(), "trigger", "str")
                         has_auto_upload = trigger and trigger != "disabled"
 
-                    if has_auto_upload:
-                        # Use a widget with icon for auto-upload hosts
+                    # Check if logos should be shown instead of text
+                    show_logos = self._should_show_worker_logos()
+                    logo_label = None
+                    if show_logos:
+                        # Try to load host logo
+                        host_id = 'imx' if worker.worker_type == 'imx' else worker.hostname.lower()
+                        logo_label = self._load_host_logo(host_id, height=18)
+
+                    # Decide whether to use widget (logo or auto icon) or plain text
+                    use_widget = has_auto_upload or (show_logos and logo_label is not None)
+
+                    if use_widget:
+                        # Use a widget with logo and/or auto icon
                         container = QWidget()
                         layout = QHBoxLayout(container)
                         layout.setContentsMargins(4, 0, 4, 0)
                         layout.setSpacing(4)
 
-                        # Add hostname text
-                        text_label = QLabel(worker.display_name)
-                        text_label.setAlignment(col_config.alignment)
+                        # Add logo or text based on availability
+                        if show_logos and logo_label:
+                            # Show logo instead of text
+                            layout.addWidget(logo_label)
+                        else:
+                            # Fallback to text (when logo not found or setting disabled)
+                            text_label = QLabel(worker.display_name)
+                            text_label.setAlignment(col_config.alignment)
 
-                        # Apply disabled styling if needed
-                        if worker.status == 'disabled':
-                            self._apply_disabled_style(text_label)
+                            # Apply disabled styling if needed
+                            if worker.status == 'disabled':
+                                self._apply_disabled_style(text_label)
 
-                        layout.addWidget(text_label)
+                            layout.addWidget(text_label)
 
                         # Stretch pushes auto icon to the right edge
-                        layout.addStretch()
+                        if has_auto_upload:
+                            layout.addStretch()
 
-                        # Add auto icon - SCALED from 126x57 to 42x19 (right-aligned)
-                        # Use auto-disabled icon when worker is disabled
-                        auto_icon_label = QLabel()
-                        auto_icon_key = 'auto-disabled' if worker.status == 'disabled' else 'auto'
-                        auto_icon = get_icon_manager().get_icon(auto_icon_key)
-                        auto_icon_label.setPixmap(auto_icon.pixmap(42, 19))
-                        layout.addWidget(auto_icon_label)
+                            # Add auto icon - smaller size for compact display (right-aligned)
+                            # Use auto-disabled icon when worker is disabled
+                            auto_icon_label = QLabel()
+                            auto_icon_key = 'auto-disabled' if worker.status == 'disabled' else 'auto'
+                            auto_icon = get_icon_manager().get_icon(auto_icon_key)
+                            auto_icon_label.setPixmap(auto_icon.pixmap(32, 14))
+                            layout.addWidget(auto_icon_label)
 
-                        container.setToolTip(f"{worker.display_name} (auto-upload enabled)")
+                        tooltip = worker.display_name
+                        if has_auto_upload:
+                            tooltip += " (auto-upload enabled)"
+                        container.setToolTip(tooltip)
                         self.status_table.setCellWidget(row_idx, col_idx, container)
                     else:
-                        # Regular text item for non-auto hosts
+                        # Regular text item for non-auto hosts when logos disabled
                         hostname_item = QTableWidgetItem(worker.display_name)
                         hostname_item.setTextAlignment(col_config.alignment)
                         hostname_item.setToolTip(worker.display_name)
@@ -1666,17 +1733,17 @@ class WorkerStatusWidget(QWidget):
             speed_bps: Speed in bytes per second
 
         Returns:
-            Formatted speed string as MiB/s with 2 decimals (e.g., "1.23 MiB/s")
+            Formatted speed string as M/s with 2 decimals (e.g., "1.23 M/s")
             or em-dash (—) for zero/none values
         """
         # Return em-dash for zero or None values
         if speed_bps is None or speed_bps <= 0:
             return "—"
 
-        # Convert bytes/s to MiB/s (divide by 1024^2)
+        # Convert bytes/s to M/s (divide by 1024^2)
         mib_per_s = speed_bps / (1024.0 * 1024.0)
-        # Show MiB/s with 2 decimal places
-        return f"{mib_per_s:.2f} MiB/s"
+        # Show M/s with 2 decimal places
+        return f"{mib_per_s:.2f} M/s"
 
     def _format_display_name(self, hostname: str, worker_type: str) -> str:
         """Format display name for worker.
@@ -1706,35 +1773,66 @@ class WorkerStatusWidget(QWidget):
         """Handle table row selection change."""
         selected_items = self.status_table.selectedItems()
         if selected_items:
-            # Find the icon column dynamically (it stores worker_id and worker_type)
+            # Get worker_id from icon column, then lookup in _workers dict
             row = self.status_table.currentRow()
             icon_col_idx = self._get_column_index('icon')
             if icon_col_idx >= 0:
                 icon_item = self.status_table.item(row, icon_col_idx)
                 if icon_item:
                     worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
-                    worker_type = icon_item.data(Qt.ItemDataRole.UserRole + 1)
                     self._selected_worker_id = worker_id
-                    if worker_id and worker_type:
-                        self.worker_selected.emit(worker_id, worker_type)
+                    # Thread-safe lookup
+                    with QMutexLocker(self._workers_mutex):
+                        if worker_id and worker_id in self._workers:
+                            worker = self._workers[worker_id]
+                            self.worker_selected.emit(worker_id, worker.worker_type)
         else:
             self._selected_worker_id = None
 
-    def _on_row_double_clicked(self, item):
-        """Handle double-click on table row to open host config."""
+    def _on_row_double_clicked(self, item):  # 'item' passed by itemDoubleClicked signal
+        """Handle double-click on table row to open host config.
+
+        ALWAYS opens a config dialog - no conditional guards that could fail silently.
+        Handles both active workers (in _workers dict) and placeholder workers.
+        """
         row = self.status_table.currentRow()
+        if row < 0:
+            return
+
+        # Get worker_id from icon column
+        worker_id = None
         icon_col_idx = self._get_column_index('icon')
         if icon_col_idx >= 0:
             icon_item = self.status_table.item(row, icon_col_idx)
             if icon_item:
-                # Get data directly from icon column (works for both real and placeholder workers)
-                worker_type = icon_item.data(Qt.ItemDataRole.UserRole + 1)
-                hostname = icon_item.data(Qt.ItemDataRole.UserRole + 2)
+                worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
 
-                if hostname and worker_type == 'filehost':
-                    self.open_host_config_requested.emit(hostname.lower())
-                elif worker_type == 'imx':
-                    self.open_settings_tab_requested.emit(1)  # Credentials tab
+        if not worker_id:
+            log.warning(f"Double-click: no worker_id found for row {row}")
+            return
+
+        # Handle placeholder workers (not in _workers dict)
+        # Placeholder IDs: "placeholder_imx", "placeholder_{host_id}"
+        if worker_id.startswith("placeholder_"):
+            host_part = worker_id[len("placeholder_"):]
+            if host_part == "imx":
+                self.open_settings_tab_requested.emit(1)  # Credentials tab
+            else:
+                self.open_host_config_requested.emit(host_part.lower())
+            return
+
+        # Thread-safe lookup for active workers in _workers dict
+        with QMutexLocker(self._workers_mutex):
+            if worker_id not in self._workers:
+                log.warning(f"Double-click: worker_id={worker_id} not in active workers (row {row})")
+                return
+            worker = self._workers[worker_id]
+
+        # Open the appropriate dialog based on worker type
+        if worker.worker_type == 'imx':
+            self.open_settings_tab_requested.emit(1)  # Credentials tab
+        else:
+            self.open_host_config_requested.emit(worker.hostname.lower())
 
     # =========================================================================
     # Public API

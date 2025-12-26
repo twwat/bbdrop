@@ -396,6 +396,49 @@ class IconManager:
         self._icon_cache[cache_key] = fallback_icon
         return fallback_icon
 
+    def get_file_host_logo_path(self, host_name: str) -> Optional[str]:
+        """
+        Get the file path for a file host's full logo image.
+
+        This returns the path to the full logo file (e.g., 'rapidgator.png'),
+        not the small icon variants. Used for displaying larger logos in UI.
+
+        Args:
+            host_name: Name of the file host (e.g., 'imx.to', 'rapidgator', 'fileboom')
+
+        Returns:
+            Full path to the logo file if it exists, None otherwise
+        """
+        # Input validation for security
+        if not host_name or not isinstance(host_name, str):
+            log(f"Invalid host_name for logo: {host_name}", level="warning", category="icon_manager")
+            return None
+
+        # Sanitize: only allow alphanumeric, hyphen, underscore, dot
+        import re
+        if not re.match(r'^[a-zA-Z0-9._-]+$', host_name):
+            log(f"Invalid characters in host_name for logo: {host_name}", level="warning", category="icon_manager")
+            return None
+
+        # Prevent directory traversal
+        if '..' in host_name or len(host_name) > 100:
+            log(f"Potentially malicious host_name for logo: {host_name}", level="warning", category="icon_manager")
+            return None
+
+        # Normalize host_name - handle 'imx' -> 'imx.to'
+        normalized_name = host_name.lower()
+        if normalized_name == 'imx':
+            normalized_name = 'imx.to'
+
+        # Build logo path using standard naming convention: {host_name}.png
+        logo_path = os.path.join(self.assets_dir, 'hosts', 'logo', f'{normalized_name}.png')
+
+        if os.path.exists(logo_path):
+            return logo_path
+
+        log(f"File host logo not found: {logo_path}", level="debug", category="icon_manager")
+        return None
+
     def validate_icons(self, report: bool = True) -> Dict[str, List[str]]:
         """
         Validate that all required icons exist.

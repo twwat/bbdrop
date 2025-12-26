@@ -38,7 +38,7 @@ def format_binary_size(num_bytes: int | float, precision: int = 1) -> str:
     if value < 0:
         return "0\u00A0B"
 
-    units = ["B", "K", "M", "G", "T", "P"]
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
     unit_index = 0
 
     while value >= 1024.0 and unit_index < len(units) - 1:
@@ -69,7 +69,7 @@ def format_binary_rate(kib_per_s: float | int, precision: int = 1) -> str:
     except Exception:
         rate = 0.0
     
-    units = ["K/s", "M/s", "G/s", "T/s"]
+    units = ["KiB/s", "MiB/s", "GiB/s", "TiB/s"]
     unit_index = 0
 
     while rate >= 1024.0 and unit_index < len(units) - 1:

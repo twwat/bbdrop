@@ -563,6 +563,18 @@ class ComprehensiveSettingsDialog(QDialog):
 
         theme_layout.addWidget(self.quick_settings_icons_only_check, 2, 0, 1, 2)  # Row 2, span 2 columns
 
+        # Show file host logos in worker table (default: True)
+        self.show_worker_logos_check = QCheckBox("Show file host logos in upload workers table")
+        self.show_worker_logos_check.setToolTip(
+            "When enabled, shows file host logos instead of text names\n"
+            "in the upload workers status table"
+        )
+        if self.parent_window and hasattr(self.parent_window, 'settings'):
+            show_logos = self.parent_window.settings.value('ui/show_worker_logos', True, type=bool)
+            self.show_worker_logos_check.setChecked(show_logos)
+
+        theme_layout.addWidget(self.show_worker_logos_check, 3, 0, 1, 2)  # Row 3, span 2 columns
+
         # Set column stretch for 50/50 split
         theme_layout.setColumnStretch(0, 1)  # Label column 50%
         theme_layout.setColumnStretch(1, 1)  # Control column 50%
@@ -605,7 +617,8 @@ class ComprehensiveSettingsDialog(QDialog):
         self.theme_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(0))
         self.font_size_spin.valueChanged.connect(lambda: self.mark_tab_dirty(0))
         self.quick_settings_icons_only_check.toggled.connect(lambda: self.mark_tab_dirty(0))
-        
+        self.show_worker_logos_check.toggled.connect(lambda: self.mark_tab_dirty(0))
+
         self.tab_widget.addTab(general_widget, "General")
         
     def setup_credentials_tab(self):
@@ -2806,6 +2819,10 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Apply to adaptive panel immediately
                 if hasattr(self.parent_window, 'adaptive_settings_panel'):
                     self.parent_window.adaptive_settings_panel.set_icons_only_mode(icons_only)
+
+                # Save worker logos setting
+                show_logos = self.show_worker_logos_check.isChecked()
+                self.parent_window.settings.setValue('ui/show_worker_logos', show_logos)
                 
                 # Save scanning settings
                 self._save_scanning_settings()
@@ -3523,6 +3540,10 @@ class ComprehensiveSettingsDialog(QDialog):
                     # Apply to adaptive panel immediately
                     if hasattr(self.parent_window, 'adaptive_settings_panel'):
                         self.parent_window.adaptive_settings_panel.set_icons_only_mode(icons_only)
+
+                    # Save worker logos setting
+                    show_logos = self.show_worker_logos_check.isChecked()
+                    self.parent_window.settings.setValue('ui/show_worker_logos', show_logos)
 
                     # Apply theme and font size immediately
                     self.parent_window.apply_theme(theme)
