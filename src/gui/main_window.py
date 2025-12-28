@@ -117,6 +117,7 @@ from src.gui.widgets.worker_status_widget import WorkerStatusWidget
 from src.gui.progress_tracker import ProgressTracker
 from src.gui.worker_signal_handler import WorkerSignalHandler
 from src.gui.gallery_queue_controller import GalleryQueueController
+from src.gui.table_row_manager import TableRowManager
 
 
 class AdaptiveGroupBox(QGroupBox):
@@ -580,6 +581,9 @@ class ImxUploadGUI(QMainWindow):
         # Initialize gallery queue controller for queue operations
         self.gallery_queue_controller = GalleryQueueController(self)
 
+        # Initialize table row manager for row population and status icons
+        self.table_row_manager = TableRowManager(self)
+
         # Now connect queue status changes (after worker_signal_handler is ready)
         self.queue_manager.status_changed.connect(self.worker_signal_handler.on_queue_item_status_changed)
 
@@ -725,13 +729,13 @@ class ImxUploadGUI(QMainWindow):
         # Initialize background tab update system
         self._background_tab_updates = {}  # Track updates for non-visible tabs
         self._background_update_timer = QTimer()
-        self._background_update_timer.timeout.connect(self._process_background_tab_updates)
+        self._background_update_timer.timeout.connect(self.table_row_manager._process_background_tab_updates)
         self._background_update_timer.setSingleShot(True)
 
         # Uploading status icon animation (7 frames, 200ms each)
         self._upload_animation_frame = 0
         self._upload_animation_timer = QTimer()
-        self._upload_animation_timer.timeout.connect(self._advance_upload_animation)
+        self._upload_animation_timer.timeout.connect(self.table_row_manager._advance_upload_animation)
         self._upload_animation_timer.start(200)  # Animate every 200ms
 
         # Speed updates timer for regular refresh - COMPLETELY DISABLED
@@ -853,199 +857,25 @@ class ImxUploadGUI(QMainWindow):
         log(f"ImxUploadGUI.__init__ Completed", level="debug")
 
     def _load_galleries_phase1(self):
-        """OPTIMIZED: Phase 1 - Load critical gallery data in single pass
+        """Phase 1 - Load critical gallery data in single pass.
 
-        This method loads gallery names and status for all items in one pass with
-        setUpdatesEnabled(False) to prevent paint events, achieving 24-60x speedup.
-        Expected time: 2-5 seconds for 997 galleries (was 120 seconds with batching).
+        Delegates to TableRowManager._load_galleries_phase1()
         """
-        if self._loading_abort:
-            log("Gallery loading aborted by user", level="info", category="performance")
-            return
-
-        self._loading_phase = 1
-        log("Phase 1: Loading critical gallery data...", level="info", category="performance")
-
-        # Clear any existing mappings
-        self.path_to_row.clear()
-        self.row_to_path.clear()
-
-        # MILESTONE 4: Clear widget tracking for viewport-based lazy loading
-        self._rows_with_widgets.clear()
-
-        # Get all items
-        items = self.queue_manager.get_all_items()
-        total_items = len(items)
-        log(f"Loading {total_items} galleries from queue", level="info", category="ui")
-
-        if total_items == 0:
-            self._loading_phase = 3
-            log("No galleries to load", level="info", category="performance")
-            return
-
-        # Batch load file host uploads (this is already optimized)
-        try:
-            self._file_host_uploads_cache = self.queue_manager.store.get_all_file_host_uploads_batch()
-            log(f"Batch loaded file host uploads for {len(self._file_host_uploads_cache)} galleries",
-                level="debug", category="performance")
-        except Exception as e:
-            log(f"Failed to batch load file host uploads: {e}", level="warning", category="performance")
-            self._file_host_uploads_cache = {}
-
-        # CRITICAL FIX: Disable table updates during bulk insert to prevent 12,961 paint events
-        # This prevents Qt from repainting after EVERY QTableWidgetItem creation (50ms each)
-        # Expected impact: 648 seconds → ~20 seconds (4.5× faster)
-        self.gallery_table.setUpdatesEnabled(False)
-        self.gallery_table.setSortingEnabled(False)
-        log("Table updates disabled for bulk insert", level="debug", category="performance")
-
-        # Set row count once
-        self.gallery_table.setRowCount(total_items)
-
-        # Set flag to defer expensive widget creation
-        self._initializing = True
-
-        try:
-            # OPTIMIZATION: Process all items in ONE pass (no batching/yielding)
-            # This eliminates 50 event loop cycles and reduces Phase 1 from 120s to 2-5s
-            log(f"Processing all {total_items} galleries in single pass...", level="info", category="performance")
-
-            for row, item in enumerate(items):
-                # Update mappings
-                self.path_to_row[item.path] = row
-                self.row_to_path[row] = item.path
-
-                # Populate row with MINIMAL data (no expensive widgets yet)
-                self._populate_table_row_minimal(row, item)
-
-                # Initialize scan state tracking
-                self._last_scan_states[item.path] = item.scan_complete
-
-        except Exception as e:
-            log(f"Error in Phase 1 table population: {e}", level="error", category="performance")
-            raise
-        finally:
-            # CRITICAL: ALWAYS re-enable updates, even on exceptions (prevents permanent UI freeze)
-            self.gallery_table.setSortingEnabled(True)
-            self.gallery_table.setUpdatesEnabled(True)
-            log("Table updates re-enabled - Phase 1 complete", level="info", category="performance")
-
-        # Start phase 2
-        self._initializing = False
-        QTimer.singleShot(50, self._load_galleries_phase2)
+        self.table_row_manager._load_galleries_phase1()
 
     def _load_galleries_phase2(self):
-        """MILESTONE 4: Phase 2 - Create widgets ONLY for visible rows (viewport-based lazy loading)
+        """Phase 2 - Create widgets ONLY for visible rows (viewport-based lazy loading).
 
-        This creates progress bars and action buttons ONLY for rows currently visible
-        in the viewport, drastically reducing initial load time.
-        Previous: Created 997 widgets (140 seconds)
-        Now: Creates ~30-40 widgets (<5 seconds)
+        Delegates to TableRowManager._load_galleries_phase2()
         """
-        if self._loading_abort:
-            log("Phase 2 loading aborted", level="info", category="performance")
-            return
-
-        self._loading_phase = 2
-        log("Phase 2: Creating widgets for VISIBLE rows only (viewport-based)...", level="info", category="performance")
-
-        # Get visible row range
-        first_visible, last_visible = self._get_visible_row_range()
-        visible_rows = list(range(first_visible, last_visible + 1))
-
-        log(f"Phase 2: Creating widgets for {len(visible_rows)} visible rows (rows {first_visible}-{last_visible})",
-            level="info", category="performance")
-
-        # CRITICAL FIX: Disable updates during widget creation
-        self.gallery_table.setUpdatesEnabled(False)
-        log("Table updates disabled for Phase 2 widget creation", level="debug", category="performance")
-
-        total_visible = len(visible_rows)
-        batch_size = 10  # Smaller batches for widget creation
-        current_batch = 0
-
-        def _create_widgets_batch():
-            """Create widgets for the next batch of VISIBLE rows"""
-            if self._loading_abort:
-                log("Phase 2 widget creation aborted", level="info", category="performance")
-                # Re-enable updates on abort
-                self.gallery_table.setUpdatesEnabled(True)
-                return
-
-            nonlocal current_batch
-            start_idx = current_batch * batch_size
-            end_idx = min(start_idx + batch_size, total_visible)
-
-            try:
-                # Create widgets only for visible rows in this batch
-                for i in range(start_idx, end_idx):
-                    row = visible_rows[i]
-                    self._create_row_widgets(row)
-                    self._rows_with_widgets.add(row)
-
-                # Update progress
-                progress_pct = int((end_idx / total_visible) * 100) if total_visible > 0 else 100
-                log(f"Phase 2 progress: {end_idx}/{total_visible} visible rows ({progress_pct}%)",
-                    level="debug", category="performance")
-
-                current_batch += 1
-
-                if end_idx < total_visible:
-                    # Schedule next batch (yield to event loop)
-                    QTimer.singleShot(20, _create_widgets_batch)
-                else:
-                    # Phase 2 complete - RE-ENABLE UPDATES
-                    self.gallery_table.setUpdatesEnabled(True)
-                    log(f"Phase 2 complete - created widgets for {len(self._rows_with_widgets)} rows",
-                        level="info", category="performance")
-
-                    # Finalize
-                    QTimer.singleShot(10, self._finalize_gallery_load)
-
-            except Exception as e:
-                log(f"Error in Phase 2 widget creation batch: {e}", level="error", category="performance")
-                # CRITICAL: Re-enable updates even on exception (prevents permanent UI freeze)
-                self.gallery_table.setUpdatesEnabled(True)
-                raise
-
-        # Start creating widgets for visible rows
-        _create_widgets_batch()
+        self.table_row_manager._load_galleries_phase2()
 
     def _get_visible_row_range(self) -> tuple[int, int]:
-        """MILESTONE 4: Calculate the range of visible rows in the table viewport
+        """Calculate the range of visible rows in the table viewport.
 
-        Returns:
-            Tuple of (first_visible_row, last_visible_row) with ±5 row buffer
+        Delegates to TableRowManager._get_visible_row_range()
         """
-        try:
-            # Get the actual table widget (handle tabbed interface)
-            table = self.gallery_table
-            if hasattr(self.gallery_table, 'table'):
-                table = self.gallery_table.table
-
-            # Get viewport and scroll position
-            viewport = table.viewport()
-            viewport_height = viewport.height()
-            vertical_scrollbar = table.verticalScrollBar()
-            scroll_value = vertical_scrollbar.value()
-
-            # Calculate row height (use first row or default)
-            row_height = table.rowHeight(0) if table.rowCount() > 0 else 30
-
-            # Calculate visible range with buffer
-            buffer = 5
-            first_visible = max(0, (scroll_value // row_height) - buffer)
-            visible_rows = (viewport_height // row_height) + 1
-            last_visible = min(table.rowCount() - 1, first_visible + visible_rows + buffer)
-
-            log(f"Viewport: rows {first_visible}-{last_visible} (total: {table.rowCount()})",
-                level="debug", category="performance")
-
-            return (first_visible, last_visible)
-        except Exception as e:
-            log(f"Error calculating visible row range: {e}", level="error", category="performance")
-            # Return full range as fallback
-            return (0, table.rowCount() - 1 if hasattr(self, 'gallery_table') else 0)
+        return self.table_row_manager._get_visible_row_range()
 
     def _on_table_scrolled(self):
         """MILESTONE 4: Handle table scroll events - create widgets for newly visible rows"""
@@ -1072,112 +902,25 @@ class ImxUploadGUI(QMainWindow):
             log(f"Error in scroll handler: {e}", level="error", category="performance")
 
     def _create_row_widgets(self, row: int):
-        """MILESTONE 4: Create progress and action widgets for a single row
+        """Create progress and action widgets for a single row.
 
-        Args:
-            row: The row number to create widgets for
+        Delegates to TableRowManager._create_row_widgets()
         """
-        try:
-            path = self.row_to_path.get(row)
-            if not path:
-                return
-
-            item = self.queue_manager.get_item(path)
-            if not item:
-                return
-
-            # Get the actual table widget (handle tabbed interface)
-            table = self.gallery_table
-            if hasattr(self.gallery_table, 'table'):
-                table = self.gallery_table.table
-
-            # Create progress widget if needed
-            progress_widget = table.cellWidget(row, GalleryTableWidget.COL_PROGRESS)
-            if not isinstance(progress_widget, TableProgressWidget):
-                progress_widget = TableProgressWidget()
-                table.setCellWidget(row, GalleryTableWidget.COL_PROGRESS, progress_widget)
-                progress_widget.update_progress(item.progress, item.status)
-
-            # Create action buttons if needed
-            action_widget = table.cellWidget(row, GalleryTableWidget.COL_ACTION)
-            if not isinstance(action_widget, ActionButtonWidget):
-                action_widget = ActionButtonWidget()
-                table.setCellWidget(row, GalleryTableWidget.COL_ACTION, action_widget)
-                action_widget.update_buttons(item.status)
-
-        except Exception as e:
-            log(f"Error creating widgets for row {row}: {e}", level="error", category="performance")
+        self.table_row_manager._create_row_widgets(row)
 
     def _finalize_gallery_load(self):
-        """EMERGENCY FIX: Finalize gallery loading - apply filters and update UI"""
-        if self._loading_abort:
-            return
+        """Finalize gallery loading - apply filters and update UI.
 
-        log("Finalizing gallery load...", level="info", category="performance")
-
-        # Apply filter and emit signals
-        if hasattr(self.gallery_table, 'refresh_filter'):
-            self.gallery_table.refresh_filter()
-            if hasattr(self.gallery_table, 'tab_changed') and hasattr(self.gallery_table, 'current_tab'):
-                self.gallery_table.tab_changed.emit(self.gallery_table.current_tab)
-
-        # MILESTONE 4: Ensure visible rows have widgets after filtering
-        QTimer.singleShot(100, self._on_table_scrolled)
-
-        self._loading_phase = 3
-        log(f"Gallery loading COMPLETE - {len(self._rows_with_widgets)} rows with widgets created",
-            level="info", category="performance")
+        Delegates to TableRowManager._finalize_gallery_load()
+        """
+        self.table_row_manager._finalize_gallery_load()
 
     def _populate_table_row_minimal(self, row: int, item: GalleryQueueItem):
-        """EMERGENCY FIX: Populate row with MINIMAL data only (no expensive widgets)
+        """Populate row with MINIMAL data only (no expensive widgets).
 
-        This is used during Phase 1 loading to show gallery names and basic info
-        without creating expensive progress bars or action buttons.
+        Delegates to TableRowManager._populate_table_row_minimal()
         """
-        try:
-            # Name column (always visible)
-            name_item = QTableWidgetItem(item.name)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.gallery_table.setItem(row, GalleryTableWidget.COL_NAME, name_item)
-
-            # Status text (lightweight)
-            status_text_item = QTableWidgetItem(item.status)
-            status_text_item.setFlags(status_text_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.gallery_table.setItem(row, GalleryTableWidget.COL_STATUS_TEXT, status_text_item)
-
-            # Upload count - CRITICAL FIX: Always create item (even if empty) so it can be updated later
-            # Before: Only created if total_images > 0, which broke updates when scan completes
-            # After: Always create item, with empty text if total_images == 0
-            if item.total_images > 0:
-                uploaded_text = f"{item.uploaded_images}/{item.total_images}"
-            else:
-                uploaded_text = ""  # Empty but item exists for later updates
-            uploaded_item = QTableWidgetItem(uploaded_text)
-            uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.gallery_table.setItem(row, GalleryTableWidget.COL_UPLOADED, uploaded_item)
-
-            # Size
-            if item.total_size > 0:
-                size_text = self._format_size_consistent(item.total_size)
-                size_item = QTableWidgetItem(size_text)
-                size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.gallery_table.setItem(row, GalleryTableWidget.COL_SIZE, size_item)
-
-            # SKIP expensive widgets (progress bars, action buttons, file host widgets)
-            # These will be created in Phase 2
-
-            # IMX Status column - restore from database
-            if item.imx_status and item.imx_status_checked:
-                match = re.match(r'\w+\s*\((\d+)/(\d+)\)', item.imx_status)
-                if match:
-                    online = int(match.group(1))
-                    total_count = int(match.group(2))
-                    check_datetime = datetime.fromtimestamp(item.imx_status_checked).strftime('%Y-%m-%d %H:%M')
-                    self.gallery_table.set_online_imx_status(row, online, total_count, check_datetime)
-
-        except Exception as e:
-            log(f"Error in _populate_table_row_minimal for row {row}: {e}",
-                level="warning", category="performance")
+        self.table_row_manager._populate_table_row_minimal(row, item)
 
     def _refresh_log_display_settings(self):
         """Cache log display settings to avoid repeated lookups on every log message.
@@ -1261,79 +1004,26 @@ class ImxUploadGUI(QMainWindow):
     # ----------------------------- Background Tab Update System -----------------------------
     
     def _process_background_tab_updates(self):
-        """Process queued updates for non-visible tabs in background"""
-        if not self._background_tab_updates:
-            return
-        
-        start_time = time.time()
-        TIME_BUDGET = 0.005  # 5ms budget for background processing
-        
-        # Process a few background updates per cycle
-        updates_processed = 0
-        paths_to_remove = []
-        
-        for path, (item, update_type, timestamp) in list(self._background_tab_updates.items()):
-            if time.time() - start_time > TIME_BUDGET:
-                break
-                
-            # Skip very old updates (>5 seconds) to prevent memory buildup
-            if time.time() - timestamp > 5.0:
-                paths_to_remove.append(path)
-                continue
-            
-            # Process the background update (simplified, no UI updates)
-            try:
-                # Update internal state without UI operations
-                row = self.path_to_row.get(path)
-                if row is not None:
-                    # Only update critical state information
-                    if update_type == 'progress' and hasattr(item, 'progress'):
-                        # Update progress tracking without UI
-                        pass
-                    elif update_type == 'status' and hasattr(item, 'status'):
-                        # Update status tracking without UI  
-                        pass
-                        
-                paths_to_remove.append(path)
-                updates_processed += 1
-                
-            except Exception:
-                # Remove problematic updates
-                paths_to_remove.append(path)
-        
-        # Clean up processed/expired updates
-        for path in paths_to_remove:
-            self._background_tab_updates.pop(path, None)
-        
-        # Update performance metrics in tabbed widget if available
-        if hasattr(self.gallery_table, '_perf_metrics') and updates_processed > 0:
-            self.gallery_table._perf_metrics['background_updates_processed'] += updates_processed
-            
-        # Schedule next batch if there are more updates
-        if self._background_tab_updates and not self._background_update_timer.isActive():
-            self._background_update_timer.start(100)  # Process every 100ms
-    
+        """Process queued updates for non-visible tabs in background.
+
+        Delegates to TableRowManager._process_background_tab_updates()
+        """
+        self.table_row_manager._process_background_tab_updates()
+
     def queue_background_tab_update(self, path: str, item, update_type: str = 'progress'):
-        """Queue an update for galleries not currently visible in tabs"""
-        # Only queue if row is likely hidden
-        row = self.path_to_row.get(path)
-        if row is not None and hasattr(self.gallery_table, 'isRowHidden'):
-            if self.gallery_table.isRowHidden(row):
-                # Queue for background processing
-                self._background_tab_updates[path] = (item, update_type, time.time())
-                
-                # Start background timer if not running
-                if not self._background_update_timer.isActive():
-                    self._background_update_timer.start(100)
-                return True
-        return False
-    
+        """Queue an update for galleries not currently visible in tabs.
+
+        Delegates to TableRowManager.queue_background_tab_update()
+        """
+        return self.table_row_manager.queue_background_tab_update(path, item, update_type)
+
     def clear_background_tab_updates(self):
-        """Clear all background tab updates (e.g., when switching tabs)"""
-        self._background_tab_updates.clear()
-        if self._background_update_timer.isActive():
-            self._background_update_timer.stop()
-    
+        """Clear all background tab updates (e.g., when switching tabs).
+
+        Delegates to TableRowManager.clear_background_tab_updates()
+        """
+        self.table_row_manager.clear_background_tab_updates()
+
     # ----------------------------- End Background Tab Update System -----------------------------
     
 
@@ -1427,63 +1117,18 @@ class ImxUploadGUI(QMainWindow):
         self.bandwidth_status_label.setToolTip(tooltip)
 
     def _set_status_cell_icon(self, row: int, status: str):
-        """Render the Status column as an icon only, without background/text.
-        Explicitly handles all possible statuses with clear icon assignments.
+        """Render the Status column as an icon.
+
+        Delegates to TableRowManager._set_status_cell_icon()
         """
-        # Validate row bounds to prevent setting icons on wrong rows
-        if row < 0 or row >= self.gallery_table.rowCount():
-            log(f"_set_status_cell_icon: Invalid row {row}, table has {self.gallery_table.rowCount()} rows", level="debug")
-            return
-
-        try:
-            # Check if this row is selected - use inner table for tabbed system consistency
-            table_widget = getattr(self.gallery_table, 'table', self.gallery_table)
-            selected_rows = {item.row() for item in table_widget.selectedItems()}
-            is_selected = row in selected_rows
-
-            icon_mgr = get_icon_manager()
-            if not icon_mgr:
-                log(f"ERROR: IconManager not initialized, cannot set icon for status: {status}", level="error")
-                return
-
-            # Use IconManager with explicit theme and selection awareness
-            # Pass animation frame for uploading status
-            animation_frame = self._upload_animation_frame if status == "uploading" else 0
-            icon = icon_mgr.get_status_icon(status, theme_mode=self._current_theme_mode, is_selected=is_selected, animation_frame=animation_frame)
-            tooltip = icon_mgr.get_status_tooltip(status)
-
-            # Apply the icon to the table cell
-            self._apply_icon_to_cell(row, GalleryTableWidget.COL_STATUS, icon, tooltip, status)
-
-        except Exception as e:
-            print(f"Warning: Failed to set status icon for {status}: {e}")
+        self.table_row_manager._set_status_cell_icon(row, status)
 
     def _set_status_text_cell(self, row: int, status: str):
         """Set the status text column with capitalized status string.
 
-        Args:
-            row: The table row index
-            status: The status string to display (will be capitalized)
+        Delegates to TableRowManager._set_status_text_cell()
         """
-        # Validate row bounds
-        if row < 0 or row >= self.gallery_table.rowCount():
-            log(f"_set_status_text_cell: Invalid row {row}, table has {self.gallery_table.rowCount()} rows", level="debug")
-            return
-
-        try:
-            # Create capitalized status text
-            status_text = status.capitalize() if status else ""
-
-            # Create table item with centered alignment
-            status_item = QTableWidgetItem(status_text)
-            status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            # Set the item in the STATUS_TEXT column
-            self.gallery_table.setItem(row, GalleryTableWidget.COL_STATUS_TEXT, status_item)
-
-        except Exception as e:
-            log(f"Warning: Failed to set status text for {status}: {e}", level="debug")
+        self.table_row_manager._set_status_text_cell(row, status)
 
     def _on_selection_changed(self, selected, deselected):
         """Handle gallery table selection changes to refresh icons"""
@@ -1604,153 +1249,32 @@ class ImxUploadGUI(QMainWindow):
         QTimer.singleShot(0, lambda: process_batch(0))
 
     def _advance_upload_animation(self):
-        """Advance the upload animation frame and update uploading icons"""
-        # Increment frame (0-6, cycling through 7 frames)
-        self._upload_animation_frame = (self._upload_animation_frame + 1) % 7
+        """Advance the upload animation frame and update uploading icons.
 
-        # Get the actual table (handle tabbed interface)
-        table = self.gallery_table
-        if hasattr(self.gallery_table, 'table'):
-            table = self.gallery_table.table
-
-        # Update only rows with "uploading" status (efficient since there's typically only 1)
-        try:
-            for row in range(table.rowCount()):
-                # Check if row is hidden (filtered out by tab)
-                if table.isRowHidden(row):
-                    continue
-
-                name_item = table.item(row, GalleryTableWidget.COL_NAME)
-                if name_item:
-                    path = name_item.data(Qt.ItemDataRole.UserRole)
-                    if path and path in self.queue_manager.items:
-                        item = self.queue_manager.items[path]
-                        if item.status == "uploading":
-                            # Update only uploading icons with new frame
-                            self._set_status_cell_icon(row, item.status)
-        except Exception as e:
-            # Silently ignore errors (table might be updating)
-            pass
+        Delegates to TableRowManager._advance_upload_animation()
+        """
+        self.table_row_manager._advance_upload_animation()
 
     def refresh_icons(self):
-        """Alias for refresh_all_status_icons - called from settings dialog"""
-        self.refresh_all_status_icons()
-    
+        """Alias for refresh_all_status_icons - called from settings dialog.
+
+        Delegates to TableRowManager.refresh_icons()
+        """
+        self.table_row_manager.refresh_icons()
+
     def refresh_all_status_icons(self):
-        """Refresh all status icons and action button icons after icon changes in settings"""
-        try:
-            icon_mgr = get_icon_manager()
-            if icon_mgr:
-                # Don't clear cache - icon keys include theme_mode, so both themes can coexist
-                # This avoids expensive disk I/O when switching themes
+        """Refresh all status icons and action button icons after icon changes in settings.
 
-                # Get the actual table (handle tabbed interface)
-                table = self.gallery_table
-                if hasattr(self.gallery_table, 'table'):
-                    table = self.gallery_table.table
+        Delegates to TableRowManager.refresh_all_status_icons()
+        """
+        self.table_row_manager.refresh_all_status_icons()
 
-                # Only update VISIBLE rows for fast theme switching
-                # Get visible row range
-                viewport = table.viewport()
-                first_visible = table.rowAt(0)
-                last_visible = table.rowAt(viewport.height())
-
-                # Handle edge cases
-                if first_visible == -1:
-                    first_visible = 0
-                if last_visible == -1:
-                    last_visible = table.rowCount() - 1
-
-                # Add buffer rows above and below visible area for smooth scrolling
-                first_visible = max(0, first_visible - 5)
-                last_visible = min(table.rowCount() - 1, last_visible + 5)
-
-                # Update only visible status icons and action button icons
-                for row in range(first_visible, last_visible + 1):
-                    # Get the gallery path from the name column (UserRole data)
-                    name_item = table.item(row, GalleryTableWidget.COL_NAME)
-                    if name_item:
-                        path = name_item.data(Qt.ItemDataRole.UserRole)
-                        if path and path in self.queue_manager.items:
-                            item = self.queue_manager.items[path]
-                            # Refresh the status icon for this row
-                            self._set_status_cell_icon(row, item.status)
-                            self._set_status_text_cell(row, item.status)
-
-                    # Refresh action button icons
-                    action_widget = table.cellWidget(row, GalleryTableWidget.COL_ACTION)
-                    if action_widget and hasattr(action_widget, 'refresh_icons'):
-                        action_widget.refresh_icons()
-
-                # Set flag so scrolling will refresh newly visible rows
-                if hasattr(table, '_needs_full_icon_refresh'):
-                    table._needs_full_icon_refresh = True
-
-                # Refresh quick settings button icons
-                if hasattr(self, 'comprehensive_settings_btn'):
-                    settings_icon = icon_mgr.get_icon('settings')
-                    if not settings_icon.isNull():
-                        self.comprehensive_settings_btn.setIcon(settings_icon)
-
-                if hasattr(self, 'manage_templates_btn'):
-                    templates_icon = icon_mgr.get_icon('templates')
-                    if not templates_icon.isNull():
-                        self.manage_templates_btn.setIcon(templates_icon)
-
-                if hasattr(self, 'manage_credentials_btn'):
-                    credentials_icon = icon_mgr.get_icon('credentials')
-                    if not credentials_icon.isNull():
-                        self.manage_credentials_btn.setIcon(credentials_icon)
-
-                if hasattr(self, 'log_viewer_btn'):
-                    log_viewer_icon = icon_mgr.get_icon('log_viewer')
-                    if not log_viewer_icon.isNull():
-                        self.log_viewer_btn.setIcon(log_viewer_icon)
-
-                if hasattr(self, 'hooks_btn'):
-                    hooks_icon = icon_mgr.get_icon('hooks')
-                    if not hooks_icon.isNull():
-                        self.hooks_btn.setIcon(hooks_icon)
-
-                if hasattr(self, 'theme_toggle_btn'):
-                    theme_icon = icon_mgr.get_icon('toggle_theme')
-                    #if not theme_icon.isNull():
-                    #    self.theme_toggle_btn.setIcon(theme_icon)
-
-                # Refresh worker status widget icons
-                if hasattr(self, 'worker_status_widget') and hasattr(self.worker_status_widget, 'refresh_icons'):
-                    self.worker_status_widget.refresh_icons()
-
-        except Exception as e:
-            log(f"Error refreshing icons: {e}", level="error", category="ui")
-    
     def _apply_icon_to_cell(self, row: int, col: int, icon, tooltip: str, status: str):
-        """Apply icon to table cell - runs on main thread"""
-        try:
-            # Quick validation
-            if row < 0 or row >= self.gallery_table.rowCount():
-                return
-                
-            # Clear existing widget (in case there was one)
-            self.gallery_table.removeCellWidget(row, col)
-            
-            # Create a simple table item with icon - much simpler than custom widgets
-            item = QTableWidgetItem()
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            item.setToolTip(tooltip)
-            
-            if icon is not None and not icon.isNull():
-                item.setIcon(icon)
-            else:
-                # Fallback to text when no icon available
-                item.setText(status.title() if isinstance(status, str) else "")
-            
-            self.gallery_table.setItem(row, col, item)
-            
-        except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise
+        """Apply icon to table cell - runs on main thread.
+
+        Delegates to TableRowManager._apply_icon_to_cell()
+        """
+        self.table_row_manager._apply_icon_to_cell(row, col, icon, tooltip, status)
 
     def _show_failed_gallery_details(self, row: int):
         """Show detailed error information for a failed gallery."""
@@ -1793,61 +1317,11 @@ class ImxUploadGUI(QMainWindow):
             QMessageBox.warning(self, "Error", f"Failed to show error details: {str(e)}")
 
     def _set_renamed_cell_icon(self, row: int, is_renamed: bool | None):
-        """Set the Renamed column cell to an icon (check/pending) if available; fallback to text.
-        is_renamed=True -> check, False -> pending, None -> blank
+        """Set the Renamed column cell to an icon (check/pending).
+
+        Delegates to TableRowManager._set_renamed_cell_icon()
         """
-        # NOTE: Traceback extraction disabled for performance (was taking 700ms for 48 rows during theme changes)
-        # import traceback
-        # stack = traceback.extract_stack()
-        # caller_chain = " -> ".join([frame.name for frame in stack[-4:-1]])
-        # print(f"DEBUG: _set_renamed_cell_icon: {caller_chain}: row={row}, is_renamed={is_renamed}")
-        try:
-            col = 11
-            
-            # Create a simple table item with icon using central configuration
-            item = QTableWidgetItem()
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            
-            # Determine icon and tooltip based on rename status
-            if is_renamed is True:
-                icon = get_icon('renamed_true')
-                tooltip = "Renamed"
-                if icon is not None and not icon.isNull():
-                    item.setIcon(icon)
-                    item.setText("")
-                else:
-                    item.setText("✓")
-                    log(f"Using fallback text for renamed_true", level="debug")
-            elif is_renamed is False:
-                icon = get_icon('renamed_false')
-                tooltip = "Pending rename"
-                #print(f"DEBUG: renamed_false icon - isNull: {icon.isNull() if icon else 'None'}")
-                if icon is not None and not icon.isNull():
-                    item.setIcon(icon)
-                    item.setText("")
-                else:
-                    item.setText("⏳")
-                    log(f"Using fallback text for renamed_false", level="debug")
-            else:
-                # None/blank - no icon or text
-                item.setIcon(QIcon())
-                item.setText("")
-                tooltip = ""
-            
-            item.setToolTip(tooltip)
-            self.gallery_table.setItem(row, col, item)
-            
-        except Exception as e:
-            # Set a basic item as fallback
-            try:
-                item = QTableWidgetItem("")
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.gallery_table.setItem(row, col, item)
-            except Exception as e:
-                log(f"Exception in main_window: {e}", level="error", category="ui")
-                raise
+        self.table_row_manager._set_renamed_cell_icon(row, is_renamed)
 
     def showEvent(self, event):
         try:
@@ -3926,549 +3400,47 @@ class ImxUploadGUI(QMainWindow):
             log(f"ERROR: Exception refreshing button icons: {e}", level="warning", category="ui")
 
     def _populate_table_row(self, row: int, item: GalleryQueueItem, total: int = 0):
-        """Update row data immediately with proper font consistency - COMPLETE VERSION"""
-        # Update splash screen during startup (only every 10 rows to avoid constant repaints)
-        if hasattr(self, 'splash') and self.splash and row % 10 == 0:
-            try:
-                if total > 0:
-                    percentage = int((row / total) * 100)
-                    self.splash.update_status(f"Loading gallery {row}/{total} ({percentage}%)")
-                else:
-                    self.splash.update_status(f"Loading gallery {row}")
-            except Exception as e:
-                log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-                raise
+        """Update row data immediately with proper font consistency.
 
-        # CRITICAL: Verify row is still valid for this item (table may have changed due to deletions)
-        # Always use the current mapping as the source of truth
-        actual_row = self.path_to_row.get(item.path)
-
-        if actual_row is None:
-            # Item was removed from table entirely
-            log(f"Skipping update - {os.path.basename(item.path)} no longer in table", level="debug", category="queue")
-            return
-
-        if actual_row != row:
-            # Table was modified (row deletions/insertions), use current row
-            log(f"Row adjusted for {os.path.basename(item.path)}: {row} → {actual_row}", level="trace", category="queue")
-            row = actual_row
-
-        theme_mode = self._current_theme_mode
-
-        # Order number - show database ID (persistent, matches logs like "gallery 1555")
-        order_item = NumericTableWidgetItem(item.db_id if item.db_id else 0)
-        order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_ORDER, order_item)
-
-        # Gallery name and path
-        display_name = item.name or os.path.basename(item.path) or "Unknown"
-        name_item = QTableWidgetItem(display_name)
-        name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        name_item.setData(Qt.ItemDataRole.UserRole, item.path)
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_NAME, name_item)
-
-        # Upload progress - always create cell, blank until images are counted
-        total_images = getattr(item, 'total_images', 0) or 0
-        uploaded_images = getattr(item, 'uploaded_images', 0) or 0
-        uploaded_text = ""
-        if total_images > 0:
-            uploaded_text = f"{uploaded_images}/{total_images}"
-        uploaded_item = QTableWidgetItem(uploaded_text)
-        uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_UPLOADED, uploaded_item)
-
-        # Progress bar - defer creation during initial load for speed
-        if not hasattr(self, '_initializing') or not self._initializing:
-            progress_widget = self.gallery_table.cellWidget(row, 3)
-            if not isinstance(progress_widget, TableProgressWidget):
-                progress_widget = TableProgressWidget()
-                self.gallery_table.setCellWidget(row, 3, progress_widget)
-            progress_widget.update_progress(item.progress, item.status)
-
-        # Status icon and text
-        self._set_status_cell_icon(row, item.status)
-        # Skip STATUS_TEXT column (5) if hidden - optimization to avoid creating unused QTableWidgetItems
-        if not self.gallery_table.isColumnHidden(GalleryTableWidget.COL_STATUS_TEXT):
-            self._set_status_text_cell(row, item.status)
-
-
-        # Added time
-        added_text, added_tooltip = format_timestamp_for_display(item.added_time)
-        added_item = QTableWidgetItem(added_text)
-        added_item.setFlags(added_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        added_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        if added_tooltip:
-            added_item.setToolTip(added_tooltip)
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_ADDED, added_item)
-
-        # Finished time
-        finished_text, finished_tooltip = format_timestamp_for_display(item.finished_time)
-        finished_item = QTableWidgetItem(finished_text)
-        finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        finished_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        if finished_tooltip:
-            finished_item.setToolTip(finished_tooltip)
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_FINISHED, finished_item)
-        
-        # Size column with consistent binary formatting
-        size_bytes = getattr(item, 'total_size', 0) or 0
-        size_text = ""
-        if size_bytes > 0:
-            size_text = self._format_size_consistent(size_bytes)
-        size_item = QTableWidgetItem(size_text)
-        size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        # PyQt is retarded, manually set font
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_SIZE, size_item)
-        
-        # Transfer speed column - Skip TRANSFER column (10) if hidden to avoid creating unused QTableWidgetItems
-        if not self.gallery_table.isColumnHidden(GalleryTableWidget.COL_TRANSFER):
-            transfer_text = ""
-            current_rate_kib = float(getattr(item, 'current_kibps', 0.0) or 0.0)
-            final_rate_kib = float(getattr(item, 'final_kibps', 0.0) or 0.0)
-            try:
-                from imxup import format_binary_rate
-                if item.status == "uploading" and current_rate_kib > 0:
-                    transfer_text = format_binary_rate(current_rate_kib, precision=2)
-                elif final_rate_kib > 0:
-                    transfer_text = format_binary_rate(final_rate_kib, precision=2)
-            except Exception:
-                rate = current_rate_kib if item.status == "uploading" else final_rate_kib
-                transfer_text = self._format_rate_consistent(rate) if rate > 0 else ""
-
-            xfer_item = QTableWidgetItem(transfer_text)
-            xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            if item.status == "uploading" and transfer_text:
-                xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
-            elif item.status in ("completed", "failed") and transfer_text:
-                xfer_item.setForeground(QColor(255, 255, 255, 230) if theme_mode == 'dark' else QColor(0, 0, 0, 190))
-            self.gallery_table.setItem(row, GalleryTableWidget.COL_TRANSFER, xfer_item)
-        
-        # Template name (always left-aligned for consistency)
-        template_text = item.template_name or ""
-        tmpl_item = QTableWidgetItem(template_text)
-        tmpl_item.setFlags(tmpl_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_TEMPLATE, tmpl_item)
-        
-        # Renamed status: Set icon based on whether gallery has been renamed
-        # Check if gallery is in the unnamed galleries list (pending rename)
-        from imxup import check_gallery_renamed
-        is_renamed = check_gallery_renamed(item.gallery_id) if item.gallery_id else None
-        self._set_renamed_cell_icon(row, is_renamed)
-
-        # Custom columns and Gallery ID: Load from database
-        # Get the actual table object (same logic as in _on_table_item_changed)
-        actual_table = getattr(self.gallery_table, 'table', self.gallery_table)
-
-        # Temporarily block signals to prevent itemChanged during initialization
-        signals_blocked = actual_table.signalsBlocked()
-        actual_table.blockSignals(True)
-        try:
-            # Gallery ID column (13) - read-only, skip if hidden to avoid creating unused QTableWidgetItems
-            if not self.gallery_table.isColumnHidden(GalleryTableWidget.COL_GALLERY_ID):
-                gallery_id_text = item.gallery_id or ""
-                gallery_id_item = QTableWidgetItem(gallery_id_text)
-                gallery_id_item.setFlags(gallery_id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                gallery_id_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                actual_table.setItem(row, GalleryTableWidget.COL_GALLERY_ID, gallery_id_item)
-
-            # Custom columns (14-17) - editable, skip hidden ones to avoid creating unused QTableWidgetItems
-            for col_idx, field_name in [
-                (GalleryTableWidget.COL_CUSTOM1, 'custom1'),
-                (GalleryTableWidget.COL_CUSTOM2, 'custom2'),
-                (GalleryTableWidget.COL_CUSTOM3, 'custom3'),
-                (GalleryTableWidget.COL_CUSTOM4, 'custom4')
-            ]:
-                if not self.gallery_table.isColumnHidden(col_idx):
-                    value = getattr(item, field_name, '') or ''
-                    custom_item = QTableWidgetItem(str(value))
-                    # Make custom columns editable
-                    custom_item.setFlags(custom_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                    custom_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                    actual_table.setItem(row, col_idx, custom_item)
-
-            # Ext columns (18-21) - editable (populated by external apps or user), skip hidden ones
-            for col_idx, field_name in [
-                (GalleryTableWidget.COL_EXT1, 'ext1'),
-                (GalleryTableWidget.COL_EXT2, 'ext2'),
-                (GalleryTableWidget.COL_EXT3, 'ext3'),
-                (GalleryTableWidget.COL_EXT4, 'ext4')
-            ]:
-                if not self.gallery_table.isColumnHidden(col_idx):
-                    value = getattr(item, field_name, '') or ''
-                    ext_item = QTableWidgetItem(str(value))
-                    # Make ext columns editable
-                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                    actual_table.setItem(row, col_idx, ext_item)
-
-            # IMX Status column - restore from database
-            if item.imx_status and item.imx_status_checked:
-                # Parse status text like "Online (124/124)" or "Partial (120/124)"
-                match = re.match(r'\w+\s*\((\d+)/(\d+)\)', item.imx_status)
-                if match:
-                    online = int(match.group(1))
-                    total = int(match.group(2))
-                    check_datetime = datetime.fromtimestamp(item.imx_status_checked).strftime('%Y-%m-%d %H:%M')
-                    self.gallery_table.set_online_imx_status(row, online, total, check_datetime)
-        finally:
-            # Restore original signal state
-            actual_table.blockSignals(signals_blocked)
-
-        # Action buttons - CREATE MISSING ACTION BUTTONS FOR NEW ITEMS
-        try:
-            existing_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_ACTION)
-            if not isinstance(existing_widget, ActionButtonWidget):
-                action_widget = ActionButtonWidget(parent=self)
-                # Connect button signals with proper closure capture
-                action_widget.start_btn.setEnabled(item.status != "scanning")
-                action_widget.start_btn.clicked.connect(lambda checked, path=item.path: self.start_single_item(path))
-                action_widget.stop_btn.clicked.connect(lambda checked, path=item.path: self.stop_single_item(path))
-                action_widget.view_btn.clicked.connect(lambda checked, path=item.path: self.handle_view_button(path))
-                action_widget.cancel_btn.clicked.connect(lambda checked, path=item.path: self.cancel_single_item(path))
-                action_widget.update_buttons(item.status)
-                self.gallery_table.setCellWidget(row, GalleryTableWidget.COL_ACTION, action_widget)
-            else:
-                # Update existing widget status
-                existing_widget.update_buttons(item.status)
-                existing_widget.start_btn.setEnabled(item.status != "scanning")
-        except Exception as e:
-            print(f"ERROR: Failed to create action buttons for row {row}: {e}")
-            import traceback
-            traceback.print_exc()
-
-        # File host widgets - CREATE/UPDATE FILE HOST STATUS AND ACTION WIDGETS
-        try:
-            from src.gui.widgets.custom_widgets import FileHostsStatusWidget, FileHostsActionWidget
-
-            # Get file host upload data from database
-            # PERFORMANCE: Use cached batch data if available (startup optimization)
-            host_uploads = {}
-            try:
-                if hasattr(self, '_file_host_uploads_cache'):
-                    # Use pre-loaded batch cache (989 queries → 1 query)
-                    uploads_list = self._file_host_uploads_cache.get(item.path, [])
-                else:
-                    # Fallback to individual query (used after startup)
-                    uploads_list = self.queue_manager.store.get_file_host_uploads(item.path)
-                host_uploads = {upload['host_name']: upload for upload in uploads_list}
-            except Exception as e:
-                log(f"Failed to load file host uploads for {item.path}: {e}", level="warning", category="file_hosts")
-
-            # HOSTS_STATUS widget (icons)
-            existing_status_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
-            if not isinstance(existing_status_widget, FileHostsStatusWidget):
-                status_widget = FileHostsStatusWidget(item.path, parent=self)
-                status_widget.update_hosts(host_uploads)
-                # Connect signal to show host details dialog
-                status_widget.host_clicked.connect(self._on_file_host_icon_clicked)
-                self.gallery_table.setCellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS, status_widget)
-            else:
-                # Update existing widget
-                existing_status_widget.update_hosts(host_uploads)
-
-            # HOSTS_ACTION widget (manage button)
-            existing_action_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_HOSTS_ACTION)
-            if not isinstance(existing_action_widget, FileHostsActionWidget):
-                hosts_action_widget = FileHostsActionWidget(item.path, parent=self)
-                # Connect signal to show file host details dialog
-                hosts_action_widget.manage_clicked.connect(self._on_file_hosts_manage_clicked)
-                self.gallery_table.setCellWidget(row, GalleryTableWidget.COL_HOSTS_ACTION, hosts_action_widget)
-
-        except Exception as e:
-            log(f"Failed to create file host widgets for row {row}: {e}", level="error", category="file_hosts")
-            import traceback
-            traceback.print_exc()
+        Delegates to TableRowManager._populate_table_row()
+        """
+        self.table_row_manager._populate_table_row(row, item, total)
 
 
     def _populate_table_row_detailed(self, row: int, item: GalleryQueueItem):
-        """Complete row formatting in background - TRULY NON-BLOCKING"""
-        # Use background thread for expensive formatting operations
-        def format_row_data():
-            """Prepare formatted data in background thread"""
-            try:
-                # Prepare all data without touching GUI
-                formatted_data = {}
-                
-                # Order number data - show database ID (persistent, matches logs)
-                formatted_data['order'] = item.db_id if item.db_id else 0
-                
-                # Time formatting (expensive datetime operations)
-                formatted_data['added_text'], formatted_data['added_tooltip'] = format_timestamp_for_display(item.added_time)
-                formatted_data['finished_text'], formatted_data['finished_tooltip'] = format_timestamp_for_display(item.finished_time)
-                
-                return formatted_data
-            except Exception:
-                return None
-        
-        def apply_formatted_data(formatted_data):
-            """Apply formatted data to table - runs on main thread"""
-            if formatted_data is None or row >= self.gallery_table.rowCount():
-                return
-                
-            try:
-                # Get current font sizes
-                # Order number (column 0) - quick operation
-                order_item = NumericTableWidgetItem(formatted_data['order'])
-                order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                # Apply font size
-                self.gallery_table.setItem(row, GalleryTableWidget.COL_ORDER, order_item)
-                
-                # Added time (column 6)
-                added_item = QTableWidgetItem(formatted_data['added_text'])
-                added_item.setFlags(added_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                added_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                if formatted_data['added_tooltip']:
-                    added_item.setToolTip(formatted_data['added_tooltip'])
-                # Apply font size
-                self.gallery_table.setItem(row, GalleryTableWidget.COL_ADDED, added_item)
+        """Complete row formatting in background.
 
-                # Finished time (column 7)
-                finished_item = QTableWidgetItem(formatted_data['finished_text'])
-                finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                finished_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                if formatted_data['finished_tooltip']:
-                    finished_item.setToolTip(formatted_data['finished_tooltip'])
-                self.gallery_table.setItem(row, GalleryTableWidget.COL_FINISHED, finished_item)
-                
-                # Apply minimal styling to uploaded count
-                uploaded_item = self.gallery_table.item(row, GalleryTableWidget.COL_UPLOADED)
-                if uploaded_item:
-                    uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                
-            except Exception as e:
-                log(f"Exception in main_window: {e}", level="error", category="ui")
-                raise  # Fail silently
-        
-        # Execute formatting in background, then apply on main thread
-        task = BackgroundTask(format_row_data)
-        task.signals.finished.connect(apply_formatted_data)
-        task.signals.error.connect(lambda err: None)  # Ignore errors
-        self._thread_pool.start(task, priority=-2)  # Lower priority than icon tasks
-        
-        # Size and transfer rate (expensive formatting) - only call if not already set
-        # Check if size column already has a value to avoid unnecessary updates during uploads
-        size_item_existing = self.gallery_table.item(row, GalleryTableWidget.COL_SIZE)
-        if (item.scan_complete and hasattr(item, 'total_size') and item.total_size > 0 and 
-            (not size_item_existing or not size_item_existing.text().strip())):
-            theme_mode = self._current_theme_mode
-            self._update_size_and_transfer_columns(row, item, theme_mode)
-    
+        Delegates to TableRowManager._populate_table_row_detailed()
+        """
+        self.table_row_manager._populate_table_row_detailed(row, item)
+
     def _update_size_and_transfer_columns(self, row: int, item: GalleryQueueItem, theme_mode: str):
-        """Update size and transfer columns with proper formatting"""
-        # Size (column 9)
-        size_bytes = int(getattr(item, 'total_size', 0) or 0)
-        if not self._format_functions_cached:
-            try:
-                self._format_binary_size = format_binary_size
-                self._format_binary_rate = format_binary_rate
-                self._format_functions_cached = True
-            except Exception:
-                self._format_binary_size = lambda x, **kwargs: f"{x} B"
-                self._format_binary_rate = lambda x, **kwargs: self._format_rate_consistent(x, 2)
-        
-        try:
-            size_text = self._format_binary_size(size_bytes, precision=2)
-        except Exception:
-            size_text = f"{size_bytes} B" if size_bytes else ""
-        size_item = QTableWidgetItem(size_text)
-        size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_SIZE, size_item)
+        """Update size and transfer columns with proper formatting.
 
-        # Transfer rate (column 10)
-        if item.status == "uploading" and hasattr(item, 'current_kibps') and item.current_kibps:
-            try:
-                transfer_text = self._format_binary_rate(float(item.current_kibps), precision=1)
-            except Exception:
-                transfer_text = f"{item.current_kibps:.1f} KiB/s" if item.current_kibps else ""
-        elif hasattr(item, 'final_kibps') and item.final_kibps:
-            try:
-                transfer_text = self._format_binary_rate(float(item.final_kibps), precision=1)
-            except Exception:
-                transfer_text = f"{item.final_kibps:.1f} KiB/s"
-        else:
-            transfer_text = ""
-        
-        xfer_item = QTableWidgetItem(transfer_text)
-        xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-        try:
-            if item.status == "uploading" and transfer_text:
-                xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
-            else:
-                if transfer_text:
-                    xfer_item.setForeground(QColor(0, 0, 0, 160))
-        except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise
-        self.gallery_table.setItem(row, GalleryTableWidget.COL_TRANSFER, xfer_item)
-    
+        Delegates to TableRowManager._update_size_and_transfer_columns()
+        """
+        self.table_row_manager._update_size_and_transfer_columns(row, item, theme_mode)
 
     def _initialize_table_from_queue(self, progress_callback=None):
-        """Initialize table from existing queue items - called once on startup
+        """Initialize table from existing queue items.
 
-        Args:
-            progress_callback: Optional callable(current, total) for progress updates
+        Delegates to TableRowManager._initialize_table_from_queue()
         """
-        log(f"_initialize_table_from_queue() called", level="debug", category="ui")
-
-        # Clear any existing mappings
-        self.path_to_row.clear()
-        self.row_to_path.clear()
-
-        # Get all items and build table
-        items = self.queue_manager.get_all_items()
-        log(f"Loading {len(items)} galleries from queue", level="info", category="ui")
-        self.gallery_table.setRowCount(len(items))
-
-        # PERFORMANCE OPTIMIZATION: Batch load all file host uploads in ONE query
-        # This replaces 989 individual queries with a single batch query,
-        # reducing startup time by 40-70 seconds
-        try:
-            self._file_host_uploads_cache = self.queue_manager.store.get_all_file_host_uploads_batch()
-            log(f"Batch loaded file host uploads for {len(self._file_host_uploads_cache)} galleries",
-                level="debug", category="performance")
-        except Exception as e:
-            log(f"Failed to batch load file host uploads: {e}", level="warning", category="performance")
-            self._file_host_uploads_cache = {}
-
-        # Set flag to defer expensive widget creation during initial load
-        self._initializing = True
-
-        # PERFORMANCE OPTIMIZATION: Disable table updates during bulk load
-        # This prevents per-row repaints and dramatically speeds up startup
-        self.gallery_table.setUpdatesEnabled(False)
-        self.gallery_table.setSortingEnabled(False)
-
-        try:
-            total_items = len(items)
-            for row, item in enumerate(items):
-                # Update mappings
-                self.path_to_row[item.path] = row
-                self.row_to_path[row] = item.path
-
-                # Populate the row (progress widgets deferred)
-                self._populate_table_row(row, item, total_items)
-
-                # Initialize scan state tracking
-                self._last_scan_states[item.path] = item.scan_complete
-
-                # Update progress every 10 galleries (batching for performance)
-                if progress_callback and (row + 1) % 10 == 0:
-                    try:
-                        progress_callback(row + 1, total_items)
-                    except Exception as e:
-                        log(f"Progress callback error at row {row+1}: {e}", level="error")
-
-            # Report final progress at completion
-            if progress_callback:
-                progress_callback(len(items), len(items))
-
-        except Exception as e:
-            log(f"Error in _initialize_table_from_queue: {e}", level="error", category="performance")
-            raise
-        finally:
-            # CRITICAL: ALWAYS re-enable updates, even on exceptions (prevents permanent UI freeze)
-            self.gallery_table.setSortingEnabled(True)
-            self.gallery_table.setUpdatesEnabled(True)
-
-        # Create progress widgets in background after initial load
-        self._initializing = False
-        QTimer.singleShot(100, lambda: self._create_deferred_widgets(len(items)))
-
-        # After building the table, apply the current tab filter and emit tab_changed to update counts
-        if hasattr(self.gallery_table, 'refresh_filter'):
-            def _apply_initial_filter():
-                self.gallery_table.refresh_filter()
-                # Emit tab_changed signal to trigger button count and progress updates
-                if hasattr(self.gallery_table, 'tab_changed') and hasattr(self.gallery_table, 'current_tab'):
-                    self.gallery_table.tab_changed.emit(self.gallery_table.current_tab)
-            QTimer.singleShot(0, _apply_initial_filter)
+        self.table_row_manager._initialize_table_from_queue(progress_callback)
 
     def _create_deferred_widgets(self, total_rows: int):
-        """Create deferred widgets (progress bars, action buttons) after initial load"""
-        log(f"Creating deferred widgets for {total_rows} items...", level="debug", category="ui")
+        """Create deferred widgets (progress bars, action buttons) after initial load.
 
-        for row in range(min(total_rows, self.gallery_table.rowCount())):
-            path = self.row_to_path.get(row)
-            if path:
-                item = self.queue_manager.get_item(path)
-                if item:
-                    # Create progress widget
-                    progress_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_PROGRESS)
-                    if not isinstance(progress_widget, TableProgressWidget):
-                        progress_widget = TableProgressWidget()
-                        self.gallery_table.setCellWidget(row, GalleryTableWidget.COL_PROGRESS, progress_widget)
-                        progress_widget.update_progress(item.progress, item.status)
-
-            # Process events every 20 rows to keep UI responsive during background creation
-            if row % 20 == 0:
-                QApplication.processEvents()
-            if row % 100 == 0:
-                log(f"{row}/{total_rows} deferred widgets created...", level="debug", category="ui")
-        log(f"Finished creating {total_rows} deferred widgets", level="debug", category="ui")
+        Delegates to TableRowManager._create_deferred_widgets()
+        """
+        self.table_row_manager._create_deferred_widgets(total_rows)
 
     def _update_scanned_rows(self):
-        """Update only rows where scan completion status has changed - ORIGINAL VERSION"""
-        items = self.queue_manager.get_all_items()
-        updated_any = False
-        
-        for item in items:
-            # Check if scan completion status changed
-            last_state = self._last_scan_states.get(item.path, False)
-            current_state = item.scan_complete
-            
-            # Check for scan completion changes
-            
-            if last_state != current_state:
-                # Scan completion status changed, update this row
-                self._last_scan_states[item.path] = current_state
-                updated_any = True
-                #print(f"DEBUG: _update_scanned_rows - Scan state changed for {item.path}: {last_state} -> {current_state}, status={item.status}")
-                # Scan state changed
-                
-                # Only update the specific row that changed
-                row = self.path_to_row.get(item.path)
-                if row is not None and row < self.gallery_table.rowCount():
-                    # Update only the columns that need updating for this specific item
-                    # Upload count (column 2) - ONLY update existing items, never create new ones
-                    if item.total_images > 0:
-                        uploaded_text = f"{item.uploaded_images}/{item.total_images}"
-                        existing_item = self.gallery_table.item(row, GalleryTableWidget.COL_UPLOADED)
-                        if existing_item:
-                            existing_item.setText(uploaded_text)
-                        # DO NOT create new items - font issues
-                    
-                    # Size (column 9) - ONLY update existing items, never create new ones
-                    if item.total_size > 0:
-                        size_text = self._format_size_consistent(item.total_size)
-                        existing_item = self.gallery_table.item(row, GalleryTableWidget.COL_SIZE)
-                        if existing_item:
-                            existing_item.setText(size_text)
+        """Update only rows where scan completion status has changed.
 
-                        # DO NOT create new items - font issues
-                    
-                    # Update status column
-                    self._set_status_cell_icon(row, item.status)
-                    self._set_status_text_cell(row, item.status)
-
-                    # Update action column for any status change
-                    action_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_ACTION)
-                    if isinstance(action_widget, ActionButtonWidget):
-                        log(f"Updating action buttons for {item.path}, status: {item.status}", level="debug")
-                        action_widget.update_buttons(item.status)
-                        if item.status == "ready":
-                            action_widget.start_btn.setEnabled(True)
-        
-        # Update button counts if any scans completed (status may have changed to ready)
-        if updated_any:
-            QTimer.singleShot(0, self.progress_tracker._update_button_counts)
+        Delegates to TableRowManager._update_scanned_rows()
+        """
+        self.table_row_manager._update_scanned_rows()
 
     def _get_current_tab_items(self):
         """Get items filtered by current tab"""
@@ -5998,6 +4970,8 @@ class ImxUploadGUI(QMainWindow):
             self.update_timer.stop()
         if hasattr(self, 'bandwidth_status_timer') and self.bandwidth_status_timer.isActive():
             self.bandwidth_status_timer.stop()
+        if hasattr(self, '_upload_animation_timer') and self._upload_animation_timer.isActive():
+            self._upload_animation_timer.stop()
 
         # Stop worker monitoring
         if hasattr(self, 'worker_status_widget'):
