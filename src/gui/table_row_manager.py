@@ -189,7 +189,7 @@ class TableRowManager(QObject):
         theme_mode = mw._current_theme_mode
 
         # Order number - show database ID (persistent, matches logs like "gallery 1555")
-        order_item = NumericTableWidgetItem(item.db_id if item.db_id else 0)
+        order_item = NumericTableWidgetItem(str(item.db_id) if item.db_id else "0")
         order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         mw.gallery_table.setItem(row, _Col.ORDER, order_item)
@@ -408,7 +408,7 @@ class TableRowManager(QObject):
             """Prepare formatted data in background thread"""
             try:
                 formatted_data = {}
-                formatted_data['order'] = item.db_id if item.db_id else 0
+                formatted_data['order'] = str(item.db_id) if item.db_id else "0"
                 formatted_data['added_text'], formatted_data['added_tooltip'] = format_timestamp_for_display(item.added_time)
                 formatted_data['finished_text'], formatted_data['finished_tooltip'] = format_timestamp_for_display(item.finished_time)
                 return formatted_data
@@ -478,7 +478,7 @@ class TableRowManager(QObject):
         mw = self._main_window
         try:
             # Order number (column 0) - use db_id for consistent ordering
-            order_item = NumericTableWidgetItem(item.db_id if item.db_id else 0)
+            order_item = NumericTableWidgetItem(str(item.db_id) if item.db_id else "0")
             order_item.setFlags(order_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             order_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             mw.gallery_table.setItem(row, _Col.ORDER, order_item)

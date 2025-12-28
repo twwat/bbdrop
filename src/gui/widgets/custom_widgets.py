@@ -604,7 +604,7 @@ class GalleryTableWidget(QTableWidget):
         self.setItem(row, 2, QTableWidgetItem(gallery_data.get('path', '')))
         
         # Images
-        images_item = NumericTableWidgetItem(gallery_data.get('total_images', 0))
+        images_item = NumericTableWidgetItem(str(gallery_data.get('total_images', 0)))
         self.setItem(row, 3, images_item)
         
         # Size
