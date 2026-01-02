@@ -1,0 +1,178 @@
+name: Build Releases
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v0.6.15
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      version:
+        description: 'Version for the release (e.g., 0.6.15)'
+        required: false
+        default: 'dev'
+
+env:
+  PYTHON_VERSION: '3.12'  # Use 3.12 for broader compatibility (3.14 not yet on runners)
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: imxup-windows
+            asset_ext: .zip
+          - os: ubuntu-22.04
+            artifact_name: imxup-linux
+            asset_ext: .tar.gz
+          - os: macos-13  # Intel Mac
+            artifact_name: imxup-macos-intel
+            asset_ext: .tar.gz
+          - os: macos-14  # Apple Silicon
+            artifact_name: imxup-macos-arm64
+            asset_ext: .tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      # Linux: Install system dependencies for PyQt6 and pycurl
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libxcb-cursor0 \
+            libxkbcommon-x11-0 \
+            libegl1 \
+            libgl1-mesa-glx \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0
+
+      # macOS: Install curl with openssl
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install curl openssl
+          echo "PYCURL_SSL_LIBRARY=openssl" >> $GITHUB_ENV
+          echo "LDFLAGS=-L$(brew --prefix openssl)/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(brew --prefix openssl)/include" >> $GITHUB_ENV
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      # Windows build
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          echo Building ImXup for Windows...
+          if exist dist rmdir /s /q dist
+          if exist build rmdir /s /q build
+          pyinstaller imxup.spec --clean -y
+
+          echo Copying assets to dist...
+          xcopy /E /I /Y assets dist\assets
+          xcopy /E /I /Y docs dist\docs
+          copy LICENSE dist\
+          copy README.md dist\
+          copy requirements.txt dist\
+
+      # Linux/macOS build
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          echo "Building ImXup for ${{ runner.os }}..."
+          rm -rf dist build
+          pyinstaller imxup.spec --clean -y
+
+          echo "Copying assets to dist..."
+          cp -r assets dist/
+          cp -r docs dist/
+          cp LICENSE README.md requirements.txt dist/
+
+      # Verify pycurl (Windows)
+      - name: Verify pycurl (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          echo Checking for pycurl files...
+          dir /s dist\*.pyd 2>nul | findstr pycurl || echo "Warning: pycurl.pyd not found"
+          dir /s dist\*curl*.dll 2>nul || echo "Warning: libcurl DLLs not found"
+
+      # Verify pycurl (Unix)
+      - name: Verify pycurl (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          echo "Checking for pycurl files..."
+          find dist -name "pycurl*" -type f || echo "Warning: pycurl not found"
+          find dist -name "*curl*" -type f || echo "Warning: libcurl not found"
+
+      # Package Windows
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd dist
+          Compress-Archive -Path * -DestinationPath "../${{ matrix.artifact_name }}.zip" -Force
+
+      # Package Unix
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          tar -czvf "../${{ matrix.artifact_name }}.tar.gz" *
+
+      # Upload artifact
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}${{ matrix.asset_ext }}
+          retention-days: 30
+
+  # Create release when triggered by tag
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display artifacts
+        run: ls -la artifacts/*
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            artifacts/imxup-windows/*.zip
+            artifacts/imxup-linux/*.tar.gz
+            artifacts/imxup-macos-intel/*.tar.gz
+            artifacts/imxup-macos-arm64/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
