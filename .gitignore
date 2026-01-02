@@ -116,7 +116,6 @@ show_env.sh
 scripts/
 find_pycurl.py
 hooks/hook-pycurl.py
-imxup.spec
 package-lock.json
 package.json
 pyrightconfig.json

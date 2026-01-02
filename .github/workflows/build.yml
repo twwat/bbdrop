@@ -172,9 +172,31 @@ jobs:
           path: ${{ matrix.artifact_name }}${{ matrix.asset_ext }}
           retention-days: 30
 
+  # Create source distribution
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create source archive
+        run: |
+          VERSION="${{ github.ref_name }}"
+          [[ "$VERSION" != v* ]] && VERSION="dev"
+          git archive --format=tar.gz --prefix=imxup-${VERSION}-source/ HEAD -o imxup-${VERSION}-source.tar.gz
+          echo "Created source archive:"
+          ls -lh imxup-*-source.tar.gz
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: imxup-source
+          path: imxup-*-source.tar.gz
+          retention-days: 30
+
   # Create release when triggered by tag
   release:
-    needs: build
+    needs: [build, source]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -196,5 +218,6 @@ jobs:
             artifacts/imxup-windows/*.zip
             artifacts/imxup-linux/*.tar.gz
             artifacts/imxup-macos-arm64/*.tar.gz
+            artifacts/imxup-source/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
