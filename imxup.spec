@@ -36,7 +36,7 @@ if sys.platform == 'win32':
         pyd_files = glob.glob(os.path.join(site_packages, pyd_pattern))
         for pyd_file in pyd_files:
             additional_binaries.append((pyd_file, '.'))
-            print(f"✓ Found .pyd: {os.path.basename(pyd_file)}")
+            print(f"[OK] Found .pyd: {os.path.basename(pyd_file)}")
 
         # Find delvewheel DLLs with HASHED names in site-packages root
         # Pattern: libcurl-[hash].dll, libssl-3-x64-[hash].dll, etc.
@@ -54,14 +54,14 @@ if sys.platform == 'win32':
             dll_files = glob.glob(os.path.join(site_packages, pattern))
             for dll_file in dll_files:
                 additional_binaries.append((dll_file, '.'))
-                print(f"✓ Found .dll: {os.path.basename(dll_file)}")
+                print(f"[OK] Found .dll: {os.path.basename(dll_file)}")
 
         if not pyd_files:
-            print(f"⚠ WARNING: No pycurl .pyd file found in {site_packages}")
-            print(f"⚠ Run: python find_pycurl.py to diagnose")
+            print(f"[WARN] No pycurl .pyd file found in {site_packages}")
+            print(f"[WARN] Run: python find_pycurl.py to diagnose")
 
     except Exception as e:
-        print(f"⚠ Warning: Could not locate pycurl DLLs: {e}")
+        print(f"[WARN] Could not locate pycurl DLLs: {e}")
         import traceback
         traceback.print_exc()
 
@@ -80,9 +80,9 @@ elif sys.platform.startswith('linux'):
             # Check if already in pycurl_binaries
             if not any(pycurl_path in str(b) for b in pycurl_binaries):
                 additional_binaries.append((pycurl_path, '.'))
-                print(f"✓ Added pycurl.so: {pycurl_path}")
+                print(f"[OK] Added pycurl.so: {pycurl_path}")
             else:
-                print(f"✓ pycurl.so already in binaries")
+                print(f"[OK] pycurl.so already in binaries")
 
         # Find libcurl dependencies using ldd
         try:
@@ -97,9 +97,9 @@ elif sys.platform.startswith('linux'):
                         lib_path = parts[1].split('(')[0].strip()
                         if os.path.exists(lib_path):
                             additional_binaries.append((lib_path, '.'))
-                            print(f"✓ Added libcurl dependency: {lib_path}")
+                            print(f"[OK] Added libcurl dependency: {lib_path}")
         except subprocess.CalledProcessError as e:
-            print(f"⚠ Warning: ldd failed: {e}")
+            print(f"[WARN] ldd failed: {e}")
 
             # Fallback: common libcurl locations on Linux
             common_paths = [
@@ -111,11 +111,11 @@ elif sys.platform.startswith('linux'):
             for lib_path in common_paths:
                 if os.path.exists(lib_path):
                     additional_binaries.append((lib_path, '.'))
-                    print(f"✓ Added libcurl (fallback): {lib_path}")
+                    print(f"[OK] Added libcurl (fallback): {lib_path}")
                     break
 
     except Exception as e:
-        print(f"⚠ Warning: Could not locate pycurl on Linux: {e}")
+        print(f"[WARN] Could not locate pycurl on Linux: {e}")
 
 # Combine all binaries
 all_binaries = pycurl_binaries + additional_binaries
