@@ -1,11 +1,11 @@
 # ImXup - Multi-Host Gallery Uploader
 
-![Version](https://img.shields.io/badge/version-0.6.15-blue.svg)
+![Version](https://img.shields.io/badge/version-0.7.01-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)
 
-A powerful PyQt6-based desktop application for uploading image galleries to imx.to and multiple file hosting services with advanced features including drag-and-drop, queue management, batch operations, and comprehensive BBCode template support.
+A modern desktop upload manager application for uploading to imx.to + multiple file hosts, and generating BBcode for  ing services with advanced features including drag-and-drop, queue management, batch operations, and comprehensive BBCode template support.
 
 ---
 
@@ -26,21 +26,28 @@ A powerful PyQt6-based desktop application for uploading image galleries to imx.
 
 ## Key Features
 
-### Core Upload Capabilities
+### Core Imx.to Upload Capabilities
 - **Drag & Drop Interface**: Simply drag folders into the GUI to queue uploads
-- **Batch Processing**: Upload multiple galleries simultaneously with parallel workers
+- **Batch Processing**: Efficient batch operations 
+- **Concurrent Uploads**: Upload multiple files to multiple hosts simultaneously with parallel workers
 - **Progress Tracking**: Real-time progress bars for individual files and overall completion
 - **Smart Resume**: Automatically resume interrupted uploads
 - **Duplicate Detection**: Intelligent detection of previously uploaded galleries
 
-### Multi-Host File Upload (v0.6.00)
-Upload galleries to 6 premium file hosting services:
+### Multi-Host File Uploads
+
+
+### Multi-Host File Upload
+Optionally upload galleries to 6 file hosting services:
 - **Fileboom** (fboom.me) - API key authentication, 10GB files, 10TB storage
 - **Filedot** (filedot.to) - Session-based with CAPTCHA handling
 - **Filespace** (filespace.com) - Cookie-based sessions
 - **Keep2Share** (k2s.cc) - API key authentication, same features as Fileboom
 - **Rapidgator** (rapidgator.net) - Token login, 5GB files, MD5 verification
 - **Tezfiles** (tezfiles.com) - Session-based authentication
+
+### Security Features
+
 
 ### Advanced Features
 - **BBCode Template System**: Create custom templates with 18 dynamic placeholders
@@ -74,6 +81,19 @@ Upload galleries to 6 premium file hosting services:
 | **Tezfiles** | Session | Varies | Varies | Token extraction |
 
 *All hosts support automatic retry, connection pooling, and token caching*
+
+## Security
+
+| Feature | Implementation |
+|---------|---------------|
+| **Credential Storage** | OS Keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service) with Fernet AES-128-CBC fallback |
+| **Password Hashing** | PBKDF2-HMAC-SHA256 (100,000 iterations) with cryptographic salt |
+| **Transport Security** | TLS 1.2+ with SSL certificate verification via certifi CA bundle |
+| **Token Management** | Encrypted token caching with configurable TTL and automatic refresh |
+| **Database Security** | Parameterized SQL queries, SQLite WAL mode |
+| **Thread Safety** | 60+ threading locks protecting shared state |
+| **Timing Attack Prevention** | Constant-time password comparison via `secrets.compare_digest()` |
+| **Input Validation** | Path normalization, SQL wildcard escaping, column whitelist validation |
 
 ---
 
@@ -293,7 +313,7 @@ Comprehensive documentation is available in the `docs/` directory:
 - **Python**: 3.14 or higher
 - **RAM**: 512 MB
 - **Disk**: 100 MB free space
-- **Network**: Stable internet connection
+- **Network**: Semi-stable internet connection faster than dial-up
 
 ### Recommended
 - **OS**: Windows 11 or Linux (latest)

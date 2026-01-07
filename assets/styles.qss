@@ -41,21 +41,21 @@ QTableWidget[class="gallery-table"]    { min-height: 400px; }
 QProgressBar[class="overall-progress"] { max-height: 25px; font-size: 12px; font-weight: bold; border-radius: 4px; }
 QProgressBar[class="table-progress"]   { min-height: 15px; max-height: 15px; border-radius: 4px; }
 QGroupBox[class="progress-group"], QGroupBox[class="stats-group"], QGroupBox[class="speed-group"] { max-height: 80px; }
-QGroupBox[class="settings-group"]      { min-height: 200px; }
+QGroupBox[class="settings-group"]      { min-height: 220px; }
 /*QPushButton[class="quick-settings-btn"] { min-height: 28px; max-height: 28px; margin: 1px; font-weight: bold; font-size: 12px; }
-QPushButton[class="theme-toggle-btn"]  { min-height: 28px; max-height: 32px; margin: 1px; max-width: 38px; min-width: 32px; }
-QPushButton[class="log-viewer-btn"]  { min-height: 28px; max-height: 32px; margin: 1px; max-width: 34px; }*/
+QPushButton[class="theme-toggle-btn"]  { min-height: 30px; max-height: 32px; margin: 1px; max-width: 75px; min-width: 32px; }
+QPushButton[class="log-viewer-btn"]  { min-height: 28px; max-height: 28px; margin: 1px; max-width: 34px; }*/
 
 
 /* Quick settings buttons - compact mode (icon-only) */
-QPushButton[class="quick-settings-btn"] { min-height: 26px; max-height: 32px; margin: 1px; min-width: 32px; font-weight: 700; font-size: 12px; }
+QPushButton[class="quick-settings-btn"] { min-height: 28px; max-height: 28px; margin: 1px; min-width: 32px; font-weight: 600; font-size: 12px; }
 QPushButton[class="theme-toggle-btn"]  { min-height: 30px; max-height: 32px; margin: 1px;  }
-QPushButton[class="log-viewer-btn"]  { min-height: 26px; max-height: 32px; margin: 1px;  }
+QPushButton[class="log-viewer-btn"]  { min-height: 28px; max-height: 28px; margin: 1px;  }
 
 /* Quick settings buttons - expanded mode (with labels) */
-QPushButton[class="quick-settings-btn-expanded"] { min-height: 26px; max-height: 34px; margin: 1px; font-weight: 700; font-size: 12px; }
+QPushButton[class="quick-settings-btn-expanded"] { min-height: 28px; max-height: 28px; margin: 1px; font-weight: 600; font-size: 12px; }
 
-QPushButton[class="comprehensive-settings"] { min-height: 30px; max-height: 34px; min-width: 34px; font-weight: 700; margin: 1px; }
+QPushButton[class="comprehensive-settings"] { min-height: 30px; max-height: 32px; min-width: 34px; font-weight: 700; margin: 1px; }
 
 /* Action buttons at bottom: Start all, Pause All, Clear Completed, Browse */
 QPushButton[class="main-action-btn"]   { min-height: 22px; max-height: 28px; font-weight: 700; margin: 1px 6px; font-size: 13px; vertical-align: middle; padding: 2px; }
@@ -114,9 +114,9 @@ QLabel[class="tab-description"] { color: #666666; }
 
 /* Tables */
 QTableWidget                      { background-color: #ffffff; color: #222222; gridline-color: #cceeff; border-radius: 4px; alternate-background-color: rgba(240, 240, 240, 0.3); }
-QTableWidget::item                { background-color: #ffffff; color: #222222; border: none; }
+QTableWidget::item                { background-color: #ffffff; border: none; }  /* color removed to allow setForeground() to work for Online(IMX) column */
 QTableWidget::item:hover          { background-color: #e5f3ff; color: #000000; gridline-color: #000;  }
-QTableWidget::item:selected       { background-color: #d4e6f4; color: #000000; gridline-color: #91d0fa;  }
+QTableWidget::item:selected       { background-color: #d4e6f4; color: #000000; gridline-color: #82bbe1; /*#91d0fa;*/  }
 /*QTableWidget::item:selected     { background-color: #2980b9; color: #ffffff; border: none; } */
 
 /* Log, Main GUI window */
@@ -349,9 +349,9 @@ QLabel[class="tab-description"] { color: #aaaaaa; }
 
 /* Tables */
 QTableWidget                      { background-color: #1e1e1e; color: #e6e6e6; gridline-color: #0d3454; border: 1px solid #666666; border-radius: 4px; alternate-background-color: rgba(64, 64, 64, 0.35); }
-QTableWidget::item                { background-color: #1e1e1e; color: #e6e6e6; border: none;  }
+QTableWidget::item                { background-color: #1e1e1e; border: none; }  /* color removed to allow setForeground() to work for Online(IMX) column */
 /* QTableWidget::item:selected       { background-color: #1f6aa5; color: #ffffff; } */
-QTableWidget::item:selected       { background-color: #0f3553; color: #ffffff; border: none; }
+QTableWidget::item:selected       { background-color: #0f3553; color: #ffffff; }
 
 /* Prevent icon dimming/opacity changes in selected table items */
 /*QTableWidget::item:selected { opacity: 1.0; }*/

@@ -293,7 +293,6 @@ CORE_COLUMNS = [
     ColumnConfig('files_remaining', 'queue (files)', 90, ColumnType.COUNT, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('bytes_remaining', 'queue (bytes)', 110, ColumnType.BYTES, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('storage', 'storage', 140, ColumnType.WIDGET, default_visible=True, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('settings', '', 28, ColumnType.WIDGET, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
 ]
 
 # Metric columns (optional, from MetricsStore)
@@ -1361,13 +1360,27 @@ class WorkerStatusWidget(QWidget):
             # Render each column based on its configuration
             for col_idx, col_config in enumerate(self._active_columns):
                 if col_config.id == 'icon':
-                    # Icon column - stores worker_id as key for _workers dict lookup
-                    icon_item = QTableWidgetItem()
-                    icon_item.setIcon(self._get_host_icon(worker.hostname, worker.worker_type))
-                    icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
-                    icon_item.setToolTip(worker.display_name)
-                    self.status_table.setItem(row_idx, col_idx, icon_item)
+                    # Icon column - clickable button that opens host settings
+                    icon_btn = QPushButton()
+                    icon_btn.setIcon(self._get_host_icon(worker.hostname, worker.worker_type))
+                    icon_btn.setFixedSize(26, 26)
+                    icon_btn.setIconSize(QSize(20, 20))
+                    icon_btn.setFlat(True)
+                    icon_btn.setStyleSheet("QPushButton { border: none; padding: 2px; } QPushButton:hover { background-color: rgba(128,128,128,0.3); border-radius: 4px; }")
+                    icon_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                    icon_btn.setToolTip(f"Configure {worker.display_name}")
+                    icon_btn.setProperty("worker_id", worker.worker_id)
+                    icon_btn.setProperty("worker_type", worker.worker_type)
+                    icon_btn.setProperty("hostname", worker.hostname)
+                    icon_btn.clicked.connect(self._on_icon_button_clicked)
+
+                    container = QWidget()
+                    layout = QHBoxLayout(container)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    layout.addWidget(icon_btn)
+                    container.setProperty("worker_id", worker.worker_id)
+                    self.status_table.setCellWidget(row_idx, col_idx, container)
 
                 elif col_config.id == 'hostname':
                     # Hostname column with auto-upload indicator and optional logo
@@ -1537,30 +1550,6 @@ class WorkerStatusWidget(QWidget):
                         )
                     self.status_table.setCellWidget(row_idx, col_idx, storage_widget)
 
-                elif col_config.id == 'settings':
-                    # Settings button column
-                    settings_btn = QPushButton()
-                    settings_btn.setIcon(self._icon_cache.get('settings', QIcon()))
-                    settings_btn.setFixedSize(20, 20)
-                    settings_btn.setIconSize(QSize(14, 14))
-                    settings_btn.setStyleSheet("padding: 2px;")
-                    settings_btn.setFlat(True)
-                    settings_btn.setToolTip(f"Configure {worker.display_name}")
-                    settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                    settings_btn.setProperty("worker_id", worker.worker_id)
-                    settings_btn.setProperty("worker_type", worker.worker_type)
-                    settings_btn.setProperty("hostname", worker.hostname)
-                    settings_btn.clicked.connect(lambda checked, w_id=worker.worker_id, w_type=worker.worker_type, host=worker.hostname:
-                                                self._on_settings_clicked(w_id, w_type, host))
-
-                    # Center the button in the cell
-                    btn_widget = QWidget()
-                    btn_layout = QHBoxLayout(btn_widget)
-                    btn_layout.setContentsMargins(0, 0, 0, 0)
-                    btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    btn_layout.addWidget(settings_btn)
-                    self.status_table.setCellWidget(row_idx, col_idx, btn_widget)
-
                 elif col_config.metric_key:
                     # Metric column - get value from cache
                     metrics = self._host_metrics_cache.get(worker.hostname.lower(), {})
@@ -1639,6 +1628,21 @@ class WorkerStatusWidget(QWidget):
             self.status_table.selectRow(row_to_select)
 
         self.status_table.blockSignals(False)
+
+    def _on_icon_button_clicked(self):
+        """Handle icon button click using sender properties.
+
+        Retrieves worker info from the button's properties to avoid lambda
+        closure memory leak issues. This is called when any icon button in
+        the worker table is clicked.
+        """
+        btn = self.sender()
+        if btn:
+            worker_id = btn.property("worker_id")
+            worker_type = btn.property("worker_type")
+            hostname = btn.property("hostname")
+            if worker_id and worker_type and hostname:
+                self._on_settings_clicked(worker_id, worker_type, hostname)
 
     def _on_settings_clicked(self, worker_id: str, worker_type: str, hostname: str):
         """Handle settings button click for a worker.
@@ -1840,13 +1844,22 @@ class WorkerStatusWidget(QWidget):
             row = self.status_table.currentRow()
             icon_col_idx = self._get_column_index('icon')
             if icon_col_idx >= 0:
-                icon_item = self.status_table.item(row, icon_col_idx)
-                if icon_item:
-                    worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
+                # Check cellWidget first (icon is now a QPushButton in a container)
+                worker_id = None
+                widget = self.status_table.cellWidget(row, icon_col_idx)
+                if widget:
+                    worker_id = widget.property("worker_id")
+                else:
+                    # Fallback to item (legacy or if widget not found)
+                    icon_item = self.status_table.item(row, icon_col_idx)
+                    if icon_item:
+                        worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
+
+                if worker_id:
                     self._selected_worker_id = worker_id
                     # Thread-safe lookup
                     with QMutexLocker(self._workers_mutex):
-                        if worker_id and worker_id in self._workers:
+                        if worker_id in self._workers:
                             worker = self._workers[worker_id]
                             self.worker_selected.emit(worker_id, worker.worker_type)
         else:
@@ -1893,16 +1906,21 @@ class WorkerStatusWidget(QWidget):
         if row < 0:
             return
 
-        # Get worker_id from icon column
+        # Get worker_id from icon column - check cellWidget first (icon is now a QPushButton)
         worker_id = None
         icon_col_idx = self._get_column_index('icon')
         if icon_col_idx >= 0:
-            icon_item = self.status_table.item(row, icon_col_idx)
-            if icon_item:
-                worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
+            widget = self.status_table.cellWidget(row, icon_col_idx)
+            if widget:
+                worker_id = widget.property("worker_id")
+            else:
+                # Fallback to item (legacy or if widget not found)
+                icon_item = self.status_table.item(row, icon_col_idx)
+                if icon_item:
+                    worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
 
         if not worker_id:
-            log.warning(f"Double-click: no worker_id found for row {row}")
+            log(f"Double-click: no worker_id found for row {row}", level="warning", category="ui")
             return
 
         # Handle placeholder workers (not in _workers dict)
@@ -1918,7 +1936,7 @@ class WorkerStatusWidget(QWidget):
         # Thread-safe lookup for active workers in _workers dict
         with QMutexLocker(self._workers_mutex):
             if worker_id not in self._workers:
-                log.warning(f"Double-click: worker_id={worker_id} not in active workers (row {row})")
+                log(f"Double-click: worker_id={worker_id} not in active workers (row {row})", level="warning", category="ui")
                 return
             worker = self._workers[worker_id]
 

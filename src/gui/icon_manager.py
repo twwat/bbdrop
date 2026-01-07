@@ -66,6 +66,7 @@ class IconManager:
         'help':                 ['help-light.png',              'help-dark.png'],
         'hooks':                ['hooks-light.png',             'hooks-dark.png'],
         'toggle_theme':         ['toggle_theme-light.png',      'toggle_theme-dark.png'],
+        'statistics':           ['statistics-light.png',        'statistics-dark.png'],
         'log_viewer':           ['log_viewer-light.png',        'log_viewer-dark.png'],
         'radio_check':          ['radio_check-light.png',       'radio_check-dark.png'],
         'check':                ['check-light.png',             'check-dark.png'],

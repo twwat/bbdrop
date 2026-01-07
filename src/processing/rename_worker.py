@@ -8,6 +8,7 @@ Extends with image status checking via imx.to/user/moderate endpoint.
 import threading
 import queue
 import time
+import re
 import requests
 import configparser
 import os
@@ -114,6 +115,12 @@ class RenameWorker(QObject):
     status_check_progress = pyqtSignal(int, int)  # current, total
     status_check_completed = pyqtSignal(dict)     # results dict
     status_check_error = pyqtSignal(str)          # error_message
+    quick_count_available = pyqtSignal(int, int)  # online_found, total_submitted
+
+    # Constants for status check streaming
+    STATUS_CHECK_CHUNK_SIZE = 4096  # Bytes per chunk when streaming response
+    STATUS_CHECK_MAX_SCAN_SIZE = 100 * 1024  # 100KB - scan limit for finding count
+    STATUS_CHECK_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB memory threshold
 
     def __init__(self):
         """Initialize RenameWorker with own web session.
@@ -559,6 +566,10 @@ class RenameWorker(QObject):
             self.status_check_completed.emit({})
             return
 
+        # Clear cancellation flag BEFORE queuing (not in _perform_status_check)
+        # This ensures cancellations between queuing and processing are not lost
+        self._status_check_cancelled.clear()
+
         # Queue the status check request
         self.status_check_queue.put(galleries_data)
         log(f"Queued status check for {len(galleries_data)} galleries", level="debug", category="status_check")
@@ -608,8 +619,68 @@ class RenameWorker(QObject):
                 log(f"StatusCheckWorker error: {e}", level="error", category="status_check")
                 continue
 
+    def _extract_image_id(self, url: str) -> Optional[str]:
+        """Extract image ID from imx.to URL.
+
+        Examples:
+            https://imx.to/i/6dg3e2 -> 6dg3e2
+            https://i.imx.to/thumb/6dg3e2.jpg -> 6dg3e2
+
+        Args:
+            url: An imx.to image URL
+
+        Returns:
+            The image ID string, or None if not found
+        """
+        match = re.search(r'/(?:i|thumb)/([a-zA-Z0-9]+)', url)
+        if match:
+            return match.group(1)
+        return None
+
+    def _parse_found_count(self, html: str) -> int:
+        """Parse 'Found: X images' count from response HTML.
+
+        Args:
+            html: Response HTML from imx.to/user/moderate
+
+        Returns:
+            Number of images found, or 0 if not parseable
+        """
+        match = re.search(r'Found:\s*(\d+)\s*images?', html, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return 0
+
+    def _parse_online_image_ids(self, html: str) -> set:
+        """Parse online image IDs from response textarea.
+
+        Extracts image IDs from the textarea element with class 'imageallcodes'
+        in the imx.to/user/moderate response.
+
+        Args:
+            html: Response HTML from imx.to/user/moderate
+
+        Returns:
+            Set of image ID strings that are online
+        """
+        ids = set()
+        # Find the last textarea with class imageallcodes
+        textarea_match = re.search(
+            r'<textarea[^>]*class=["\']imageallcodes["\'][^>]*>(.*?)</textarea>',
+            html, re.DOTALL | re.IGNORECASE
+        )
+        if textarea_match:
+            textarea_content = textarea_match.group(1)
+            for match in re.finditer(r'/(?:i|thumb)/([a-zA-Z0-9]+)', textarea_content):
+                ids.add(match.group(1))
+        return ids
+
     def _perform_status_check(self, galleries_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Perform the actual status check against imx.to/user/moderate.
+
+        Uses streaming to detect "Found: X images" early and exit without
+        downloading the full response (30MB+) when all images are online.
+        Falls back to ID-based matching when some images are offline.
 
         Args:
             galleries_data: List of gallery dicts with image_urls
@@ -620,8 +691,8 @@ class RenameWorker(QObject):
         Raises:
             Exception: On network or parsing errors
         """
-        # Reset cancellation flag at start
-        self._status_check_cancelled.clear()
+        # NOTE: Cancellation flag is cleared in check_image_status() BEFORE queuing,
+        # not here. This ensures cancellations between queuing and processing are honored.
 
         # Collect all URLs and build mapping back to galleries
         all_urls: List[str] = []
@@ -674,68 +745,266 @@ class RenameWorker(QObject):
 
         log(f"POSTing to {self.web_url}/user/moderate with {total_urls} URLs", level="debug", category="status_check")
 
-        response = self.session.post(
-            f"{self.web_url}/user/moderate",
-            data=form_data,
-            timeout=300,  # 5 minute timeout for large requests with thousands of galleries
-            verify=True
+        _t0 = time.perf_counter()
+
+        # Use streaming to detect "Found: X images" early and potentially avoid
+        # downloading the entire response (which can be 30MB+ for large galleries)
+        response_text, found_count, early_exit = self._stream_and_detect_found_count(
+            form_data, total_urls, _t0
         )
 
-        if response.status_code == 403:
-            # Session expired - try re-auth
-            log("Status check: Session expired (403), attempting re-auth", level="debug", category="status_check")
-            if self._attempt_reauth_with_rate_limit():
-                # Check if cancelled before retry
-                if self._status_check_cancelled.is_set():
-                    log("Status check cancelled before retry", level="debug", category="status_check")
-                    return {}
-                # Retry the request
-                response = self.session.post(
-                    f"{self.web_url}/user/moderate",
-                    data=form_data,
-                    timeout=300,  # 5 minute timeout for large requests
-                    verify=True
-                )
-            else:
-                raise Exception("Authentication expired and re-auth failed")
+        if response_text is None:
+            # Error occurred during streaming (e.g., cancelled, auth failure)
+            return {}
 
-        if response.status_code != 200:
-            raise Exception(f"Server returned HTTP {response.status_code}")
+        _t1 = time.perf_counter()
+        if early_exit:
+            log(f"DEBUG TIMING: Streaming early exit took {_t1 - _t0:.2f}s (avoided full download)",
+                level="info", category="status_check")
+        else:
+            log(f"DEBUG TIMING: Full response download took {_t1 - _t0:.2f}s, response size: {len(response_text)} bytes",
+                level="info", category="status_check")
 
-        if 'DDoS-Guard' in response.text:
-            raise Exception("DDoS-Guard protection active - please try again later")
-
-        # Get response text for URL presence checking
-        response_text = response.text
+        log(f"Response shows {found_count} images found out of {total_urls} submitted",
+            level="debug", category="status_check")
 
         # Emit progress (all URLs processed)
         self.status_check_progress.emit(total_urls, total_urls)
 
-        # Build results per gallery by checking if each URL appears in the response
-        # URLs that are online will be present in the response textarea
-        results: Dict[str, Dict[str, Any]] = {}
-        total_online = 0
+        # FAST PATH: If all images found, all are online
+        if found_count == total_urls:
+            log("All images online - using fast path", level="debug", category="status_check")
+            _t4 = time.perf_counter()
+            results: Dict[str, Dict[str, Any]] = {}
+            total_online = total_urls
+            for path, info in gallery_info.items():
+                gallery_urls = info['urls']
+                results[path] = {
+                    'db_id': info['db_id'],
+                    'name': info['name'],
+                    'total': len(gallery_urls),
+                    'online': len(gallery_urls),
+                    'offline': 0,
+                    'online_urls': gallery_urls,
+                    'offline_urls': []
+                }
+            _t5 = time.perf_counter()
+            log(f"DEBUG TIMING: Fast path result building took {(_t5 - _t4)*1000:.1f}ms for {len(gallery_info)} galleries",
+                level="info", category="status_check")
+        else:
+            # SLOW PATH: Need to determine which are offline
+            online_ids = self._parse_online_image_ids(response_text)
 
-        for path, info in gallery_info.items():
-            gallery_urls = info['urls']
-            online_list = [u for u in gallery_urls if u in response_text]
-            offline_list = [u for u in gallery_urls if u not in response_text]
-            total_online += len(online_list)
+            # Build URL to ID mapping
+            url_to_id = {}
+            for url in all_urls:
+                img_id = self._extract_image_id(url)
+                if img_id:
+                    url_to_id[url] = img_id
 
-            results[path] = {
-                'db_id': info['db_id'],
-                'name': info['name'],
-                'total': len(gallery_urls),
-                'online': len(online_list),
-                'offline': len(offline_list),
-                'online_urls': online_list,
-                'offline_urls': offline_list
-            }
+            results: Dict[str, Dict[str, Any]] = {}
+            total_online = 0
+
+            for path, info in gallery_info.items():
+                gallery_urls = info['urls']
+                online_list = []
+                offline_list = []
+
+                for url in gallery_urls:
+                    img_id = url_to_id.get(url)
+                    if img_id and img_id in online_ids:
+                        online_list.append(url)
+                    else:
+                        offline_list.append(url)
+
+                total_online += len(online_list)
+                results[path] = {
+                    'db_id': info['db_id'],
+                    'name': info['name'],
+                    'total': len(gallery_urls),
+                    'online': len(online_list),
+                    'offline': len(offline_list),
+                    'online_urls': online_list,
+                    'offline_urls': offline_list
+                }
 
         log(f"Found {total_online} online URLs out of {total_urls} submitted",
             level="info", category="status_check")
 
         return results
+
+    def _stream_and_detect_found_count(
+        self,
+        form_data: Dict[str, str],
+        total_urls: int,
+        start_time: float,
+        is_retry: bool = False
+    ) -> tuple[Optional[str], int, bool]:
+        """Stream the response and detect 'Found: X images' early.
+
+        Uses streaming to read chunks of the response until we find the
+        "Found: X images" count. If all images are online (found_count == total_urls),
+        we can exit early without downloading the entire 30MB response.
+
+        Args:
+            form_data: POST form data with 'imagesid'
+            total_urls: Total number of URLs being checked
+            start_time: perf_counter start time for timing
+            is_retry: Whether this is a retry after re-auth
+
+        Returns:
+            Tuple of (response_text, found_count, early_exit):
+            - response_text: Full response text (or partial if early exit), None on error
+            - found_count: Number of images found
+            - early_exit: True if we exited early (all images online)
+        """
+        response = None
+        try:
+            response = self.session.post(
+                f"{self.web_url}/user/moderate",
+                data=form_data,
+                timeout=(30, 300),  # (connect, read) - 30s connect, 5min read
+                verify=True,
+                stream=True  # Enable streaming for early detection
+            )
+
+            # Handle 403 (session expired) - close response before retry
+            if response.status_code == 403:
+                response.close()
+                response = None  # Prevent double-close in finally
+                if is_retry:
+                    raise Exception("Authentication expired and re-auth failed")
+
+                log("Status check: Session expired (403), attempting re-auth", level="debug", category="status_check")
+                if self._attempt_reauth_with_rate_limit():
+                    if self._status_check_cancelled.is_set():
+                        log("Status check cancelled before retry", level="debug", category="status_check")
+                        return None, 0, False
+                    # Retry with is_retry=True to prevent infinite recursion
+                    return self._stream_and_detect_found_count(form_data, total_urls, start_time, is_retry=True)
+                else:
+                    raise Exception("Authentication expired and re-auth failed")
+
+            if response.status_code != 200:
+                raise Exception(f"Server returned HTTP {response.status_code}")
+
+            # Stream the response to find "Found: X images" early
+            # The count appears near the top of the page (within first 10-20KB typically)
+            # Use bytearray for O(1) amortized append instead of O(n) bytes +=
+            accumulated_bytes = bytearray()
+            found_count = 0
+            early_exit = False
+            memory_warning_logged = False
+
+            # Create iterator ONCE - calling iter_content() again doesn't restart,
+            # chunks already consumed are gone
+            chunk_iterator = response.iter_content(chunk_size=self.STATUS_CHECK_CHUNK_SIZE)
+
+            for chunk in chunk_iterator:
+                if self._status_check_cancelled.is_set():
+                    log("Status check cancelled during streaming", level="debug", category="status_check")
+                    return None, 0, False
+
+                accumulated_bytes.extend(chunk)
+
+                # Try to find "Found: X images" in what we have so far
+                # Decode with error handling for partial UTF-8 sequences
+                try:
+                    text_so_far = accumulated_bytes.decode('utf-8', errors='ignore')
+                except Exception:
+                    text_so_far = accumulated_bytes.decode('latin-1', errors='ignore')
+
+                # Check for DDoS-Guard early
+                if len(accumulated_bytes) < 10000 and 'DDoS-Guard' in text_so_far:
+                    raise Exception("DDoS-Guard protection active - please try again later")
+
+                # Try to parse found count
+                found_count = self._parse_found_count(text_so_far)
+
+                if found_count > 0:
+                    # Emit quick count signal - user sees result immediately!
+                    self.quick_count_available.emit(found_count, total_urls)
+
+                    # We found the count!
+                    if found_count == total_urls:
+                        # ALL ONLINE - no need to download the rest!
+                        _t_early = time.perf_counter()
+                        log(f"Early exit: Found {found_count} == {total_urls} (all online) after {len(accumulated_bytes)} bytes, {_t_early - start_time:.2f}s",
+                            level="debug", category="status_check")
+                        early_exit = True
+                        # Return partial text - sufficient for fast path
+                        return text_so_far, found_count, early_exit
+                    else:
+                        # Some images offline - need to read the rest to identify which
+                        log(f"Found {found_count} < {total_urls} (some offline), downloading full response",
+                            level="debug", category="status_check")
+                        break  # Exit chunk loop, read rest below
+
+                # Safety limit for scanning
+                if len(accumulated_bytes) > self.STATUS_CHECK_MAX_SCAN_SIZE:
+                    log(f"Reached {self.STATUS_CHECK_MAX_SCAN_SIZE} bytes without finding count, reading full response",
+                        level="debug", category="status_check")
+                    break
+
+            # If we exited the loop (not early exit), read the remaining response
+            if not early_exit:
+                # Track download progress for UI feedback (emit every 1MB)
+                last_progress_mb = len(accumulated_bytes) // (1024 * 1024)
+
+                # Continue reading remaining chunks using the SAME iterator
+                for chunk in chunk_iterator:
+                    if self._status_check_cancelled.is_set():
+                        log("Status check cancelled during full download", level="debug", category="status_check")
+                        return None, 0, False
+                    accumulated_bytes.extend(chunk)
+
+                    # Emit download progress every 1MB
+                    current_mb = len(accumulated_bytes) // (1024 * 1024)
+                    if current_mb > last_progress_mb:
+                        # Use status_check_progress signal to show download progress
+                        # Negative values indicate download progress (in MB) vs URL progress
+                        self.status_check_progress.emit(-current_mb, -1)
+                        last_progress_mb = current_mb
+
+                    # Check memory threshold
+                    if len(accumulated_bytes) > self.STATUS_CHECK_MAX_MEMORY_SIZE and not memory_warning_logged:
+                        log(f"Warning: Response size exceeds {self.STATUS_CHECK_MAX_MEMORY_SIZE // (1024*1024)}MB memory threshold "
+                            f"(current: {len(accumulated_bytes) // (1024*1024)}MB). Consider reducing gallery size.",
+                            level="warning", category="status_check")
+                        memory_warning_logged = True
+
+                try:
+                    response_text = accumulated_bytes.decode('utf-8', errors='ignore')
+                except Exception:
+                    response_text = accumulated_bytes.decode('latin-1', errors='ignore')
+
+                # Parse found_count from full response if we didn't get it yet
+                if found_count == 0:
+                    found_count = self._parse_found_count(response_text)
+
+                # Check for DDoS-Guard in full response
+                if 'DDoS-Guard' in response_text:
+                    raise Exception("DDoS-Guard protection active - please try again later")
+
+                return response_text, found_count, False
+
+            # This return is technically unreachable due to the early_exit return above,
+            # but included for completeness
+            return text_so_far, found_count, early_exit
+
+        except Exception as e:
+            if 'DDoS-Guard' in str(e) or 'Authentication' in str(e):
+                raise
+            log(f"Error during streaming status check: {e}", level="error", category="status_check")
+            raise
+
+        finally:
+            # Ensure response is closed exactly once
+            if response is not None:
+                try:
+                    response.close()
+                except Exception:
+                    pass
 
     def _process_renames(self):
         """Background thread that processes rename queue."""

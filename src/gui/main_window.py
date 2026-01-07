@@ -498,6 +498,11 @@ class ImxUploadGUI(QMainWindow):
         # MILESTONE 4: Track which rows have widgets created for viewport-based lazy loading
         self._rows_with_widgets = set()  # Rows that have progress/action widgets created
 
+        # Session time tracking for statistics
+        self._session_start_time = time.time()
+        self._session_time_saved = False  # Flag to prevent double-saving on close
+        self._init_session_stats()
+
         # Initialize IconManager
         if self.splash:
             self.splash.set_status("Icon Manager")
@@ -682,18 +687,18 @@ class ImxUploadGUI(QMainWindow):
         
         # Single instance server
         if self.splash:
-            self.splash.set_status("SingleInstanceServer()")
+            self.splash.set_status("Starting SingleInstanceServer...")
         self.server = SingleInstanceServer()
         self.server.folder_received.connect(self.add_folder_from_command_line)
         self.server.start()
         
         if self.splash:
-            self.splash.set_status("Running setup_ui()")
+            self.splash.set_status("Setting up UI...")
         self.setup_ui()
         
         # Initialize context menu helper and connect to the actual table widget
         if self.splash:
-            self.splash.set_status("context menus")
+            self.splash.set_status("Initializing context menu helper...")
         self.context_menu_helper = GalleryContextMenuHelper(self)
         self.context_menu_helper.set_main_window(self)
         self.context_menu_helper.template_change_requested.connect(
@@ -715,19 +720,21 @@ class ImxUploadGUI(QMainWindow):
             log(f"Could not connect context menu helper: {e}", level="error", category="ui")
         
         if self.splash:
-            self.splash.set_status("menu bar (setup_menu_bar())")
+            self.splash.set_status("Setting up menu bar...")
             self.splash.update_status("random")
         self.menu_manager.setup_menu_bar()
         if self.splash:
             self.splash.set_status("Running setup_system_tray()")
         self.setup_system_tray()
         if self.splash:
-            self.splash.set_status("Restoring saved settings and galleries")
+            self.splash.set_status("Restoring settings...")
         self.restore_settings()
        
         # Easter egg - quick gremlin flash
         if self.splash:
             self.splash.set_status("Wiping front to back")
+            time.sleep(0.015)
+            self.splash.set_status("Processing events...")
             QApplication.processEvents()
         
         # Initialize table update queue after table creation
@@ -1770,7 +1777,7 @@ class ImxUploadGUI(QMainWindow):
                 filehosts_icon = icon_mgr.get_icon('filehosts')
                 if not filehosts_icon.isNull():
                     self.file_hosts_btn.setIcon(filehosts_icon)
-                    self.file_hosts_btn.setIconSize(QSize(24, 24))
+                    self.file_hosts_btn.setIconSize(QSize(22, 22))
         except Exception as e:
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
@@ -1812,6 +1819,22 @@ class ImxUploadGUI(QMainWindow):
         self.help_btn.clicked.connect(self.open_help_dialog)
         self.help_btn.setProperty("class", "quick-settings-btn")
 
+        # Statistics button (opens statistics dialog)
+        self.statistics_btn = QPushButton("")
+        self.statistics_btn.setToolTip("View application statistics")
+        try:
+            icon_mgr = get_icon_manager()
+            if icon_mgr:
+                stats_icon = icon_mgr.get_icon('statistics')
+                if not stats_icon.isNull():
+                    self.statistics_btn.setIcon(stats_icon)
+                    self.statistics_btn.setIconSize(QSize(20, 20))
+        except Exception as e:
+            log(f"Exception in main_window: {e}", level="error", category="ui")
+            raise
+        self.statistics_btn.clicked.connect(self.open_statistics_dialog)
+        self.statistics_btn.setProperty("class", "quick-settings-btn")
+
         # Create adaptive panel for quick settings buttons
         # Automatically adjusts layout based on available width AND height:
         # - Compact: 1 row, icon-only (when both dimensions constrained)
@@ -1825,7 +1848,8 @@ class ImxUploadGUI(QMainWindow):
             self.hooks_btn,                 # Hooks
             self.log_viewer_btn,            # Logs
             self.help_btn,                  # Help
-            self.theme_toggle_btn           # Theme
+            self.theme_toggle_btn,          # Theme
+            self.statistics_btn             # Statistics
         )
 
         # Apply icons-only mode if setting is enabled
@@ -2402,6 +2426,60 @@ class ImxUploadGUI(QMainWindow):
         dialog = HelpDialog(self)
         # Use non-blocking show() for help dialog
         dialog.show()
+
+    def open_statistics_dialog(self) -> None:
+        """Open the Statistics dialog.
+
+        Shows comprehensive application statistics including session info,
+        upload totals, and image scanner stats.
+        """
+        from src.gui.dialogs.statistics_dialog import StatisticsDialog
+        dialog = StatisticsDialog(self, self._session_start_time)
+        dialog.exec()
+
+    def _init_session_stats(self) -> None:
+        """Initialize session statistics on app startup.
+
+        Increments app_startup_count and sets first_startup_timestamp
+        if not already recorded. Called once during __init__.
+        """
+        from datetime import datetime
+        settings = QSettings("ImxUploader", "Stats")
+
+        # Increment startup count
+        count = settings.value("app_startup_count", 0, type=int)
+        settings.setValue("app_startup_count", count + 1)
+
+        # Set first startup timestamp if not already set
+        if not settings.value("first_startup_timestamp"):
+            settings.setValue("first_startup_timestamp",
+                              datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        settings.sync()
+
+    def _save_session_time(self) -> None:
+        """Save accumulated session time to QSettings.
+
+        Called on app close. Adds current session duration to the stored total.
+        Uses a flag to prevent double-saving if called multiple times during shutdown.
+        """
+        if not hasattr(self, '_session_start_time'):
+            return
+
+        # Check if already saved to prevent double-counting during shutdown
+        if getattr(self, '_session_time_saved', False):
+            return
+
+        duration = int(time.time() - self._session_start_time)
+        if duration <= 0:
+            return
+
+        settings = QSettings("ImxUploader", "Stats")
+        total = settings.value("total_session_time_seconds", 0, type=int)
+        settings.setValue("total_session_time_seconds", total + duration)
+        settings.sync()
+
+        # Mark as saved to prevent double-counting
+        self._session_time_saved = True
 
     def toggle_theme(self):
         """Toggle between light and dark theme.
@@ -3429,6 +3507,10 @@ class ImxUploadGUI(QMainWindow):
             fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
             if current_kbps > fastest_kbps:
                 fastest_kbps = current_kbps
+                # Save timestamp when new record is set
+                from datetime import datetime
+                settings.setValue("fastest_kbps_timestamp",
+                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             settings.setValue("total_galleries", total_galleries)
             settings.setValue("total_images", total_images_acc)
             settings.setValue("total_size_bytes_v2", str(total_size_acc))
@@ -4676,6 +4758,9 @@ class ImxUploadGUI(QMainWindow):
                 self._minimize_to_tray()
                 return
             # else: RESULT_EXIT - continue to shutdown
+
+        # Save session time before shutdown
+        self._save_session_time()
 
         # Step 3: Show shutdown progress dialog
         shutdown_dialog = ShutdownDialog(self)

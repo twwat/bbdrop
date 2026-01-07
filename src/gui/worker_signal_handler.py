@@ -265,7 +265,7 @@ class WorkerSignalHandler(QObject):
             mw.speed_current_value_label.setText(speed_str)
 
             # Update fastest speed record if needed
-            settings = QSettings("ImxUploader", "ImxUploadGUI")
+            settings = QSettings("ImxUploader", "Stats")
             fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
             if total_kbps > fastest_kbps and total_kbps < 10000:  # Sanity check
                 settings.setValue("fastest_kbps", total_kbps)

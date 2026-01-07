@@ -79,30 +79,33 @@ def format_binary_rate(kib_per_s: float | int, precision: int = 1) -> str:
     return f"{rate:.{precision}f}\u00A0{units[unit_index]}"
 
 
-def format_duration(seconds: float) -> str:
-    """Format a duration in seconds to a human-readable string
-    
+def format_duration(seconds: float | int) -> str:
+    """Format a duration in seconds to a human-readable string.
+
     Args:
-        seconds: Duration in seconds
-        
+        seconds: Duration in seconds (float or int)
+
     Returns:
-        Formatted duration string (e.g., "2h 15m 30s")
+        Formatted duration string (e.g., "2d 5h 30m" or "1h 15m 30s")
     """
     if seconds < 0:
         return "0s"
-    
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    
+
+    seconds = int(seconds)
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, secs = divmod(remainder, 60)
+
     parts = []
+    if days > 0:
+        parts.append(f"{days}d")
     if hours > 0:
         parts.append(f"{hours}h")
     if minutes > 0:
         parts.append(f"{minutes}m")
     if secs > 0 or not parts:
         parts.append(f"{secs}s")
-    
+
     return " ".join(parts)
 
 

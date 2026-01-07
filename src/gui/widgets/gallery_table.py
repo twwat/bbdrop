@@ -6,6 +6,7 @@ Displays gallery queue with sortable columns, progress tracking, and interactive
 
 import os
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, TYPE_CHECKING
 
@@ -19,10 +20,10 @@ from PyQt6.QtWidgets import (
     QStyledItemDelegate, QStyleOptionViewItem, QMessageBox, QFileDialog,
     QDialog, QApplication, QInputDialog
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QUrl, QMimeData, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QUrl, QMimeData, QTimer, QModelIndex
 from PyQt6.QtGui import (
-    QDragEnterEvent, QDropEvent, QIcon, QFont, QColor,
-    QPainter, QDrag, QPen, QPixmap, QFontMetrics, QDesktopServices
+    QDragEnterEvent, QDropEvent, QIcon, QFont, QColor, QBrush,
+    QPainter, QDrag, QPen, QPixmap, QFontMetrics, QDesktopServices, QPalette
 )
 
 # Import existing utilities
@@ -54,6 +55,61 @@ class NumericColumnDelegate(QStyledItemDelegate):
 
         # Paint with modified options
         super().paint(painter, new_option, index)
+
+
+class OnlineStatusSortItem(QTableWidgetItem):
+    """Custom QTableWidgetItem for Online (IMX) column with special sorting.
+
+    Sorts by:
+    1. Offline count DESCENDING (most offline files first) - always
+    2. Date ASCENDING/DESCENDING (toggles with sort direction)
+
+    This ensures galleries with the most offline files appear at the top
+    regardless of whether ascending or descending sort is selected.
+    """
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        """Compare for sorting: offline count DESC, then date by sort direction."""
+        # Get sort data: (offline_count, timestamp, date_sort_direction_multiplier)
+        self_data = self.data(Qt.ItemDataRole.UserRole)
+        other_data = other.data(Qt.ItemDataRole.UserRole)
+
+        # Handle missing data
+        if self_data is None or not isinstance(self_data, tuple):
+            return True  # Items without data sort first
+        if other_data is None or not isinstance(other_data, tuple):
+            return False
+
+        self_offline, self_ts = self_data[0], self_data[1]
+        other_offline, other_ts = other_data[0], other_data[1]
+
+        # Primary sort: offline count DESCENDING (more offline = "less than" for sorting first)
+        if self_offline != other_offline:
+            return self_offline > other_offline  # Reversed for descending
+
+        # Secondary sort: timestamp (normal comparison, direction handled by Qt)
+        return self_ts < other_ts
+
+
+class StatusColorDelegate(NumericColumnDelegate):
+    """Delegate that preserves status-specific colors even when row is selected.
+
+    Inherits font scaling from NumericColumnDelegate and modifies the palette
+    to preserve foreground color set via setForeground() for status display.
+    Used for the Online (IMX) column to maintain green/amber/red status colors.
+    """
+
+    def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        """Initialize style option with item's foreground color preserved."""
+        super().initStyleOption(option, index)
+
+        # Get the item's foreground color (set via setForeground())
+        foreground = index.data(Qt.ItemDataRole.ForegroundRole)
+        if foreground and isinstance(foreground, QBrush):
+            # Override the palette text color with the item's foreground
+            # This ensures the color survives QSS :selected styling
+            option.palette.setColor(QPalette.ColorRole.Text, foreground.color())
+            option.palette.setColor(QPalette.ColorRole.HighlightedText, foreground.color())
 
 
 class GalleryTableWidget(QTableWidget):
@@ -200,8 +256,12 @@ class GalleryTableWidget(QTableWidget):
 
         # Apply numeric column delegate for smaller font and right alignment
         numeric_delegate = NumericColumnDelegate(self)
-        for col in [self.COL_UPLOADED, self.COL_ADDED, self.COL_FINISHED, self.COL_SIZE, self.COL_TRANSFER, self.COL_STATUS_TEXT, self.COL_GALLERY_ID, self.COL_CUSTOM1, self.COL_CUSTOM2, self.COL_CUSTOM3, self.COL_CUSTOM4, self.COL_EXT1, self.COL_EXT2, self.COL_EXT3, self.COL_EXT4, self.COL_ONLINE_IMX]:
+        for col in [self.COL_UPLOADED, self.COL_ADDED, self.COL_FINISHED, self.COL_SIZE, self.COL_TRANSFER, self.COL_STATUS_TEXT, self.COL_GALLERY_ID, self.COL_CUSTOM1, self.COL_CUSTOM2, self.COL_CUSTOM3, self.COL_CUSTOM4, self.COL_EXT1, self.COL_EXT2, self.COL_EXT3, self.COL_EXT4]:
             self.setItemDelegateForColumn(col, numeric_delegate)
+
+        # Apply StatusColorDelegate to Online IMX column to preserve status colors when selected
+        status_delegate = StatusColorDelegate(self)
+        self.setItemDelegateForColumn(self.COL_ONLINE_IMX, status_delegate)
 
         # Make Status and Action columns non-resizable
         header = self.horizontalHeader()
@@ -1132,6 +1192,21 @@ class GalleryTableWidget(QTableWidget):
     def set_online_imx_status(self, row: int, online_count: int, total_count: int, check_datetime: Optional[str] = None):
         """Set the Online (imx) column value for a specific row.
 
+        Displays the check date (yyyy-mm-dd) with color-coded text indicating status:
+        - Green (normal): All images online
+        - Amber (bold): Some images offline (partial)
+        - Red (bold): All images offline
+
+        Bold formatting is used for offline/partial to help with color blindness.
+
+        Sorting behavior (via OnlineStatusSortItem):
+        - Primary: Offline count DESCENDING (most offline files first)
+        - Secondary: Date (direction toggles with column header clicks)
+
+        Colors are theme-aware via get_online_status_colors():
+        - Light theme: Darker colors for contrast on white background
+        - Dark theme: Brighter colors for contrast on dark background
+
         Args:
             row: The table row index
             online_count: Number of images currently online
@@ -1141,32 +1216,95 @@ class GalleryTableWidget(QTableWidget):
         if row < 0 or row >= self.rowCount():
             return
 
+        # Get theme-aware status colors
+        from src.gui.theme_manager import get_online_status_colors
+        colors = get_online_status_colors()
+
+        # Calculate offline count for sorting and styling
+        offline_count = total_count - online_count
+
+        # Determine color and bold status based on online status
+        # Green = all online, Amber = partial, Red = all offline
+        # Bold is used for partial/offline to help with color blindness accessibility
         if total_count == 0:
-            display_text = ""
-            sort_value = -1
+            text_color = None
+            use_bold = False
         elif online_count == total_count:
-            display_text = f"Online ({online_count}/{total_count})"
-            sort_value = 100
+            # All online -> GREEN, normal weight
+            text_color = colors['online']
+            use_bold = False
         elif online_count == 0:
-            display_text = f"Offline (0/{total_count})"
-            sort_value = 0
+            # All offline -> RED, bold
+            text_color = colors['offline']
+            use_bold = True
         else:
-            display_text = f"Partial ({online_count}/{total_count})"
-            sort_value = int((online_count / total_count) * 100)
+            # Partially offline (0 < online < total) -> AMBER, bold
+            text_color = colors['partial']
+            use_bold = True
+
+        # Parse check_datetime and build display text and tooltip
+        display_text = ""
+        tooltip_text = ""
+        timestamp = 0  # For sorting
+        if check_datetime and total_count > 0:
+            try:
+                # Parse the ISO format datetime
+                check_dt = datetime.fromisoformat(check_datetime)
+                # Display only the date portion
+                display_text = check_dt.strftime("%Y-%m-%d")
+                # Store timestamp for secondary sort
+                timestamp = int(check_dt.timestamp())
+
+                # Calculate days ago
+                now = datetime.now()
+                delta = now - check_dt
+                days_ago = delta.days
+
+                if days_ago < 0:
+                    days_ago_text = "in the future"
+                elif days_ago == 0:
+                    days_ago_text = "today"
+                elif days_ago == 1:
+                    days_ago_text = "1 day ago"
+                else:
+                    days_ago_text = f"{days_ago} days ago"
+
+                # Build rich tooltip
+                formatted_datetime = check_dt.strftime("%Y-%m-%d %H:%M")
+                tooltip_text = f"Images online: {online_count}/{total_count}\nLast checked: {formatted_datetime} ({days_ago_text})"
+            except (ValueError, TypeError):
+                # Fallback if datetime parsing fails
+                display_text = ""
+                tooltip_text = ""
 
         item = self.item(row, self.COL_ONLINE_IMX)
-        if item is None:
-            item = QTableWidgetItem()
+        if item is None or not isinstance(item, OnlineStatusSortItem):
+            # Create OnlineStatusSortItem for custom sorting behavior
+            item = OnlineStatusSortItem()
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.setItem(row, self.COL_ONLINE_IMX, item)
 
         item.setText(display_text)
-        item.setData(Qt.ItemDataRole.UserRole, sort_value)
+        # Store (offline_count, timestamp) for custom sorting:
+        # Primary: offline count DESC (most offline first)
+        # Secondary: timestamp (direction toggles with sort)
+        item.setData(Qt.ItemDataRole.UserRole, (offline_count, timestamp))
 
-        if check_datetime:
-            item.setToolTip(f"Checked: {check_datetime}")
+        # Apply color coding
+        if text_color is not None:
+            item.setForeground(text_color)
+
+        # Apply bold for offline/partial to help with color blindness accessibility
+        if use_bold:
+            font = item.font()
+            font.setBold(True)
+            item.setFont(font)
         else:
-            item.setToolTip("")
+            font = item.font()
+            font.setBold(False)
+            item.setFont(font)
+
+        item.setToolTip(tooltip_text)
 
     def clear_online_imx_status(self, row: int):
         """Clear the Online (imx) column value for a specific row."""
@@ -1178,3 +1316,5 @@ class GalleryTableWidget(QTableWidget):
             item.setText("")
             item.setData(Qt.ItemDataRole.UserRole, -1)
             item.setToolTip("")
+            # Reset foreground color to default
+            item.setForeground(self.palette().color(QPalette.ColorRole.WindowText))

@@ -47,6 +47,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
         self.log_viewer_btn = None
         self.help_btn = None
         self.theme_toggle_btn = None
+        self.statistics_btn = None
 
         # Layout mode tracking
         self._current_mode = None
@@ -85,7 +86,8 @@ class AdaptiveQuickSettingsPanel(QWidget):
         return QSize(0, self.MIN_HEIGHT)
 
     def set_buttons(self, settings_btn, credentials_btn, templates_btn, file_hosts_btn,
-                    hooks_btn, log_viewer_btn, help_btn, theme_toggle_btn):
+                    hooks_btn, log_viewer_btn, help_btn, theme_toggle_btn,
+                    statistics_btn=None):
         """
         Set the button references to manage
 
@@ -98,6 +100,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
             log_viewer_btn: Log viewer button
             help_btn: Help/documentation button
             theme_toggle_btn: Theme toggle button
+            statistics_btn: Statistics dialog button (optional)
         """
         self.settings_btn = settings_btn
         self.credentials_btn = credentials_btn
@@ -107,17 +110,19 @@ class AdaptiveQuickSettingsPanel(QWidget):
         self.log_viewer_btn = log_viewer_btn
         self.help_btn = help_btn
         self.theme_toggle_btn = theme_toggle_btn
+        self.statistics_btn = statistics_btn
 
         # Store original button text for restoration
         self._button_labels = {
             'settings': ' Settings',
             'credentials': ' Credentials',
-            'templates': ' Templates',
-            'file_hosts': ' File Hosts',
-            'hooks': ' App Hooks',
-            'log_viewer': ' View Logs',
-            'help': ' Help Docs',
-            'theme': ''  # Theme button never shows text in 2-row/3-row/4-row modes
+            'templates': ' BBCode Templates',
+            'file_hosts': '  File Hosts',
+            'hooks': '  App Hooks',
+            'log_viewer': ' Log Viewer',
+            'help': ' Documentation',
+            'theme': '',  # Theme button never shows text in 2-row/3-row/4-row modes
+            'statistics': ' Statistics'
         }
 
         # Initialize state based on current height
@@ -207,7 +212,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
         elif self._num_rows == 3:
             # Row 1: Settings checks width, Theme is icon-only
             # Row 2: Credentials, Templates, File Hosts check width
-            # Row 3: Hooks, Logs, Help check width
+            # Row 3: Hooks, Logs, Help, Statistics check width
             buttons_to_check = [
                 (self.settings_btn, 'settings'),
                 (self.credentials_btn, 'credentials'),
@@ -216,12 +221,13 @@ class AdaptiveQuickSettingsPanel(QWidget):
                 (self.hooks_btn, 'hooks'),
                 (self.log_viewer_btn, 'log_viewer'),
                 (self.help_btn, 'help'),
+                (self.statistics_btn, 'statistics'),
             ]
         elif self._num_rows == 4:
             # Row 1: Settings checks width, Theme is icon-only
             # Row 2: Credentials, Templates check width
             # Row 3: File Hosts, Hooks check width
-            # Row 4: Logs, Help check width
+            # Row 4: Logs, Help, Statistics check width
             buttons_to_check = [
                 (self.settings_btn, 'settings'),
                 (self.credentials_btn, 'credentials'),
@@ -230,6 +236,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
                 (self.hooks_btn, 'hooks'),
                 (self.log_viewer_btn, 'log_viewer'),
                 (self.help_btn, 'help'),
+                (self.statistics_btn, 'statistics'),
             ]
 
         for btn, label_key in buttons_to_check:
@@ -283,7 +290,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
         main.addLayout(row1)
 
-        # Second row: Credentials, Templates, File Hosts, Hooks, Logs, Help (all icon-only per spec)
+        # Second row: Credentials, Templates, File Hosts, Hooks, Logs, Help, Statistics (all icon-only per spec)
         row2 = QHBoxLayout()
         row2.setSpacing(6)
 
@@ -293,7 +300,8 @@ class AdaptiveQuickSettingsPanel(QWidget):
             self.file_hosts_btn,
             self.hooks_btn,
             self.log_viewer_btn,
-            self.help_btn
+            self.help_btn,
+            self.statistics_btn
         ]
 
         for btn in row2_buttons:
@@ -370,14 +378,15 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
         main.addLayout(row2)
 
-        # Third row: Hooks, Logs, Help (equal width, check own width for text)
+        # Third row: Hooks, Logs, Help, Statistics (equal width, check own width for text)
         row3 = QHBoxLayout()
         row3.setSpacing(6)
 
         row3_buttons = [
             self.hooks_btn,
             self.log_viewer_btn,
-            self.help_btn
+            self.help_btn,
+            self.statistics_btn
         ]
 
         for btn in row3_buttons:
@@ -474,13 +483,14 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
         main.addLayout(row3)
 
-        # Fourth row: Logs, Help (equal width, check own width for text)
+        # Fourth row: Logs, Help, Statistics (equal width, check own width for text)
         row4 = QHBoxLayout()
         row4.setSpacing(6)
 
         row4_buttons = [
             self.log_viewer_btn,
-            self.help_btn
+            self.help_btn,
+            self.statistics_btn
         ]
 
         for btn in row4_buttons:

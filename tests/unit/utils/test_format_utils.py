@@ -16,6 +16,10 @@ from src.utils.format_utils import (
     format_percentage
 )
 
+# Non-breaking space character used by format functions for typography
+# Prevents line wrapping between numbers and units in GUI displays
+NBSP = "\u00A0"
+
 
 class TestTimestamp:
     """Test timestamp generation"""
@@ -43,35 +47,35 @@ class TestFormatBinarySize:
 
     @pytest.mark.parametrize("bytes_value,expected", [
         # Bytes (no decimals)
-        (0, "0 B"),
-        (1, "1 B"),
-        (512, "512 B"),
-        (1023, "1023 B"),
+        (0, f"0{NBSP}B"),
+        (1, f"1{NBSP}B"),
+        (512, f"512{NBSP}B"),
+        (1023, f"1023{NBSP}B"),
         # KiB
-        (1024, "1.0 KiB"),
-        (2048, "2.0 KiB"),
-        (1536, "1.5 KiB"),
+        (1024, f"1.0{NBSP}KiB"),
+        (2048, f"2.0{NBSP}KiB"),
+        (1536, f"1.5{NBSP}KiB"),
         # MiB
-        (1048576, "1.0 MiB"),
-        (5242880, "5.0 MiB"),
-        (10485760, "10.0 MiB"),
+        (1048576, f"1.0{NBSP}MiB"),
+        (5242880, f"5.0{NBSP}MiB"),
+        (10485760, f"10.0{NBSP}MiB"),
         # GiB
-        (1073741824, "1.0 GiB"),
-        (5368709120, "5.0 GiB"),
+        (1073741824, f"1.0{NBSP}GiB"),
+        (5368709120, f"5.0{NBSP}GiB"),
         # TiB
-        (1099511627776, "1.0 TiB"),
+        (1099511627776, f"1.0{NBSP}TiB"),
         # PiB (max unit)
-        (1125899906842624, "1.0 PiB"),
+        (1125899906842624, f"1.0{NBSP}PiB"),
     ])
     def test_standard_sizes(self, bytes_value, expected):
         """Test standard binary size conversions"""
         assert format_binary_size(bytes_value) == expected
 
     @pytest.mark.parametrize("bytes_value,precision,expected", [
-        (1536, 2, "1.50 KiB"),
-        (1536, 0, "2 KiB"),
-        (1572864, 3, "1.500 MiB"),
-        (5500000, 2, "5.25 MiB"),
+        (1536, 2, f"1.50{NBSP}KiB"),
+        (1536, 0, f"2{NBSP}KiB"),
+        (1572864, 3, f"1.500{NBSP}MiB"),
+        (5500000, 2, f"5.25{NBSP}MiB"),
     ])
     def test_precision_control(self, bytes_value, precision, expected):
         """Test precision parameter controls decimal places"""
@@ -85,16 +89,16 @@ class TestFormatBinarySize:
     ])
     def test_invalid_input_returns_zero(self, invalid_input):
         """Test invalid inputs return 0 B"""
-        assert format_binary_size(invalid_input) == "0 B"
+        assert format_binary_size(invalid_input) == f"0{NBSP}B"
 
     def test_negative_value_returns_zero(self):
         """Test negative values treated as zero"""
-        assert format_binary_size(-1024) == "0 B"
+        assert format_binary_size(-1024) == f"0{NBSP}B"
 
     def test_float_input(self):
         """Test float inputs are handled"""
-        assert format_binary_size(1024.5) == "1.0 KiB"
-        assert format_binary_size(2048.9) == "2.0 KiB"
+        assert format_binary_size(1024.5) == f"1.0{NBSP}KiB"
+        assert format_binary_size(2048.9) == f"2.0{NBSP}KiB"
 
     def test_very_large_number(self):
         """Test handling of numbers beyond PiB"""
@@ -110,27 +114,27 @@ class TestFormatBinaryRate:
 
     @pytest.mark.parametrize("kib_per_s,expected", [
         # KiB/s
-        (0, "0.0 KiB/s"),
-        (1, "1.0 KiB/s"),
-        (100, "100.0 KiB/s"),
-        (1023, "1023.0 KiB/s"),
+        (0, f"0.0{NBSP}KiB/s"),
+        (1, f"1.0{NBSP}KiB/s"),
+        (100, f"100.0{NBSP}KiB/s"),
+        (1023, f"1023.0{NBSP}KiB/s"),
         # MiB/s
-        (1024, "1.0 MiB/s"),
-        (2048, "2.0 MiB/s"),
-        (5120, "5.0 MiB/s"),
+        (1024, f"1.0{NBSP}MiB/s"),
+        (2048, f"2.0{NBSP}MiB/s"),
+        (5120, f"5.0{NBSP}MiB/s"),
         # GiB/s
-        (1048576, "1.0 GiB/s"),
+        (1048576, f"1.0{NBSP}GiB/s"),
         # TiB/s
-        (1073741824, "1.0 TiB/s"),
+        (1073741824, f"1.0{NBSP}TiB/s"),
     ])
     def test_standard_rates(self, kib_per_s, expected):
         """Test standard transfer rate conversions"""
         assert format_binary_rate(kib_per_s) == expected
 
     @pytest.mark.parametrize("kib_per_s,precision,expected", [
-        (1536, 2, "1.50 MiB/s"),
-        (1536, 0, "2 MiB/s"),
-        (512.5, 3, "512.500 KiB/s"),
+        (1536, 2, f"1.50{NBSP}MiB/s"),
+        (1536, 0, f"2{NBSP}MiB/s"),
+        (512.5, 3, f"512.500{NBSP}KiB/s"),
     ])
     def test_precision_control(self, kib_per_s, precision, expected):
         """Test precision parameter"""
@@ -143,11 +147,11 @@ class TestFormatBinaryRate:
     ])
     def test_invalid_input(self, invalid_input):
         """Test invalid inputs return 0.0 KiB/s"""
-        assert format_binary_rate(invalid_input) == "0.0 KiB/s"
+        assert format_binary_rate(invalid_input) == f"0.0{NBSP}KiB/s"
 
     def test_float_input(self):
         """Test float rate values"""
-        assert format_binary_rate(1024.5) == "1.0 MiB/s"
+        assert format_binary_rate(1024.5) == f"1.0{NBSP}MiB/s"
 
 
 class TestFormatDuration:
@@ -171,9 +175,13 @@ class TestFormatDuration:
         (7200, "2h"),
         (7260, "2h 1m"),
         (7261, "2h 1m 1s"),
-        # Large values
-        (86400, "24h"),
-        (90000, "25h"),
+        # Days
+        (86400, "1d"),
+        (90000, "1d 1h"),
+        (172800, "2d"),
+        (176461, "2d 1h 1m 1s"),
+        (604800, "7d"),
+        (694861, "8d 1h 1m 1s"),
     ])
     def test_duration_formatting(self, seconds, expected):
         """Test various duration values"""

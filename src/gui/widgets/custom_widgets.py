@@ -959,11 +959,11 @@ class FileHostsStatusWidget(QWidget):
             else:
                 # CREATE new button only if needed
                 btn = QPushButton()
-                btn.setFixedSize(24, 24)
+                btn.setFixedSize(22, 22)
                 btn.setToolTip(tooltip)
                 btn.setProperty("class", "icon-btn")
                 btn.setIcon(final_icon)
-                btn.setIconSize(QSize(19, 19))
+                btn.setIconSize(QSize(18, 18))
 
                 # Connect click handler
                 btn.clicked.connect(lambda checked, h=host_name: self.host_clicked.emit(self.gallery_path, h))
@@ -997,7 +997,7 @@ class FileHostsStatusWidget(QWidget):
             QIcon with status overlay applied
         """
         # Get base pixmap (create copy to avoid modifying original)
-        pixmap = base_icon.pixmap(QSize(24, 24)).copy()
+        pixmap = base_icon.pixmap(QSize(22, 22)).copy()
 
         # Create painter for overlays
         painter = QPainter(pixmap)
@@ -1019,9 +1019,9 @@ class FileHostsStatusWidget(QWidget):
         elif status == 'failed':
             # Red X overlay for failed uploads
             painter.setOpacity(1.0)
-            painter.setPen(QPen(QColor(255, 0, 0), 3))
-            painter.drawLine(4, 4, 20, 20)
-            painter.drawLine(20, 4, 4, 20)
+            painter.setPen(QPen(QColor(255, 0, 0), 2))
+            painter.drawLine(4, 4, 18, 18)
+            painter.drawLine(18, 4, 4, 18)
 
         painter.end()
 

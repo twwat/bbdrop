@@ -1222,7 +1222,7 @@ class TableRowManager(QObject):
                 first_visible = max(0, first_visible - 5)
                 last_visible = min(table.rowCount() - 1, last_visible + 5)
 
-                # Update only visible status icons and action button icons
+                # Update only visible status icons, action button icons, and Online IMX colors
                 for row in range(first_visible, last_visible + 1):
                     name_item = table.item(row, _Col.NAME)
                     if name_item:
@@ -1231,6 +1231,8 @@ class TableRowManager(QObject):
                             item = mw.queue_manager.items[path]
                             self._set_status_cell_icon(row, item.status)
                             self._set_status_text_cell(row, item.status)
+                            # Refresh Online IMX column colors (theme-aware)
+                            self._update_imx_status_cell(row, item)
 
                     action_widget = table.cellWidget(row, _Col.ACTION)
                     if action_widget and hasattr(action_widget, 'refresh_icons'):

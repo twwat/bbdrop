@@ -192,6 +192,12 @@ class MenuManager(QObject):
 
             # Tools menu
             tools_menu = menu_bar.addMenu("Tools")
+
+            # Statistics
+            action_statistics = tools_menu.addAction("Statistics")
+            action_statistics.triggered.connect(mw.open_statistics_dialog)
+            tools_menu.addSeparator()
+
             action_unrenamed = tools_menu.addAction("Unnamed Galleries")
             action_unrenamed.triggered.connect(mw.open_unrenamed_galleries_dialog)
 

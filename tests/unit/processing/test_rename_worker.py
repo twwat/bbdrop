@@ -114,9 +114,13 @@ class TestRenameWorkerLogin:
 
         with patch('imxup.decrypt_password', return_value='plain_pass'), \
              patch('src.network.cookies.get_firefox_cookies', return_value={}), \
-             patch('src.network.cookies.load_cookies_from_file', return_value={}):
+             patch('src.network.cookies.load_cookies_from_file', return_value={}), \
+             patch('src.processing.rename_worker.load_session_cookies_from_keyring', return_value={}):
 
             worker = RenameWorker()
+            # Set credentials directly since __init__ already ran before our mocks
+            worker.username = 'testuser'
+            worker.password = 'plain_pass'
             worker.session = Mock()
 
             mock_response = Mock()
@@ -168,7 +172,8 @@ class TestRenameWorkerLogin:
         mock_get_cred.return_value = None
 
         with patch('src.network.cookies.get_firefox_cookies', return_value={}), \
-             patch('src.network.cookies.load_cookies_from_file', return_value={}):
+             patch('src.network.cookies.load_cookies_from_file', return_value={}), \
+             patch('src.processing.rename_worker.load_session_cookies_from_keyring', return_value={}):
 
             worker = RenameWorker()
             worker.session = Mock()
@@ -345,7 +350,9 @@ class TestRenameWorkerLifecycle:
         worker.stop(timeout=1.0)
 
         assert worker.running is False
-        mock_thread.join.assert_called_once_with(timeout=1.0)
+        # stop() joins TWO threads: rename thread + status check thread
+        assert mock_thread.join.call_count == 2
+        mock_thread.join.assert_any_call(timeout=1.0)
         worker.session.close.assert_called_once()
 
     @patch('threading.Thread')

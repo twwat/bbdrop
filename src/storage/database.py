@@ -1781,6 +1781,35 @@ class QueueStore:
                 log(f"Error updating IMX status for {gallery_path}: {e}", level="error", category="database")
                 return False
 
+    def bulk_update_gallery_imx_status(self, updates: List[Tuple[str, str, int]]) -> None:
+        """Bulk update IMX online status for multiple galleries.
+
+        Much more efficient than individual updates for large numbers of galleries.
+
+        Args:
+            updates: List of tuples (path, status_text, check_timestamp)
+                     - path: Gallery path
+                     - status_text: Status like "Online (10/10)" or "Partial (5/10)"
+                     - check_timestamp: Unix timestamp of check
+        """
+        if not updates:
+            return
+
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                # Reorder tuple: input is (path, status, timestamp) but SQL needs (status, timestamp, path)
+                # to match the SET clause order followed by WHERE clause
+                conn.executemany(
+                    "UPDATE galleries SET imx_status = ?, imx_status_checked = ? WHERE path = ?",
+                    [(status, timestamp, path) for path, status, timestamp in updates]
+                )
+            log(f"Bulk updated IMX status for {len(updates)} galleries",
+                level="debug", category="database")
+        except Exception as e:
+            log(f"Failed to bulk update IMX status: {e}", level="error", category="database")
+            raise
+
     def update_gallery_path(self, old_path: str, new_path: str) -> bool:
         """Update a gallery's path when it has been relocated.
 

@@ -39,8 +39,43 @@ def is_dark_mode() -> bool:
         True if dark mode, False if light mode.
     """
     from PyQt6.QtCore import QSettings
-    settings = QSettings()
+    # MUST use same org/app name as main_window.py to read from correct registry location
+    settings = QSettings("ImxUploader", "ImxUploadGUI")
     return settings.value('ui/theme', 'dark') == 'dark'
+
+
+def get_online_status_colors(is_dark: bool | None = None) -> dict[str, QColor]:
+    """Get theme-aware colors for online status indicators.
+
+    Provides consistent colors for online/partial/offline status display
+    across the main gallery table and image status dialog.
+
+    Args:
+        is_dark: Override theme detection. If None, uses current theme.
+
+    Returns:
+        dict: Color mappings with keys 'online', 'partial', 'offline', 'gray'.
+              Each value is a QColor instance appropriate for the current theme.
+    """
+    if is_dark is None:
+        is_dark = is_dark_mode()
+
+    if is_dark:
+        # Dark theme: brighter colors for contrast on dark background
+        return {
+            'online': QColor(85, 208, 165),    # #55D0A5 - bright green
+            'partial': QColor(255, 191, 64),   # #FFBF40 - amber/gold
+            'offline': QColor(255, 107, 107),  # #FF6B6B - bright red
+            'gray': QColor(128, 128, 128),     # #808080 - neutral gray
+        }
+    else:
+        # Light theme: darker colors for contrast on white background
+        return {
+            'online': QColor(0, 128, 0),       # #008000 - forest green
+            'partial': QColor(204, 133, 0),    # #CC8500 - dark amber
+            'offline': QColor(204, 0, 0),      # #CC0000 - dark red
+            'gray': QColor(128, 128, 128),     # #808080 - neutral gray
+        }
 
 
 class ThemeManager(QObject):
@@ -207,12 +242,14 @@ class ThemeManager(QObject):
             log(f"Error loading styles.qss: {e}", level="error", category="ui")
 
         # Fallback: inline theme styles
+        # Note: QTableWidget::item does NOT include color: to allow setForeground() to work
+        # for theme-aware colored text (e.g., Online IMX column green/red status)
         if theme_type == 'dark':
             fallback = """
                 QWidget { color: #e6e6e6; }
                 QToolTip { color: #e6e6e6; background-color: #333333; border: 1px solid #555; }
                 QTableWidget { background-color: #1e1e1e; color: #e6e6e6; gridline-color: #555555; border: 1px solid #555555; }
-                QTableWidget::item { background-color: #1e1e1e; color: #e6e6e6; }
+                QTableWidget::item { background-color: #1e1e1e; }
                 QTableWidget::item:selected { background-color: #2f5f9f; color: #ffffff; }
                 QHeaderView::section { background-color: #2d2d2d; color: #e6e6e6; }
                 QMenu { background-color: #2d2d2d; color: #e6e6e6; border: 1px solid #555; font-size: 12px; }
@@ -227,7 +264,7 @@ class ThemeManager(QObject):
                 QWidget { color: #333333; }
                 QToolTip { color: #333333; background-color: #ffffcc; border: 1px solid #999; }
                 QTableWidget { background-color: #ffffff; color: #333333; gridline-color: #cccccc; border: 1px solid #cccccc; }
-                QTableWidget::item { background-color: #ffffff; color: #333333; }
+                QTableWidget::item { background-color: #ffffff; }
                 QTableWidget::item:selected { background-color: #3399ff; color: #ffffff; }
                 QHeaderView::section { background-color: #f0f0f0; color: #333333; }
                 QMenu { background-color: #ffffff; color: #333333; border: 1px solid #999; font-size: 12px; }
