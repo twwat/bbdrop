@@ -1,11 +1,13 @@
 # ImXup - Multi-Host Gallery Uploader
 
-![Version](https://img.shields.io/badge/version-0.7.01-blue.svg)
+![Version](https://img.shields.io/badge/version-0.7.1-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Mac-lightgrey.svg)
 
-A modern desktop upload manager application for uploading to imx.to + multiple file hosts, and generating BBcode for  ing services with advanced features including drag-and-drop, queue management, batch operations, and comprehensive BBCode template support.
+A modern desktop application for uploading galleries to image host imx.to and multiple file hosts, generating BBCode to post on forums, monitoring online availability of uploads and more.
+
+Drag-and-drop support, queue management, batch operations, and comprehensive BBCode template support.
 
 ---
 
@@ -16,10 +18,11 @@ A modern desktop upload manager application for uploading to imx.to + multiple f
 ### Why ImXup?
 
 - **Multi-Host Support**: Upload to 7 different services (imx.to + 6 file hosts)
+- **Cross-Platform**: Windows, Linux, MacOS, or run using Python 3.14+
 - **Intelligent Queue Management**: Batch operations, priority scheduling, and status tracking
-- **Advanced BBCode Templates**: Customizable templates with 18 dynamic placeholders
-- **Production-Ready GUI**: Modern PyQt6 interface with dark/light themes
-- **Robust Error Handling**: Automatic retries, duplicate detection, and comprehensive logging
+- **Advanced BBCode Templates**: Create customizable templates with 18 dynamic placeholders and conditional logic 
+- **Professional Production-Ready GUI**: Modern PyQt6 interface with dark/light themes
+- **Robust Error Handling**: Automatic retries, duplicate detection, fallback methods, comprehensive logging system
 - **Windows Integration**: Context menu support, system tray, single-instance mode
 
 ---
@@ -34,29 +37,27 @@ A modern desktop upload manager application for uploading to imx.to + multiple f
 - **Smart Resume**: Automatically resume interrupted uploads
 - **Duplicate Detection**: Intelligent detection of previously uploaded galleries
 
-### Multi-Host File Uploads
-
 
 ### Multi-Host File Upload
 Optionally upload galleries to 6 file hosting services:
-- **Fileboom** (fboom.me) - API key authentication, 10GB files, 10TB storage
-- **Filedot** (filedot.to) - Session-based with CAPTCHA handling
-- **Filespace** (filespace.com) - Cookie-based sessions
-- **Keep2Share** (k2s.cc) - API key authentication, same features as Fileboom
-- **Rapidgator** (rapidgator.net) - Token login, 5GB files, MD5 verification
-- **Tezfiles** (tezfiles.com) - Session-based authentication
-
-### Security Features
+- **Fileboom** (fboom.me) - API key authentication
+- **Filedot** (filedot.to) - Session-based with CAPTCHA handling, storage monitoring
+- **Filespace** (filespace.com) - Cookie-based sessions, storage monitoring
+- **Keep2Share** (k2s.cc) - API key authentication
+- **Rapidgator** (rapidgator.net) - Token login, 5GB files, MD5 verification, storage monitoring
+- **Tezfiles** (tezfiles.com) - API key authentication
 
 
 ### Advanced Features
-- **BBCode Template System**: Create custom templates with 18 dynamic placeholders
+- **BBCode Template System**: Create multiple custom templates with 18 dynamic placeholders, conditional logic, switch on-the-fly
 - **Archive Management**: Automatic ZIP extraction and compression support
 - **Credential Management**: Secure storage using system keyring
 - **Hook System**: External script integration for custom workflows
-- **Comprehensive Logging**: Detailed logs with filtering and export capabilities
-- **Adaptive Settings**: Context-aware settings panels that adapt to your workflow
 - **Bandwidth Tracking**: Monitor upload/download speeds and usage
+- **Custom Tabs**: Use tab system to help organize uploads according to your workflow
+- **Online Status Monitoring**: Monitor the availability of uploaded files
+- **Adaptive Settings**: Context-aware settings panels that adapt to your workflow
+- **Comprehensive Logging**: Detailed logs with filtering and export capabilities
 
 ### Professional GUI
 - **Modern Interface**: Sleek PyQt6 design with Material-inspired icons
@@ -72,15 +73,16 @@ Optionally upload galleries to 6 file hosting services:
 
 | Host | Authentication | Max File Size | Storage | Features |
 |------|---------------|---------------|---------|----------|
-| **imx.to** | Session | Unlimited | Unlimited | Primary gallery hosting |
-| **Fileboom** | API Key | 10 GB | 10 TB | Multi-step upload, deduplication |
-| **Filedot** | Session | Varies | Varies | CAPTCHA handling, CSRF protection |
-| **Filespace** | Cookie | Varies | Varies | Simple cookie-based auth |
-| **Keep2Share** | API Key | 10 GB | 10 TB | Same API as Fileboom |
-| **Rapidgator** | Token | 5 GB | Varies | MD5 verification, polling |
-| **Tezfiles** | Session | Varies | Varies | Token extraction |
+| **IMX.to** | API Key / Session | Unlimited | Unlimited | Primary gallery hosting |
+| **FileBoom** | API Key | 10 GiB | 20 TiB\* | Multi-step upload, deduplication |
+| **Filedot** | Session | Varies | 10 TiB | CAPTCHA handling, CSRF protection, storage monitor |
+| **Filespace** | Cookie | Varies | 50+ GiB / Varies | Simple cookie-based auth, storage monitor |
+| **Keep2Share** | API Key | 10 GiB | 20 TiB\* | Same API as Fileboom |
+| **Rapidgator** | API Key / Token | 5 GiB | 4 TiB / Varies | MD5 verification, polling, storage monitor |
+| **TezFiles** | API Key | Varies | 20 TiB\* | Token extraction |
 
 *All hosts support automatic retry, connection pooling, and token caching*
+\* 20 TiB combined storage is shared between all 3 hosts (FileBoom, Keep2Share, TezFiles)
 
 ## Security
 
@@ -269,6 +271,8 @@ Templates are stored in `~/.imxup/*.template.txt`
 
 ## Documentation
 
+_**Note**: Documentation isn't fully up to date (work in progress)_
+
 Comprehensive documentation is available in the `docs/` directory:
 
 ### User Documentation
@@ -286,37 +290,17 @@ Comprehensive documentation is available in the `docs/` directory:
 
 ---
 
-## Screenshots
-
-### Main Interface
-![Main Window](assets/screenshot-main.png)
-*Drag-and-drop interface with queue management and real-time progress*
-
-### Settings Panel
-![Settings](assets/screenshot-settings.png)
-*Adaptive settings with file host configuration and template management*
-
-### BBCode Viewer
-![BBCode Output](assets/screenshot-bbcode.png)
-*Generated BBCode with syntax highlighting and one-click copy*
-
-### Multi-Host Upload
-![File Hosts](assets/filehosts-dark.png)
-*Configure multiple file hosting services with credential management*
-
----
-
 ## System Requirements
 
 ### Minimum Requirements
-- **OS**: Windows 10+ or Linux (Ubuntu 20.04+, Fedora 35+)
+- **OS**: Windows 10+ or Linux (Ubuntu 20.04+, Fedora 35+), MacOS (15 Sequoia)
 - **Python**: 3.14 or higher
 - **RAM**: 512 MB
 - **Disk**: 100 MB free space
 - **Network**: Semi-stable internet connection faster than dial-up
 
 ### Recommended
-- **OS**: Windows 11 or Linux (latest)
+- **OS**: Windows 10/11, Linux (latest), MacOS (latest)
 - **Python**: 3.14+
 - **RAM**: 2 GB
 - **Disk**: 500 MB (for logs and cache)
@@ -372,13 +356,8 @@ pytest tests/test_upload.py
 pytest -v tests/
 ```
 
-### Building Executable
-
+### Manual build with PyInstaller
 ```bash
-# Windows
-build.bat
-
-# Manual build with PyInstaller
 pyinstaller imxup.spec
 ```
 
@@ -396,42 +375,6 @@ See `CONTRIBUTING.md` for detailed guidelines.
 
 ---
 
-## Troubleshooting
-
-### Common Issues
-
-**Problem**: GUI won't start
-```bash
-# Solution: Check PyQt6 installation
-pip install --upgrade PyQt6
-```
-
-**Problem**: qt.qpa.xcb: could not connect to display (Windows Subsystem for Linux) 
-```bash
-# Solution: Set DISPLAY environment variable to :0
-export DISPLAY=:0
-
-**Problem**: Upload fails with "Authentication error"
-```bash
-# Solution: Re-enter credentials in Settings → File Hosts
-# Click "Test Connection" to verify
-```
-
-**Problem**: Duplicate detection not working
-```bash
-# Solution: Enable in Settings → Advanced → Duplicate Detection
-```
-
-**Problem**: BBCode template not applying
-```bash
-# Solution: Check template syntax, ensure placeholders are spelled correctly
-# View logs: Help → View Logs
-```
-
-For more issues, see **[Troubleshooting Guide](docs/user/troubleshooting.md)**
-
----
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -444,7 +387,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Documentation**: Check the `docs/` directory
 - **Issues**: [GitHub Issues](https://github.com/twwat/imxup/issues)
+- **[Troubleshooting Guide](docs/user/troubleshooting.md)**
 - **Discussions**: [GitHub Discussions](https://github.com/twwat/imxup/discussions)
+
+For more issues, see **[Troubleshooting Guide](docs/user/troubleshooting.md)**
 
 ### Bug Reports
 
@@ -464,48 +410,21 @@ Have an idea? Open a feature request on GitHub Issues with:
 
 ---
 
-## Changelog
-
-### v0.6.00 (Latest)
-- ✨ Multi-host file upload system with 6 provider integrations
-- 🔐 Enhanced authentication with token caching and TTL management
-- 🎨 Improved GUI with adaptive settings panels
-- 🔧 External hooks system for custom workflows
-
-### v0.5.13
-- 🚀 Partial multi-host uploader implementation
-- 🗜️ ZIP compression support
-
-### v0.5.12
-- ⚙️ Adaptive Settings Panel
-- 🪝 External Hooks system
-- 🛠️ System enhancements
-
 See **[CHANGELOG.md](CHANGELOG.md)** for complete version history.
 
 ---
 
 ## Acknowledgments
 
+- **[IMX.to](https://imx.to/)** - Primary image hosting service
 - **PyQt6** - Excellent GUI framework
-- **imx.to** - Primary image hosting service
-- **File Host Providers** - Fileboom, Keep2Share, Rapidgator, and others
 - **Contributors** - Everyone who has contributed code, bug reports, and ideas
 
 ---
 
 ## Project Status
 
-**Active Development** - ImXup is actively maintained and receives regular updates. The latest stable version is v0.6.15.
-
-### Roadmap
-
-- [ ] Additional file host integrations (1fichier, Katfile)
-- [ ] Cloud storage support (Google Drive, Dropbox)
-- [ ] API for automation and integrations
-- [ ] Mobile companion app
-- [ ] Batch BBCode template processing
-- [ ] Advanced duplicate detection with perceptual hashing
+**Active Development** - ImXup is actively maintained and receives regular updates. The latest stable version is v0.7.1.
 
 ---
 
