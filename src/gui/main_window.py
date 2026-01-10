@@ -1123,10 +1123,13 @@ class ImxUploadGUI(QMainWindow):
             self.bandwidth_status_label.setText(
                 f"Uploading: {total_speed_mbps:.2f} MiB/s ({active_count} active)"
             )
-            self.bandwidth_status_label.setStyleSheet("color: green; font-weight: bold;")
+            self.bandwidth_status_label.setProperty("status", "active")
         else:
             self.bandwidth_status_label.setText("Bandwidth: 0.00 MiB/s")
-            self.bandwidth_status_label.setStyleSheet("")
+            self.bandwidth_status_label.setProperty("status", "")
+        # Reapply stylesheet to pick up property change
+        self.bandwidth_status_label.style().unpolish(self.bandwidth_status_label)
+        self.bandwidth_status_label.style().polish(self.bandwidth_status_label)
 
         self.bandwidth_status_label.setToolTip(tooltip)
 

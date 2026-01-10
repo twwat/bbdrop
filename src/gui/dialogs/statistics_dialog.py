@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSettings
 
 from src.utils.format_utils import format_binary_size, format_binary_rate, format_duration
-from src.gui.theme_manager import get_online_status_colors
 from src.utils.logger import log
 
 
@@ -301,8 +300,6 @@ class StatisticsDialog(QDialog):
     def _load_stats(self) -> None:
         """Load all statistics from QSettings and display."""
         settings = QSettings("ImxUploader", "Stats")
-        colors = get_online_status_colors()
-
         # Session stats
         app_startups = settings.value("app_startup_count", 0, type=int)
         first_startup = settings.value("first_startup_timestamp", "")
@@ -370,12 +367,26 @@ class StatisticsDialog(QDialog):
         self._online_images_label.setText(f"{online_images:,}")
         self._offline_images_label.setText(f"{offline_images:,}")
 
-        # Apply theme-aware colors to status labels
-        self._online_galleries_label.setStyleSheet(f"color: {colors['online'].name()};")
-        self._online_images_label.setStyleSheet(f"color: {colors['online'].name()};")
-        self._partial_galleries_label.setStyleSheet(f"color: {colors['partial'].name()};")
-        self._offline_galleries_label.setStyleSheet(f"color: {colors['offline'].name()};")
-        self._offline_images_label.setStyleSheet(f"color: {colors['offline'].name()};")
+        # Apply theme-aware colors to status labels via QSS properties
+        self._online_galleries_label.setProperty("online-status", "online")
+        self._online_galleries_label.style().unpolish(self._online_galleries_label)
+        self._online_galleries_label.style().polish(self._online_galleries_label)
+        
+        self._online_images_label.setProperty("online-status", "online")
+        self._online_images_label.style().unpolish(self._online_images_label)
+        self._online_images_label.style().polish(self._online_images_label)
+        
+        self._partial_galleries_label.setProperty("online-status", "partial")
+        self._partial_galleries_label.style().unpolish(self._partial_galleries_label)
+        self._partial_galleries_label.style().polish(self._partial_galleries_label)
+        
+        self._offline_galleries_label.setProperty("online-status", "offline")
+        self._offline_galleries_label.style().unpolish(self._offline_galleries_label)
+        self._offline_galleries_label.style().polish(self._offline_galleries_label)
+        
+        self._offline_images_label.setProperty("online-status", "offline")
+        self._offline_images_label.style().unpolish(self._offline_images_label)
+        self._offline_images_label.style().polish(self._offline_images_label)
 
         # Load file host statistics
         self._load_file_host_stats()

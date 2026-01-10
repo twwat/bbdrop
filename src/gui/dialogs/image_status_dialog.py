@@ -232,7 +232,7 @@ class ImageStatusDialog(QDialog):
 
         # Spinner status
         self.spinner_label = QLabel("")
-        self.spinner_label.setStyleSheet("font-style: italic;")
+        self.spinner_label.setProperty("class", "status-muted")
         bars_layout.addWidget(self.spinner_label, 1, 3)
 
         bars_layout.setColumnStretch(1, 1)  # Bar column stretches
@@ -258,17 +258,17 @@ class ImageStatusDialog(QDialog):
 
         # Column 2: Gallery breakdown
         stats_layout.addWidget(QLabel("<b>Galleries</b>"), 0, 1)
-        self.stat_online_galleries = self._create_stat_row("Online:", "—", self._colors['online'])
-        self.stat_partial_galleries = self._create_stat_row("Partial:", "—", self._colors['partial'])
-        self.stat_offline_galleries = self._create_stat_row("Offline:", "—", self._colors['offline'])
+        self.stat_online_galleries = self._create_stat_row("Online:", "—", "online")
+        self.stat_partial_galleries = self._create_stat_row("Partial:", "—", "partial")
+        self.stat_offline_galleries = self._create_stat_row("Offline:", "—", "offline")
         stats_layout.addWidget(self.stat_online_galleries, 1, 1)
         stats_layout.addWidget(self.stat_partial_galleries, 2, 1)
         stats_layout.addWidget(self.stat_offline_galleries, 3, 1)
 
         # Column 3: Image breakdown
         stats_layout.addWidget(QLabel("<b>Images</b>"), 0, 2)
-        self.stat_online_images = self._create_stat_row("Online:", "—", self._colors['online'])
-        self.stat_offline_images = self._create_stat_row("Offline:", "—", self._colors['offline'])
+        self.stat_online_images = self._create_stat_row("Online:", "—", "online")
+        self.stat_offline_images = self._create_stat_row("Offline:", "—", "offline")
         stats_layout.addWidget(self.stat_online_images, 1, 2)
         stats_layout.addWidget(self.stat_offline_images, 2, 2)
 
@@ -314,13 +314,13 @@ class ImageStatusDialog(QDialog):
 
         layout.addLayout(button_layout)
 
-    def _create_stat_row(self, label: str, value: str, color: QColor = None) -> QWidget:
+    def _create_stat_row(self, label: str, value: str, status: str = None) -> QWidget:
         """Create a stat row widget with label and value.
 
         Args:
             label: Label text
             value: Value text
-            color: Optional color for the value
+            status: Optional status for styling ('online', 'partial', 'offline')
 
         Returns:
             Widget containing the stat row
@@ -334,8 +334,10 @@ class ImageStatusDialog(QDialog):
         value_widget = QLabel(value)
         value_widget.setAlignment(Qt.AlignmentFlag.AlignRight)
 
-        if color:
-            value_widget.setStyleSheet(f"color: {color.name()}; font-weight: bold;")
+        if status:
+            value_widget.setProperty("online-status", status)
+            value_widget.style().unpolish(value_widget)
+            value_widget.style().polish(value_widget)
 
         layout.addWidget(label_widget)
         layout.addStretch()
@@ -456,14 +458,14 @@ class ImageStatusDialog(QDialog):
 
         # Update images bar with green/red segments
         self.images_bar.set_segments([
-            (online, self._colors['online']),
-            (offline, self._colors['offline'])
+            (online, self._colors["online"]),
+            (offline, self._colors["offline"])
         ])
 
         # Update images status label
         self.images_status_label.setText(
-            f"<span style='color:{self._colors['online'].name()}'>{online:,} online</span>, "
-            f"<span style='color:{self._colors['offline'].name()}'>{offline:,} offline</span> "
+            f"<span style='color:{self._colors["online"].name()}'>{online:,} online</span>, "
+            f"<span style='color:{self._colors["offline"].name()}'>{offline:,} offline</span> "
             f"({pct}%)"
         )
         self.images_status_label.setTextFormat(Qt.TextFormat.RichText)
@@ -477,12 +479,12 @@ class ImageStatusDialog(QDialog):
             # All online - can update galleries too
             galleries_count = self.table.rowCount()
             self.galleries_bar.set_segments([
-                (galleries_count, self._colors['online']),
-                (0, self._colors['partial']),
-                (0, self._colors['offline'])
+                (galleries_count, self._colors["online"]),
+                (0, self._colors["partial"]),
+                (0, self._colors["offline"])
             ])
             self.galleries_status_label.setText(
-                f"<span style='color:{self._colors['online'].name()}'>{galleries_count:,} online</span>"
+                f"<span style='color:{self._colors["online"].name()}'>{galleries_count:,} online</span>"
             )
             self.galleries_status_label.setTextFormat(Qt.TextFormat.RichText)
             self._update_stat(self.stat_galleries_scanned, f"{galleries_count:,}")
