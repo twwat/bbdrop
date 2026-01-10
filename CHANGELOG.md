@@ -4,6 +4,44 @@ All notable changes to IMXuploader will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.7.2] - 2026-01-10
+
+v0.7.2: Performance optimization, modular theming, design tokens
+
+### Performance
+- **Optimize deferred widget creation**: 16-32 seconds → ~1 second (17-32x faster)
+  - Viewport-first loading: visible rows (~25) created in ~50ms
+  - Batch repaints with setUpdatesEnabled(False): 1144 repaints → ~11
+  - Pause update_timer during batch operation
+  - Reduce processEvents frequency from every 20 to every 100 rows
+- Optimize selection handler to avoid O(N²) complexity
+
+### Added
+- Design tokens system for consistent theming
+- Modular QSS loader with token injection
+- Session length and timeframe filter to Statistics dialog
+- get_hosts_for_period() for per-host statistics filtering
+- Visual regression testing infrastructure
+- Widget creation timing benchmark (tests/performance/)
+- Comprehensive STYLING_GUIDE.md
+
+### Changed
+- Migrate inline styles to property-based QSS
+- Split monolithic QSS into modular architecture
+- Enhance ImageStatusDialog with ProportionalBar
+
+### Fixed
+- Improve scanner cleanup in GalleryFileManagerDialog
+
+### Assets
+- Add scan icons
+- Update Keep2Share logo
+
+### Tests
+- Add visual regression testing infrastructure
+- Add Statistics dialog enhancement tests
+- Refactor test infrastructure and update fixtures
+
 ## [0.7.1] - 2026-01-07
 
 v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
