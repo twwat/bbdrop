@@ -1849,6 +1849,22 @@ class ImxUploadGUI(QMainWindow):
         self.statistics_btn.clicked.connect(self.open_statistics_dialog)
         self.statistics_btn.setProperty("class", "quick-settings-btn")
 
+        # Link Scanner button (opens link scanner dashboard)
+        self.link_scanner_btn = QPushButton("")
+        self.link_scanner_btn.setToolTip("Scan gallery links to check online status")
+        try:
+            icon_mgr = get_icon_manager()
+            if icon_mgr:
+                scan_icon = icon_mgr.get_icon('scan')
+                if not scan_icon.isNull():
+                    self.link_scanner_btn.setIcon(scan_icon)
+                    self.link_scanner_btn.setIconSize(QSize(20, 20))
+        except Exception as e:
+            log(f"Exception loading scan icon: {e}", level="error", category="ui")
+            raise
+        self.link_scanner_btn.clicked.connect(self.open_link_scanner_dashboard)
+        self.link_scanner_btn.setProperty("class", "quick-settings-btn")
+
         # Create adaptive panel for quick settings buttons
         # Automatically adjusts layout based on available width AND height:
         # - Compact: 1 row, icon-only (when both dimensions constrained)
@@ -1863,7 +1879,8 @@ class ImxUploadGUI(QMainWindow):
             self.log_viewer_btn,            # Logs
             self.help_btn,                  # Help
             self.theme_toggle_btn,          # Theme
-            self.statistics_btn             # Statistics
+            self.statistics_btn,            # Statistics
+            self.link_scanner_btn           # Link Scanner
         )
 
         # Apply icons-only mode if setting is enabled
@@ -2296,26 +2313,15 @@ class ImxUploadGUI(QMainWindow):
         log(f"Update check failed: {error}", level="warning", category="updates")
 
     def _should_check_for_updates(self) -> bool:
-        """Check if auto-update check should run.
+        """Check if auto-update check should run on startup.
 
-        Returns True only if auto-check is enabled in settings AND
-        at least 24 hours have passed since the last check.
+        Returns True if auto-check is enabled in settings.
 
         Returns:
             True if update check should proceed, False otherwise.
         """
-        # Check if auto-check is enabled in settings
         defaults = load_user_defaults()
-        if not defaults.get('check_updates_on_startup', True):
-            return False
-
-        # Check 24-hour cooldown
-        last_check = self.settings.value('updates/last_check_time', 0, type=int)
-        current_time = int(time.time())
-        if current_time - last_check < 86400:  # 24 hours
-            return False
-
-        return True
+        return defaults.get('check_updates_on_startup', True)
 
     def _check_for_updates_silently(self):
         """Check for updates silently on startup.
@@ -2449,6 +2455,20 @@ class ImxUploadGUI(QMainWindow):
         """
         from src.gui.dialogs.statistics_dialog import StatisticsDialog
         dialog = StatisticsDialog(self, self._session_start_time)
+        dialog.exec()
+
+    def open_link_scanner_dashboard(self) -> None:
+        """Open the Link Scanner Dashboard dialog.
+
+        Shows gallery online status statistics with cumulative scanning options,
+        allowing targeted scanning of galleries based on check age or status.
+        """
+        from src.gui.dialogs.link_scanner_dashboard import LinkScannerDashboardDialog
+        dialog = LinkScannerDashboardDialog(
+            parent=self,
+            queue_manager=self.queue_manager,
+            on_scan_requested=self.check_image_status_via_menu
+        )
         dialog.exec()
 
     def _init_session_stats(self) -> None:

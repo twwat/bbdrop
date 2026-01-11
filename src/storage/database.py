@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 import json
@@ -362,7 +363,7 @@ def _migrate_unnamed_galleries_to_db(conn: sqlite3.Connection) -> None:
             return  # No config file, nothing to migrate
             
         config = configparser.ConfigParser()
-        config.read(config_file)
+        config.read(config_file, encoding='utf-8')
         
         if 'UNNAMED_GALLERIES' not in config:
             return  # No unnamed galleries section
@@ -1809,6 +1810,187 @@ class QueueStore:
         except Exception as e:
             log(f"Failed to bulk update IMX status: {e}", level="error", category="database")
             raise
+
+    def get_galleries_by_check_age(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get completed galleries grouped by how long ago they were checked.
+
+        Groups galleries into time buckets based on imx_status_checked timestamp:
+        - never: Never checked (NULL or 0)
+        - 0-7: Checked within last 7 days
+        - 8-14: Checked 8-14 days ago
+        - 15-30: Checked 15-30 days ago
+        - 31-60: Checked 31-60 days ago
+        - 61-90: Checked 61-90 days ago
+        - 91-365: Checked 91-365 days ago
+        - 365+: Checked more than 365 days ago
+
+        Returns:
+            Dict with bucket names as keys and lists of gallery dicts as values.
+            Each gallery dict contains: path, name, db_id, imx_status, imx_status_checked
+        """
+        buckets: Dict[str, List[Dict[str, Any]]] = {
+            'never': [],
+            '0-7': [],
+            '8-14': [],
+            '15-30': [],
+            '31-60': [],
+            '61-90': [],
+            '91-365': [],
+            '365+': []
+        }
+
+        now = int(time.time())
+        day_seconds = 86400
+
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            cursor = conn.execute("""
+                SELECT id, path, name, imx_status, imx_status_checked
+                FROM galleries
+                WHERE status = 'completed'
+                ORDER BY imx_status_checked ASC NULLS FIRST
+            """)
+
+            for row in cursor.fetchall():
+                gallery = {
+                    'db_id': row[0],
+                    'path': row[1],
+                    'name': row[2] or os.path.basename(row[1]),
+                    'imx_status': row[3] or '',
+                    'imx_status_checked': row[4]
+                }
+
+                checked_ts = row[4]
+                if not checked_ts:
+                    buckets['never'].append(gallery)
+                else:
+                    age_days = (now - checked_ts) // day_seconds
+                    if age_days <= 7:
+                        buckets['0-7'].append(gallery)
+                    elif age_days <= 14:
+                        buckets['8-14'].append(gallery)
+                    elif age_days <= 30:
+                        buckets['15-30'].append(gallery)
+                    elif age_days <= 60:
+                        buckets['31-60'].append(gallery)
+                    elif age_days <= 90:
+                        buckets['61-90'].append(gallery)
+                    elif age_days <= 365:
+                        buckets['91-365'].append(gallery)
+                    else:
+                        buckets['365+'].append(gallery)
+
+        return buckets
+
+    def get_link_scanner_stats(self) -> Dict[str, Any]:
+        """Get comprehensive statistics for the Link Scanner dashboard.
+
+        Returns gallery and image status counts, plus cumulative counts for
+        galleries by check age (how long since they were scanned).
+
+        Returns:
+            Dict containing:
+            - galleries: {online, offline, partial, never, total}
+            - images: {online, offline, unknown, total}
+            - cumulative_counts: {7: count_7plus, 14: count_14plus, ...}
+            - galleries_by_age: {7: [galleries], 14: [galleries], ...}
+            - offline_partial_galleries: [galleries with offline/partial status]
+            - never_checked_galleries: [galleries never scanned]
+        """
+        stats: Dict[str, Any] = {
+            'galleries': {'online': 0, 'offline': 0, 'partial': 0, 'never': 0, 'total': 0},
+            'images': {'online': 0, 'offline': 0, 'unknown': 0, 'total': 0},
+            'cumulative_counts': {},
+            'galleries_by_age': {},
+            'offline_partial_galleries': [],
+            'never_checked_galleries': []
+        }
+
+        now = int(time.time())
+        day_seconds = 86400
+
+        # Age thresholds for cumulative counts (in days)
+        age_thresholds = [7, 14, 30, 60, 90, 365, 0]  # 0 = all
+
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            # Get all completed galleries with their status info
+            cursor = conn.execute("""
+                SELECT id, path, name, imx_status, imx_status_checked
+                FROM galleries
+                WHERE status = 'completed'
+                ORDER BY imx_status_checked ASC NULLS FIRST
+            """)
+
+            all_galleries = []
+            for row in cursor.fetchall():
+                gallery = {
+                    'db_id': row[0],
+                    'path': row[1],
+                    'name': row[2] or os.path.basename(row[1]),
+                    'imx_status': row[3] or '',
+                    'imx_status_checked': row[4]
+                }
+                all_galleries.append(gallery)
+
+                # Count by status
+                status = gallery['imx_status'].lower()
+                if not gallery['imx_status_checked']:
+                    stats['galleries']['never'] += 1
+                    stats['never_checked_galleries'].append(gallery)
+                elif 'offline' in status:
+                    stats['galleries']['offline'] += 1
+                    stats['offline_partial_galleries'].append(gallery)
+                elif 'partial' in status:
+                    stats['galleries']['partial'] += 1
+                    stats['offline_partial_galleries'].append(gallery)
+                elif status and ('online' in status or 'ok' in status):
+                    stats['galleries']['online'] += 1
+
+            stats['galleries']['total'] = len(all_galleries)
+
+            # Build cumulative counts by age
+            for threshold in age_thresholds:
+                galleries_in_range = []
+
+                for gallery in all_galleries:
+                    checked_ts = gallery['imx_status_checked']
+
+                    if threshold == 0:
+                        # All galleries
+                        galleries_in_range.append(gallery)
+                    elif not checked_ts:
+                        # Never checked - always include in cumulative
+                        galleries_in_range.append(gallery)
+                    else:
+                        age_days = (now - checked_ts) // day_seconds
+                        if age_days >= threshold:
+                            galleries_in_range.append(gallery)
+
+                stats['cumulative_counts'][threshold] = len(galleries_in_range)
+                stats['galleries_by_age'][threshold] = galleries_in_range
+
+            # Get image count from completed galleries
+            # Note: Image-level status isn't tracked - only gallery-level imx_status
+            # So we just count total images from completed galleries
+            cursor = conn.execute("""
+                SELECT COUNT(*) as total
+                FROM images i
+                INNER JOIN galleries g ON i.gallery_fk = g.id
+                WHERE g.status = 'completed'
+            """)
+
+            row = cursor.fetchone()
+            if row:
+                stats['images']['total'] = row[0] or 0
+                # Image-level online/offline not tracked - derive from gallery status
+                stats['images']['online'] = 0
+                stats['images']['offline'] = 0
+                stats['images']['unknown'] = stats['images']['total']
+
+        return stats
 
     def update_gallery_path(self, old_path: str, new_path: str) -> bool:
         """Update a gallery's path when it has been relocated.
