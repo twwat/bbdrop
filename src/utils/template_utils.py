@@ -46,6 +46,8 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
 
             # Check for BBCode format setting
             bbcode_format = get_file_host_setting(host_id, 'bbcode_format', 'str')
+            log(f"BBCode format for {host_id}: '{bbcode_format}' (type={type(bbcode_format).__name__}, len={len(bbcode_format) if bbcode_format else 0})",
+                level="debug", category="template")
 
             if bbcode_format:
                 # Get host display name
