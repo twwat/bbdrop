@@ -131,7 +131,6 @@ class FileHostWorker(QThread):
                 if credentials:
                     with self._credentials_lock:
                         self.host_credentials[self.host_id] = credentials
-                    self._log("Loaded credentials")
             except Exception as e:
                 self._log(f"Failed to decrypt credentials: {e}")
 
@@ -419,7 +418,6 @@ class FileHostWorker(QThread):
 
     def run(self):
         """Main worker thread loop - process uploads for this host only."""
-        self._log("Worker started", level="debug")
         self.status_updated.emit(self.host_id, "starting")
         #log(f"Emitted status signal: {self.host_id} -> starting", level="trace", category="file_hosts")
 
@@ -435,7 +433,6 @@ class FileHostWorker(QThread):
                 self._stop_event.set()
                 return
 
-            self._log("Testing credentials during spinup...", level="debug")
             self.status_updated.emit(self.host_id, "authenticating")
 
             # Load retry settings
@@ -474,7 +471,6 @@ class FileHostWorker(QThread):
                                 except (ValueError, TypeError) as e:
                                     self._log(f"Failed to parse storage: {e}", level="debug")
 
-                        self._log("Ready", level="info")
                         spinup_success = True
                         self.status_updated.emit(self.host_id, "idle")
 
@@ -529,7 +525,6 @@ class FileHostWorker(QThread):
         else:
             # No auth required - immediately signal idle
             self.status_updated.emit(self.host_id, "idle")
-            log(f"Emitted status signal: {self.host_id} -> idle", level="debug", category="file_hosts")
             self.spinup_complete.emit(self.host_id, "")
 
         while not self._stop_event.is_set():

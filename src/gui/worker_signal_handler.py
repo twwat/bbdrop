@@ -425,9 +425,7 @@ class WorkerSignalHandler(QObject):
         mw = self._main_window
 
         with QMutexLocker(mw._file_host_startup_mutex):
-            log(f"Worker {host_id} spinup complete (error={error}), "
-                f"completed={mw._file_host_startup_completed+1}/{mw._file_host_startup_expected}",
-                level="debug", category="startup")
+            # Progress tracking is internal - final result logged by manager
 
             if mw._file_host_startup_complete:
                 log(f"Already complete, ignoring {host_id}", level="debug", category="startup")
@@ -447,7 +445,7 @@ class WorkerSignalHandler(QObject):
     def _on_worker_status_updated(self, host_id: str, status_text: str):
         """Handle worker status updates during spinup."""
         mw = self._main_window
-        log(f"Worker {host_id} status: {status_text}", level="debug", category="file_hosts")
+        # Skip verbose status logging during startup - final result is logged by manager
 
         worker_id = f"filehost_{host_id.lower().replace(' ', '_')}"
         if hasattr(mw, 'worker_status_widget') and mw.worker_status_widget:
