@@ -7,4 +7,4 @@ PyQt6-stubs
 # Optional: Add other dev tools as needed
 pytest==8.0.0  # For running tests when implemented
 mypy==1.8.0    # For static type checking
-black==24.1.0  # For code formatting
+black==24.3.0  # For code formatting
