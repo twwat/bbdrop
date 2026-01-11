@@ -148,21 +148,26 @@ class TableProgressWidget(QWidget):
 
 class ActionButtonWidget(QWidget):
     """Action buttons widget for table cells"""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         from src.gui.icon_manager import get_icon_manager
         self.icon_manager = get_icon_manager()
+
+        # Prevent focus changes from affecting table selection
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 1, 4, 1)  # Better horizontal padding, minimal vertical
         layout.setSpacing(3)  # Slightly better spacing between buttons
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)  # left-align and center vertically
-        
+
         # Set consistent minimum height for the widget to match table row height
         self.setProperty("class", "status-row")
         
         self.start_btn = QPushButton("Start")
         self.start_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        self.start_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Prevent selection changes
         # Set icon and hover style
         try:
             self.start_btn.setIcon(self.icon_manager.get_icon('start'))
@@ -191,8 +196,8 @@ class ActionButtonWidget(QWidget):
         #""")
         
         self.stop_btn = QPushButton("Stop")
-        
         self.stop_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        self.stop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Prevent selection changes
         self.stop_btn.setVisible(False)
         try:
             self.stop_btn.setIcon(self.icon_manager.get_icon('stop'))
@@ -222,6 +227,7 @@ class ActionButtonWidget(QWidget):
         
         self.view_btn = QPushButton("View")
         self.view_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        self.view_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Prevent selection changes
         self.view_btn.setVisible(False)
         try:
             self.view_btn.setIcon(self.icon_manager.get_icon('view'))
@@ -250,6 +256,7 @@ class ActionButtonWidget(QWidget):
         
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setFixedSize(22, 22)  # smaller icon-only buttons
+        self.cancel_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Prevent selection changes
         self.cancel_btn.setVisible(False)
         try:
             # Use pause.png as requested
