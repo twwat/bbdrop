@@ -18,6 +18,7 @@ from PyQt6.QtCore import QObject, QTimer, QSettings, QMutexLocker, QMutex
 
 from src.utils.logger import log
 from src.utils.format_utils import format_binary_size
+from src.gui.bandwidth_manager import BandwidthManager
 
 if TYPE_CHECKING:
     from src.gui.main_window import ImxUploadGUI
@@ -35,9 +36,10 @@ class WorkerSignalHandler(QObject):
         super().__init__()
         self._main_window = main_window
 
-        # File host bandwidth tracking
-        self._fh_bandwidth_samples = []
-        self._fh_current_transfer_kbps = 0.0
+        # Centralized bandwidth manager for unified tracking
+        self.bandwidth_manager = BandwidthManager(self)
+        self.bandwidth_manager.total_bandwidth_updated.connect(self._on_total_bandwidth_updated)
+
 
     def start_worker(self):
         """Start the upload worker thread."""
@@ -59,7 +61,7 @@ class WorkerSignalHandler(QObject):
             mw.worker.ext_fields_updated.connect(mw.on_ext_fields_updated)
             mw.worker.log_message.connect(mw.add_log_message)
             mw.worker.queue_stats.connect(self.on_queue_stats)
-            mw.worker.bandwidth_updated.connect(mw.progress_tracker.on_bandwidth_updated)
+            mw.worker.bandwidth_updated.connect(self.bandwidth_manager.on_imx_bandwidth)
 
             # Connect to worker status widget
             mw.worker.gallery_started.connect(self._on_imx_worker_started)
@@ -213,73 +215,16 @@ class WorkerSignalHandler(QObject):
             # AttributeError: queue_manager not initialized; KeyError: missing stats key
             log(f"Error updating {host_name} queue stats: {e}", level="warning", category="ui")
 
-    def on_file_host_bandwidth_updated(self, kbps: float):
-        """Handle file host bandwidth update with smoothing.
+    def on_file_host_bandwidth_updated(self, host_name: str, kbps: float):
+        """Handle file host bandwidth update.
 
-        Uses the same rolling average + compression-style smoothing algorithm
-        as the IMX.to bandwidth handler for consistent display behavior.
+        Forwards to centralized BandwidthManager for unified tracking and smoothing.
 
         Args:
+            host_name: Name of the file host
             kbps: Instantaneous bandwidth in KB/s
         """
-        mw = self._main_window
-        try:
-            # Add to rolling window (keep last 20 samples = 4 seconds at 200ms polling)
-            self._fh_bandwidth_samples.append(kbps)
-            if len(self._fh_bandwidth_samples) > 20:
-                self._fh_bandwidth_samples.pop(0)
-
-            # Calculate average of recent samples to smooth out file completion spikes
-            if self._fh_bandwidth_samples:
-                averaged_kbps = sum(self._fh_bandwidth_samples) / len(self._fh_bandwidth_samples)
-            else:
-                averaged_kbps = kbps
-
-            # Apply compression-style smoothing to the averaged value
-            if averaged_kbps > self._fh_current_transfer_kbps:
-                # Moderate attack - follow increases reasonably fast
-                alpha = 0.3
-            else:
-                # Very slow release - heavily smooth out drops from file completion
-                alpha = 0.05
-
-            # Exponential moving average with asymmetric alpha
-            self._fh_current_transfer_kbps = (alpha * averaged_kbps +
-                                               (1 - alpha) * self._fh_current_transfer_kbps)
-
-            # Convert to MiB/s for display
-            mib_per_sec = self._fh_current_transfer_kbps / 1024.0
-
-            # Aggregate with IMX.to bandwidth for total speed display
-            # The Speed box shows combined upload speed from both IMX.to and file hosts
-            total_kbps = mw.progress_tracker._current_transfer_kbps + self._fh_current_transfer_kbps
-            total_mib = total_kbps / 1024.0
-            speed_str = f"{total_mib:.3f} MiB/s"
-
-            # Dim the text if speed is essentially zero
-            if total_mib < 0.001:
-                mw.speed_current_value_label.setStyleSheet("opacity: 0.4;")
-            else:
-                mw.speed_current_value_label.setStyleSheet("opacity: 1.0;")
-
-            mw.speed_current_value_label.setText(speed_str)
-
-            # Update fastest speed record if needed
-            settings = QSettings("ImxUploader", "Stats")
-            fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
-            if total_kbps > fastest_kbps and total_kbps < 10000:  # Sanity check
-                settings.setValue("fastest_kbps", total_kbps)
-                # Save timestamp when new record is set
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                settings.setValue("fastest_kbps_timestamp", timestamp)
-                fastest_mib = total_kbps / 1024.0
-                fastest_str = f"{fastest_mib:.3f} MiB/s"
-                mw.speed_fastest_value_label.setText(fastest_str)
-                # Update tooltip with timestamp
-                mw.speed_fastest_value_label.setToolTip(f"Record set: {timestamp}")
-
-        except Exception as e:
-            log(f"Error updating file host bandwidth: {e}", level="error", category="file_hosts")
+        self.bandwidth_manager.on_file_host_bandwidth(host_name, kbps)
 
     def on_file_host_storage_updated(self, host_id: str, total, left):
         """Handle file host storage update from worker.
@@ -347,6 +292,10 @@ class WorkerSignalHandler(QObject):
 
     def _on_imx_worker_finished(self, *args):
         """Handle imx.to worker upload finished."""
+        # Deactivate IMX bandwidth source so monitor shows 0
+        self.bandwidth_manager._imx_source.active = False
+        self.bandwidth_manager._imx_source.reset()
+
         mw = self._main_window
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
@@ -398,6 +347,9 @@ class WorkerSignalHandler(QObject):
 
     def _on_filehost_worker_completed(self, db_id: int, host_name: str, result: dict):
         """Handle file host worker upload completion."""
+        # Deactivate file host bandwidth source so monitor shows 0
+        self.bandwidth_manager.on_host_completed(host_name)
+
         mw = self._main_window
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
@@ -529,3 +481,48 @@ class WorkerSignalHandler(QObject):
 
         except Exception as e:
             log(f"Error updating worker queue stats: {e}", level="error", category="ui")
+
+    def _on_total_bandwidth_updated(self, total_kbps: float):
+        """Handle aggregated bandwidth update from BandwidthManager.
+
+        Updates the Speed box UI with the combined bandwidth from all sources
+        (IMX.to + file hosts) and tracks the fastest speed record.
+
+        Args:
+            total_kbps: Total bandwidth in KB/s from all sources
+        """
+        mw = self._main_window
+        # Guard against early calls before UI is fully initialized
+        if not hasattr(mw, 'speed_current_value_label'):
+            return
+        try:
+            total_mib = total_kbps / 1024.0
+            speed_str = f"{total_mib:.3f} MiB/s"
+
+            # Dim the text if speed is essentially zero
+            if total_mib < 0.001:
+                mw.speed_current_value_label.setStyleSheet("opacity: 0.4;")
+            else:
+                mw.speed_current_value_label.setStyleSheet("opacity: 1.0;")
+
+            mw.speed_current_value_label.setText(speed_str)
+
+            # Update fastest speed record if needed
+            settings = QSettings("ImxUploader", "Stats")
+            fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
+            if total_kbps > fastest_kbps and total_kbps < 10000:  # Sanity check
+                settings.setValue("fastest_kbps", total_kbps)
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                settings.setValue("fastest_kbps_timestamp", timestamp)
+                fastest_mib = total_kbps / 1024.0
+                fastest_str = f"{fastest_mib:.3f} MiB/s"
+                mw.speed_fastest_value_label.setText(fastest_str)
+                mw.speed_fastest_value_label.setToolTip(f"Record set: {timestamp}")
+
+        except Exception as e:
+            log(f"Error updating total bandwidth display: {e}", level="error", category="ui")
+
+    def stop(self):
+        """Stop the bandwidth manager timer on shutdown."""
+        if hasattr(self, 'bandwidth_manager'):
+            self.bandwidth_manager.stop()

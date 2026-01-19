@@ -209,53 +209,6 @@ class ProgressTracker(QObject):
             self._main_window.speed_current_value_label.setText("0.000 MiB/s")
             self._main_window.speed_current_value_label.setStyleSheet("opacity: 0.4;")
 
-    def on_bandwidth_updated(self, instant_kbps: float):
-        """Update Speed box with rolling average + compression-style smoothing."""
-        try:
-            self._bandwidth_samples.append(instant_kbps)
-            if len(self._bandwidth_samples) > 20:
-                self._bandwidth_samples.pop(0)
-
-            if self._bandwidth_samples:
-                averaged_kbps = sum(self._bandwidth_samples) / len(self._bandwidth_samples)
-            else:
-                averaged_kbps = instant_kbps
-
-            if averaged_kbps > self._current_transfer_kbps:
-                alpha = 0.3
-            else:
-                alpha = 0.05
-
-            self._current_transfer_kbps = alpha * averaged_kbps + (1 - alpha) * self._current_transfer_kbps
-
-            mib_per_sec = self._current_transfer_kbps / 1024.0
-            speed_str = f"{mib_per_sec:.3f} MiB/s"
-
-            if mib_per_sec < 0.001:
-                self._main_window.speed_current_value_label.setStyleSheet("opacity: 0.4;")
-            else:
-                self._main_window.speed_current_value_label.setStyleSheet("opacity: 1.0;")
-
-            self._main_window.speed_current_value_label.setText(speed_str)
-
-            # Use cached QSettings instance to avoid disk/registry I/O on every bandwidth update
-            # Note: We read from _gui_settings but writes go to _stats_settings for consistency
-            # with how update_progress_display reads from Stats
-            cached = self._get_cached_stats()
-            fastest_kbps = cached['fastest_kbps']
-            if self._current_transfer_kbps > fastest_kbps and self._current_transfer_kbps < 10000:
-                # Write new record to Stats settings (same location where update_progress_display reads)
-                self._stats_settings.setValue("fastest_kbps", self._current_transfer_kbps)
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self._stats_settings.setValue("fastest_kbps_timestamp", timestamp)
-                # Invalidate cache so next read picks up the new value
-                self._stats_cache_time = 0.0
-                fastest_mib = self._current_transfer_kbps / 1024.0
-                fastest_str = f"{fastest_mib:.3f} MiB/s"
-                self._main_window.speed_fastest_value_label.setText(fastest_str)
-                self._main_window.speed_fastest_value_label.setToolTip(f"Record set: {timestamp}")
-        except Exception:
-            pass
 
     def _update_unnamed_count_background(self):
         """Update unnamed gallery count in background."""

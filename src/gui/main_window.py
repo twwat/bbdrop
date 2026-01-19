@@ -70,6 +70,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Tuple
 from contextlib import contextmanager
 import weakref
+import psutil
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -756,9 +757,8 @@ class ImxUploadGUI(QMainWindow):
         # There's a critical issue with _update_transfer_speed_display causing hangs
         pass  # Removed timer completely
 
-        # Sliding window for accurate bandwidth tracking
-        self._bandwidth_history = []  # List of (timestamp, bytes) tuples
-        self._bandwidth_window_size = 3.0  # 3 second sliding window
+        # Memory monitoring - psutil process handle
+        self._process = psutil.Process()
         
         # Connect tab manager to the tabbed gallery widget  
         #print(f"Debug: Setting TabManager in TabbedGalleryWidget: {self.tab_manager}")
@@ -811,6 +811,14 @@ class ImxUploadGUI(QMainWindow):
         # Set reference to update queue in tabbed widget for cache invalidation
         if hasattr(self.gallery_table, '_update_queue'):
             self.gallery_table._update_queue = self._table_update_queue
+        
+        # Setup delegate handlers for action buttons and file hosts status
+        if hasattr(self.gallery_table, 'setup_delegate_handlers'):
+            self.gallery_table.setup_delegate_handlers(
+                self.queue_manager,
+                self._handle_action_button,
+                self._handle_file_host_click
+            )
         
         # Ensure initial filter is applied once UI is ready
         try:
@@ -1095,43 +1103,13 @@ class ImxUploadGUI(QMainWindow):
             # Hide on error
             self.scan_status_label.setVisible(False)
 
-    def _update_bandwidth_status(self):
-        """Update bandwidth status bar with aggregate speed."""
-        if not hasattr(self, 'worker_status_widget'):
-            return
-
-        total_speed_bps = self.worker_status_widget.get_total_speed()
-        total_speed_mbps = total_speed_bps / (1024 * 1024)
-
-        active_count = self.worker_status_widget.get_active_count()
-
-        # Build tooltip with per-host breakdown
-        tooltip_lines = ["Total Upload Bandwidth", ""]
-
-        # Get worker statuses for breakdown
-        for worker_id, status in self.worker_status_widget._workers.items():
-            if status.speed_bps > 0:
-                speed_mbps = status.speed_bps / (1024 * 1024)
-                tooltip_lines.append(f"{status.display_name}: {speed_mbps:.2f} MiB/s")
-
-        if not any(line for line in tooltip_lines[2:]):
-            tooltip_lines.append("No active uploads")
-
-        tooltip = "\n".join(tooltip_lines)
-
-        if active_count > 0:
-            self.bandwidth_status_label.setText(
-                f"Uploading: {total_speed_mbps:.2f} MiB/s ({active_count} active)"
-            )
-            self.bandwidth_status_label.setProperty("status", "active")
-        else:
-            self.bandwidth_status_label.setText("Bandwidth: 0.00 MiB/s")
-            self.bandwidth_status_label.setProperty("status", "")
-        # Reapply stylesheet to pick up property change
-        self.bandwidth_status_label.style().unpolish(self.bandwidth_status_label)
-        self.bandwidth_status_label.style().polish(self.bandwidth_status_label)
-
-        self.bandwidth_status_label.setToolTip(tooltip)
+    def _update_memory_status(self):
+        """Update memory usage in status bar."""
+        try:
+            memory_mb = self._process.memory_info().rss / (1024 * 1024)
+            self.memory_status_label.setText(f"Memory: {memory_mb:.0f} MB")
+        except Exception as e:
+            log(f"Error updating memory status: {e}", level="debug", category="ui")
 
     def _set_status_cell_icon(self, row: int, status: str):
         """Render the Status column as an icon.
@@ -1439,10 +1417,10 @@ class ImxUploadGUI(QMainWindow):
         self.scan_status_label.setVisible(False)
         self.statusBar().addPermanentWidget(self.scan_status_label)
 
-        # Add real-time bandwidth display to status bar
-        self.bandwidth_status_label = QLabel("Bandwidth: 0.00 MiB/s")
-        self.bandwidth_status_label.setToolTip("Total upload bandwidth across all workers")
-        self.statusBar().addPermanentWidget(self.bandwidth_status_label)
+        # Add memory usage display to status bar
+        self.memory_status_label = QLabel("Memory: 0 MB")
+        self.memory_status_label.setToolTip("Application memory usage")
+        self.statusBar().addPermanentWidget(self.memory_status_label)
 
         self._log_viewer_dialog = None # Log viewer dialog reference
 
@@ -1913,10 +1891,10 @@ class ImxUploadGUI(QMainWindow):
         # Worker monitoring started in showEvent() to avoid blocking startup
         # with database queries from _populate_initial_metrics()
 
-        # Setup bandwidth status update timer
-        self.bandwidth_status_timer = QTimer()
-        self.bandwidth_status_timer.timeout.connect(self._update_bandwidth_status)
-        self.bandwidth_status_timer.start(500)  # Update every 500ms
+        # Setup memory status update timer
+        self.memory_status_timer = QTimer()
+        self.memory_status_timer.timeout.connect(self._update_memory_status)
+        self.memory_status_timer.start(1000)  # Update every 1 second
 
         # Set minimum height for worker status group
         worker_status_group.setMinimumHeight(150)
@@ -2699,24 +2677,22 @@ class ImxUploadGUI(QMainWindow):
                     level="debug", category="file_hosts")
                 return
 
-            # OPTIMIZATION 3: Get widget reference first, skip DB query if widget missing
-            from src.gui.widgets.custom_widgets import FileHostsStatusWidget
-            status_widget = self.gallery_table.table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
+            # Get table item for delegate-based rendering
+            hosts_item = self.gallery_table.table.item(row, GalleryTableWidget.COL_HOSTS_STATUS)
 
-            # 4. Log widget lookup result
-            widget_type = type(status_widget).__name__ if status_widget else "None"
-            log(f"cellWidget(row={row}, COL_HOSTS_STATUS) returned: {widget_type}, "
-                f"is FileHostsStatusWidget: {isinstance(status_widget, FileHostsStatusWidget)}",
+            # 4. Log item lookup result
+            log(f"table.item(row={row}, COL_HOSTS_STATUS) returned: {hosts_item}",
                 level="debug", category="file_hosts")
 
-            if not isinstance(status_widget, FileHostsStatusWidget):
-                log(f"File host status widget not found at row {row} for db_id {db_id}", level="debug", category="file_hosts")
-                return  # Widget not present, skip expensive DB query
+            if hosts_item is None:
+                log(f"File host status item not found at row {row} for db_id {db_id}", level="debug", category="file_hosts")
+                return  # Item not present, skip DB query
 
-            # Only do DB query if we have a valid widget to update
+            # Fetch file host uploads from database
             host_uploads = {}
             try:
                 uploads_list = self.queue_manager.store.get_file_host_uploads(gallery_path)
+                # Convert list to dict format for delegate
                 host_uploads = {upload['host_name']: upload for upload in uploads_list}
 
                 # 5. Log uploads fetched from database
@@ -2727,19 +2703,19 @@ class ImxUploadGUI(QMainWindow):
                 log(f"Failed to load file host uploads: {e}", level="warning", category="file_hosts")
                 return
 
-            # Update widget (already confirmed it exists and is correct type)
-            status_widget.update_hosts(host_uploads)
-            status_widget.update()  # Force visual refresh
+            # Update table item data for delegate rendering
+            hosts_item.setData(Qt.ItemDataRole.UserRole + 1, host_uploads)
 
-            # BUGFIX: Update cache to prevent stale data on future row refreshes
-            # Cache is used during row population (table_row_manager.py:370-371)
-            # Without this update, rows show incorrect status when re-populated
-            # (scrolling, filtering, theme changes would revert to stale cache)
+            # Force repaint of the cell
+            table = self.gallery_table.table
+            table.viewport().update(table.visualItemRect(hosts_item))
+
+            # Update cache with dict format for consistency
             if hasattr(self, '_file_host_uploads_cache') and gallery_path:
                 self._file_host_uploads_cache[gallery_path] = uploads_list
 
-            # 6. Confirm update_hosts was called
-            log(f"Called update_hosts() on widget at row {row} with {len(host_uploads)} hosts",
+            # 6. Confirm update completed
+            log(f"Updated table item data at row {row} with {len(host_uploads)} hosts",
                 level="debug", category="file_hosts")
 
         except Exception as e:
@@ -3027,7 +3003,7 @@ class ImxUploadGUI(QMainWindow):
             self.path_to_row = new_path_to_row
             self.row_to_path = new_row_to_path
     
-    def _update_specific_gallery_display(self, path: str):
+    def _update_specific_gallery_display(self, path: str, _retry_count: int = 0):
         """Update a specific gallery's display with background tab support - NON-BLOCKING"""
         item = self.queue_manager.get_item(path)
         if not item:
@@ -3038,7 +3014,17 @@ class ImxUploadGUI(QMainWindow):
         # If item not in table, skip update (it should be added explicitly via add_folders)
         # This prevents duplicate additions via status change signals
         if path not in self.path_to_row:
-            log(f"Item {path} not in path_to_row, skipping update (prevents duplicates)", level="debug")
+            # Item not yet in table - likely a race condition where scan completed
+            # before the table row was created. Retry after a short delay.
+            MAX_RETRIES = 10
+            item = self.queue_manager.get_item(path)
+            if item and _retry_count < MAX_RETRIES:
+                log(f"Item {path} not in path_to_row yet, scheduling retry {_retry_count + 1}/{MAX_RETRIES}",
+                    level="debug", category="queue")
+                QTimer.singleShot(100, lambda p=path, r=_retry_count: self._update_specific_gallery_display(p, r + 1))
+            elif _retry_count >= MAX_RETRIES:
+                log(f"Item {path} never added to table after {MAX_RETRIES} retries, giving up",
+                    level="warning", category="queue")
             return
         
         # Check if row is currently visible for performance optimization
@@ -4188,14 +4174,17 @@ class ImxUploadGUI(QMainWindow):
             uploads = self.queue_manager.store.get_file_host_uploads(item.path)
             file_host_uploads_map[item.path] = {u['host_name']: u for u in uploads}
 
-        # Update all FileHostsStatusWidget instances
+        # Update all file host status table items for delegate rendering
+        table = self.gallery_table.table
         for row in range(self.gallery_table.rowCount()):
             path = self.row_to_path.get(row)
             if path:
-                status_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_HOSTS_STATUS)
-                if status_widget and hasattr(status_widget, 'update_hosts'):
+                hosts_item = table.item(row, GalleryTableWidget.COL_HOSTS_STATUS)
+                if hosts_item:
                     host_uploads = file_host_uploads_map.get(path, {})
-                    status_widget.update_hosts(host_uploads)
+                    hosts_item.setData(Qt.ItemDataRole.UserRole + 1, host_uploads)
+        # Force full table repaint
+        table.viewport().update()
 
     def handle_view_button(self, path: str):
         """Handle view button click - show BBCode for completed, start upload for ready, retry/file manager for failed"""
@@ -4239,6 +4228,35 @@ class ImxUploadGUI(QMainWindow):
         dialog = BBCodeViewerDialog(path, self)
         dialog.exec()
     
+
+    def _handle_action_button(self, path: str, action: str) -> None:
+        """Handle action button clicks from delegate.
+        
+        Args:
+            path: Gallery path
+            action: Action to perform (start, stop, cancel, view, view_error)
+        """
+        if action == "start":
+            self.queue_controller.start_gallery(path)
+        elif action == "stop":
+            self.queue_controller.stop_gallery(path)
+        elif action == "cancel":
+            self.queue_controller.cancel_gallery(path)
+        elif action == "view":
+            self.view_bbcode_files(path)
+        elif action == "view_error":
+            self._show_error_details(path)
+
+    def _handle_file_host_click(self, path: str, host_name: str) -> None:
+        """Handle file host icon clicks from delegate.
+        
+        Args:
+            path: Gallery path
+            host_name: Name of the clicked host
+        """
+        # Delegate to existing handler
+        self._on_file_host_icon_clicked(path, host_name)
+
     def copy_bbcode_to_clipboard(self, path: str):
         """Copy BBCode content to clipboard for the given item"""
         # Check if item is completed
@@ -4755,8 +4773,8 @@ class ImxUploadGUI(QMainWindow):
             self._background_update_timer.stop()
         if hasattr(self, 'update_timer') and self.update_timer.isActive():
             self.update_timer.stop()
-        if hasattr(self, 'bandwidth_status_timer') and self.bandwidth_status_timer.isActive():
-            self.bandwidth_status_timer.stop()
+        if hasattr(self, 'memory_status_timer') and self.memory_status_timer.isActive():
+            self.memory_status_timer.stop()
         if hasattr(self, '_upload_animation_timer') and self._upload_animation_timer.isActive():
             self._upload_animation_timer.stop()
 
