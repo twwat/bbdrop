@@ -42,7 +42,7 @@ class FileHostWorker(QThread):
     upload_progress = pyqtSignal(int, str, int, int, float)  # db_id, host_name, uploaded_bytes, total_bytes, speed_bps
     upload_completed = pyqtSignal(int, str, dict)  # db_id, host_name, result_dict
     upload_failed = pyqtSignal(int, str, str)  # db_id, host_name, error_message
-    bandwidth_updated = pyqtSignal(float)  # Instantaneous KB/s from pycurl
+    bandwidth_updated = pyqtSignal(str, float)  # host_id, KB/s from pycurl
     log_message = pyqtSignal([str], [str, str])  # Overloaded: (message) or (level, message) for backward compatibility
 
     # New signals for testing and storage
@@ -481,7 +481,7 @@ class FileHostWorker(QThread):
                 except Exception as e:
                     spinup_error = str(e)
                     last_exception = e
-                    self._log(f"Credential test exception: {spinup_error}\n{traceback.format_exc()}", level="error")
+                    self._log(f"Credential test exception: {spinup_error}", level="error")
 
                 # Handle spinup error (from either credential failure or exception)
                 if spinup_error:
@@ -552,8 +552,7 @@ class FileHostWorker(QThread):
                 pending_uploads = self.queue_store.get_pending_file_host_uploads(host_name=self.host_id)
 
                 if not pending_uploads:
-                    # No work to do, emit bandwidth and wait
-                    self._emit_bandwidth()
+                    # No work to do, just wait (don't emit 0 bandwidth)
                     time.sleep(1.0)
                     continue
 
@@ -744,11 +743,11 @@ class FileHostWorker(QThread):
                         self.upload_progress.emit(db_id, host_name, uploaded, total, speed_bps)
 
                     # Emit bandwidth periodically (speed_bps is bytes/sec, convert to KB/s)
+                    # Only emit when we have actual speed data - don't emit 0 during
+                    # connection setup, SSL handshake, or server response wait
                     if speed_bps > 0:
                         kbps = speed_bps / 1024.0
                         self._emit_bandwidth_immediate(kbps)
-                    else:
-                        self._emit_bandwidth()
                 except Exception as e:
                     self._log(f"Progress callback error: {e}\n{traceback.format_exc()}", level="error")
                     self._cleanup_upload_throttle_state(db_id, host_name)
@@ -920,7 +919,7 @@ class FileHostWorker(QThread):
             kbps = (bytes_transferred / 1024.0) / elapsed
 
             # Emit signal
-            self.bandwidth_updated.emit(kbps)
+            self.bandwidth_updated.emit(self.host_id, kbps)
 
             # Update tracking
             self._bw_last_bytes = current_bytes
@@ -936,7 +935,7 @@ class FileHostWorker(QThread):
             return
 
         # Emit the speed directly (already calculated by pycurl callback)
-        self.bandwidth_updated.emit(kbps)
+        self.bandwidth_updated.emit(self.host_id, kbps)
 
         # Update tracking
         self._bw_last_emit = now

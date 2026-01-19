@@ -35,7 +35,7 @@ class FileHostWorkerManager(QObject):
     upload_progress = pyqtSignal(int, str, int, int, float)  # gallery_id, host_name, uploaded, total, speed_bps
     upload_completed = pyqtSignal(int, str, dict)  # gallery_id, host_name, result
     upload_failed = pyqtSignal(int, str, str)  # gallery_id, host_name, error
-    bandwidth_updated = pyqtSignal(float)  # KB/s
+    bandwidth_updated = pyqtSignal(str, float)  # host_id, KB/s
     worker_status_updated = pyqtSignal(str, str)  # host_id, status_text
 
     def __init__(self, queue_store: QueueStore):
