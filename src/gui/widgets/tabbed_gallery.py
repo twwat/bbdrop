@@ -20,6 +20,7 @@ from PyQt6.QtGui import (
 
 # Import the table widget we extracted
 from src.gui.widgets.gallery_table import GalleryTableWidget
+from src.gui.delegates import ActionButtonDelegate, FileHostsStatusDelegate
 from src.utils.logger import log
 from src.gui.dialogs.message_factory import show_warning, show_info
 
@@ -215,12 +216,39 @@ class TabbedGalleryWidget(QWidget):
         self.table = GalleryTableWidget()
         layout.addWidget(self.table, 1)  # Give it stretch priority
 
+        # Attach delegates for memory-efficient cell rendering
+        self._setup_delegates()
+
         # Connect selection changes to auto-save state
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
 
         # Tabs will be initialized when TabManager is set
         # Don't add hardcoded tabs here
     
+    def _setup_delegates(self):
+        """Attach delegates for action buttons and file host status columns."""
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        
+        # Action button delegate (column 8)
+        self.action_delegate = ActionButtonDelegate(self.table)
+        self.table.setItemDelegateForColumn(GalleryTableWidget.COL_ACTION, self.action_delegate)
+        
+        # File hosts status delegate (column 22)
+        self.hosts_delegate = FileHostsStatusDelegate(self.table)
+        self.table.setItemDelegateForColumn(GalleryTableWidget.COL_HOSTS_STATUS, self.hosts_delegate)
+
+    def setup_delegate_handlers(self, queue_manager, action_handler, host_click_handler):
+        """Connect delegate signals to handlers.
+        
+        Args:
+            queue_manager: QueueManager for status lookups
+            action_handler: Callable(path, action) for button clicks
+            host_click_handler: Callable(path, host_name) for host icon clicks
+        """
+        self.action_delegate.set_queue_manager(queue_manager)
+        self.action_delegate.button_clicked.connect(action_handler)
+        self.hosts_delegate.host_clicked.connect(host_click_handler)
+
     def _setup_connections(self):
         """Setup signal connections"""
         self.tab_bar.currentChanged.connect(self._on_tab_changed)

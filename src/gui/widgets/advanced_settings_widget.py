@@ -34,6 +34,25 @@ ADVANCED_SETTINGS = [
         "default": True,
         "type": "bool"
     },
+    # Bandwidth display smoothing settings
+    {
+        "key": "bandwidth/alpha_up",
+        "description": "Speed display attack rate (higher = faster rise). Audio-style EMA smoothing.",
+        "default": 0.6,
+        "type": "float",
+        "min": 0.1,
+        "max": 1.0,
+        "decimals": 2
+    },
+    {
+        "key": "bandwidth/alpha_down",
+        "description": "Speed display release rate (lower = slower decay). Audio-style EMA smoothing.",
+        "default": 0.35,
+        "type": "float",
+        "min": 0.01,
+        "max": 0.5,
+        "decimals": 2
+    },
 ]
 
 

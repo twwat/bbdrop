@@ -674,6 +674,10 @@ class ShutdownWorker(QThread):
         if hasattr(self.mw, 'worker_status_widget'):
             self.mw.worker_status_widget.stop_monitoring()
 
+        # Stop worker signal handler (stops BandwidthManager timer)
+        if hasattr(self.mw, 'worker_signal_handler'):
+            self.mw.worker_signal_handler.stop()
+
     def _stop_file_host_workers(self):
         """Stop all file host workers."""
         log("ShutdownWorker: Stopping file host workers...", level="debug", category="shutdown")

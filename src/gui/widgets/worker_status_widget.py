@@ -628,7 +628,8 @@ class WorkerStatusWidget(QWidget):
         Returns:
             True if logos should be shown, False for text display
         """
-        settings = QSettings()
+        # Must use same org/app name as settings dialog to read correct registry location
+        settings = QSettings("ImxUploader", "ImxUploadGUI")
         return settings.value('ui/show_worker_logos', True, type=bool)
 
     def _load_host_logo(self, host_id: str, height: int = 20) -> Optional[QLabel]:
