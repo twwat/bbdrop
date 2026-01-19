@@ -137,6 +137,18 @@ def get_config_path() -> str:
     os.makedirs(base_dir, exist_ok=True)
     return os.path.join(base_dir, "imxup.ini")
 
+def read_config() -> configparser.ConfigParser:
+    """Read the application config file with proper encoding.
+    
+    Returns:
+        ConfigParser instance with loaded config (empty if file doesn't exist)
+    """
+    config = configparser.ConfigParser()
+    config_file = get_config_path()
+    if os.path.exists(config_file):
+        config.read(config_file, encoding='utf-8')
+    return config
+
 def _unique_destination_path(dest_dir: str, filename: str) -> str:
     """Generate a unique destination path within dest_dir.
     If a file with the same name exists, append _1, _2, ... before the extension.
@@ -426,7 +438,7 @@ def migrate_credentials_from_ini():
     if not os.path.exists(config_file):
         return
 
-    config.read(config_file)
+    config.read(config_file, encoding='utf-8')
     if 'CREDENTIALS' not in config:
         return
 
@@ -476,13 +488,9 @@ def load_user_defaults():
         'check_updates_on_startup': True,
     }
 
-    config = configparser.ConfigParser()
-    config_file = get_config_path()
+    config = read_config()
 
-    if os.path.exists(config_file):
-        config.read(config_file)
-
-        if 'DEFAULTS' in config:
+    if 'DEFAULTS' in config:
             # Load integer settings
             for key in ['thumbnail_size', 'thumbnail_format', 'max_retries',
                        'parallel_batch_size', 'upload_connect_timeout', 'upload_read_timeout']:
@@ -549,7 +557,7 @@ def save_unnamed_gallery(gallery_id, intended_name):
         config_file = get_config_path()
         
         if os.path.exists(config_file):
-            config.read(config_file)
+            config.read(config_file, encoding='utf-8')
         
         if 'UNNAMED_GALLERIES' not in config:
             config['UNNAMED_GALLERIES'] = {}
@@ -635,13 +643,9 @@ def get_unnamed_galleries():
         return store.get_unnamed_galleries()
     except Exception:
         # Fallback to config file if database fails
-        config = configparser.ConfigParser()
-        config_file = get_config_path()
-        
-        if os.path.exists(config_file):
-            config.read(config_file)
-            if 'UNNAMED_GALLERIES' in config:
-                return dict(config['UNNAMED_GALLERIES'])
+        config = read_config()
+        if 'UNNAMED_GALLERIES' in config:
+            return dict(config['UNNAMED_GALLERIES'])
         return {}
 
 def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
@@ -736,7 +740,7 @@ def remove_unnamed_gallery(gallery_id):
         config_file = get_config_path()
         
         if os.path.exists(config_file):
-            config.read(config_file)
+            config.read(config_file, encoding='utf-8')
             
             if 'UNNAMED_GALLERIES' in config and gallery_id in config['UNNAMED_GALLERIES']:
                 del config['UNNAMED_GALLERIES'][gallery_id]
@@ -1356,444 +1360,6 @@ class ImxToUploader:
             curl = self._curl_local.curl
             curl.setopt(pycurl.COOKIELIST, "ALL")
             log("Cleared pycurl API cookies for new gallery", level="debug", category="uploads")
-
-    # ============================================================================
-    # WEB OPERATIONS - DISABLED
-    # ============================================================================
-    # All web-based operations (login, rename, visibility) are now handled by
-    # RenameWorker which maintains a separate long-lived web session.
-    # ImxToUploader is API-only and uses X-API-Key for uploads.
-    #
-    # The following methods raise NotImplementedError to ensure ONE RENAMEWORKER
-    # handles all web operations consistently.
-    # ============================================================================
-    #
-    # def login(self):
-    #     """Login to imx.to web interface
-    # 
-    #     DEPRECATED: Use RenameWorker for all web-based authentication.
-    #     ImxToUploader is now API-only.
-    #     """
-    #     raise NotImplementedError(
-    #         "ImxToUploader.login() is deprecated. Use RenameWorker for all web operations. "
-    #         "ImxToUploader is API-only and uses X-API-Key for uploads."
-    #     )
-    # 
-    #     if not self.username or not self.password:
-    #     Attempt cookie-based session login even without stored username/password if enabled
-    #         use_cookies = True
-    #         try:
-    #             cfg = configparser.ConfigParser()
-    #             cfg_path = get_config_path()
-    #             if os.path.exists(cfg_path):
-    #                 cfg.read(cfg_path)
-    #                 if 'CREDENTIALS' in cfg:
-    #                     use_cookies = str(cfg['CREDENTIALS'].get('cookies_enabled', 'true')).lower() != 'false'
-    #         except Exception:
-    #             use_cookies = True
-    #         if use_cookies:
-    #             try:
-    #                login_start = time.time()
-    #                log(f" DEBUG: Starting cookie-based login process...")
-    #                log(f" Attempting to use cookies to bypass DDoS-Guard...")
-    # 
-    #                 cookies_start = time.time()
-    #                 firefox_cookies = get_firefox_cookies("imx.to", cookie_names=REQUIRED_COOKIES)
-    #                 firefox_time = time.time() - cookies_start
-    #                 log(f" DEBUG: Firefox cookies took {firefox_time:.3f}s")
-    #                 
-    #                 file_start = time.time()
-    #                 file_cookies = load_cookies_from_file("cookies.txt")
-    #                 file_time = time.time() - file_start
-    #                 log(f" DEBUG: File cookies took {file_time:.3f}s")
-    #                 all_cookies = {}
-    #                 if firefox_cookies:
-    #                    log(f" Found {len(firefox_cookies)} Firefox cookies for imx.to")
-    #                     all_cookies.update(firefox_cookies)
-    #                 if file_cookies:
-    #                     log(f" Loaded cookies from cookies.txt")
-    #                     all_cookies.update(file_cookies)
-    #                 if all_cookies:
-    #                     for name, cookie_data in all_cookies.items():
-    #                         try:
-    #                             self.session.cookies.set(name, cookie_data['value'], domain=cookie_data['domain'], path=cookie_data['path'])
-    #                         except Exception:
-    #                             pass
-    #                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
-    #                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-    #                         log(f"Successfully authenticated using cookies (no password login)", level="debug", category="auth")
-    #                         try:
-    #                             self.last_login_method = "cookies"
-    #                         except Exception:
-    #                             pass
-    #                         return True
-    #             except Exception:
-    #                 Ignore cookie errors and fall back
-    #                 pass
-    #         if self.api_key:
-    #             log(f"Using API key authentication - gallery naming may be limited", level="debug", category="info")
-    #             try:
-    #                 self.last_login_method = "api_key"
-    #             except Exception:
-    #                 pass
-    #             return True
-    #         else:
-    #             log(f"No stored credentials, gallery naming disabled", level="warning", category="auth")
-    #             try:
-    #                 self.last_login_method = "none"
-    #             except Exception:
-    #                 pass
-    #             return False
-    #     
-    #     max_retries = 1
-    #     for attempt in range(max_retries):
-    #         try:
-    #             if attempt > 0:
-    #                 log(f" Retry attempt {attempt + 1}/{max_retries}")
-    #                 time.sleep(1)
-    #             
-    #             Try to get cookies first (browser + file) if enabled
-    #             use_cookies = True
-    #             try:
-    #                 cfg = configparser.ConfigParser()
-    #                 cfg_path = get_config_path()
-    #                 if os.path.exists(cfg_path):
-    #                     cfg.read(cfg_path)
-    #                     if 'CREDENTIALS' in cfg:
-    #                         use_cookies = str(cfg['CREDENTIALS'].get('cookies_enabled', 'true')).lower() != 'false'
-    #             except Exception:
-    #                 use_cookies = True
-    #             if use_cookies:
-    #                 log(f" Attempting to use cookies to bypass DDoS-Guard...")
-    #                 firefox_cookies = get_firefox_cookies("imx.to", cookie_names=REQUIRED_COOKIES)
-    #                 file_cookies = load_cookies_from_file("cookies.txt")
-    #                 all_cookies = {}
-    #                 if firefox_cookies:
-    #                     log(f" Found {len(firefox_cookies)} Firefox cookies for imx.to")
-    #                     all_cookies.update(firefox_cookies)
-    #                 if file_cookies:
-    #                     log(f" Loaded cookies from cookies.txt")
-    #                     all_cookies.update(file_cookies)
-    #                 if all_cookies:
-    #                    # Add cookies to session
-    #                     for name, cookie_data in all_cookies.items():
-    #                         try:
-    #                             self.session.cookies.set(name, cookie_data['value'], domain=cookie_data['domain'], path=cookie_data['path'])
-    #                         except Exception:
-    #                             #Best effort
-    #                             pass
-    #                     Test if we're already logged in with cookies
-    #                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
-    #                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-    #                         log(f"Successfully authenticated using cookies (no password login)", level="info", category="auth")
-    #                         try:
-    #                             self.last_login_method = "cookies"
-    #                         except Exception:
-    #                             pass
-    #                         return True
-    #             else:
-    #                 log(f" Skipping Firefox cookies per settings")
-    #             
-    #             #Fall back to regular login
-    #             log(f" Attempting login to {self.web_url}/login.php")
-    #             login_page = self.session.get(f"{self.web_url}/login.php")
-    #             
-    #             Submit login form
-    #             login_data = {
-    #                 'usr_email': self.username,
-    #                 'pwd': self.password,
-    #                 'remember': '1',
-    #                 'doLogin': 'Login'
-    #             }
-    #             
-    #             response = self.session.post(f"{self.web_url}/login.php", data=login_data)
-    #             
-    #            # Check if we hit DDoS-Guard
-    #             if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-    #                 log(f"DDoS-Guard detected", level="warning", category="auth")
-    # 
-    #                # If bypass didn't work, try browser cookies fallback
-    #             log(f"Trying browser cookies...", level="debug", category="auth")
-    #             firefox_cookies = get_firefox_cookies("imx.to", cookie_names=REQUIRED_COOKIES) if use_cookies else {}
-    #             file_cookies = load_cookies_from_file("cookies.txt") if use_cookies else {}
-    #             all_cookies = {**firefox_cookies, **file_cookies} if use_cookies else {}
-    # 
-    #             if all_cookies:
-    #                 log(f"Retrying with browser cookies...", level="debug", category="auth")
-    #                # Clear session and try with cookies (use resilient session)
-    #                 defaults = load_user_defaults()
-    #                 parallel_batch_size = defaults.get('parallel_batch_size', 4)
-    #                 self.session = self._setup_resilient_session(parallel_batch_size)
-    #                 self.session.headers.update({
-    #                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0',
-    #                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    #                     'Accept-Language': 'en-US',
-    #                     'Accept-Encoding': 'gzip, deflate, br, zstd',
-    #                     'DNT': '1'
-    #                 })
-    # 
-    #                 for name, cookie_data in all_cookies.items():
-    #                     self.session.cookies.set(name, cookie_data['value'],
-    #                                           domain=cookie_data['domain'],
-    #                                           path=cookie_data['path'])
-    # 
-    #                 #Try login again with cookies
-    #                 response = self.session.post(f"{self.web_url}/login.php", data=login_data)
-    # 
-    #                # If we still hit DDoS-Guard but have cookies, test if we can access user pages
-    #                 if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-    #                     log(f"DDoS-Guard detected but cookies loaded - testing access to user pages...", level="debug", category="auth")
-    #                     #Test if we can access a user page
-    #                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
-    #                     if test_response.status_code == 200 and 'login' not in test_response.url:
-    #                         log(f"Successfully accessed user pages with cookies", level="debug", category="auth")
-    #                         try:
-    #                             self.last_login_method = "cookies"
-    #                         except Exception:
-    #                             pass
-    #                         return True
-    #                     else:
-    #                         log(f"Cannot access user pages despite cookies - login may have failed", level="debug", category="auth")
-    #                         if attempt < max_retries - 1:
-    #                             continue
-    #                         else:
-    #                             return False
-    #                 
-    #                 if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-    #                     log(f"DDoS-Guard still detected, falling back to API-only upload...", level="debug", category="auth")
-    #                     if attempt < max_retries - 1:
-    #                         continue
-    #                     else:
-    #                         return False
-    #             
-    #            # Check if login was successful
-    #             if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-    #                 log(f"Successfully logged in", level="info", category="auth")
-    #                 try:
-    #                     self.last_login_method = "credentials"
-    #                 except Exception:
-    #                     pass
-    #                 return True
-    #             else:
-    #                 log(f"Login failed - check username/password", level="warning", category="auth")
-    #                 if attempt < max_retries - 1:
-    #                     continue
-    #                 else:
-    #                     return False
-    #                 
-    #         except Exception as e:
-    #             log(f"Login error: {str(e)}", level="error", category="auth")
-    #             if attempt < max_retries - 1:
-    #                 continue
-    #             else:
-    #                 return False
-    #     
-    #     return False
-
-    #def login_with_credentials_only(self) -> bool:
-    #    """Login using stored username/password without attempting cookies.
-    #
-    #    Returns True on success and sets last_login_method to 'credentials'.
-    #    """
-    #    if not self.username or not self.password:
-    #        return False
-    #    try:
-    #        # Fresh resilient session without any cookie loading
-    #        defaults = load_user_defaults()
-    #        parallel_batch_size = defaults.get('parallel_batch_size', 4)
-    #        self.session = self._setup_resilient_session(parallel_batch_size)
-    #        self.session.headers.update({
-    #            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0',
-    #            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    #            'Accept-Language': 'en-US',
-    #            'Accept-Encoding': 'gzip, deflate, br, zstd',
-    #            'DNT': '1'
-    #        })
-    #        # Submit login form directly
-    #        login_data = {
-    #            'usr_email': self.username,
-    #            'pwd': self.password,
-    #            'remember': '1',
-    #            'doLogin': 'Login'
-    #        }
-    #        response = self.session.post(f"{self.web_url}/login.php", data=login_data)
-    #        if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-    #            try:
-    #                self.last_login_method = "credentials"
-    #            except Exception:
-    #                pass
-    #            return True
-    #        return False
-    #    except Exception:
-    #        return False
-    
-    #def create_gallery_with_name(self, gallery_name, skip_login=False):
-    #    """Create a gallery with a specific name using web interface"""
-    #    if not skip_login and not self.login():
-    #        log(f"Login failed - cannot create gallery with name", level="debug", category="auth")
-    #        return None
-    #    
-    #    try:
-    #        # Get the add gallery page
-    #        add_page = self.session.get(f"{self.web_url}/user/gallery/add")
-    #        
-    #        # Submit gallery creation form
-    #        gallery_data = {
-    #            'gallery_name': gallery_name,
-    #            'public_gallery': '1',  # Always public for now
-    #            'submit_new_gallery': 'Add'
-    #        }
-    #        
-    #        response = self.session.post(f"{self.web_url}/user/gallery/add", data=gallery_data)
-    #        
-    #        # Extract gallery ID from redirect URL
-    #        if 'gallery/manage?id=' in response.url:
-    #            gallery_id = response.url.split('id=')[1]
-    #            log(f"Created gallery '{gallery_name}' with ID '{gallery_id}'", level="debug", category="auth")
-    #            return gallery_id
-    #        else:
-    #            log(f"Failed to create gallery", level="debug", category="auth")
-    #            log(f"- Response URL: {response.url}", level="debug", category="auth")
-    #            log(f"- Response status: {response.status_code}", level="debug", category="auth")
-    #            if 'DDoS-Guard' in response.text:
-    #                log(f"DDoS-Guard detected in gallery creation", level="debug", category="auth")
-    #            return None
-    #            
-    #    except Exception as e:
-    #        log(f"Error creating gallery: {str(e)}", level="error")
-    #        return None
-    
-    # REMOVED: _upload_without_named_gallery — unified into upload_folder
-    
-    #def rename_gallery(self, gallery_id, new_name):
-    #    """Rename an existing gallery"""
-    #    if not self.login():
-    #        return False
-    #    
-    #    try:
-    #        # Get the edit gallery page
-    #        edit_page = self.session.get(f"{self.web_url}/user/gallery/edit?id={gallery_id}")
-    #        
-    #        # Submit gallery rename form
-    #        rename_data = {
-    #            'gallery_name': new_name,
-    #            'submit_new_gallery': 'Rename Gallery',
-    #            'public_gallery': '1'
-    #        }
-    #        
-    #        response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
-    #        
-    #        if response.status_code == 200:
-    #            log(f"Successfully renamed gallery '{gallery_id}' to '{new_name}'", level="info")
-    #            return True
-    #        else:
-    #            log(f"Failed to rename gallery", level="debug", category="renaming")
-    #            return False
-    #            
-    #    except Exception as e:
-    #        log(f"Error renaming gallery: {str(e)}", level="error", category="renaming")
-    #        return False
-    
-    #def rename_gallery_with_session(self, gallery_id, new_name):
-    #    """Rename an existing gallery using existing session (no login call)"""
-    #    try:
-    #        # Sanitize the gallery name
-    #        original_name = new_name
-    #        new_name = sanitize_gallery_name(new_name)
-    #        if original_name != new_name:
-    #            log(f"Sanitized gallery name: '{original_name}' -> '{new_name}'", level="debug", category="renaming")
-    #        
-    #        # Get the edit gallery page
-    #        edit_page = self.session.get(f"{self.web_url}/user/gallery/edit?id={gallery_id}")
-    #        # Track last rename status for caller logic
-    #        try:
-    #            self._last_rename_status_code = getattr(edit_page, 'status_code', None)
-    #            self._last_rename_ddos = bool('DDoS-Guard' in (edit_page.text or ''))
-    #        except Exception:
-    #            self._last_rename_status_code = None
-    #            self._last_rename_ddos = False
-    #        
-    #        # Check if we can access the edit page
-    #        if edit_page.status_code != 200:
-    #            if 'DDoS-Guard' in edit_page.text:
-    #                log(f"DDoS-Guard detected while accessing edit page for gallery {gallery_id} (status: {edit_page.status_code})", level="debug", category="network")
-    #            else:
-    #                log(f"Failed to access edit page for gallery {gallery_id} (status: {edit_page.status_code})", level="debug", category="network")
-    #            return False
-    #
-    #        # Check if we're actually logged in by looking for login form
-    #        if 'login' in edit_page.url or 'login' in edit_page.text.lower():
-    #            log(f"Not logged in - redirecting to login page", level="debug", category="auth")
-    #            return False
-    #        
-    #        # Submit gallery rename form
-    #        rename_data = {
-    #            'gallery_name': new_name,
-    #            'submit_new_gallery': 'Rename Gallery',
-    #            'public_gallery': '1'
-    #        }
-    #        
-    #        response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
-    #        # Track last rename status for caller logic
-    #        try:
-    #            self._last_rename_status_code = getattr(response, 'status_code', None)
-    #            self._last_rename_ddos = bool('DDoS-Guard' in (response.text or ''))
-    #        except Exception:
-    #            self._last_rename_status_code = None
-    #            self._last_rename_ddos = False
-    #        
-    #        if response.status_code == 200:
-    #            # Check if the rename was actually successful
-    #            if 'success' in response.text.lower() or 'gallery' in response.url:
-    #                log(f"Rename Worker: Successfully renamed gallery on imx.to ({gallery_id}) --> '{new_name}'", level="info", category="renaming")
-    #                return True
-    #            else:
-    #                log(f"Rename request returned 200 but may have failed", level="debug", category="renaming")
-    #                if 'DDoS-Guard' in response.text:
-    #                    log(f"DDoS-Guard detected in rename response", level="debug", category="renaming")
-    #                return False
-    #        else:
-    #            log(f"Failed to rename gallery (status: {response.status_code})", level="debug", category="renaming")
-    #            if 'DDoS-Guard' in response.text:
-    #                log(f"DDoS-Guard detected in error response", level="debug", category="renaming")
-    #            return False
-    #            
-    #    except Exception as e:
-    #        log(f"Error renaming gallery: {str(e)}", level="error", category="renaming")
-    #        return False
-    
-    #def set_gallery_visibility(self, gallery_id, visibility):
-    #    """Set gallery visibility (public/private)
-    #
-    #    Args:
-    #        gallery_id: Gallery ID
-    #        visibility: 1 for public, 0 for private
-    #    """
-    #    if not self.login():
-    #        return False
-    #
-    #    try:
-    #        # Get the edit gallery page
-    #        edit_page = self.session.get(f"{self.web_url}/user/gallery/edit?id={gallery_id}")
-    #
-    #        # Submit gallery visibility form
-    #        visibility_data = {
-    #            'public_gallery': str(visibility),
-    #            'submit_new_gallery': 'Update Gallery'
-    #        }
-    #        
-    #        response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=visibility_data)
-    #        
-    #        if response.status_code == 200:
-    #            log(f"Successfully set gallery {gallery_id} visibility", level="debug")
-    #            return True
-    #        else:
-    #            log(f"Failed to update gallery visibility", level="warning")
-    #            return False
-    #            
-    #    except Exception as e:
-    #        log(f"Error updating gallery visibility: {str(e)}", level="error")
-    #        return False
     
     def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None, progress_callback=None):
         """
@@ -1870,7 +1436,7 @@ class ImxToUploader:
             # Prepare multipart form data
             form_data = [
                 ('image', (
-                    pycurl.FORM_BUFFER, os.path.basename(image_path),
+                    pycurl.FORM_BUFFER, os.path.basename(image_path).replace('\u2014', '-').replace('\u2013', '-').encode('ascii', 'replace').decode('ascii'),
                     pycurl.FORM_BUFFERPTR, file_data,
                     pycurl.FORM_CONTENTTYPE, content_type
                 )),
