@@ -457,7 +457,9 @@ class ComprehensiveSettingsDialog(QDialog):
         portable_path = os.path.join(app_root, '.imxup')
 
         # Radio buttons for location selection
-        self.home_radio = QRadioButton(f"Home folder: {home_path}")
+        # Display home path with ~ instead of full username path for privacy/brevity
+        home_display = home_path.replace(os.path.expanduser("~"), "~")
+        self.home_radio = QRadioButton(f"Home folder: {home_display}")
         self.portable_radio = QRadioButton(f"App folder (portable): {portable_path}")
         self.custom_radio = QRadioButton("Custom location:")
 
@@ -1400,9 +1402,10 @@ class ComprehensiveSettingsDialog(QDialog):
 
     def _get_available_vars(self, hook_type):
         """Get available variables for a hook type"""
-        base_vars = "%N, %T, %p, %C, %s, %t, %e1-%e4, %c1-%c4"
+        # %z available for all hooks - temp zip created on demand if command uses it
+        base_vars = "%N, %T, %p, %C, %s, %t, %z, %e1-%e4, %c1-%c4"
         if hook_type == "completed":
-            return f"{base_vars}, %g, %j, %b, %z"
+            return f"{base_vars}, %g, %j, %b"
         else:
             return base_vars
 
@@ -1432,6 +1435,7 @@ class ComprehensiveSettingsDialog(QDialog):
             ("%T", "Tab name"),
             ("%p", "Gallery folder path"),
             ("%C", "Number of images"),
+            ("%z", "ZIP archive path (created on demand)"),
         ]
 
         # Add completed-only variables
@@ -1440,7 +1444,6 @@ class ComprehensiveSettingsDialog(QDialog):
                 ("%g", "Gallery ID"),
                 ("%j", "JSON artifact path"),
                 ("%b", "BBCode artifact path"),
-                ("%z", "ZIP archive path (if exists)"),
             ])
 
         # Create menu actions
@@ -1511,6 +1514,7 @@ class ComprehensiveSettingsDialog(QDialog):
             ("%C", "Number of images"),
             ("%s", "Gallery size in bytes"),
             ("%t", "Template name"),
+            ("%z", "ZIP archive path (created on demand)"),
             ("", ""),  # Separator
             ("%e1", "ext1 field value"),
             ("%e2", "ext2 field value"),
@@ -1523,12 +1527,11 @@ class ComprehensiveSettingsDialog(QDialog):
             ("%c4", "custom4 field value"),
         ]
 
-        # Additional variables for completed events
+        # Additional variables for completed events only
         if hook_type == "completed":
             base_variables.insert(4, ("%g", "Gallery ID"))
             base_variables.insert(5, ("%j", "JSON artifact path"))
             base_variables.insert(6, ("%b", "BBCode artifact path"))
-            base_variables.insert(7, ("%z", "ZIP archive path"))
 
         # Custom QTextEdit with autocomplete support
         class AutoCompleteTextEdit(QTextEdit):
@@ -1668,41 +1671,116 @@ class ComprehensiveSettingsDialog(QDialog):
 
         layout.addWidget(command_group)
 
+        # Create test zip file for hook testing
+        import tempfile
+        import zipfile
+        import os
+        
+        test_zip_path = None
+        
+        def create_test_zip():
+            """Create a small test zip file with a dummy text file for hook testing."""
+            nonlocal test_zip_path
+            if test_zip_path and os.path.exists(test_zip_path):
+                return test_zip_path
+            
+            try:
+                # Create temp zip in system temp directory
+                temp_dir = tempfile.gettempdir()
+                test_zip_path = os.path.join(temp_dir, 'hook_test_gallery.zip')
+                
+                # Create a small test zip with a dummy file
+                with zipfile.ZipFile(test_zip_path, 'w', zipfile.ZIP_STORED) as zf:
+                    # Add a small test file
+                    zf.writestr('test_image.txt', 'This is a test file for hook testing.\n' * 10)
+                
+                return test_zip_path
+            except Exception as e:
+                from src.utils.logger import log
+                log(f"Failed to create test zip: {e}", level="warning", category="hooks")
+                return ''
+        
+        def cleanup_test_zip():
+            """Clean up the test zip file when dialog closes."""
+            nonlocal test_zip_path
+            if test_zip_path and os.path.exists(test_zip_path):
+                try:
+                    os.remove(test_zip_path)
+                except:
+                    pass
+        
+        # Connect cleanup to dialog close
+        dialog.finished.connect(cleanup_test_zip)
+        
+        # Color definitions matching the CommandHighlighter
+        GALLERY_COLOR = '#2980b9'  # Blue - gallery info vars
+        UPLOAD_COLOR = '#27ae60'   # Green - upload result vars
+        EXT_COLOR = '#e67e22'      # Orange - ext fields
+        CUSTOM_COLOR = '#9b59b6'   # Purple - custom fields
+
         # Function to update preview in real-time with syntax highlighting
         def update_preview():
             command = command_input.toPlainText()
+            
+            # Get or create the test zip path
+            zip_path = create_test_zip()
 
-            # Define all substitutions (longest first to handle multi-char vars)
-            substitutions = {
-                # Multi-char variables first
-                '%e1': 'val1', '%e2': 'val2', '%e3': 'val3', '%e4': 'val4',
-                '%c1': 'cval1', '%c2': 'cval2', '%c3': 'cval3', '%c4': 'cval4',
-                # Single-char variables
-                '%N': 'Test Gallery',
-                '%T': 'Main',
-                '%p': 'C:\\test\\path',
-                '%C': '10',
-                '%s': '1048576',
-                '%t': 'Main',
-            }
+            # Define all substitutions with their colors (longest first to handle multi-char vars)
+            # Format: (variable, test_value, color)
+            substitutions_with_colors = [
+                # Multi-char variables first (ext - orange)
+                ('%e1', 'val1', EXT_COLOR),
+                ('%e2', 'val2', EXT_COLOR),
+                ('%e3', 'val3', EXT_COLOR),
+                ('%e4', 'val4', EXT_COLOR),
+                # Custom fields (purple)
+                ('%c1', 'cval1', CUSTOM_COLOR),
+                ('%c2', 'cval2', CUSTOM_COLOR),
+                ('%c3', 'cval3', CUSTOM_COLOR),
+                ('%c4', 'cval4', CUSTOM_COLOR),
+                # Single-char variables (gallery info - blue)
+                ('%N', 'Test Gallery', GALLERY_COLOR),
+                ('%T', 'Main', GALLERY_COLOR),
+                ('%p', 'C:\\test\\path', GALLERY_COLOR),
+                ('%C', '10', GALLERY_COLOR),
+                ('%s', '1048576', GALLERY_COLOR),
+                ('%t', 'Main', GALLERY_COLOR),
+                # ZIP path (green - upload-related)
+                ('%z', zip_path, UPLOAD_COLOR),
+            ]
 
-            # Add completed-specific substitutions
+            # Add completed-specific substitutions (green - upload results)
             if hook_type == "completed":
-                substitutions.update({
-                    '%g': 'TEST123',
-                    '%j': 'C:\\test\\artifact.json',
-                    '%b': 'C:\\test\\bbcode.txt',
-                    '%z': '',
-                })
+                substitutions_with_colors.extend([
+                    ('%g', 'TEST123', UPLOAD_COLOR),
+                    ('%j', 'C:\\test\\artifact.json', UPLOAD_COLOR),
+                    ('%b', 'C:\\test\\bbcode.txt', UPLOAD_COLOR),
+                ])
 
-            # Sort by length (descending) to handle multi-char vars first
-            sorted_subs = sorted(substitutions.items(), key=lambda x: len(x[0]), reverse=True)
+            # Sort by variable length (descending) to handle multi-char vars first
+            substitutions_with_colors.sort(key=lambda x: len(x[0]), reverse=True)
+            
+            # Build plain text substitutions for the actual preview command
+            substitutions = {var: val for var, val, _ in substitutions_with_colors}
 
             preview_command = command
-            for var, value in sorted_subs:
+            for var, value in sorted(substitutions.items(), key=lambda x: len(x[0]), reverse=True):
                 preview_command = preview_command.replace(var, value)
 
-            preview_display.setPlainText(preview_command)
+            # Build HTML preview with colored test values
+            html_preview = command
+            # Escape HTML special characters first
+            html_preview = html_preview.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            
+            # Replace variables with colored values
+            for var, value, color in substitutions_with_colors:
+                # Escape the value for HTML
+                escaped_value = value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                colored_value = f'<span style="color: {color}; font-weight: bold;">{escaped_value}</span>'
+                html_preview = html_preview.replace(var, colored_value)
+            
+            # Wrap in pre tag for monospace and set HTML
+            preview_display.setHtml(f'<pre style="margin: 0; white-space: pre-wrap;">{html_preview}</pre>')
 
         # Enhanced syntax highlighter with color-coded variables
         class CommandHighlighter(QSyntaxHighlighter):
@@ -2241,16 +2319,16 @@ class ComprehensiveSettingsDialog(QDialog):
         self.tab_widget.addTab(self.advanced_widget, "Advanced")
 
     def _load_advanced_settings(self):
-        """Load advanced settings from INI file."""
+        """Load advanced settings from INI file and QSettings."""
         from imxup import get_config_path
 
         config = configparser.ConfigParser()
         config_file = get_config_path()
+        values = {}
 
         if os.path.exists(config_file):
             config.read(config_file, encoding='utf-8')
             if config.has_section('Advanced'):
-                values = {}
                 for key, value in config.items('Advanced'):
                     # Convert string values back to appropriate types
                     if value.lower() in ('true', 'false'):
@@ -2263,10 +2341,24 @@ class ComprehensiveSettingsDialog(QDialog):
                                 values[key] = float(value)
                             except ValueError:
                                 values[key] = value
-                self.advanced_widget.set_values(values)
+
+        # Load bandwidth settings from QSettings (where BandwidthManager stores them)
+        qsettings = QSettings("ImxUploader", "Settings")
+        alpha_up = qsettings.value("bandwidth/alpha_up", None)
+        alpha_down = qsettings.value("bandwidth/alpha_down", None)
+        if alpha_up is not None:
+            values["bandwidth/alpha_up"] = float(alpha_up)
+        if alpha_down is not None:
+            values["bandwidth/alpha_down"] = float(alpha_down)
+
+        if values:
+            self.advanced_widget.set_values(values)
 
     def _save_advanced_settings(self):
-        """Save advanced settings to INI file (only non-default values)."""
+        """Save advanced settings to INI file (only non-default values).
+
+        Bandwidth settings are also saved to QSettings for BandwidthManager.
+        """
         from imxup import get_config_path
 
         config = configparser.ConfigParser()
@@ -2279,14 +2371,33 @@ class ComprehensiveSettingsDialog(QDialog):
         if config.has_section('Advanced'):
             config.remove_section('Advanced')
 
+        all_values = self.advanced_widget.get_values()
         non_defaults = self.advanced_widget.get_non_default_values()
-        if non_defaults:
+
+        # Save non-defaults to INI (excluding bandwidth settings which use QSettings)
+        non_bandwidth_settings = {k: v for k, v in non_defaults.items()
+                                  if not k.startswith('bandwidth/')}
+        if non_bandwidth_settings:
             config.add_section('Advanced')
-            for key, value in non_defaults.items():
+            for key, value in non_bandwidth_settings.items():
                 config.set('Advanced', key, str(value))
 
         with open(config_file, 'w', encoding='utf-8') as f:
             config.write(f)
+
+        # Save bandwidth settings to QSettings (for BandwidthManager)
+        alpha_up = all_values.get('bandwidth/alpha_up', 0.6)
+        alpha_down = all_values.get('bandwidth/alpha_down', 0.15)
+
+        qsettings = QSettings("ImxUploader", "Settings")
+        qsettings.setValue("bandwidth/alpha_up", alpha_up)
+        qsettings.setValue("bandwidth/alpha_down", alpha_down)
+
+        # Update the running BandwidthManager if available
+        if self.parent() and hasattr(self.parent(), 'worker_signal_handler'):
+            handler = self.parent().worker_signal_handler
+            if hasattr(handler, 'bandwidth_manager'):
+                handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down)
 
         return True
 

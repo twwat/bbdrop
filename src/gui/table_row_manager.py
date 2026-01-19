@@ -366,58 +366,22 @@ class TableRowManager(QObject):
         finally:
             actual_table.blockSignals(signals_blocked)
 
-        # Action buttons - CREATE MISSING ACTION BUTTONS FOR NEW ITEMS
-        try:
-            existing_widget = mw.gallery_table.cellWidget(row, _Col.ACTION)
-            if not isinstance(existing_widget, ActionButtonWidget):
-                action_widget = ActionButtonWidget(parent=mw)
-                action_widget.start_btn.setEnabled(item.status != "scanning")
-                action_widget.start_btn.clicked.connect(lambda checked, path=item.path: mw.start_single_item(path))
-                action_widget.stop_btn.clicked.connect(lambda checked, path=item.path: mw.stop_single_item(path))
-                action_widget.view_btn.clicked.connect(lambda checked, path=item.path: mw.handle_view_button(path))
-                action_widget.cancel_btn.clicked.connect(lambda checked, path=item.path: mw.cancel_single_item(path))
-                action_widget.update_buttons(item.status)
-                mw.gallery_table.setCellWidget(row, _Col.ACTION, action_widget)
-            else:
-                existing_widget.update_buttons(item.status)
-                existing_widget.start_btn.setEnabled(item.status != "scanning")
-        except Exception as e:
-            log(f"ERROR: Failed to create action buttons for row {row}: {e}", level="error", category="ui")
+        # Action column - set item data for delegate rendering
+        action_item = QTableWidgetItem()
+        action_item.setFlags(action_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        action_item.setData(Qt.ItemDataRole.UserRole, item.path)
+        mw.gallery_table.setItem(row, _Col.ACTION, action_item)
 
-        # File host widgets - CREATE/UPDATE FILE HOST STATUS AND ACTION WIDGETS
-        try:
-            from src.gui.widgets.custom_widgets import FileHostsStatusWidget, FileHostsActionWidget
-
-            # Get file host upload data from database
-            host_uploads = {}
-            try:
-                if hasattr(mw, '_file_host_uploads_cache'):
-                    uploads_list = mw._file_host_uploads_cache.get(item.path, [])
-                else:
-                    uploads_list = mw.queue_manager.store.get_file_host_uploads(item.path)
-                host_uploads = {upload['host_name']: upload for upload in uploads_list}
-            except Exception as e:
-                log(f"Failed to load file host uploads for {item.path}: {e}", level="warning", category="file_hosts")
-
-            # HOSTS_STATUS widget (icons)
-            existing_status_widget = mw.gallery_table.cellWidget(row, _Col.HOSTS_STATUS)
-            if not isinstance(existing_status_widget, FileHostsStatusWidget):
-                status_widget = FileHostsStatusWidget(item.path, parent=mw)
-                status_widget.update_hosts(host_uploads)
-                status_widget.host_clicked.connect(mw._on_file_host_icon_clicked)
-                mw.gallery_table.setCellWidget(row, _Col.HOSTS_STATUS, status_widget)
-            else:
-                existing_status_widget.update_hosts(host_uploads)
-
-            # HOSTS_ACTION widget (manage button)
-            existing_action_widget = mw.gallery_table.cellWidget(row, _Col.HOSTS_ACTION)
-            if not isinstance(existing_action_widget, FileHostsActionWidget):
-                hosts_action_widget = FileHostsActionWidget(item.path, parent=mw)
-                hosts_action_widget.manage_clicked.connect(mw._on_file_hosts_manage_clicked)
-                mw.gallery_table.setCellWidget(row, _Col.HOSTS_ACTION, hosts_action_widget)
-
-        except Exception as e:
-            log(f"Failed to create file host widgets for row {row}: {e}", level="error", category="file_hosts")
+        # File hosts status column - set item data for delegate rendering
+        # Cache stores list format: [{host_name: ..., status: ...}, ...]
+        # Delegate expects dict format: {host_name: {status: ...}, ...}
+        host_uploads_list = mw._file_host_uploads_cache.get(item.path, [])
+        host_uploads = {u['host_name']: u for u in host_uploads_list} if host_uploads_list else {}
+        hosts_item = QTableWidgetItem()
+        hosts_item.setFlags(hosts_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        hosts_item.setData(Qt.ItemDataRole.UserRole, item.path)
+        hosts_item.setData(Qt.ItemDataRole.UserRole + 1, host_uploads)
+        mw.gallery_table.setItem(row, _Col.HOSTS_STATUS, hosts_item)
 
     def _populate_table_row_detailed(self, row: int, item: GalleryQueueItem):
         """Complete row formatting in background - TRULY NON-BLOCKING.
@@ -1021,6 +985,9 @@ class TableRowManager(QObject):
             scroll_value = vertical_scrollbar.value()
 
             row_height = table.rowHeight(0) if table.rowCount() > 0 else 30
+            # Guard against zero row height during table initialization
+            if row_height <= 0:
+                row_height = 30  # Default row height
 
             buffer = 5
             first_visible = max(0, (scroll_value // row_height) - buffer)
