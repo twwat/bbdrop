@@ -164,7 +164,7 @@ class TestImageStatusDialogInitialization:
             dialog.table.horizontalHeaderItem(i).text()
             for i in range(6)
         ]
-        assert headers == ["DB ID", "Name", "Images", "Online", "Offline", "Status"]
+        assert headers == ["ID", "Gallery Name", "Images", "Online", "Offline", "Status"]
 
     def test_table_properties(self, dialog):
         """Test table properties are set correctly."""
@@ -539,8 +539,8 @@ class TestGalleryTable:
         images_item = dialog.table.item(0, 2)
         assert images_item.text() == "25"
 
-    def test_set_galleries_sets_pending_status(self, dialog):
-        """Test initial status shows pending."""
+    def test_set_galleries_sets_initial_placeholders(self, dialog):
+        """Test initial columns show placeholders."""
         galleries = [
             {"db_id": 1, "path": "/path1", "name": "Gallery", "total_images": 10}
         ]
@@ -549,12 +549,11 @@ class TestGalleryTable:
 
         online_item = dialog.table.item(0, 3)
         offline_item = dialog.table.item(0, 4)
-        status_item = dialog.table.item(0, 5)
 
-        # Online and Offline columns start at "0", status shows "Pending..."
-        assert online_item.text() == "0"
-        assert offline_item.text() == "0"
-        assert status_item.text() == "Pending..."
+        # Online and Offline columns start with em-dash placeholder
+        # Status column has no item - only cell widget set by set_results()
+        assert online_item.text() == "—"
+        assert offline_item.text() == "—"
 
     def test_set_galleries_stores_path_in_user_role(self, dialog):
         """Test gallery path stored in UserRole data."""
@@ -607,9 +606,11 @@ class TestStatusColors:
 
         # Get theme-aware colors
         colors = get_online_status_colors()
-        status_item = dialog_with_galleries.table.item(0, 5)
-        assert status_item.text() == "Online"
-        assert status_item.foreground().color() == colors['online']
+        # Status now uses a cell widget (QLabel) with properties
+        status_widget = dialog_with_galleries.table.cellWidget(0, 5)
+        assert status_widget is not None
+        assert status_widget.property("status_type") == "Online"
+        assert status_widget.property("status_color") == colors['online']
 
     def test_partial_status_orange(self, dialog_with_galleries):
         """Test partial galleries show amber status (theme-aware)."""
@@ -625,9 +626,11 @@ class TestStatusColors:
 
         # Get theme-aware colors
         colors = get_online_status_colors()
-        status_item = dialog_with_galleries.table.item(0, 5)
-        assert status_item.text() == "Partial"
-        assert status_item.foreground().color() == colors['partial']
+        # Status now uses a cell widget (QLabel) with properties
+        status_widget = dialog_with_galleries.table.cellWidget(0, 5)
+        assert status_widget is not None
+        assert status_widget.property("status_type") == "Partial"
+        assert status_widget.property("status_color") == colors['partial']
 
     def test_offline_status_red(self, dialog_with_galleries):
         """Test fully offline galleries show red status (theme-aware)."""
@@ -643,9 +646,11 @@ class TestStatusColors:
 
         # Get theme-aware colors
         colors = get_online_status_colors()
-        status_item = dialog_with_galleries.table.item(0, 5)
-        assert status_item.text() == "Offline"
-        assert status_item.foreground().color() == colors['offline']
+        # Status now uses a cell widget (QLabel) with properties
+        status_widget = dialog_with_galleries.table.cellWidget(0, 5)
+        assert status_widget is not None
+        assert status_widget.property("status_type") == "Offline"
+        assert status_widget.property("status_color") == colors['offline']
 
     def test_no_images_status_gray(self, dialog_with_galleries):
         """Test galleries with no images show gray status (theme-aware)."""
@@ -661,9 +666,11 @@ class TestStatusColors:
 
         # Get theme-aware colors
         colors = get_online_status_colors()
-        status_item = dialog_with_galleries.table.item(0, 5)
-        assert status_item.text() == "No images"
-        assert status_item.foreground().color() == colors['gray']
+        # Status now uses a cell widget (QLabel) with properties
+        status_widget = dialog_with_galleries.table.cellWidget(0, 5)
+        assert status_widget is not None
+        assert status_widget.property("status_type") == "No images"
+        assert status_widget.property("status_color") == colors['gray']
 
 
 class TestCancelFunctionality:
@@ -755,9 +762,9 @@ class TestEdgeCases:
         # Should not raise
         dialog_with_galleries.set_results(results)
 
-        # Original rows should still show pending
-        status_item = dialog_with_galleries.table.item(0, 5)
-        assert status_item.text() == "Pending..."
+        # Original rows should still have no status set (no cell widget)
+        status_widget = dialog_with_galleries.table.cellWidget(0, 5)
+        assert status_widget is None
 
     def test_zero_elapsed_time(self, dialog_with_galleries):
         """Test results with zero elapsed time doesn't divide by zero."""

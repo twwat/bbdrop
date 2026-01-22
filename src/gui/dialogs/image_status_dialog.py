@@ -11,12 +11,13 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QPushButton, QLabel, QProgressBar, QWidget, QFrame,
-    QAbstractItemView, QApplication, QSizePolicy
+    QAbstractItemView, QApplication, QSizePolicy, QGroupBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QColor, QFont, QPainter, QPaintEvent
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPaintEvent
 
 from src.gui.theme_manager import get_online_status_colors
+from src.gui.icon_manager import get_icon
 from src.utils.logger import log
 
 
@@ -143,8 +144,13 @@ class NumericTableItem(QTableWidgetItem):
     def __lt__(self, other: QTableWidgetItem) -> bool:
         """Compare items numerically for sorting."""
         try:
+            # Check UserRole first for raw numeric value
+            my_val = self.data(Qt.ItemDataRole.UserRole)
+            other_val = other.data(Qt.ItemDataRole.UserRole)
+            if my_val is not None and other_val is not None:
+                return int(my_val) < int(other_val)
             return int(self.text()) < int(other.text())
-        except ValueError:
+        except (ValueError, TypeError):
             return super().__lt__(other)
 
 
@@ -197,10 +203,10 @@ class ImageStatusDialog(QDialog):
         # Get theme colors
         self._colors = get_online_status_colors()
 
-        # === Top Section: Progress Bars ===
-        bars_widget = QWidget()
-        bars_layout = QGridLayout(bars_widget)
-        bars_layout.setContentsMargins(0, 0, 0, 0)
+        # === Progress Section (QGroupBox) ===
+        progress_group = QGroupBox("Progress")
+        bars_layout = QGridLayout(progress_group)
+        bars_layout.setContentsMargins(10, 10, 10, 10)
         bars_layout.setSpacing(8)
 
         # Images bar row
@@ -236,52 +242,107 @@ class ImageStatusDialog(QDialog):
         bars_layout.addWidget(self.spinner_label, 1, 3)
 
         bars_layout.setColumnStretch(1, 1)  # Bar column stretches
-        layout.addWidget(bars_widget)
+        layout.addWidget(progress_group)
 
         # Elapsed time timer
         self._elapsed_timer = QTimer(self)
         self._elapsed_timer.timeout.connect(self._update_elapsed)
 
-        # === Statistics Section (3 columns) ===
-        self.stats_frame = QFrame()
-        self.stats_frame.setFrameStyle(QFrame.Shape.StyledPanel)
-        stats_layout = QGridLayout(self.stats_frame)
-        stats_layout.setSpacing(8)
-        stats_layout.setContentsMargins(10, 10, 10, 10)
+        # === Summary Section with nested Galleries/Images QGroupBoxes ===
+        summary_group = QGroupBox("Summary")
+        summary_layout = QHBoxLayout(summary_group)
+        summary_layout.setSpacing(10)
+        summary_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Column 1: Totals
-        stats_layout.addWidget(QLabel("<b>Summary</b>"), 0, 0)
-        self.stat_galleries_scanned = self._create_stat_row("Galleries Scanned:", "—")
-        self.stat_images_checked = self._create_stat_row("Images Checked:", "—")
-        stats_layout.addWidget(self.stat_galleries_scanned, 1, 0)
-        stats_layout.addWidget(self.stat_images_checked, 2, 0)
+        # --- Galleries sub-groupbox ---
+        galleries_group = QGroupBox("Galleries")
+        gal_layout = QGridLayout(galleries_group)
+        gal_layout.setSpacing(4)
+        gal_layout.setContentsMargins(10, 8, 10, 8)
 
-        # Column 2: Gallery breakdown
-        stats_layout.addWidget(QLabel("<b>Galleries</b>"), 0, 1)
-        self.stat_online_galleries = self._create_stat_row("Online:", "—", "online")
-        self.stat_partial_galleries = self._create_stat_row("Partial:", "—", "partial")
-        self.stat_offline_galleries = self._create_stat_row("Offline:", "—", "offline")
-        stats_layout.addWidget(self.stat_online_galleries, 1, 1)
-        stats_layout.addWidget(self.stat_partial_galleries, 2, 1)
-        stats_layout.addWidget(self.stat_offline_galleries, 3, 1)
+        # Galleries: Checked row
+        gal_layout.addWidget(QLabel("Checked:"), 0, 0)
+        self.val_checked_galleries = QLabel("—")
+        self.val_checked_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        gal_layout.addWidget(self.val_checked_galleries, 0, 1)
 
-        # Column 3: Image breakdown
-        stats_layout.addWidget(QLabel("<b>Images</b>"), 0, 2)
-        self.stat_online_images = self._create_stat_row("Online:", "—", "online")
-        self.stat_offline_images = self._create_stat_row("Offline:", "—", "offline")
-        stats_layout.addWidget(self.stat_online_images, 1, 2)
-        stats_layout.addWidget(self.stat_offline_images, 2, 2)
+        # Galleries: Online row
+        gal_layout.addWidget(QLabel("Online:"), 1, 0)
+        self.val_online_galleries = QLabel("—")
+        self.val_online_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_online_galleries.setProperty("online-status", "online")
+        self.pct_online_galleries = QLabel("")
+        self.pct_online_galleries.setProperty("online-status", "online")
+        gal_layout.addWidget(self.val_online_galleries, 1, 1)
+        gal_layout.addWidget(self.pct_online_galleries, 1, 2)
 
-        # Equal column widths
-        for col in range(3):
-            stats_layout.setColumnStretch(col, 1)
+        # Galleries: Partially Offline row
+        gal_layout.addWidget(QLabel("Partially Offline:"), 2, 0)
+        self.val_partial_galleries = QLabel("—")
+        self.val_partial_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_partial_galleries.setProperty("online-status", "partial")
+        self.pct_partial_galleries = QLabel("")
+        self.pct_partial_galleries.setProperty("online-status", "partial")
+        gal_layout.addWidget(self.val_partial_galleries, 2, 1)
+        gal_layout.addWidget(self.pct_partial_galleries, 2, 2)
 
-        layout.addWidget(self.stats_frame)
+        # Galleries: Offline row
+        gal_layout.addWidget(QLabel("Offline:"), 3, 0)
+        self.val_offline_galleries = QLabel("—")
+        self.val_offline_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_offline_galleries.setProperty("online-status", "offline")
+        self.pct_offline_galleries = QLabel("")
+        self.pct_offline_galleries.setProperty("online-status", "offline")
+        gal_layout.addWidget(self.val_offline_galleries, 3, 1)
+        gal_layout.addWidget(self.pct_offline_galleries, 3, 2)
 
-        # === Results Table (hidden initially) ===
+        summary_layout.addWidget(galleries_group)
+
+        # --- Images sub-groupbox ---
+        images_group = QGroupBox("Images")
+        img_layout = QGridLayout(images_group)
+        img_layout.setSpacing(4)
+        img_layout.setContentsMargins(10, 8, 10, 8)
+
+        # Images: Checked row
+        img_layout.addWidget(QLabel("Checked:"), 0, 0)
+        self.val_checked_images = QLabel("—")
+        self.val_checked_images.setAlignment(Qt.AlignmentFlag.AlignRight)
+        img_layout.addWidget(self.val_checked_images, 0, 1)
+
+        # Images: Online row
+        img_layout.addWidget(QLabel("Online:"), 1, 0)
+        self.val_online_images = QLabel("—")
+        self.val_online_images.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_online_images.setProperty("online-status", "online")
+        self.pct_online_images = QLabel("")
+        self.pct_online_images.setProperty("online-status", "online")
+        img_layout.addWidget(self.val_online_images, 1, 1)
+        img_layout.addWidget(self.pct_online_images, 1, 2)
+
+        # Images: Offline row
+        img_layout.addWidget(QLabel("Offline:"), 2, 0)
+        self.val_offline_images = QLabel("—")
+        self.val_offline_images.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_offline_images.setProperty("online-status", "offline")
+        self.pct_offline_images = QLabel("")
+        self.pct_offline_images.setProperty("online-status", "offline")
+        img_layout.addWidget(self.val_offline_images, 2, 1)
+        img_layout.addWidget(self.pct_offline_images, 2, 2)
+
+        summary_layout.addWidget(images_group)
+
+        layout.addWidget(summary_group)
+
+        # === Scan Results Section (QGroupBox) ===
+        results_group = QGroupBox("Scan Results")
+        results_layout = QVBoxLayout(results_group)
+        results_layout.setContentsMargins(10, 10, 10, 10)
+
         self.table = QTableWidget()
         self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(["DB ID", "Name", "Images", "Online", "Offline", "Status"])
+        self.table.setHorizontalHeaderLabels(["ID", "Gallery Name", "Images", "Online", "Offline", "Status"])
+        self.table.setColumnHidden(4, True)  # Hide Offline column (kept for sorting)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
@@ -296,8 +357,11 @@ class ImageStatusDialog(QDialog):
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
 
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(24)  # Shorter rows
         self.table.setVisible(False)  # Hidden until scan complete
-        layout.addWidget(self.table)
+
+        results_layout.addWidget(self.table)
+        layout.addWidget(results_group)
 
         # === Buttons ===
         button_layout = QHBoxLayout()
@@ -314,48 +378,23 @@ class ImageStatusDialog(QDialog):
 
         layout.addLayout(button_layout)
 
-    def _create_stat_row(self, label: str, value: str, status: str = None) -> QWidget:
-        """Create a stat row widget with label and value.
+        # Backward compatibility aliases for tests
+        self._setup_stat_aliases()
 
-        Args:
-            label: Label text
-            value: Value text
-            status: Optional status for styling ('online', 'partial', 'offline')
+    def _setup_stat_aliases(self) -> None:
+        """Create backward-compatible stat widget aliases for tests."""
+        class StatWrapper:
+            """Wrapper to provide .value_label attribute."""
+            def __init__(self, label: QLabel):
+                self.value_label = label
 
-        Returns:
-            Widget containing the stat row
-        """
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
-
-        label_widget = QLabel(label)
-        value_widget = QLabel(value)
-        value_widget.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        if status:
-            value_widget.setProperty("online-status", status)
-            value_widget.style().unpolish(value_widget)
-            value_widget.style().polish(value_widget)
-
-        layout.addWidget(label_widget)
-        layout.addStretch()
-        layout.addWidget(value_widget)
-
-        # Store reference to value label for updates
-        widget.value_label = value_widget
-        return widget
-
-    def _update_stat(self, stat_widget: QWidget, value: str) -> None:
-        """Update a stat widget's value.
-
-        Args:
-            stat_widget: The stat row widget
-            value: New value text
-        """
-        if hasattr(stat_widget, 'value_label'):
-            stat_widget.value_label.setText(value)
+        self.stat_galleries_scanned = StatWrapper(self.val_checked_galleries)
+        self.stat_images_checked = StatWrapper(self.val_checked_images)
+        self.stat_online_galleries = StatWrapper(self.val_online_galleries)
+        self.stat_partial_galleries = StatWrapper(self.val_partial_galleries)
+        self.stat_offline_galleries = StatWrapper(self.val_offline_galleries)
+        self.stat_online_images = StatWrapper(self.val_online_images)
+        self.stat_offline_images = StatWrapper(self.val_offline_images)
 
     def set_galleries(self, galleries: List[Dict[str, Any]]) -> None:
         """Set galleries to be checked and display in table.
@@ -381,19 +420,25 @@ class ImageStatusDialog(QDialog):
             self.table.setItem(row, 1, name_item)
 
             images_item = NumericTableItem(str(total))
-            images_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            images_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            images_item.setData(Qt.ItemDataRole.UserRole, total)
             self.table.setItem(row, 2, images_item)
 
-            online_item = NumericTableItem("0")
+            # Store total in UserRole+1 for formatting later
+            online_item = NumericTableItem("—")
             online_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            online_item.setData(Qt.ItemDataRole.UserRole, 0)
+            online_item.setData(Qt.ItemDataRole.UserRole + 1, total)  # Store total
             self.table.setItem(row, 3, online_item)
 
-            offline_item = NumericTableItem("0")
+            offline_item = NumericTableItem("—")
             offline_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            offline_item.setData(Qt.ItemDataRole.UserRole, 0)
+            offline_item.setData(Qt.ItemDataRole.UserRole + 1, total)  # Store total
             self.table.setItem(row, 4, offline_item)
 
-            status_item = QTableWidgetItem("Pending...")
-            self.table.setItem(row, 5, status_item)
+            # Status column will be populated by set_results()
+            # (table is hidden until then anyway)
 
         self.table.sortItems(4, Qt.SortOrder.DescendingOrder)
 
@@ -455,6 +500,7 @@ class ImageStatusDialog(QDialog):
 
         offline = total - online
         pct = (online * 100) // total
+        offline_pct = 100 - pct
 
         # Update images bar with green/red segments
         self.images_bar.set_segments([
@@ -464,16 +510,18 @@ class ImageStatusDialog(QDialog):
 
         # Update images status label
         self.images_status_label.setText(
-            f"<span style='color:{self._colors["online"].name()}'>{online:,} online</span>, "
-            f"<span style='color:{self._colors["offline"].name()}'>{offline:,} offline</span> "
+            f"<span style='color:{self._colors['online'].name()}'>{online:,} online</span>, "
+            f"<span style='color:{self._colors['offline'].name()}'>{offline:,} offline</span> "
             f"({pct}%)"
         )
         self.images_status_label.setTextFormat(Qt.TextFormat.RichText)
 
-        # Update stats
-        self._update_stat(self.stat_images_checked, f"{total:,}")
-        self._update_stat(self.stat_online_images, f"{online:,} ({pct}%)")
-        self._update_stat(self.stat_offline_images, f"{offline:,} ({100-pct}%)")
+        # Update summary stats
+        self.val_checked_images.setText(f"{total:,}")
+        self.val_online_images.setText(f"{online:,}")
+        self.pct_online_images.setText(f"({pct}%)")
+        self.val_offline_images.setText(f"{offline:,}")
+        self.pct_offline_images.setText(f"({offline_pct}%)")
 
         if online == total:
             # All online - can update galleries too
@@ -484,13 +532,16 @@ class ImageStatusDialog(QDialog):
                 (0, self._colors["offline"])
             ])
             self.galleries_status_label.setText(
-                f"<span style='color:{self._colors["online"].name()}'>{galleries_count:,} online</span>"
+                f"<span style='color:{self._colors['online'].name()}'>{galleries_count:,} online</span>"
             )
             self.galleries_status_label.setTextFormat(Qt.TextFormat.RichText)
-            self._update_stat(self.stat_galleries_scanned, f"{galleries_count:,}")
-            self._update_stat(self.stat_online_galleries, f"{galleries_count:,} (100%)")
-            self._update_stat(self.stat_partial_galleries, "0")
-            self._update_stat(self.stat_offline_galleries, "0")
+            self.val_checked_galleries.setText(f"{galleries_count:,}")
+            self.val_online_galleries.setText(f"{galleries_count:,}")
+            self.pct_online_galleries.setText("(100%)")
+            self.val_partial_galleries.setText("0")
+            self.pct_partial_galleries.setText("(0%)")
+            self.val_offline_galleries.setText("0")
+            self.pct_offline_galleries.setText("(0%)")
             self.spinner_label.setText("All images online!")
         else:
             # Still scanning to identify which galleries have offline images
@@ -559,34 +610,39 @@ class ImageStatusDialog(QDialog):
                     else:
                         galleries_partial += 1
 
-                # Update table cells
+                # Update table cells with new format: "X/Y (Z%)"
                 online_item = self.table.item(row, 3)
                 offline_item = self.table.item(row, 4)
                 status_item = self.table.item(row, 5)
 
                 if online_item:
-                    online_item.setText(str(online))
-
-                if offline_item:
-                    offline_item.setText(str(offline))
-                    if offline > 0:
-                        offline_item.setForeground(colors['offline'])
-                        bold_font = QFont()
-                        bold_font.setBold(True)
-                        offline_item.setFont(bold_font)
-
-                if status_item:
-                    if total == 0:
-                        status_text, color = "No images", colors['gray']
-                    elif online == total:
-                        status_text, color = "Online", colors['online']
-                    elif online == 0:
-                        status_text, color = "Offline", colors['offline']
+                    online_item.setData(Qt.ItemDataRole.UserRole, online)
+                    if total > 0:
+                        online_pct = online * 100 // total
+                        online_item.setText(f"{online}/{total} ({online_pct}%)")
+                        # Red if not 100%
+                        if online < total:
+                            online_item.setForeground(colors['offline'])
+                            bold_font = QFont()
+                            bold_font.setBold(True)
+                            online_item.setFont(bold_font)
                     else:
-                        status_text, color = "Partial", colors['partial']
+                        online_item.setText("0/0 (0%)")
+                        dim_color = QColor(128, 128, 128, 128)
+                        online_item.setForeground(dim_color)
 
-                    status_item.setText(status_text)
-                    status_item.setForeground(color)
+                # Update hidden offline column for sorting
+                if offline_item:
+                    offline_item.setData(Qt.ItemDataRole.UserRole, offline)
+                    offline_item.setText(str(offline))
+
+                # Update status with centered icon
+                if total == 0:
+                    self._set_centered_status(row, "No images", None, colors['gray'], 'No images')
+                elif online == total:
+                    self._set_centered_status(row, None, get_icon('status_online'), colors['online'], 'Online')
+                else:
+                    self._set_centered_status(row, None, get_icon('status_failed'), colors['offline'] if online == 0 else colors['partial'], 'Offline' if online == 0 else 'Partial')
 
             # Update galleries bar
             self.galleries_bar.set_segments([
@@ -620,18 +676,23 @@ class ImageStatusDialog(QDialog):
             )
             self.images_status_label.setTextFormat(Qt.TextFormat.RichText)
 
-            # Update all stats
-            self._update_stat(self.stat_galleries_scanned, f"{total_galleries:,}")
-            self._update_stat(self.stat_images_checked, f"{total_images:,}")
+            # Update all summary stats
+            self.val_checked_galleries.setText(f"{total_galleries:,}")
+            self.val_checked_images.setText(f"{total_images:,}")
 
             gal_total = total_galleries if total_galleries > 0 else 1
-            self._update_stat(self.stat_online_galleries, f"{galleries_online:,} ({galleries_online*100//gal_total}%)")
-            self._update_stat(self.stat_partial_galleries, f"{galleries_partial:,} ({galleries_partial*100//gal_total}%)")
-            self._update_stat(self.stat_offline_galleries, f"{galleries_offline:,} ({galleries_offline*100//gal_total}%)")
+            self.val_online_galleries.setText(f"{galleries_online:,}")
+            self.pct_online_galleries.setText(f"({galleries_online*100//gal_total}%)")
+            self.val_partial_galleries.setText(f"{galleries_partial:,}")
+            self.pct_partial_galleries.setText(f"({galleries_partial*100//gal_total}%)")
+            self.val_offline_galleries.setText(f"{galleries_offline:,}")
+            self.pct_offline_galleries.setText(f"({galleries_offline*100//gal_total}%)")
 
             img_total = total_images if total_images > 0 else 1
-            self._update_stat(self.stat_online_images, f"{total_online:,} ({total_online*100//img_total}%)")
-            self._update_stat(self.stat_offline_images, f"{total_offline:,} ({total_offline*100//img_total}%)")
+            self.val_online_images.setText(f"{total_online:,}")
+            self.pct_online_images.setText(f"({total_online*100//img_total}%)")
+            self.val_offline_images.setText(f"{total_offline:,}")
+            self.pct_offline_images.setText(f"({total_offline*100//img_total}%)")
 
             # Update elapsed time with final value
             self.elapsed_label.setText(f"Elapsed: {elapsed_time:.1f}s")
@@ -652,6 +713,34 @@ class ImageStatusDialog(QDialog):
         # Update buttons
         self.cancel_btn.setVisible(False)
         self.close_btn.setVisible(True)
+
+    def _set_centered_status(self, row: int, text: str = None, icon: QIcon = None, color: QColor = None, status_type: str = None) -> None:
+        """Set a centered status widget in the given row.
+
+        Args:
+            row: Table row index
+            text: Text to display (if no icon)
+            icon: Icon to display (takes precedence over text)
+            color: Foreground color for text
+            status_type: Status type for testing (e.g., 'Online', 'Partial', 'Offline', 'No images')
+        """
+        label = QLabel()
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        if icon and not icon.isNull():
+            label.setPixmap(icon.pixmap(16, 16))
+        elif text:
+            label.setText(text)
+            if color:
+                label.setStyleSheet(f"color: {color.name()};")
+
+        # Store metadata for testing
+        if status_type:
+            label.setProperty("status_type", status_type)
+        if color:
+            label.setProperty("status_color", color)
+
+        self.table.setCellWidget(row, 5, label)
 
     def _on_cancel(self) -> None:
         """Handle cancel button click."""
