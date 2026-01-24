@@ -20,6 +20,8 @@ from urllib.parse import quote
 from src.core.file_host_config import HostConfig
 from src.core.engine import AtomicCounter
 from src.utils.logger import log
+from src.proxy.pycurl_adapter import PyCurlProxyAdapter
+from src.proxy.models import ProxyEntry
 
 
 class FileHostClient:
@@ -34,7 +36,8 @@ class FileHostClient:
         log_callback: Optional[Callable[[str, str], None]] = None,
         session_cookies: Optional[Dict[str, str]] = None,
         session_token: Optional[str] = None,
-        session_timestamp: Optional[float] = None
+        session_timestamp: Optional[float] = None,
+        proxy: Optional[ProxyEntry] = None
     ):
         """Initialize file host client.
 
@@ -47,12 +50,14 @@ class FileHostClient:
             session_cookies: Optional existing session cookies to reuse
             session_token: Optional existing session token (sess_id) to reuse
             session_timestamp: Optional timestamp when session was created
+            proxy: Optional proxy configuration to use for requests
         """
         self.config = host_config
         self.bandwidth_counter = bandwidth_counter
         self.credentials = credentials
         self.host_id = host_id
         self._log_callback = log_callback
+        self.proxy = proxy
 
         # Load timeout settings from INI (overrides JSON defaults)
         if host_id:
@@ -135,6 +140,10 @@ class FileHostClient:
         curl.setopt(pycurl.SSL_VERIFYPEER, 1)
         curl.setopt(pycurl.SSL_VERIFYHOST, 2)
 
+    def _configure_proxy(self, curl: pycurl.Curl) -> None:
+        """Configure proxy settings on curl handle."""
+        PyCurlProxyAdapter.configure_proxy(curl, self.proxy)
+
     def _login_token_based(self, credentials: str) -> str:
         """Login to get authentication token.
 
@@ -168,6 +177,8 @@ class FileHostClient:
         # Perform login request
         curl = pycurl.Curl()
         self._configure_ssl(curl)
+
+        self._configure_proxy(curl)
         response_buffer = BytesIO()
 
         try:
@@ -253,6 +264,7 @@ class FileHostClient:
         # Step 1: GET login page first (establishes initial cookies, extracts CSRF tokens)
         get_curl = pycurl.Curl()
         self._configure_ssl(get_curl)
+        self._configure_proxy(get_curl)
         get_buffer = BytesIO()
         get_headers = BytesIO()
 
@@ -352,6 +364,7 @@ class FileHostClient:
 
         # Step 3: POST login credentials
         post_curl = pycurl.Curl()
+        self._configure_proxy(post_curl)
         self._configure_ssl(post_curl)
         post_buffer = BytesIO()
         post_headers = BytesIO()
@@ -521,6 +534,8 @@ class FileHostClient:
 
             curl = pycurl.Curl()
             self._configure_ssl(curl)
+
+            self._configure_proxy(curl)
             buffer = BytesIO()
             try:
                 curl.setopt(pycurl.URL, upload_page_url)
@@ -816,6 +831,8 @@ class FileHostClient:
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)
+
+        self._configure_proxy(curl)
         response_buffer = BytesIO()
 
         try:
@@ -871,6 +888,7 @@ class FileHostClient:
 
                     page_curl = pycurl.Curl()
                     self._configure_ssl(page_curl)
+                    self._configure_proxy(page_curl)
                     page_buffer = BytesIO()
                     try:
                         page_curl.setopt(pycurl.URL, upload_page_url)
@@ -965,6 +983,8 @@ class FileHostClient:
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)
+
+        self._configure_proxy(curl)
         response_buffer = BytesIO()
 
         try:
@@ -1078,6 +1098,8 @@ class FileHostClient:
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)
+
+        self._configure_proxy(curl)
         response_buffer = BytesIO()
 
         try:
@@ -1136,6 +1158,8 @@ class FileHostClient:
             for attempt in range(self.config.upload_poll_retries):
                 curl = pycurl.Curl()
                 self._configure_ssl(curl)
+
+                self._configure_proxy(curl)
                 response_buffer = BytesIO()
 
                 try:
@@ -1226,6 +1250,8 @@ class FileHostClient:
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)
+
+        self._configure_proxy(curl)
         response_buffer = BytesIO()
 
         try:
@@ -1404,6 +1430,8 @@ class FileHostClient:
             """Core delete implementation (wrapped for retry)."""
             curl = pycurl.Curl()
             self._configure_ssl(curl)
+
+            self._configure_proxy(curl)
             response_buffer = BytesIO()
 
             try:
@@ -1568,6 +1596,8 @@ class FileHostClient:
 
             curl = pycurl.Curl()
             self._configure_ssl(curl)
+
+            self._configure_proxy(curl)
             response_buffer = BytesIO()
 
             try:

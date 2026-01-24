@@ -19,6 +19,8 @@ from src.core.engine import AtomicCounter
 from src.core.file_host_config import get_config_manager, HostConfig, get_file_host_setting
 from src.network.file_host_client import FileHostClient
 from src.processing.file_host_coordinator import get_coordinator
+from src.proxy.resolver import ProxyResolver
+from src.proxy.models import ProxyContext
 from src.storage.database import QueueStore
 from src.utils.logger import log
 from src.utils.zip_manager import get_zip_manager
@@ -156,7 +158,7 @@ class FileHostWorker(QThread):
             self._upload_throttle_state.pop((db_id, host_name), None)
 
     def _create_client(self, host_config: HostConfig) -> FileHostClient:
-        """Create FileHostClient with session reuse.
+        """Create FileHostClient with session reuse and proxy support.
 
         Thread-safe: Reads session state under lock, injects into new client.
 
@@ -164,8 +166,21 @@ class FileHostWorker(QThread):
             host_config: Host configuration
 
         Returns:
-            Configured FileHostClient instance with session reuse
+            Configured FileHostClient instance with session reuse and proxy
         """
+        # Resolve proxy for this host
+        resolver = ProxyResolver()
+        context = ProxyContext(
+            category="file_hosts",
+            service_id=self.host_id,
+            operation="upload"
+        )
+        proxy = resolver.resolve(context)
+
+        # Log proxy being used (for debugging)
+        if proxy:
+            self._log(f"Using proxy: {proxy.host}:{proxy.port}", "debug")
+
         with self._credentials_lock:
             credentials = self.host_credentials.get(self.host_id)
 
@@ -175,7 +190,7 @@ class FileHostWorker(QThread):
             session_token = self._session_token
             session_timestamp = self._session_timestamp
 
-        # Create client with session injection (no login if session exists)
+        # Create client with session injection and proxy (no login if session exists)
         client = FileHostClient(
             host_config=host_config,
             bandwidth_counter=self.bandwidth_counter,
@@ -185,7 +200,8 @@ class FileHostWorker(QThread):
             # NEW: Inject session (reuse if exists, fresh login if None)
             session_cookies=session_cookies,
             session_token=session_token,
-            session_timestamp=session_timestamp
+            session_timestamp=session_timestamp,
+            proxy=proxy  # Inject proxy
         )
 
         return client

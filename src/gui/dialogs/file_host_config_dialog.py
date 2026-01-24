@@ -482,6 +482,19 @@ class FileHostConfigDialog(QDialog):
         self._adjust_bbcode_height()  # Initial adjustment
         settings_layout.addRow("BBCode Format:", self.bbcode_format_edit)
 
+        # 8. Proxy - InheritableProxyControl widget for per-host proxy configuration
+        from src.gui.widgets.inheritable_proxy_control import InheritableProxyControl
+        self.proxy_control = InheritableProxyControl(
+            parent=self,
+            level="service",
+            category="file_hosts",
+            service_id=self.host_id,
+            show_label=False,
+            compact=True
+        )
+        self.proxy_control.value_changed.connect(self._mark_dirty)
+        settings_layout.addRow("Proxy:", self.proxy_control)
+
         content_layout.addWidget(settings_group)
 
         # Test Results section
