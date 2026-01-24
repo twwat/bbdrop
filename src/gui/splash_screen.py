@@ -211,3 +211,4 @@ class SplashScreen(QSplashScreen):
     def finish_and_hide(self):
         """Clean shutdown of splash screen"""
         self.hide()
+        self.close()  # Required for WSL/X11 - hide() alone doesn't close the window

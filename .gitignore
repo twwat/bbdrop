@@ -17,6 +17,7 @@ venv/
 ENV/
 *.egg-info/
 .pytest_cache/
+.env
 
 # PyInstaller
 build/
@@ -128,3 +129,6 @@ docs/internal/
 
 .cursor/
 CLAUDE.md
+docs/plans/
+agents/
+docs/dev/CLAUDE_FLOW_CHEAT_SHEET.md

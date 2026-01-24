@@ -610,7 +610,8 @@ class ImxUploadGUI(QMainWindow):
             try:
                 from src.processing.file_host_worker_manager import FileHostWorkerManager
                 self.file_host_manager = FileHostWorkerManager(self.queue_manager.store)
-                self.splash.set_status("Connecting FileHostWorkerManager's signals to UI handlers")
+                if self.splash:
+                    self.splash.set_status("Connecting FileHostWorkerManager's signals to UI handlers")
                 # Connect manager signals to UI handlers (via worker_signal_handler)
                 self.file_host_manager.test_completed.connect(self.worker_signal_handler.on_file_host_test_completed)
                 self.file_host_manager.upload_started.connect(self.worker_signal_handler.on_file_host_upload_started)
