@@ -94,7 +94,7 @@ class TestDropEnabledTabBar:
         tab_bar.addTab("Target Tab")
 
         mime_data = QMimeData()
-        mime_data.setData("application/x-imxup-galleries", b"/path/to/gallery1\n/path/to/gallery2")
+        mime_data.setData("application/x-bbdrop-galleries", b"/path/to/gallery1\n/path/to/gallery2")
 
         event = MagicMock()
         event.mimeData.return_value = mime_data
@@ -111,7 +111,7 @@ class TestDropEnabledTabBar:
     def test_drop_event_with_invalid_position(self, tab_bar):
         """Test drop on invalid position is ignored"""
         mime_data = QMimeData()
-        mime_data.setData("application/x-imxup-galleries", b"/path/to/gallery")
+        mime_data.setData("application/x-bbdrop-galleries", b"/path/to/gallery")
 
         event = MagicMock()
         event.mimeData.return_value = mime_data

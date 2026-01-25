@@ -1,5 +1,5 @@
 """
-Graceful shutdown dialogs for IMXuploader.
+Graceful shutdown dialogs for BBDrop.
 
 Provides exit confirmation with active transfer details and
 a shutdown progress dialog with force quit option.
@@ -20,7 +20,7 @@ from src.storage.queue_manager import GalleryQueueItem
 from src.utils.logger import log
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
 
 
 class ExitConfirmationDialog(QDialog):
@@ -544,7 +544,7 @@ class ShutdownWorker(QThread):
     shutdown_complete = pyqtSignal()
     shutdown_error = pyqtSignal(str)
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize shutdown worker.
 
         Args:

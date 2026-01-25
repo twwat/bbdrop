@@ -22,7 +22,7 @@ class BBCodeViewerDialog(QDialog):
         self.folder_files = []
 
         # Import here to avoid circular imports
-        from imxup import get_central_storage_path
+        from bbdrop import get_central_storage_path
         self.central_path: str = get_central_storage_path()  # Type annotation ensures non-None
         
         self.setWindowTitle(f"BBCode Files - {self.folder_name}")
@@ -84,7 +84,7 @@ class BBCodeViewerDialog(QDialog):
             widget = widget.parent()
         
         # Central location files in standardized naming (fallback to legacy if not found)
-        from imxup import build_gallery_filenames
+        from bbdrop import build_gallery_filenames
         if gallery_id and gallery_name:
             _, json_filename, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
             central_bbcode = os.path.join(self.central_path, bbcode_filename)

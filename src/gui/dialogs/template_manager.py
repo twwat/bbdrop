@@ -530,7 +530,7 @@ class TemplateManagerDialog(QDialog):
 
     def load_templates(self):
         """Load and display available templates"""
-        from imxup import load_templates
+        from bbdrop import load_templates
         templates = load_templates()
 
         self.template_list.clear()
@@ -627,7 +627,7 @@ class TemplateManagerDialog(QDialog):
             return
 
         # Load from disk
-        from imxup import load_templates
+        from bbdrop import load_templates
         templates = load_templates()
 
         if template_name in templates:
@@ -746,7 +746,7 @@ class TemplateManagerDialog(QDialog):
                 return
 
             # Check if template already exists (on disk or in pending)
-            from imxup import load_templates
+            from bbdrop import load_templates
             templates = load_templates()
             if name in templates or name in self.pending_new_templates:
                 QMessageBox.warning(self, "Error", f"Template '{name}' already exists!")
@@ -798,7 +798,7 @@ class TemplateManagerDialog(QDialog):
                 return
 
             # Check if new name already exists
-            from imxup import load_templates
+            from bbdrop import load_templates
             templates = load_templates()
             if new_name in templates or new_name in self.pending_new_templates:
                 QMessageBox.warning(self, "Error", f"Template '{new_name}' already exists!")
@@ -813,7 +813,7 @@ class TemplateManagerDialog(QDialog):
                     self.pending_changes[new_name] = self.pending_changes.pop(old_name)
             else:
                 # Template exists on disk, rename file
-                from imxup import get_template_path
+                from bbdrop import get_template_path
                 template_path = get_template_path()
                 old_file = os.path.join(template_path, f"{old_name}.template.txt")
                 new_file = os.path.join(template_path, f"{new_name}.template.txt")
@@ -913,7 +913,7 @@ class TemplateManagerDialog(QDialog):
                 return
 
             # Check if template already exists
-            from imxup import load_templates
+            from bbdrop import load_templates
             templates = load_templates()
             if new_name in templates or new_name in self.pending_new_templates:
                 QMessageBox.warning(self, "Error", f"Template '{new_name}' already exists!")
@@ -940,7 +940,7 @@ class TemplateManagerDialog(QDialog):
         Returns:
             True if all changes were saved successfully, False otherwise.
         """
-        from imxup import get_template_path
+        from bbdrop import get_template_path
         template_path = get_template_path()
 
         errors = []

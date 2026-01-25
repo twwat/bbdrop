@@ -58,36 +58,36 @@ class DropEnabledTabBar(QTabBar):
     
     def dragEnterEvent(self, event):
         """Handle drag enter events"""
-        if event.mimeData().hasFormat("application/x-imxup-galleries"):
+        if event.mimeData().hasFormat("application/x-bbdrop-galleries"):
             event.acceptProposedAction()
             self._update_drag_highlight(event.position().toPoint())
         else:
             super().dragEnterEvent(event)
-    
+
     def dragMoveEvent(self, event):
         """Handle drag move events"""
-        if event.mimeData().hasFormat("application/x-imxup-galleries"):
+        if event.mimeData().hasFormat("application/x-bbdrop-galleries"):
             event.acceptProposedAction()
             self._update_drag_highlight(event.position().toPoint())
         else:
             super().dragMoveEvent(event)
-    
+
     def dragLeaveEvent(self, event):
         """Handle drag leave events"""
         self._clear_drag_highlight()
         super().dragLeaveEvent(event)
-    
+
     def dropEvent(self, event):
         """Handle drop events"""
-        if event.mimeData().hasFormat("application/x-imxup-galleries"):
+        if event.mimeData().hasFormat("application/x-bbdrop-galleries"):
             # Find the tab at drop position
             drop_index = self.tabAt(event.position().toPoint())
             if drop_index >= 0:
                 tab_text = self.tabText(drop_index)
                 tab_name = tab_text.split(' (')[0] if ' (' in tab_text else tab_text
-                
+
                 # Extract gallery paths from mime data
-                gallery_data = event.mimeData().data("application/x-imxup-galleries")
+                gallery_data = event.mimeData().data("application/x-bbdrop-galleries")
                 gallery_paths = gallery_data.data().decode('utf-8').split('\n')
                 gallery_paths = [path.strip() for path in gallery_paths if path.strip()]
                 

@@ -563,7 +563,7 @@ MANUAL TESTING CHECKLIST
 ========================
 
 **Prerequisites:**
-1. Build and run the GUI: `python imxup.py`
+1. Build and run the GUI: `python bbdrop.py`
 2. Navigate to Worker Status Widget tab/panel
 3. Ensure some file hosts are configured and enabled
 

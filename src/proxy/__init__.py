@@ -1,4 +1,4 @@
-"""Proxy configuration and management module for imxup2.
+"""Proxy configuration and management module for bbdrop.
 
 Provides comprehensive proxy support including:
 - Profile management (ProxyProfile, ProxyType)

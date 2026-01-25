@@ -76,7 +76,7 @@ def mock_credentials(monkeypatch):
 @pytest.fixture
 def mock_config_path(tmp_path, monkeypatch):
     """Create a temporary config file and mock get_config_path."""
-    config_file = tmp_path / "imxup.ini"
+    config_file = tmp_path / "bbdrop.ini"
     config_file.touch()
 
     monkeypatch.setattr('src.gui.dialogs.credential_setup.get_config_path', lambda: str(config_file))

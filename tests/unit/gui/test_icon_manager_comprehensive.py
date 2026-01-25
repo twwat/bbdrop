@@ -107,8 +107,8 @@ def temp_assets_dir(tmp_path):
         (assets / f"{ui}-dark.png").write_bytes(minimal_png)
 
     # Main window and app icons
-    (assets / "imxup.png").write_bytes(minimal_png)
-    (assets / "imxup.ico").write_bytes(minimal_png)
+    (assets / "bbdrop.png").write_bytes(minimal_png)
+    (assets / "bbdrop.ico").write_bytes(minimal_png)
 
     return str(assets)
 
@@ -565,7 +565,7 @@ class TestIconPaths:
 
         assert path is not None
         assert temp_assets_dir in path
-        assert 'imxup.ico' in path
+        assert 'bbdrop.ico' in path
 
     def test_get_icon_path_list_config(self, qtbot, icon_manager, temp_assets_dir):
         """Test get_icon_path for icon with list config returns light variant."""
@@ -646,9 +646,9 @@ class TestThemedFilenameResolution:
 
     def test_string_config_returns_as_is(self, qtbot, icon_manager):
         """Test string config returns the string unchanged."""
-        result = icon_manager._get_themed_filename('imxup.ico', 'light', False)
+        result = icon_manager._get_themed_filename('bbdrop.ico', 'light', False)
 
-        assert result == 'imxup.ico'
+        assert result == 'bbdrop.ico'
 
     def test_list_config_light_theme(self, qtbot, icon_manager):
         """Test list config returns first element for light theme."""

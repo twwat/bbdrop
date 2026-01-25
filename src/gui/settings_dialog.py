@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Settings management module for imxup GUI
+Settings management module for bbdrop GUI
 Contains all settings-related dialogs and configuration management
 
 SETTINGS STORAGE ARCHITECTURE:
@@ -18,9 +18,9 @@ This application uses TWO separate settings storage systems with clear separatio
    - Any transient "where did I leave the UI" state
 
    Location: Platform-specific (Windows Registry, macOS plist, Linux conf files)
-   Managed by: Qt automatically via QSettings("ImxUploader", "ImxUploadGUI")
+   Managed by: Qt automatically via QSettings("BBDropUploader", "BBDropGUI")
 
-2. INI File (~/.imxup/imxup.ini) - FOR USER CONFIGURATION:
+2. INI File (~/.bbdrop/bbdrop.ini) - FOR USER CONFIGURATION:
    - Credentials (username, password, API key)
    - Templates
    - Scanning settings (fast scan, sampling, exclusions, etc.)
@@ -29,7 +29,7 @@ This application uses TWO separate settings storage systems with clear separatio
    - Auto-start/auto-clear preferences
    - Thumbnail settings
 
-   Location: ~/.imxup/imxup.ini (portable, human-editable)
+   Location: ~/.bbdrop/bbdrop.ini (portable, human-editable)
    Managed by: ConfigParser (manual read/write)
 
 WHY THIS SEPARATION:
@@ -59,7 +59,7 @@ from PyQt6.QtGui import QIcon, QFont, QColor, QTextCharFormat, QPixmap, QPainter
 from PyQt6.QtGui import QSyntaxHighlighter
 
 # Import local modules
-from imxup import load_user_defaults, get_config_path, encrypt_password, decrypt_password
+from bbdrop import load_user_defaults, get_config_path, encrypt_password, decrypt_password
 from src.utils.format_utils import timestamp, format_binary_size
 from src.utils.logger import log
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
@@ -252,7 +252,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.current_tab_index = 0
 
         # Initialize QSettings for storing test results and cache
-        self.settings = QSettings("ImxUploader", "ImxUploadGUI")
+        self.settings = QSettings("BBDropUploader", "BBDropGUI")
 
         self.setup_ui()
         self.load_settings()
@@ -462,13 +462,13 @@ class ComprehensiveSettingsDialog(QDialog):
         storage_layout.addWidget(location_label, 2, 0, 1, 3)
         
         # Import path functions
-        from imxup import get_central_store_base_path, get_default_central_store_base_path, get_project_root, get_base_path
+        from bbdrop import get_central_store_base_path, get_default_central_store_base_path, get_project_root, get_base_path
 
         # Get ACTUAL current path from QSettings (source of truth)
         current_path = get_base_path()
         home_path = get_default_central_store_base_path()
         app_root = get_project_root()
-        portable_path = os.path.join(app_root, '.imxup')
+        portable_path = os.path.join(app_root, '.bbdrop')
 
         # Radio buttons for location selection
         # Display home path with ~ instead of full username path for privacy/brevity
@@ -2342,7 +2342,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
     def _load_advanced_settings(self):
         """Load advanced settings from INI file and QSettings."""
-        from imxup import get_config_path
+        from bbdrop import get_config_path
 
         config = configparser.ConfigParser()
         config_file = get_config_path()
@@ -2365,7 +2365,7 @@ class ComprehensiveSettingsDialog(QDialog):
                                 values[key] = value
 
         # Load bandwidth settings from QSettings (where BandwidthManager stores them)
-        qsettings = QSettings("ImxUploader", "Settings")
+        qsettings = QSettings("BBDropUploader", "Settings")
         alpha_up = qsettings.value("bandwidth/alpha_up", None)
         alpha_down = qsettings.value("bandwidth/alpha_down", None)
         if alpha_up is not None:
@@ -2389,7 +2389,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
         Bandwidth settings are also saved to QSettings for BandwidthManager.
         """
-        from imxup import get_config_path
+        from bbdrop import get_config_path
 
         config = configparser.ConfigParser()
         config_file = get_config_path()
@@ -2419,7 +2419,7 @@ class ComprehensiveSettingsDialog(QDialog):
         alpha_up = all_values.get('bandwidth/alpha_up', 0.6)
         alpha_down = all_values.get('bandwidth/alpha_down', 0.15)
 
-        qsettings = QSettings("ImxUploader", "Settings")
+        qsettings = QSettings("BBDropUploader", "Settings")
         qsettings.setValue("bandwidth/alpha_up", alpha_up)
         qsettings.setValue("bandwidth/alpha_down", alpha_down)
 
@@ -2619,7 +2619,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
     def browse_central_store(self):
         """Browse for central store directory"""
-        from imxup import get_default_central_store_base_path
+        from bbdrop import get_default_central_store_base_path
         current_path = self.path_edit.text() or get_default_central_store_base_path()
         
         # Use non-blocking file dialog
@@ -2835,7 +2835,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 return
 
             from src.core.file_host_config import get_config_manager
-            from imxup import get_credential, decrypt_password
+            from bbdrop import get_credential, decrypt_password
 
             config = configparser.ConfigParser()
             config_file = get_config_path()
@@ -2891,7 +2891,7 @@ class ComprehensiveSettingsDialog(QDialog):
             if not hasattr(self, 'file_hosts_widget') or not self.file_hosts_widget:
                 return
 
-            from imxup import set_credential, encrypt_password
+            from bbdrop import set_credential, encrypt_password
 
             config = configparser.ConfigParser()
             config_file = get_config_path()
@@ -3476,7 +3476,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
         self.store_in_central_check.setChecked(defaults.get('store_in_central', True))
         
-        from imxup import get_central_store_base_path
+        from bbdrop import get_central_store_base_path
         current_path = defaults.get('central_store_path') or get_central_store_base_path()
         self.path_edit.setText(current_path)
         
@@ -3520,7 +3520,7 @@ class ComprehensiveSettingsDialog(QDialog):
             config.set('DEFAULTS', 'max_retries', str(self.max_retries_slider.value()))
 
             # Check if batch size changed to trigger connection pool refresh
-            # load_user_defaults already imported from imxup at top of file
+            # load_user_defaults already imported from bbdrop at top of file
             current_defaults = load_user_defaults()
             old_batch_size = current_defaults.get('parallel_batch_size', 4)
             new_batch_size = self.batch_size_slider.value()
@@ -3549,7 +3549,7 @@ class ComprehensiveSettingsDialog(QDialog):
             config.set('DEFAULTS', 'store_in_central', str(self.store_in_central_check.isChecked()))
             
             # Determine storage mode and path
-            from imxup import get_central_store_base_path, get_default_central_store_base_path
+            from bbdrop import get_central_store_base_path, get_default_central_store_base_path
             
             # Get the CURRENT active path (what's actually being used)
             current_active_path = get_central_store_base_path()
@@ -3563,9 +3563,9 @@ class ComprehensiveSettingsDialog(QDialog):
                 new_path = get_default_central_store_base_path()
             elif self.portable_radio.isChecked():
                 storage_mode = 'portable'
-                from imxup import get_project_root
+                from bbdrop import get_project_root
                 app_root = get_project_root()  # Use centralized function that handles frozen exe correctly
-                new_path = os.path.join(app_root, '.imxup')
+                new_path = os.path.join(app_root, '.bbdrop')
             elif self.custom_radio.isChecked():
                 storage_mode = 'custom'
                 new_path = self.path_edit.text().strip()
@@ -3573,13 +3573,13 @@ class ComprehensiveSettingsDialog(QDialog):
             # Check if path is actually changing
             if new_path and os.path.normpath(new_path) != os.path.normpath(current_active_path):
                 # Check if NEW location already has a config file
-                new_config_file = os.path.join(new_path, 'imxup.ini')
+                new_config_file = os.path.join(new_path, 'bbdrop.ini')
                 if os.path.exists(new_config_file):
                     # NEW location already has config - ask what to do
                     conflict_msg = QMessageBox(self)
                     conflict_msg.setIcon(QMessageBox.Icon.Warning)
                     conflict_msg.setWindowTitle("Existing Configuration Found")
-                    conflict_msg.setText(f"The new location already contains an imxup.ini file:\n{new_config_file}")
+                    conflict_msg.setText(f"The new location already contains an bbdrop.ini file:\n{new_config_file}")
                     conflict_msg.setInformativeText("How would you like to handle this?")
 
                     keep_btn = conflict_msg.addButton("Keep Existing", QMessageBox.ButtonRole.YesRole)
@@ -3634,7 +3634,7 @@ class ComprehensiveSettingsDialog(QDialog):
                     config.set('DEFAULTS', 'storage_mode', storage_mode)
                     config.set('DEFAULTS', 'central_store_path', new_path)
                     # Write to NEW location (not config_file which is old location)
-                    new_config_file = os.path.join(new_path, 'imxup.ini')
+                    new_config_file = os.path.join(new_path, 'bbdrop.ini')
                     os.makedirs(new_path, exist_ok=True)
                     with open(new_config_file, 'w', encoding='utf-8') as f:
                         config.write(f)
@@ -3658,7 +3658,7 @@ class ComprehensiveSettingsDialog(QDialog):
                     config.set('DEFAULTS', 'storage_mode', storage_mode)
                     config.set('DEFAULTS', 'central_store_path', new_path)
                     # Write to NEW location
-                    new_config_file = os.path.join(new_path, 'imxup.ini')
+                    new_config_file = os.path.join(new_path, 'bbdrop.ini')
                     os.makedirs(new_path, exist_ok=True)
                     with open(new_config_file, 'w', encoding='utf-8') as f:
                         config.write(f)
@@ -3759,7 +3759,7 @@ class ComprehensiveSettingsDialog(QDialog):
             
             # Migrate database files (all of them)
             progress.setLabelText("Migrating database...")
-            for db_file in ['imxup.db', 'imxup.db-shm', 'imxup.db-wal']:
+            for db_file in ['bbdrop.db', 'bbdrop.db-shm', 'bbdrop.db-wal']:
                 old_db = os.path.join(old_path, db_file)
                 new_db = os.path.join(new_path, db_file)
                 if os.path.exists(old_db):
@@ -3813,7 +3813,7 @@ class ComprehensiveSettingsDialog(QDialog):
             if self.parent_window:
                 self.parent_window.close()
             python = sys.executable
-            subprocess.Popen([python, "imxup.py", "--gui"])
+            subprocess.Popen([python, "bbdrop.py", "--gui"])
             QApplication.quit()
             
         except Exception as e:

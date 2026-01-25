@@ -1,5 +1,5 @@
 """
-Centralized logging for imxup (GUI and CLI).
+Centralized logging for bbdrop (GUI and CLI).
 
 - Writes rolling log files under {central_store_base_path}/logs
 - Supports daily rotation with compression and backup retention
@@ -117,7 +117,7 @@ class AppLogger:
         "max_bytes": "10485760",  # 10 MiB for size-based rotation
         "level_file": "INFO",
         "level_gui": "INFO",
-        "filename": "imxup.log",
+        "filename": "bbdrop.log",
         # Category toggles (GUI and file sinks)
         "cats_gui_uploads": "true",
         "cats_file_uploads": "true",
@@ -161,14 +161,14 @@ class AppLogger:
 
     def __init__(self) -> None:
         # Lazy imports to avoid circular deps
-        from imxup import get_config_path, get_central_store_base_path  # type: ignore
+        from bbdrop import get_config_path, get_central_store_base_path  # type: ignore
         self._get_config_path = get_config_path
         self._get_central_base = get_central_store_base_path
 
         # Add custom TRACE level to Python's logging module
         logging.addLevelName(self.TRACE, "TRACE")
 
-        self._logger = logging.getLogger("imxup")
+        self._logger = logging.getLogger("bbdrop")
         self._logger.setLevel(self.TRACE)  # Allow TRACE level
         self._logger.propagate = False
 

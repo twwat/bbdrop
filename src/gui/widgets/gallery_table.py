@@ -116,7 +116,7 @@ class GalleryTableWidget(QTableWidget):
     """Table widget for gallery queue with resizable columns, sorting, and action buttons
     """
 
-    # Type hints for attributes set externally by parent (ImxUploadGUI)
+    # Type hints for attributes set externally by parent (BBDropGUI)
     queue_manager: 'QueueManager'  # Set by parent after instantiation
     tab_manager: Optional['TabManager']  # Set by parent after instantiation
     icon_manager: Optional['IconManager']  # Set by parent after instantiation
@@ -299,7 +299,7 @@ class GalleryTableWidget(QTableWidget):
     def _on_scroll(self):
         """Refresh icons for newly visible rows when scrolling (only if needed after theme change)"""
         if self._needs_full_icon_refresh:
-            # Find parent ImxUploadGUI to call refresh
+            # Find parent BBDropGUI to call refresh
             from PyQt6.QtWidgets import QWidget, QMainWindow
             parent = self.parent()
             while parent and not isinstance(parent, QMainWindow):
@@ -439,7 +439,7 @@ class GalleryTableWidget(QTableWidget):
 
         # Create mime data for internal gallery transfer
         mime_data = QMimeData()
-        mime_data.setData("application/x-imxup-galleries",
+        mime_data.setData("application/x-bbdrop-galleries",
                          "\n".join(gallery_paths).encode('utf-8'))
 
         # Add text representation for debugging
@@ -653,7 +653,7 @@ class GalleryTableWidget(QTableWidget):
 
     def manage_gallery_files(self, path: str):
         """Open the file manager dialog for a gallery"""
-        # Find the parent ImxUploadGUI window
+        # Find the parent BBDropGUI window
         from PyQt6.QtWidgets import QMainWindow
         parent_window = self
         while parent_window and not isinstance(parent_window, QMainWindow):
@@ -669,7 +669,7 @@ class GalleryTableWidget(QTableWidget):
 
     def rename_gallery(self, path: str):
         """Handle gallery rename from context menu"""
-        # Find the parent ImxUploadGUI window
+        # Find the parent BBDropGUI window
         from PyQt6.QtWidgets import QMainWindow
         parent_window = self
         while parent_window and not isinstance(parent_window, QMainWindow):
@@ -713,7 +713,7 @@ class GalleryTableWidget(QTableWidget):
                 try:
                     parent_window.regenerate_bbcode_for_gallery(path)
                     # Only log if regeneration actually happened (could check if enabled first)
-                    from imxup import load_user_defaults
+                    from bbdrop import load_user_defaults
                     defaults = load_user_defaults()
                     if defaults.get('auto_regenerate_bbcode', True):
                         log(f"BBCode regenerated for renamed gallery: {new_name}", level="debug")
@@ -800,7 +800,7 @@ class GalleryTableWidget(QTableWidget):
         """Add files to a gallery"""
         import shutil
 
-        # Find the parent ImxUploadGUI window to access queue manager
+        # Find the parent BBDropGUI window to access queue manager
         from PyQt6.QtWidgets import QMainWindow
         parent_window = self
         while parent_window and not isinstance(parent_window, QMainWindow):
@@ -1060,7 +1060,7 @@ class GalleryTableWidget(QTableWidget):
                 central_path = os.path.join(base_path, "galleries")
                 #print(f"DEBUG: Using widget._get_central_storage_path: {central_path}")
             else:
-                central_path = os.path.expanduser("~/.imxup/galleries")
+                central_path = os.path.expanduser("~/.bbdrop/galleries")
                 log(f"Using fallback central_path: {central_path}", level="debug")
             if item.gallery_id and (item.name or folder_name):
                 #print(f"DEBUG: Has gallery_id and name, item.name: {getattr(item, 'name', 'MISSING')}")
@@ -1148,7 +1148,7 @@ class GalleryTableWidget(QTableWidget):
                 # Fallback: attempt to read JSON and extract meta.gallery_url
                 try:
                     folder_name = os.path.basename(path)
-                    from imxup import get_central_storage_path, build_gallery_filenames
+                    from bbdrop import get_central_storage_path, build_gallery_filenames
                     json_path_candidates = []
                     uploaded_subdir = os.path.join(path, ".uploaded")
                     if item.gallery_id and (item.name or folder_name):

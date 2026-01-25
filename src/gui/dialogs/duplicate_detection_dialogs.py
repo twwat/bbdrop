@@ -1,5 +1,5 @@
 """
-Duplicate detection dialogs for ImxUp application.
+Duplicate detection dialogs for BBDrop application.
 Handles two types of duplicates: previously uploaded galleries and queue duplicates.
 """
 

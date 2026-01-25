@@ -67,7 +67,7 @@ __version__ = "0.7.4"  # Application version number
 
 # GitHub repository info for update checker
 GITHUB_OWNER = "twwat"
-GITHUB_REPO = "imxup"
+GITHUB_REPO = "bbdrop"
 
 # Lazy User-Agent string builder to avoid platform.system() hang during module import
 # (platform.system() can hang on some Windows systems, breaking splash screen initialization)
@@ -82,10 +82,10 @@ def get_user_agent() -> str:
             _release = platform.release()
             _machine = platform.machine()
             _version = platform.version()
-            _user_agent_cache = f"Mozilla/5.0 (ImxUp {__version__}; {_system} {_release} {_version}; {_machine}; rv:141.0) Gecko/20100101 Firefox/141.0"
+            _user_agent_cache = f"Mozilla/5.0 (BBDrop {__version__}; {_system} {_release} {_version}; {_machine}; rv:141.0) Gecko/20100101 Firefox/141.0"
         except Exception:
             # Fallback if platform calls fail
-            _user_agent_cache = f"Mozilla/5.0 (ImxUp {__version__}; Windows; rv:141.0) Gecko/20100101 Firefox/141.0"
+            _user_agent_cache = f"Mozilla/5.0 (BBDrop {__version__}; Windows; rv:141.0) Gecko/20100101 Firefox/141.0"
     return _user_agent_cache
 
 def get_version() -> str:
@@ -101,25 +101,25 @@ def get_project_root() -> str:
     When running as PyInstaller frozen executable:
         Returns the directory containing the .exe (where assets/, docs/, src/ are located)
     When running as Python script:
-        Returns the directory containing imxup.py
+        Returns the directory containing bbdrop.py
     """
     if getattr(sys, 'frozen', False):
         # Running as PyInstaller executable - use .exe location
         # This ensures we find assets/, docs/, src/ next to the .exe
         return os.path.dirname(os.path.abspath(sys.executable))
     else:
-        # Running as Python script - use imxup.py location
+        # Running as Python script - use bbdrop.py location
         return os.path.dirname(os.path.abspath(__file__))
 
 def get_base_path() -> str:
     """Get the base path for all app data (config, galleries, templates).
 
-    Checks QSettings for custom base path (bootstrap), falls back to default ~/.imxup
+    Checks QSettings for custom base path (bootstrap), falls back to default ~/.bbdrop
     """
     try:
         # Check QSettings for custom base path (bootstrap location)
         from PyQt6.QtCore import QSettings
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
         custom_base = settings.value("config/base_path", "", type=str)
 
         if custom_base and os.path.isdir(custom_base):
@@ -128,14 +128,14 @@ def get_base_path() -> str:
         pass  # QSettings not available (CLI mode)
 
     # Default location
-    return os.path.join(os.path.expanduser("~"), ".imxup")
+    return os.path.join(os.path.expanduser("~"), ".bbdrop")
 
 
 def get_config_path() -> str:
     """Return the canonical path to the application's config file."""
     base_dir = get_base_path()
     os.makedirs(base_dir, exist_ok=True)
-    return os.path.join(base_dir, "imxup.ini")
+    return os.path.join(base_dir, "bbdrop.ini")
 
 def read_config() -> configparser.ConfigParser:
     """Read the application config file with proper encoding.
@@ -148,6 +148,96 @@ def read_config() -> configparser.ConfigParser:
     if os.path.exists(config_file):
         config.read(config_file, encoding='utf-8')
     return config
+
+def migrate_from_imxup() -> bool:
+    """Migrate settings and data from old imxup to new bbdrop location.
+
+    Copies settings and data from ~/.imxup to ~/.bbdrop and migrates
+    QSettings from ImxUploader/imxup to BBDropUploader/bbdrop namespaces.
+    Also migrates keyring credentials from 'imxup' to 'bbdrop' service.
+
+    Returns:
+        True if migration was performed, False if not needed or failed.
+    """
+    import shutil
+
+    home = os.path.expanduser("~")
+    old_path = os.path.join(home, ".imxup")
+    new_path = os.path.join(home, ".bbdrop")
+
+    # Check if migration is needed
+    if not os.path.exists(old_path):
+        return False  # No old data to migrate
+
+    if os.path.exists(new_path) and os.listdir(new_path):
+        return False  # New location already has data
+
+    try:
+        # Create new directory
+        os.makedirs(new_path, exist_ok=True)
+
+        # Copy data files (database, templates, galleries, etc.)
+        for item in os.listdir(old_path):
+            old_item = os.path.join(old_path, item)
+            new_item = os.path.join(new_path, item)
+
+            # Rename imxup files to bbdrop
+            if item == "imxup.ini":
+                new_item = os.path.join(new_path, "bbdrop.ini")
+            elif item == "imxup.db":
+                new_item = os.path.join(new_path, "bbdrop.db")
+            elif item == "imxup.db-shm":
+                new_item = os.path.join(new_path, "bbdrop.db-shm")
+            elif item == "imxup.db-wal":
+                new_item = os.path.join(new_path, "bbdrop.db-wal")
+
+            if os.path.isdir(old_item):
+                shutil.copytree(old_item, new_item, dirs_exist_ok=True)
+            else:
+                shutil.copy2(old_item, new_item)
+
+        # Migrate QSettings (Windows registry or ini files)
+        try:
+            from PyQt6.QtCore import QSettings
+
+            old_qsettings_pairs = [
+                ("ImxUploader", "ImxUploadGUI", "BBDropUploader", "BBDropGUI"),
+                ("ImxUploader", "QueueManager", "BBDropUploader", "QueueManager"),
+                ("ImxUploader", "Stats", "BBDropUploader", "Stats"),
+                ("ImxUploader", "Settings", "BBDropUploader", "Settings"),
+                ("ImxUploader", "TabManager", "BBDropUploader", "TabManager"),
+                ("imxup", "imxup", "bbdrop", "bbdrop"),
+            ]
+
+            for old_org, old_app, new_org, new_app in old_qsettings_pairs:
+                old_settings = QSettings(old_org, old_app)
+                new_settings = QSettings(new_org, new_app)
+
+                for key in old_settings.allKeys():
+                    value = old_settings.value(key)
+                    if value is not None:
+                        new_settings.setValue(key, value)
+
+                new_settings.sync()
+        except Exception:
+            pass  # QSettings migration is optional
+
+        # Migrate keyring credentials
+        try:
+            import keyring
+            cookies = keyring.get_password("imxup", "session_cookies")
+            if cookies:
+                keyring.set_password("bbdrop", "session_cookies", cookies)
+        except Exception:
+            pass  # Keyring migration is optional
+
+        log(f"Migrated settings from {old_path} to {new_path}", level="info")
+        return True
+
+    except Exception as e:
+        log(f"Migration failed: {e}", level="error")
+        return False
+
 
 def _unique_destination_path(dest_dir: str, filename: str) -> str:
     """Generate a unique destination path within dest_dir.
@@ -187,8 +277,8 @@ def create_windows_context_menu():
         else:
             # Running as Python script - use .py files with python.exe
             script_dir = get_project_root()
-            cli_script = os.path.join(script_dir, 'imxup.py')
-            gui_script = os.path.join(script_dir, 'imxup.py')  # Use imxup.py --gui for consistency
+            cli_script = os.path.join(script_dir, 'bbdrop.py')
+            gui_script = os.path.join(script_dir, 'bbdrop.py')  # Use bbdrop.py --gui for consistency
             # Prefer python.exe for CLI and pythonw.exe for GUI
             python_exe = sys.executable or 'python.exe'
             if python_exe.lower().endswith('pythonw.exe'):
@@ -217,7 +307,7 @@ def create_windows_context_menu():
             # For .exe, pass folder path as argument (--gui flag already in gui_script variable)
             gui_command = f'{gui_script} "%V"'
         else:
-            # For Python script, use pythonw.exe with imxup.py --gui
+            # For Python script, use pythonw.exe with bbdrop.py --gui
             gui_command = f'"{pythonw_exe}" "{gui_script}" --gui "%V"'
 
         winreg.SetValue(gui_command_key_dir, "", winreg.REG_SZ, gui_command)
@@ -381,7 +471,7 @@ def get_credential(key):
     try:
         # Try keyring first (secure OS-native storage)
         import keyring
-        value = keyring.get_password("imxup", key)
+        value = keyring.get_password("bbdrop", key)
         if value:
             return value
     except ImportError:
@@ -391,7 +481,7 @@ def get_credential(key):
 
     # Fallback to legacy QSettings/Registry storage
     from PyQt6.QtCore import QSettings
-    settings = QSettings("imxup", "imxup")
+    settings = QSettings("bbdrop", "bbdrop")
     settings.beginGroup("Credentials")
     value = settings.value(key, "")
     settings.endGroup()
@@ -405,7 +495,7 @@ def set_credential(key, value):
     try:
         # Try to use keyring (secure OS-native storage)
         import keyring
-        keyring.set_password("imxup", key, value)
+        keyring.set_password("bbdrop", key, value)
         log(f"Credential '{key}' stored securely in OS keyring", level="debug", category="auth")
     except ImportError:
         log("keyring not available, using QSettings only", level="warning", category="auth")
@@ -414,7 +504,7 @@ def set_credential(key, value):
 
     # Also store in QSettings/Registry for backward compatibility
     from PyQt6.QtCore import QSettings
-    settings = QSettings("imxup", "imxup")
+    settings = QSettings("bbdrop", "bbdrop")
     settings.beginGroup("Credentials")
     settings.setValue(key, value)
     settings.endGroup()
@@ -423,7 +513,7 @@ def set_credential(key, value):
 def remove_credential(key):
     """Remove credential from QSettings"""
     from PyQt6.QtCore import QSettings
-    settings = QSettings("imxup", "imxup")
+    settings = QSettings("bbdrop", "bbdrop")
     settings.beginGroup("Credentials")
     settings.remove(key)
     settings.endGroup()
@@ -519,7 +609,7 @@ def load_user_defaults():
 def setup_secure_password():
     """Interactive setup for secure password storage"""
     print("Setting up secure password storage for imx.to")
-    print("This will store a hashed version of your password in ~/.imxup/imxup.ini")
+    print("This will store a hashed version of your password in ~/.bbdrop/bbdrop.ini")
     print("")
     
     username = input("Enter your imx.to username: ")
@@ -571,7 +661,7 @@ def save_unnamed_gallery(gallery_id, intended_name):
 
 def get_default_central_store_base_path():
     """Return the default central store BASE path. Alias for get_base_path default."""
-    return os.path.join(os.path.expanduser("~"), ".imxup")
+    return os.path.join(os.path.expanduser("~"), ".bbdrop")
 
 
 def get_central_store_base_path():
@@ -1281,7 +1371,7 @@ class ImxToUploader:
             log(f"Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.", level="warning", category="auth")
             # Don't exit in GUI mode - let the user set credentials through the dialog
             # Only exit if running in CLI mode (when there's no way to set credentials interactively)
-            is_gui_mode = os.environ.get('IMXUP_GUI_MODE') == '1'
+            is_gui_mode = os.environ.get('BBDROP_GUI_MODE') == '1'
             if not is_gui_mode:
                 sys.exit(1)
 
@@ -2034,11 +2124,11 @@ def main():
     
     # Handle GUI launch
     if args.gui:
-        debug_print(f"Launching ImxUp v{__version__} in GUI mode...")
+        debug_print(f"Launching BBDrop v{__version__} in GUI mode...")
         try:
             # Set environment variable to indicate GUI mode BEFORE stripping --gui from sys.argv
             # This allows ImxToUploader to detect GUI mode even after sys.argv is modified
-            os.environ['IMXUP_GUI_MODE'] = '1'
+            os.environ['BBDROP_GUI_MODE'] = '1'
 
             # Import only lightweight PyQt6 basics for splash screen FIRST
             debug_print("Importing PyQt6.QtWidgets...")
@@ -2089,7 +2179,7 @@ def main():
                 print(f"{'='*60}\n")
                 # Also try to write to a crash log file
                 try:
-                    crash_log = os.path.join(os.path.expanduser("~"), ".imxup", "crash.log")
+                    crash_log = os.path.join(os.path.expanduser("~"), ".bbdrop", "crash.log")
                     with open(crash_log, 'a', encoding='utf-8') as f:
                         f.write(f"\n{'='*60}\n")
                         f.write(f"CRASH AT {datetime.now()}\n")
@@ -2106,21 +2196,21 @@ def main():
             splash = SplashScreen()
             #debug_print("Showing splash screen...")
             splash.show()
-            splash.update_status("Starting ImxUp...")
+            splash.update_status("Starting BBDrop...")
             debug_print("Processing events...")
             app.processEvents()  # Force splash to appear NOW
             #debug_print("Events processed")
 
             # NOW import the heavy main_window module (while splash is visible)
             splash.set_status("Loading modules")
-            debug_print(f"Launching GUI for ImxUp v{__version__}...")
+            debug_print(f"Launching GUI for BBDrop v{__version__}...")
             if sys.stdout is not None:
                 try:
                     sys.stdout.flush()
                 except (OSError, AttributeError):
                     pass
             debug_print("Importing main_window...")
-            from src.gui.main_window import ImxUploadGUI, check_single_instance
+            from src.gui.main_window import BBDropGUI, check_single_instance
 
             # Check for existing instance
             folders_to_add = []
@@ -2133,14 +2223,14 @@ def main():
                     return
             else:
                 if check_single_instance():
-                    print(f"{timestamp()} INFO: ImxUp GUI already running, bringing existing instance to front.")
+                    print(f"{timestamp()} INFO: BBDrop GUI already running, bringing existing instance to front.")
                     splash.finish_and_hide()
                     return
 
             splash.set_status("Creating main window")
 
             # Create main window (pass splash for progress updates)
-            window = ImxUploadGUI(splash)
+            window = BBDropGUI(splash)
 
             # Now set Fusion style after widgets are initialized
             splash.set_status("Setting Fusion style...")
@@ -2159,7 +2249,7 @@ def main():
             # Load saved galleries with progress dialog (window exists but not shown yet)
             debug_print(f"{timestamp()} Loading {gallery_count} galleries with progress dialog")
             progress = QProgressDialog("Loading saved galleries...", None, 0, gallery_count, None)
-            progress.setWindowTitle("ImxUp")
+            progress.setWindowTitle("BBDrop")
             progress.setWindowModality(Qt.WindowModality.ApplicationModal)
             progress.setMinimumDuration(0)  # Show immediately
             progress.show()
@@ -2512,8 +2602,8 @@ if __name__ == "__main__":
         # Log crash to file when running with --noconsole (so we can debug it)
         try:
             import traceback
-            with open('imxup_crash.log', 'w') as f:
-                f.write(f"ImxUp crashed:\n")
+            with open('bbdrop_crash.log', 'w') as f:
+                f.write(f"BBDrop crashed:\n")
                 f.write(f"{traceback.format_exc()}\n")
         except (OSError, IOError):
             pass

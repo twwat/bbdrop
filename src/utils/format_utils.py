@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Formatting utilities for imxup
+Formatting utilities for bbdrop
 Handles binary size formatting, timestamps, and string sanitization
 """
 

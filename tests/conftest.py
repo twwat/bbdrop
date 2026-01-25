@@ -1,5 +1,5 @@
 """
-Pytest configuration and fixtures for imxup swarm testing.
+Pytest configuration and fixtures for bbdrop swarm testing.
 Provides shared fixtures, test utilities, and environment setup.
 """
 

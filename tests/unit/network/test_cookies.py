@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
-# Mock logging BEFORE importing cookies module to prevent .imxup directory creation
+# Mock logging BEFORE importing cookies module to prevent .bbdrop directory creation
 import sys
 from unittest.mock import MagicMock
 

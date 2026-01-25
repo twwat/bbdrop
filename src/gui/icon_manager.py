@@ -1,5 +1,5 @@
 """
-Icon Manager for ImxUp application.
+Icon Manager for BBDrop application.
 Centralized management of all application icons with validation and clear mappings.
 """
 
@@ -76,8 +76,8 @@ class IconManager:
         'radio_check':          ['radio_check-light.png',       'radio_check-dark.png'],
         'check':                'check.png',          #green, also used for rename
         'checkbox_check':       'checkbox_check.png', #blue
-        'main_window':          'imxup-main-icon.png',
-        'app_icon':             'imxup.ico',
+        'main_window':          'bbdrop-main-icon.png',
+        'app_icon':             'bbdrop.ico',
         # Alternative sizes (optional)
     }
 

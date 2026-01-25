@@ -22,7 +22,7 @@ spec = importlib.util.spec_from_file_location("main_window",
     str(Path(__file__).parent.parent.parent.parent / 'src' / 'gui' / 'main_window.py'))
 main_window_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(main_window_module)
-MainWindow = main_window_module.ImxUploadGUI
+MainWindow = main_window_module.BBDropGUI
 
 # Import TableRowManager for checking actual implementation
 from src.gui.table_row_manager import TableRowManager

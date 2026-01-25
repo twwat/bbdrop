@@ -116,7 +116,7 @@ The test suite provides comprehensive coverage for:
 ### Temporary Directories
 - `temp_config_dir` - Clean config directory for tests
 - `temp_assets_dir` - Assets directory with dummy icon files
-- `mock_config_file` - Temporary imxup.ini config file
+- `mock_config_file` - Temporary bbdrop.ini config file
 
 ### Test Data
 - `sample_gallery_data` - Sample gallery data for testing

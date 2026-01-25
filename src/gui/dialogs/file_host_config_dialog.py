@@ -82,7 +82,7 @@ class FileHostConfigDialog(QDialog):
         if self.worker_manager:
             self.worker_manager.spinup_complete.connect(self._on_spinup_complete)
 
-        self.settings = QSettings("ImxUploader", "ImxUploadGUI")
+        self.settings = QSettings("BBDropUploader", "BBDropGUI")
 
         # Initialize saved values for cache (updated when Apply/Enable/Disable clicked)
         # These values are returned by get_*() methods when dialog closes
@@ -176,7 +176,7 @@ class FileHostConfigDialog(QDialog):
             creds_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
             # Load current credentials from encrypted storage
-            from imxup import get_credential, decrypt_password
+            from bbdrop import get_credential, decrypt_password
             from src.utils.logger import log
 
             encrypted_creds = get_credential(f"file_host_{self.host_id}_credentials")
@@ -587,7 +587,7 @@ class FileHostConfigDialog(QDialog):
 
         # Set initial splitter sizes (50/50 split) and restore saved state
         self.content_splitter.setSizes([450, 450])  # Initial equal split
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
         splitter_state = settings.value(f"FileHostConfigDialog/{self.host_id}/splitter_state")
         if splitter_state:
             self.content_splitter.restoreState(splitter_state)
@@ -672,7 +672,7 @@ class FileHostConfigDialog(QDialog):
         Returns:
             Clickable QLabel with scaled logo pixmap, or None if logo not found
         """
-        from imxup import get_project_root
+        from bbdrop import get_project_root
         import os
 
         logo_path = os.path.join(get_project_root(), "assets", "hosts", "logo", f"{host_id}.png")
@@ -1344,7 +1344,7 @@ class FileHostConfigDialog(QDialog):
         if credentials:
                 try:
                     # Bug fix: Correct function name is set_credential, not store_credential
-                    from imxup import set_credential, encrypt_password
+                    from bbdrop import set_credential, encrypt_password
                     encrypted = encrypt_password(credentials)
                     set_credential(f"file_host_{self.host_id}_credentials", encrypted)
 
@@ -1491,7 +1491,7 @@ class FileHostConfigDialog(QDialog):
                 pass  # Already disconnected or never connected
 
         # Save splitter state to preserve user's layout preference
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
         settings.setValue(f"FileHostConfigDialog/{self.host_id}/splitter_state", self.content_splitter.saveState())
 
         super().closeEvent(event)

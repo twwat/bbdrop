@@ -86,7 +86,7 @@ class UnrenamedGalleriesDialog(QDialog):
     def load_galleries(self):
         """Load unrenamed galleries into the table"""
         try:
-            from imxup import get_unnamed_galleries
+            from bbdrop import get_unnamed_galleries
             unnamed = get_unnamed_galleries()
 
             # Clear existing rows
@@ -135,7 +135,7 @@ class UnrenamedGalleriesDialog(QDialog):
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                from imxup import remove_unnamed_gallery
+                from bbdrop import remove_unnamed_gallery
 
                 # Collect gallery IDs before removal
                 gallery_ids = []
@@ -179,7 +179,7 @@ class UnrenamedGalleriesDialog(QDialog):
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                from imxup import get_config_path
+                from bbdrop import get_config_path
                 from src.storage.database import QueueStore
 
                 # Get database instance

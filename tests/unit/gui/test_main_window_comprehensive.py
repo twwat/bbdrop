@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive pytest-qt tests for ImxUploadGUI (main_window.py)
+Comprehensive pytest-qt tests for BBDropGUI (main_window.py)
 
 Tests cover:
 - Widget initialization and properties
@@ -33,7 +33,7 @@ from PyQt6.QtGui import QIcon, QDropEvent, QDragEnterEvent, QAction
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.gui.main_window import (
-    ImxUploadGUI, CompletionWorker, SingleInstanceServer,
+    BBDropGUI, CompletionWorker, SingleInstanceServer,
     LogTextEdit, NumericTableWidgetItem, get_icon,
     check_stored_credentials, api_key_is_set, format_timestamp_for_display
 )
@@ -56,8 +56,8 @@ def temp_assets_dir(tmp_path):
         'status_completed-dark.png',
         'status_failed-light.png',
         'status_failed-dark.png',
-        'imxup.ico',
-        'imxup.png',
+        'bbdrop.ico',
+        'bbdrop.png',
     ]
 
     for icon_name in dummy_icons:
@@ -75,19 +75,19 @@ def temp_assets_dir(tmp_path):
 
 @pytest.fixture
 def comprehensive_mock_dependencies(monkeypatch, temp_assets_dir, tmp_path):
-    """Comprehensive mock for all ImxUploadGUI dependencies"""
-    # Mock imxup functions
-    monkeypatch.setattr('imxup.get_project_root', lambda: str(tmp_path))
-    monkeypatch.setattr('imxup.get_config_path', lambda: str(tmp_path / '.imxup'))
-    monkeypatch.setattr('imxup.load_user_defaults', lambda: {
+    """Comprehensive mock for all BBDropGUI dependencies"""
+    # Mock bbdrop functions
+    monkeypatch.setattr('bbdrop.get_project_root', lambda: str(tmp_path))
+    monkeypatch.setattr('bbdrop.get_config_path', lambda: str(tmp_path / '.bbdrop'))
+    monkeypatch.setattr('bbdrop.load_user_defaults', lambda: {
         'confirm_delete': True,
         'parallel_batch_size': 4,
         'thumbnail_size': 180,
         'thumbnail_format': 1
     })
-    monkeypatch.setattr('imxup.get_credential', lambda x: None)
-    monkeypatch.setattr('imxup.set_credential', lambda x, y: True)
-    monkeypatch.setattr('imxup.get_central_storage_path', lambda: str(tmp_path / 'storage'))
+    monkeypatch.setattr('bbdrop.get_credential', lambda x: None)
+    monkeypatch.setattr('bbdrop.set_credential', lambda x, y: True)
+    monkeypatch.setattr('bbdrop.get_central_storage_path', lambda: str(tmp_path / 'storage'))
     monkeypatch.setattr('src.utils.logger.set_main_window', lambda x: None)
 
     # Mock IconManager
@@ -149,7 +149,7 @@ def comprehensive_mock_dependencies(monkeypatch, temp_assets_dir, tmp_path):
 
 @pytest.fixture
 def create_minimal_window(qtbot, comprehensive_mock_dependencies):
-    """Factory fixture to create ImxUploadGUI with minimal initialization"""
+    """Factory fixture to create BBDropGUI with minimal initialization"""
     windows = []
 
     def _create(**kwargs):
@@ -227,12 +227,12 @@ def create_minimal_window(qtbot, comprehensive_mock_dependencies):
             mock_server.wait = Mock()
 
             with patch('src.gui.main_window.SingleInstanceServer', return_value=mock_server):
-                with patch.object(ImxUploadGUI, 'setup_ui', mock_setup_ui):
+                with patch.object(BBDropGUI, 'setup_ui', mock_setup_ui):
                     with patch.object(MenuManager, 'setup_menu_bar'):
-                        with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                            with patch.object(ImxUploadGUI, 'restore_settings'):
-                                with patch.object(ImxUploadGUI, 'check_credentials'):
-                                    window = ImxUploadGUI(**kwargs)
+                        with patch.object(BBDropGUI, 'setup_system_tray'):
+                            with patch.object(BBDropGUI, 'restore_settings'):
+                                with patch.object(BBDropGUI, 'check_credentials'):
+                                    window = BBDropGUI(**kwargs)
 
                                     # Immediately stop background threads after creation
                                     # to prevent cleanup issues

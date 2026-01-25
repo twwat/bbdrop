@@ -1,5 +1,5 @@
 """
-Custom widget classes for ImxUp application.
+Custom widget classes for BBDrop application.
 Provides specialized UI components.
 """
 

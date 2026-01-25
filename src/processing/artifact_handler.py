@@ -27,7 +27,7 @@ from src.utils.logger import log
 from src.utils.format_utils import format_binary_size
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
 
 
 class CompletionWorker(QThread):
@@ -82,7 +82,7 @@ class CompletionWorker(QThread):
                 - failed_details: List of (filename, error) tuples
                 - total_size: Total bytes uploaded
                 - avg_width/height: Image dimension statistics
-            gui_parent: Reference to ImxUploadGUI for queue_manager access
+            gui_parent: Reference to BBDropGUI for queue_manager access
 
         Note:
             This method returns immediately; actual processing happens in background thread.
@@ -118,7 +118,7 @@ class CompletionWorker(QThread):
 
             # Only track for renaming if gallery is actually unnamed
             try:
-                from imxup import save_unnamed_gallery, get_unnamed_galleries, check_gallery_renamed
+                from bbdrop import save_unnamed_gallery, get_unnamed_galleries, check_gallery_renamed
                 # Check if gallery is already renamed
                 is_renamed = check_gallery_renamed(gallery_id)
                 if not is_renamed:
@@ -192,7 +192,7 @@ class CompletionWorker(QThread):
 
             # Use centralized save_gallery_artifacts function
             try:
-                from imxup import save_gallery_artifacts, load_user_defaults
+                from bbdrop import save_gallery_artifacts, load_user_defaults
                 written = save_gallery_artifacts(
                     folder_path=path,
                     results={
@@ -238,11 +238,11 @@ class ArtifactHandler(QObject):
         >>> handler.regenerate_bbcode_for_gallery(gallery_path, force=True)
     """
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize the artifact handler.
 
         Args:
-            main_window: Reference to ImxUploadGUI instance
+            main_window: Reference to BBDropGUI instance
         """
         super().__init__()
         self._main_window = main_window
@@ -334,7 +334,7 @@ class ArtifactHandler(QObject):
         Raises:
             Exception: If gallery not found, no JSON artifact, or regeneration fails
         """
-        from imxup import get_central_storage_path, build_gallery_filenames, save_gallery_artifacts
+        from bbdrop import get_central_storage_path, build_gallery_filenames, save_gallery_artifacts
         import json
         import glob
         import os
@@ -418,7 +418,7 @@ class ArtifactHandler(QObject):
             True if auto-regeneration is enabled and gallery is completed
         """
         # Check if auto-regeneration is enabled
-        from imxup import load_user_defaults
+        from bbdrop import load_user_defaults
         defaults = load_user_defaults()
         if not defaults.get('auto_regenerate_bbcode', True):
             return False

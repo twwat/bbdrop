@@ -1,4 +1,4 @@
-"""Menu management for IMXuploader GUI.
+"""Menu management for BBDrop GUI.
 
 This module handles menu bar creation and menu-related dialogs extracted from
 main_window.py to improve maintainability and separation of concerns.
@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
 from src.utils.logger import log
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
 
 
 class MenuManager(QObject):
@@ -39,17 +39,17 @@ class MenuManager(QObject):
     - Windows Explorer context menu integration
 
     Attributes:
-        _main_window: Reference to the main ImxUploadGUI window
+        _main_window: Reference to the main BBDropGUI window
         _action_toggle_right_panel: Action for toggling right panel visibility
         _theme_action_light: Action for light theme selection
         _theme_action_dark: Action for dark theme selection
     """
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize the MenuManager.
 
         Args:
-            main_window: Reference to the main ImxUploadGUI window
+            main_window: Reference to the main BBDropGUI window
         """
         super().__init__()
         self._main_window = main_window
@@ -243,14 +243,14 @@ class MenuManager(QObject):
         mw = self._main_window
 
         try:
-            from imxup import __version__, get_project_root
+            from bbdrop import __version__, get_project_root
             version = f"{__version__}"
         except Exception as e:
             log(f"Failed to get version: {e}", level="warning", category="ui")
             version = "unknown"
 
         dialog = QDialog(mw)
-        dialog.setWindowTitle("About IMXup")
+        dialog.setWindowTitle("About BBDrop")
         dialog.setFixedSize(400, 500)
         dialog.setModal(True)
 
@@ -260,8 +260,8 @@ class MenuManager(QObject):
 
         # Add logo at top
         try:
-            from imxup import get_project_root
-            logo_path = os.path.join(get_project_root(), 'assets', 'imxup.png')
+            from bbdrop import get_project_root
+            logo_path = os.path.join(get_project_root(), 'assets', 'bbdrop.png')
             logo_pixmap = QPixmap(logo_path)
             if not logo_pixmap.isNull():
                 logo_label = QLabel()
@@ -275,7 +275,7 @@ class MenuManager(QObject):
             raise
 
         # Add title
-        title_label = QLabel("IMXup")
+        title_label = QLabel("BBDrop")
         title_label.setProperty("class", "about-title")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title_label)
@@ -339,7 +339,7 @@ class MenuManager(QObject):
 
         # Load LICENSE file
         try:
-            from imxup import get_project_root
+            from bbdrop import get_project_root
             license_path = os.path.join(get_project_root(), 'LICENSE')
             if os.path.exists(license_path):
                 with open(license_path, 'r', encoding='utf-8') as f:
@@ -373,7 +373,7 @@ class MenuManager(QObject):
         """Install Windows Explorer context menu integration."""
         mw = self._main_window
         try:
-            from imxup import create_windows_context_menu
+            from bbdrop import create_windows_context_menu
             ok = create_windows_context_menu()
             if ok:
                 QMessageBox.information(mw, "Context Menu", "Windows Explorer context menu installed successfully.")
@@ -389,7 +389,7 @@ class MenuManager(QObject):
         """Remove Windows Explorer context menu integration."""
         mw = self._main_window
         try:
-            from imxup import remove_windows_context_menu
+            from bbdrop import remove_windows_context_menu
             ok = remove_windows_context_menu()
             if ok:
                 QMessageBox.information(mw, "Context Menu", "Windows Explorer context menu removed successfully.")

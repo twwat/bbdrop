@@ -369,7 +369,7 @@ class TestZIPCreationWithPaths:
 @pytest.fixture(scope="session")
 def test_results_file():
     """File to store test results."""
-    return "/home/jimbo/imxup/tests/path_retry_test_results.json"
+    return "/home/jimbo/bbdrop/tests/path_retry_test_results.json"
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -393,7 +393,7 @@ def pytest_sessionfinish(session, exitstatus):
         # Count outcomes...
 
     # Save to file
-    results_file = "/home/jimbo/imxup/tests/path_retry_test_results.json"
+    results_file = "/home/jimbo/bbdrop/tests/path_retry_test_results.json"
     with open(results_file, "w") as f:
         json.dump(results, f, indent=2)
 

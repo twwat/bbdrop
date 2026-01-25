@@ -299,7 +299,7 @@ class StatisticsDialog(QDialog):
 
     def _load_stats(self) -> None:
         """Load all statistics from QSettings and display."""
-        settings = QSettings("ImxUploader", "Stats")
+        settings = QSettings("BBDropUploader", "Stats")
         # Session stats
         app_startups = settings.value("app_startup_count", 0, type=int)
         first_startup = settings.value("first_startup_timestamp", "")

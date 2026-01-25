@@ -21,7 +21,7 @@ class ProxyStorage:
     USE_OS_PROXY_KEY = "Proxy/UseOSProxy"
 
     def __init__(self):
-        self._settings = QSettings("imxup", "imxup")
+        self._settings = QSettings("bbdrop", "bbdrop")
 
     # === Profile CRUD (Legacy - kept for bulk import compatibility) ===
 

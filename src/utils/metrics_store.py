@@ -24,7 +24,7 @@ from typing import Any, Dict, Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
 # Access central data dir path from shared helper
-from imxup import get_central_store_base_path
+from bbdrop import get_central_store_base_path
 
 logger = logging.getLogger(__name__)
 

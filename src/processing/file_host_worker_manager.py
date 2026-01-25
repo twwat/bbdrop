@@ -58,7 +58,7 @@ class FileHostWorkerManager(QObject):
 
         Called at application startup.
         """
-        from imxup import get_config_path
+        from bbdrop import get_config_path
         import configparser
         import os
 

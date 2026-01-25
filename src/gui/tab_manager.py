@@ -72,7 +72,7 @@ class TabManager(QObject):
     tab_deleted = pyqtSignal(str, str)  # (deleted_tab_name, reassign_to)
     tabs_reordered = pyqtSignal()
     
-    def __init__(self, queue_store: QueueStore, settings_org: str = "ImxUploader", settings_app: str = "TabManager"):
+    def __init__(self, queue_store: QueueStore, settings_org: str = "BBDropUploader", settings_app: str = "TabManager"):
         """
         Initialize TabManager with database store and settings.
         

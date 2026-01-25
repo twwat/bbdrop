@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Log Viewer Dialog for imxup application
+Log Viewer Dialog for bbdrop application
 Provides log viewing, filtering, and configuration capabilities
 """
 
@@ -95,7 +95,7 @@ class LogViewerDialog(QDialog):
         self.cmb_level_filter.setToolTip("Filter by minimum log level")
         
         # Load saved level filter from QSettings
-        settings = QSettings("imxup", "imxup")
+        settings = QSettings("bbdrop", "bbdrop")
         settings.beginGroup("log_viewer")
         saved_level = settings.value("level_filter", "INFO+")
         settings.endGroup()
@@ -186,13 +186,13 @@ class LogViewerDialog(QDialog):
 
         def _load_logs_list():
             self.cmb_file_select.clear()
-            self.cmb_file_select.addItem("Current (imxup.log)", userData="__current__")
+            self.cmb_file_select.addItem("Current (bbdrop.log)", userData="__current__")
             try:
                 if self._logger:
                     logs_dir = self._logger.get_logs_dir()
                     files = []
                     for name in os.listdir(logs_dir):
-                        if name.startswith("imxup.log"):
+                        if name.startswith("bbdrop.log"):
                             files.append(name)
                     files.sort(reverse=True)
                     for name in files:
@@ -387,7 +387,7 @@ class LogViewerDialog(QDialog):
         # Bind level dropdown with QSettings save
         def on_level_filter_changed(_=None):
             # Save to QSettings with group structure
-            settings = QSettings("imxup", "imxup")
+            settings = QSettings("bbdrop", "bbdrop")
             settings.beginGroup("log_viewer")
             settings.setValue("level_filter", self.cmb_level_filter.currentText())
             settings.endGroup()

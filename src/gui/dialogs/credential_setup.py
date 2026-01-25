@@ -14,7 +14,7 @@ from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QIcon
 
 # Import the core credential functions
-from imxup import (get_config_path, encrypt_password, decrypt_password,
+from bbdrop import (get_config_path, encrypt_password, decrypt_password,
                    get_credential, set_credential, remove_credential)
 
 

@@ -2,7 +2,7 @@
 Core upload engine shared by CLI and GUI.
 
 This module centralizes the upload loop, retries, and statistics aggregation,
-so both the CLI (`imxup.py`) and GUI (`imxup_gui.py`) can use the same logic
+so both the CLI (`bbdrop.py`) and GUI (`bbdrop_gui.py`) can use the same logic
 without duplication.
 """
 
@@ -108,7 +108,7 @@ class UploadEngine:
     def _is_gallery_unnamed(self, gallery_id: str) -> bool:
         """Check if gallery is in the unnamed galleries list."""
         try:
-            from imxup import get_unnamed_galleries  # type: ignore
+            from bbdrop import get_unnamed_galleries  # type: ignore
             unnamed_galleries = get_unnamed_galleries()
             return gallery_id in unnamed_galleries
         except Exception:
@@ -193,7 +193,7 @@ class UploadEngine:
             gallery_name = os.path.basename(folder_path)
         # Sanitize gallery name using the canonical helper (lazy import to avoid circular deps)
         try:
-            from imxup import sanitize_gallery_name  # type: ignore
+            from bbdrop import sanitize_gallery_name  # type: ignore
             original_name = gallery_name
             # No sanitization - only rename worker should sanitize
             if original_name != gallery_name:
@@ -273,7 +273,7 @@ class UploadEngine:
             else:
                 # No rename worker; queue for later auto-rename
                 try:
-                    from imxup import save_unnamed_gallery  # type: ignore
+                    from bbdrop import save_unnamed_gallery  # type: ignore
                     save_unnamed_gallery(gallery_id, gallery_name)
                     log(f"Queued gallery for auto-rename: '{gallery_name}' (no RenameWorker)", level="debug", category="renaming")
                 except Exception:

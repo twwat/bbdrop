@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Update Dialog for IMXuploader
+Update Dialog for BBDrop
 
 Modal dialog showing available update information with download option.
 """

@@ -1,5 +1,5 @@
 """
-Background task management for ImxUp application.
+Background task management for BBDrop application.
 Handles async operations, progress batching, and table updates.
 """
 
@@ -340,7 +340,7 @@ class TableUpdateQueue:
 def check_stored_credentials() -> bool:
     """Check if credentials are stored in QSettings (Registry)"""
     try:
-        from imxup import get_credential
+        from bbdrop import get_credential
 
         username = get_credential('username')
         password = get_credential('password')
@@ -355,7 +355,7 @@ def check_stored_credentials() -> bool:
 def api_key_is_set() -> bool:
     """Check if API key is configured in QSettings (Registry)"""
     try:
-        from imxup import get_credential
+        from bbdrop import get_credential
         encrypted_api_key = get_credential('api_key')
         return bool(encrypted_api_key)
     except Exception:

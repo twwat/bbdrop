@@ -2,7 +2,7 @@
 Validation and sanitization utilities for user inputs.
 
 This module provides comprehensive validation and sanitization functions
-for various input types used throughout the imxup application.
+for various input types used throughout the bbdrop application.
 """
 
 import os

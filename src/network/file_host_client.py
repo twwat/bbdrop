@@ -430,23 +430,23 @@ class FileHostClient:
     def _get_clean_filename(self, filename: str) -> str:
         """Extract clean filename without internal ID prefix.
 
-        Removes 'imxup_{id}_' prefix from ZIP filenames before uploading to hosts.
+        Removes 'bbdrop_{id}_' prefix from ZIP filenames before uploading to hosts.
         This keeps local temp files unique while sending clean names externally.
 
         Examples:
-            'imxup_1555_Test70e.zip' → 'Test70e.zip'
-            'imxup_999_My_Gallery-2024.zip' → 'My_Gallery-2024.zip'
+            'bbdrop_1555_Test70e.zip' → 'Test70e.zip'
+            'bbdrop_999_My_Gallery-2024.zip' → 'My_Gallery-2024.zip'
             'normal_file.zip' → 'normal_file.zip' (unchanged)
-            'imxup_gallery_1555.zip' → 'imxup_gallery_1555.zip' (fallback pattern, unchanged)
+            'bbdrop_gallery_1555.zip' → 'bbdrop_gallery_1555.zip' (fallback pattern, unchanged)
 
         Args:
-            filename: Original filename (possibly with imxup prefix)
+            filename: Original filename (possibly with bbdrop prefix)
 
         Returns:
             Cleaned filename suitable for external hosts
         """
-        # Match "imxup_<numbers>_<rest>" and extract <rest>
-        match = re.match(r'^imxup_\d+_(.+)$', filename)
+        # Match "bbdrop_<numbers>_<rest>" and extract <rest>
+        match = re.match(r'^bbdrop_\d+_(.+)$', filename)
         if match:
             return match.group(1)
 
@@ -1812,11 +1812,11 @@ class FileHostClient:
 
         try:
             # Create a small test ZIP file
-            test_zip_path = Path(tempfile.gettempdir()) / "test_imxup.zip"
+            test_zip_path = Path(tempfile.gettempdir()) / "test_bbdrop.zip"
 
             with zipfile.ZipFile(test_zip_path, 'w', zipfile.ZIP_STORED) as zf:
                 # Add a tiny text file to the ZIP
-                zf.writestr("test.txt", "imxup test file - safe to delete")
+                zf.writestr("test.txt", "bbdrop test file - safe to delete")
 
             if self._log_callback: self._log_callback(f"Created test file: {test_zip_path} ({test_zip_path.stat().st_size} bytes)", "debug")
 

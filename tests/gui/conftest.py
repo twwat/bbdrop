@@ -177,7 +177,7 @@ def temp_config_dir(tmp_path) -> Generator[Path, None, None]:
     Temporary configuration directory for testing.
     Creates a clean config directory that's cleaned up after tests.
     """
-    config_dir = tmp_path / ".imxup"
+    config_dir = tmp_path / ".bbdrop"
     config_dir.mkdir(parents=True, exist_ok=True)
     yield config_dir
     # Cleanup handled by tmp_path
@@ -200,8 +200,8 @@ def temp_assets_dir(tmp_path) -> Generator[Path, None, None]:
         'status_failed-dark.png',
         'action_start-light.png',
         'action_start-dark.png',
-        'imxup.ico',
-        'imxup.png',
+        'bbdrop.ico',
+        'bbdrop.png',
     ]
 
     for icon_name in dummy_icons:
@@ -358,12 +358,12 @@ def mock_queue_manager() -> Mock:
 @pytest.fixture
 def mock_config_file(temp_config_dir) -> Generator[Path, None, None]:
     """
-    Create a temporary imxup.ini config file for testing.
+    Create a temporary bbdrop.ini config file for testing.
     Returns path to the config file.
     """
     import configparser
 
-    config_path = temp_config_dir / "imxup.ini"
+    config_path = temp_config_dir / "bbdrop.ini"
     config = configparser.ConfigParser()
 
     config['credentials'] = {
@@ -395,24 +395,24 @@ def mock_config_file(temp_config_dir) -> Generator[Path, None, None]:
 
 
 @pytest.fixture
-def mock_imxup_functions(monkeypatch):
+def mock_bbdrop_functions(monkeypatch):
     """
-    Mock core imxup functions to avoid external dependencies.
-    Patches common functions from the imxup module.
+    Mock core bbdrop functions to avoid external dependencies.
+    Patches common functions from the bbdrop module.
     """
     # Mock credential functions
-    monkeypatch.setattr('imxup.get_credential', lambda x: None)
-    monkeypatch.setattr('imxup.set_credential', lambda x, y: True)
-    monkeypatch.setattr('imxup.remove_credential', lambda x: True)
-    monkeypatch.setattr('imxup.encrypt_password', lambda x: f"encrypted_{x}")
-    monkeypatch.setattr('imxup.decrypt_password', lambda x: x.replace("encrypted_", ""))
+    monkeypatch.setattr('bbdrop.get_credential', lambda x: None)
+    monkeypatch.setattr('bbdrop.set_credential', lambda x, y: True)
+    monkeypatch.setattr('bbdrop.remove_credential', lambda x: True)
+    monkeypatch.setattr('bbdrop.encrypt_password', lambda x: f"encrypted_{x}")
+    monkeypatch.setattr('bbdrop.decrypt_password', lambda x: x.replace("encrypted_", ""))
 
     # Mock path functions
-    monkeypatch.setattr('imxup.get_config_path', lambda: '/tmp/.imxup')
-    monkeypatch.setattr('imxup.get_project_root', lambda: '/tmp/imxup')
+    monkeypatch.setattr('bbdrop.get_config_path', lambda: '/tmp/.bbdrop')
+    monkeypatch.setattr('bbdrop.get_project_root', lambda: '/tmp/bbdrop')
 
     # Mock version function
-    monkeypatch.setattr('imxup.get_version', lambda: '1.0.0-test')
+    monkeypatch.setattr('bbdrop.get_version', lambda: '1.0.0-test')
 
 
 @pytest.fixture

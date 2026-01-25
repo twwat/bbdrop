@@ -862,8 +862,8 @@ class TestFileHostClientEdgeCases:
         )
 
         # Test with internal prefix
-        assert client._get_clean_filename("imxup_1555_Gallery.zip") == "Gallery.zip"
-        assert client._get_clean_filename("imxup_999_My_Photos.zip") == "My_Photos.zip"
+        assert client._get_clean_filename("bbdrop_1555_Gallery.zip") == "Gallery.zip"
+        assert client._get_clean_filename("bbdrop_999_My_Photos.zip") == "My_Photos.zip"
 
         # Test without prefix
         assert client._get_clean_filename("normal_file.zip") == "normal_file.zip"

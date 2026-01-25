@@ -2,9 +2,9 @@
 File host configuration system for multi-host uploads.
 
 Loads host configurations from JSON files in:
-- Built-in: assets/hosts/ (shipped with imxup)
+- Built-in: assets/hosts/ (shipped with bbdrop)
 - Built-in logos: assets/hosts/logo/ (host logo images)
-- Custom: ~/.imxup/hosts/ (user-created configs)
+- Custom: ~/.bbdrop/hosts/ (user-created configs)
 """
 
 import os
@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, field
 from threading import Lock
 
-from imxup import get_central_store_base_path
+from bbdrop import get_central_store_base_path
 from src.utils.logger import log
 
 
@@ -253,7 +253,7 @@ def get_file_host_setting(host_id: str, key: str, value_type: str = "str") -> An
     Returns:
         Setting value from INI (if set), else JSON default, else hardcoded default
     """
-    from imxup import get_config_path
+    from bbdrop import get_config_path
     import configparser
     import os
 
@@ -315,7 +315,7 @@ def save_file_host_setting(host_id: str, key: str, value: Any) -> None:
     Raises:
         ValueError: If host_id doesn't exist or key is invalid
     """
-    from imxup import get_config_path
+    from bbdrop import get_config_path
     import configparser
     import os
 
@@ -414,9 +414,9 @@ class FileHostConfigManager:
         self.custom_dir = self._get_custom_hosts_dir()
 
     def _get_builtin_hosts_dir(self) -> Path:
-        """Get path to built-in host configs (shipped with imxup)."""
+        """Get path to built-in host configs (shipped with bbdrop)."""
         # Use centralized get_project_root() for consistency with icon loading
-        from imxup import get_project_root
+        from bbdrop import get_project_root
         project_root = get_project_root()
         hosts_dir = Path(project_root) / "assets" / "hosts"
         return hosts_dir

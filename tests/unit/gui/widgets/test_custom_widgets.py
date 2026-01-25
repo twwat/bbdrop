@@ -16,7 +16,7 @@ Tests cover:
 - FileHostsActionWidget: manage button actions
 
 Target: 70%+ coverage with 45+ tests
-Environment: pytest-qt, PyQt6, venv ~/imxup-venv-314
+Environment: pytest-qt, PyQt6, venv ~/bbdrop-venv
 """
 
 import pytest

@@ -409,7 +409,7 @@ class TestStatusOperations:
 class TestTemplateSubmenu:
     """Test template selection submenu"""
 
-    @patch('imxup.load_templates')
+    @patch('bbdrop.load_templates')
     def test_template_submenu_exists(self, mock_load_templates, context_menu_helper):
         """Test template submenu is created"""
         mock_load_templates.return_value = {
@@ -428,7 +428,7 @@ class TestTemplateSubmenu:
         )
         assert has_template_menu
 
-    @patch('imxup.load_templates')
+    @patch('bbdrop.load_templates')
     def test_template_submenu_has_templates(self, mock_load_templates, context_menu_helper):
         """Test template submenu contains available templates"""
         template_names = ['Default', 'Thumbnails', 'Full Size']
@@ -449,7 +449,7 @@ class TestTemplateSubmenu:
         for name in template_names:
             assert name in submenu_texts
 
-    @patch('imxup.load_templates')
+    @patch('bbdrop.load_templates')
     def test_template_selection_emits_signal(self, mock_load_templates, context_menu_helper, qtbot):
         """Test template selection emits signal"""
         mock_load_templates.return_value = {'Default': {}}
@@ -735,7 +735,7 @@ class TestTemplateUpdate:
         paths = ["/path/to/gallery"]
         template_name = "NewTemplate"
 
-        with patch('imxup.timestamp', return_value="12:00"):
+        with patch('bbdrop.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         context_menu_helper.main_window.queue_manager.store.update_item_template.assert_called_with(
@@ -754,7 +754,7 @@ class TestTemplateUpdate:
         context_menu_helper.main_window.queue_manager.items = {paths[0]: sample_queue_item}
         context_menu_helper.main_window.queue_manager.mutex = QMutex()
 
-        with patch('imxup.timestamp', return_value="12:00"):
+        with patch('bbdrop.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         assert sample_queue_item.template_name == template_name
@@ -771,7 +771,7 @@ class TestTemplateUpdate:
         context_menu_helper.main_window.queue_manager.items = {paths[0]: sample_queue_item}
         context_menu_helper.main_window.queue_manager.mutex = QMutex()
 
-        with patch('imxup.timestamp', return_value="12:00"):
+        with patch('bbdrop.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         context_menu_helper.main_window.regenerate_gallery_bbcode.assert_called_with(
@@ -783,7 +783,7 @@ class TestTemplateUpdate:
         paths = ["/path/to/gallery"]
         template_name = "NewTemplate"
 
-        with patch('imxup.timestamp', return_value="12:00"):
+        with patch('bbdrop.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         context_menu_helper.main_window.add_log_message.assert_called()
@@ -901,7 +901,7 @@ class TestEdgeCases:
         menu = context_menu_helper.create_context_menu(QPoint(0, 0), selected_paths)
         assert menu is not None
 
-    @patch('imxup.load_templates')
+    @patch('bbdrop.load_templates')
     def test_template_load_error(self, mock_load_templates, context_menu_helper, capsys):
         """Test handling of template loading error"""
         mock_load_templates.side_effect = Exception("Load error")

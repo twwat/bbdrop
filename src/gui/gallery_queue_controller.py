@@ -1,4 +1,4 @@
-"""Gallery queue controller for IMXuploader GUI.
+"""Gallery queue controller for BBDrop GUI.
 
 This module handles gallery queue addition and action operations extracted from main_window.py
 to improve maintainability and separation of concerns.
@@ -26,7 +26,7 @@ from src.processing.archive_worker import ArchiveExtractionWorker
 from src.storage.queue_manager import GalleryQueueItem
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
     from src.gui.widgets.gallery_table import GalleryTableWidget
 
 # Column index constant (mirrors GalleryTableWidget.COL_NAME)
@@ -43,14 +43,14 @@ class GalleryQueueController(QObject):
     - Batch queue operations (start, pause, clear, delete)
 
     Attributes:
-        _main_window: Reference to the main ImxUploadGUI window
+        _main_window: Reference to the main BBDropGUI window
     """
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize the GalleryQueueController.
 
         Args:
-            main_window: Reference to the main ImxUploadGUI window
+            main_window: Reference to the main BBDropGUI window
         """
         super().__init__()
         self._main_window = main_window

@@ -40,7 +40,7 @@ class TestApplicationInfo:
 
     def test_app_name_is_defined(self):
         """Test APP_NAME is defined as expected."""
-        assert APP_NAME == "ImxUp"
+        assert APP_NAME == "BBDrop"
         assert isinstance(APP_NAME, str)
         assert len(APP_NAME) > 0
 
@@ -457,15 +457,15 @@ class TestFilePaths:
 
     def test_config_dir_name_starts_with_dot(self):
         """Test CONFIG_DIR_NAME is hidden directory."""
-        assert CONFIG_DIR_NAME == ".imxup"
+        assert CONFIG_DIR_NAME == ".bbdrop"
         assert CONFIG_DIR_NAME.startswith('.')
 
     def test_file_names_have_correct_extensions(self):
         """Test configuration file names have correct extensions."""
-        assert CONFIG_FILE_NAME == "imxup.ini"
+        assert CONFIG_FILE_NAME == "bbdrop.ini"
         assert CONFIG_FILE_NAME.endswith('.ini')
 
-        assert DATABASE_FILE_NAME == "imxup.db"
+        assert DATABASE_FILE_NAME == "bbdrop.db"
         assert DATABASE_FILE_NAME.endswith('.db')
 
     @pytest.mark.parametrize("dir_name", [

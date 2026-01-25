@@ -536,7 +536,7 @@ INTEGRATION TEST INSTRUCTIONS
 These tests verify column management in isolation. For full integration testing:
 
 1. Manual Testing:
-   - Run the application: python imxup.py
+   - Run the application: python bbdrop.py
    - Open worker status widget
    - Test column reordering by dragging headers
    - Test column resizing by dragging header edges

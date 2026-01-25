@@ -1,4 +1,4 @@
-"""Table row management for IMXuploader GUI.
+"""Table row management for BBDrop GUI.
 
 This module handles table row population, loading, and status icon operations
 extracted from main_window.py to improve maintainability and separation of concerns.
@@ -28,10 +28,10 @@ from src.storage.queue_manager import GalleryQueueItem
 from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget
 from src.gui.icon_manager import get_icon_manager
 from src.processing.tasks import BackgroundTask
-from imxup import check_gallery_renamed
+from bbdrop import check_gallery_renamed
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
     from src.gui.widgets.gallery_table import GalleryTableWidget
 
 
@@ -134,14 +134,14 @@ class TableRowManager(QObject):
     - Background tab update processing
 
     Attributes:
-        _main_window: Reference to the main ImxUploadGUI window
+        _main_window: Reference to the main BBDropGUI window
     """
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize the TableRowManager.
 
         Args:
-            main_window: Reference to the main ImxUploadGUI window
+            main_window: Reference to the main BBDropGUI window
         """
         super().__init__()
         self._main_window = main_window

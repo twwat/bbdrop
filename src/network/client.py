@@ -1,5 +1,5 @@
 """
-Network communication and upload management for ImxUp application.
+Network communication and upload management for BBDrop application.
 Handles GUI-specific upload logic and single instance server.
 """
 
@@ -13,7 +13,7 @@ from functools import cmp_to_key
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from imxup import ImxToUploader, timestamp, sanitize_gallery_name
+from bbdrop import ImxToUploader, timestamp, sanitize_gallery_name
 from src.core.engine import UploadEngine, AtomicCounter
 from src.utils.logger import log
 from src.core.constants import (

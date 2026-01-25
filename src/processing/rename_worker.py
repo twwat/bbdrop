@@ -20,7 +20,7 @@ from src.utils.logger import log
 def save_session_cookies_to_keyring(session_cookies):
     """Save session cookies to OS keyring for reuse across sessions.
 
-    Stores cookies as JSON string under the 'imxup' service with 48-hour expiry.
+    Stores cookies as JSON string under the 'bbdrop' service with 48-hour expiry.
     """
     import json
     try:
@@ -38,7 +38,7 @@ def save_session_cookies_to_keyring(session_cookies):
                     'expiry': int(time.time()) + 172800  # 48 hours
                 }
         if cookies_dict:
-            keyring.set_password("imxup", "session_cookies", json.dumps(cookies_dict))
+            keyring.set_password("bbdrop", "session_cookies", json.dumps(cookies_dict))
             log("Session cookies saved to keyring", level="debug", category="auth")
     except ImportError:
         log("keyring not available, cookies not saved", level="debug", category="auth")
@@ -55,7 +55,7 @@ def load_session_cookies_from_keyring():
     import json
     try:
         import keyring
-        cookies_json = keyring.get_password("imxup", "session_cookies")
+        cookies_json = keyring.get_password("bbdrop", "session_cookies")
         if cookies_json:
             try:
                 cookies = json.loads(cookies_json)
@@ -98,7 +98,7 @@ def clear_session_cookies_from_keyring():
     """Clear stored session cookies from keyring."""
     try:
         import keyring
-        keyring.delete_password("imxup", "session_cookies")
+        keyring.delete_password("bbdrop", "session_cookies")
         log("Cleared session cookies from keyring", level="debug", category="auth")
     except Exception:
         pass
@@ -134,7 +134,7 @@ class RenameWorker(QObject):
         """
         super().__init__()
         # Import existing functions
-        from imxup import (get_config_path, decrypt_password, get_firefox_cookies,
+        from bbdrop import (get_config_path, decrypt_password, get_firefox_cookies,
                           load_cookies_from_file, get_unnamed_galleries,
                           remove_unnamed_gallery, sanitize_gallery_name, get_credential)
 
@@ -458,7 +458,7 @@ class RenameWorker(QObject):
 
         return False
 
-    # EXACT COPY of ImxToUploader.rename_gallery_with_session() - lines 1300-1365 from imxup.py
+    # EXACT COPY of ImxToUploader.rename_gallery_with_session() - lines 1300-1365 from bbdrop.py
     def rename_gallery_with_session(self, gallery_id, new_name, retry_on_auth_failure=True):
         """Rename gallery using existing session (will re-login on 403)"""
         log(f"RenameWorker (ID: {self._instance_id}) using session {id(self.session)} for rename of {gallery_id} ({new_name})", level="debug", category="renaming")
@@ -1008,7 +1008,7 @@ class RenameWorker(QObject):
 
     def _process_renames(self):
         """Background thread that processes rename queue."""
-        from imxup import save_unnamed_gallery
+        from bbdrop import save_unnamed_gallery
 
         while self.running:
             try:

@@ -10,7 +10,7 @@ import concurrent.futures
 import time
 import sys
 from typing import Any, Dict, List, Optional, Tuple
-from imxup import get_config_path
+from bbdrop import get_config_path
 from src.utils.logger import log
 
 

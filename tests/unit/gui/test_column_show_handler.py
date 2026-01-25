@@ -8,7 +8,7 @@ from unittest.mock import Mock, MagicMock, patch
 from PyQt6.QtWidgets import QApplication, QTableWidgetItem
 from PyQt6.QtCore import Qt
 
-from src.gui.main_window import ImxUploadGUI
+from src.gui.main_window import BBDropGUI
 from src.gui.widgets.gallery_table import GalleryTableWidget
 from src.storage.queue_manager import GalleryQueueItem
 
@@ -23,7 +23,7 @@ class TestColumnShowHandler:
              patch('src.gui.main_window.load_user_defaults'), \
              patch('src.gui.main_window.get_file_host_setting'), \
              patch('src.gui.main_window.get_config_manager'):
-            window = ImxUploadGUI()
+            window = BBDropGUI()
             qtbot.addWidget(window)
             yield window
 

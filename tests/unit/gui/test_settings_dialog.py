@@ -271,7 +271,7 @@ class TestSettingsDialogInit:
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
     def test_settings_dialog_creates(self, mock_get_path, mock_load, qtbot,
-                                     mock_config_file, mock_imxup_functions):
+                                     mock_config_file, mock_bbdrop_functions):
         """Test ComprehensiveSettingsDialog instantiation"""
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
@@ -519,7 +519,7 @@ class TestSettingsDialogLoadSave:
         mock_load.return_value = {}
 
         # Create config file with scanning settings
-        config_file = tmp_path / "imxup.ini"
+        config_file = tmp_path / "bbdrop.ini"
         config = configparser.ConfigParser()
         config['SCANNING'] = {
             'fast_scanning': 'true',
@@ -550,7 +550,7 @@ class TestSettingsDialogLoadSave:
     def test_save_scanning_settings(self, mock_get_path, mock_load, qtbot, tmp_path):
         """Test saving scanning settings to config file"""
         mock_load.return_value = {}
-        config_file = tmp_path / "imxup.ini"
+        config_file = tmp_path / "bbdrop.ini"
         config_file.write_text("[SCANNING]\n")
         mock_get_path.return_value = str(config_file)
 
@@ -886,7 +886,7 @@ class TestSettingsDialogExternalApps:
         """Test loading external apps settings"""
         mock_load.return_value = {}
 
-        config_file = tmp_path / "imxup.ini"
+        config_file = tmp_path / "bbdrop.ini"
         config = configparser.ConfigParser()
         config['HOOKS'] = {
             'pre_scan_enabled': 'true',
@@ -966,7 +966,7 @@ class TestSettingsDialogSaveFunctions:
         from PyQt6.QtCore import QSettings
 
         mock_load.return_value = {}
-        config_file = tmp_path / "imxup.ini"
+        config_file = tmp_path / "bbdrop.ini"
         config_file.write_text("[SCANNING]\n")
         mock_get_path.return_value = str(config_file)
 
@@ -1089,7 +1089,7 @@ class TestSettingsDialogIntegration:
         """Test complete workflow: open, edit, save, close"""
         mock_load.return_value = {}
 
-        config_file = tmp_path / "imxup.ini"
+        config_file = tmp_path / "bbdrop.ini"
         config = configparser.ConfigParser()
         config['SCANNING'] = {'fast_scanning': 'true'}
         with open(config_file, 'w') as f:

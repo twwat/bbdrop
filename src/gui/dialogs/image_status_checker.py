@@ -449,7 +449,7 @@ class ImageStatusChecker:
             images_offline: Count of offline images in this scan
         """
         try:
-            settings = QSettings("ImxUploader", "Stats")
+            settings = QSettings("BBDropUploader", "Stats")
 
             # Update lifetime totals (cumulative)
             settings.setValue("checker_online_galleries",

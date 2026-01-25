@@ -23,7 +23,7 @@ class ArchiveService:
         """Initialize with base temporary directory
 
         Args:
-            base_temp_dir: Base directory for temp extractions (e.g., ~/.imxup/temp)
+            base_temp_dir: Base directory for temp extractions (e.g., ~/.bbdrop/temp)
         """
         self.base_temp_dir = Path(base_temp_dir)
         self.base_temp_dir.mkdir(parents=True, exist_ok=True)

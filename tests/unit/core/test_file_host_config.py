@@ -445,28 +445,28 @@ class TestSettingsManagement:
         with open(temp_ini_file, 'w') as f:
             cfg.write(f)
 
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 value = get_file_host_setting("testhost", "enabled", "bool")
                 assert value is True
 
     def test_get_setting_defaults_to_false_for_enabled(self, temp_ini_file, mock_config_manager):
         """Test 'enabled' setting defaults to False when not in INI."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 value = get_file_host_setting("testhost", "enabled", "bool")
                 assert value is False
 
     def test_get_setting_defaults_to_disabled_for_trigger(self, temp_ini_file, mock_config_manager):
         """Test 'trigger' setting defaults to 'disabled' when not in INI."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 value = get_file_host_setting("testhost", "trigger", "str")
                 assert value == "disabled"
 
     def test_get_setting_uses_json_defaults(self, temp_ini_file, mock_config_manager):
         """Test get_file_host_setting falls back to JSON defaults."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 value = get_file_host_setting("testhost", "max_connections", "int")
                 assert value == 3  # From host defaults
@@ -481,14 +481,14 @@ class TestSettingsManagement:
             defaults={}
         )
 
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=manager):
                 value = get_file_host_setting("minimalhost", "max_retries", "int")
                 assert value == _HARDCODED_DEFAULTS["max_retries"]
 
     def test_save_setting_creates_ini_section(self, temp_ini_file, mock_config_manager):
         """Test save_file_host_setting creates FILE_HOSTS section if missing."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 save_file_host_setting("testhost", "enabled", True)
 
@@ -507,7 +507,7 @@ class TestSettingsManagement:
         with open(temp_ini_file, 'w') as f:
             cfg.write(f)
 
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 save_file_host_setting("testhost", "max_connections", 5)
 
@@ -517,14 +517,14 @@ class TestSettingsManagement:
 
     def test_save_setting_validates_host_exists(self, temp_ini_file, mock_config_manager):
         """Test save_file_host_setting validates host exists."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 with pytest.raises(ValueError, match="Unknown host ID"):
                     save_file_host_setting("nonexistent", "enabled", True)
 
     def test_save_setting_validates_key(self, temp_ini_file, mock_config_manager):
         """Test save_file_host_setting validates key is in whitelist."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 with pytest.raises(ValueError, match="Invalid setting key"):
                     save_file_host_setting("testhost", "invalid_key", "value")
@@ -539,7 +539,7 @@ class TestSettingsManagement:
     ])
     def test_save_setting_validates_values(self, temp_ini_file, mock_config_manager, key, invalid_value, error_match):
         """Test save_file_host_setting validates value types and ranges."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
                 with pytest.raises(ValueError, match=error_match):
                     save_file_host_setting("testhost", key, invalid_value)
@@ -581,7 +581,7 @@ class TestEnableDisableAndTriggers:
         with open(temp_ini_file, 'w') as f:
             cfg.write(f)
 
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager_with_hosts):
                 enabled = mock_config_manager_with_hosts.get_enabled_hosts()
 
@@ -603,7 +603,7 @@ class TestEnableDisableAndTriggers:
         with open(temp_ini_file, 'w') as f:
             cfg.write(f)
 
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager_with_hosts):
                 added_hosts = mock_config_manager_with_hosts.get_hosts_by_trigger("added")
 
@@ -614,7 +614,7 @@ class TestEnableDisableAndTriggers:
 
     def test_enable_host_sets_enabled_to_true(self, temp_ini_file, mock_config_manager_with_hosts):
         """Test enable_host sets enabled setting to True."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager_with_hosts):
                 result = mock_config_manager_with_hosts.enable_host("host1")
 
@@ -626,7 +626,7 @@ class TestEnableDisableAndTriggers:
 
     def test_disable_host_sets_enabled_to_false(self, temp_ini_file, mock_config_manager_with_hosts):
         """Test disable_host sets enabled setting to False."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager_with_hosts):
                 result = mock_config_manager_with_hosts.disable_host("host1")
 
@@ -638,7 +638,7 @@ class TestEnableDisableAndTriggers:
 
     def test_enable_nonexistent_host_returns_false(self, temp_ini_file, mock_config_manager_with_hosts):
         """Test enable_host returns False for nonexistent host."""
-        with patch('imxup.get_config_path', return_value=temp_ini_file):
+        with patch('bbdrop.get_config_path', return_value=temp_ini_file):
             with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager_with_hosts):
                 result = mock_config_manager_with_hosts.enable_host("nonexistent")
 
@@ -686,7 +686,7 @@ class TestThreadSafety:
 
         # Apply patches at module level before starting threads
         with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
-            with patch('imxup.get_config_path', return_value=temp_ini_file):
+            with patch('bbdrop.get_config_path', return_value=temp_ini_file):
                 threads = [threading.Thread(target=write_setting, args=(i,)) for i in range(num_threads)]
 
                 for t in threads:
@@ -725,7 +725,7 @@ class TestThreadSafety:
 
         # Apply patches at module level before starting threads
         with patch('src.core.file_host_config.get_config_manager', return_value=mock_config_manager):
-            with patch('imxup.get_config_path', return_value=temp_ini_file):
+            with patch('bbdrop.get_config_path', return_value=temp_ini_file):
                 threads = [threading.Thread(target=read_setting) for _ in range(num_threads)]
 
                 for t in threads:

@@ -15,7 +15,7 @@ class TestCredentialSetupDialogInit:
     """Test CredentialSetupDialog initialization"""
 
     @patch('src.gui.dialogs.credential_setup.get_credential')
-    def test_credential_dialog_creates(self, mock_get_cred, qtbot, mock_imxup_functions):
+    def test_credential_dialog_creates(self, mock_get_cred, qtbot, mock_bbdrop_functions):
         """Test CredentialSetupDialog instantiation"""
         mock_get_cred.return_value = None
 
@@ -26,7 +26,7 @@ class TestCredentialSetupDialogInit:
         assert isinstance(dialog, QDialog)
 
     @patch('src.gui.dialogs.credential_setup.get_credential')
-    def test_dialog_has_api_key_section(self, mock_get_cred, qtbot, mock_imxup_functions):
+    def test_dialog_has_api_key_section(self, mock_get_cred, qtbot, mock_bbdrop_functions):
         """Test that dialog has API key section"""
         mock_get_cred.return_value = None
 
@@ -42,7 +42,7 @@ class TestCredentialOperations:
 
     @patch('src.gui.dialogs.credential_setup.get_credential')
     @patch('src.gui.dialogs.credential_setup.set_credential')
-    def test_change_api_key_button_exists(self, mock_set, mock_get, qtbot, mock_imxup_functions):
+    def test_change_api_key_button_exists(self, mock_set, mock_get, qtbot, mock_bbdrop_functions):
         """Test change API key button"""
         mock_get.return_value = None
 

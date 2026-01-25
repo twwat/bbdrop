@@ -14,7 +14,7 @@ from typing import Optional, Dict, Any
 
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings, Qt
 
-from imxup import get_credential, decrypt_password
+from bbdrop import get_credential, decrypt_password
 from src.core.engine import AtomicCounter
 from src.core.file_host_config import get_config_manager, HostConfig, get_file_host_setting
 from src.network.file_host_client import FileHostClient
@@ -68,7 +68,7 @@ class FileHostWorker(QThread):
         self.config_manager = get_config_manager()
         self.coordinator = get_coordinator()
         self.zip_manager = get_zip_manager()
-        self.settings = QSettings("ImxUploader", "ImxUploadGUI")
+        self.settings = QSettings("BBDropUploader", "BBDropGUI")
 
         # Get display name for logs (e.g., "RapidGator" instead of "rapidgator")
         host_config = self.config_manager.get_host(host_id)

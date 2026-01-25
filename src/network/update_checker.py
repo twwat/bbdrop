@@ -10,7 +10,7 @@ Usage:
     checker = UpdateChecker(
         current_version="0.6.13",
         owner="username",
-        repo="IMXuploader"
+        repo="BBDrop"
     )
     checker.update_available.connect(on_update_available)
     checker.no_update.connect(on_no_update)

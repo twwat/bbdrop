@@ -30,7 +30,7 @@ class FileHostsSettingsWidget(QWidget):
         super().__init__(parent)
         self.parent_dialog = parent
         self.worker_manager = worker_manager
-        self.settings = QSettings("ImxUploader", "ImxUploadGUI")
+        self.settings = QSettings("BBDropUploader", "BBDropGUI")
         self.host_widgets: Dict[str, Dict[str, Any]] = {}
 
         # Icon manager for status icons
@@ -236,7 +236,7 @@ class FileHostsSettingsWidget(QWidget):
         Returns:
             Clickable QLabel with scaled logo pixmap, or None if logo not found
         """
-        from imxup import get_project_root
+        from bbdrop import get_project_root
         import os
 
         logo_path = os.path.join(get_project_root(), "assets", "hosts", "logo", f"{host_id}.png")
@@ -612,15 +612,10 @@ class FileHostsSettingsWidget(QWidget):
                 from src.utils.logger import log
                 log(f"Config dialog accepted for {host_id}", level="debug", category="file_hosts")
 
-                from imxup import encrypt_password, set_credential
-                import configparser
-                import os
-
-                # Get values from dialog
+                # Get values from dialog (credentials already saved by dialog._on_apply_clicked)
                 enabled = dialog.get_enabled_state()
-                credentials = dialog.get_credentials()
-                trigger_value = dialog.get_trigger_settings()  # Now returns single string
-                log(f"Got values: enabled={enabled}, has_creds={bool(credentials)}, trigger={trigger_value}",
+                trigger_value = dialog.get_trigger_settings()
+                log(f"Got values: enabled={enabled}, trigger={trigger_value}",
                     level="debug", category="file_hosts")
 
                 # Save enabled state and trigger using new API
@@ -629,11 +624,8 @@ class FileHostsSettingsWidget(QWidget):
                 save_file_host_setting(host_id, "trigger", trigger_value)
                 log(f"Saved settings for {host_id}", level="info", category="file_hosts")
 
-                # Save credentials (encrypted) to QSettings
-                if credentials:
-                    encrypted = encrypt_password(credentials)
-                    set_credential(f"file_host_{host_id}_credentials", encrypted)
-                    log("Saved encrypted credentials", level="debug", category="file_hosts")
+                # NOTE: Credentials are already saved by dialog._on_apply_clicked()
+                # Do NOT save again here - widgets may be destroyed, returning wrong value
 
                 # Spawn or kill worker based on enabled state
                 if enabled:
@@ -642,7 +634,7 @@ class FileHostsSettingsWidget(QWidget):
                     self.worker_manager.disable_host(host_id)
 
                 # Refresh display in File Hosts tab
-                self._refresh_host_display(host_id, host_config, credentials)
+                self._refresh_host_display(host_id, host_config)
                 log(f"Refreshed display for {host_id}", level="debug", category="file_hosts")
 
                 # Mark settings as changed

@@ -222,9 +222,9 @@ class ZIPManager:
             safe_name = "".join(c for c in gallery_name if c.isalnum() or c in (' ', '-', '_')).strip()
             safe_name = safe_name[:50]  # Limit length
             if safe_name:
-                return f"imxup_{gallery_id}_{safe_name}.zip"
+                return f"bbdrop_{gallery_id}_{safe_name}.zip"
 
-        return f"imxup_gallery_{gallery_id}.zip"
+        return f"bbdrop_gallery_{gallery_id}.zip"
 
     def _create_store_mode_zip(self, folder_path: Path, zip_path: Path) -> None:
         """Create a ZIP file in store mode (no compression) for maximum speed.

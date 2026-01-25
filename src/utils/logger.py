@@ -1,5 +1,5 @@
 """
-Unified logging system for imxup.
+Unified logging system for bbdrop.
 
 Provides a single, simple logging interface that works everywhere:
 - Main thread (CLI or GUI)
@@ -86,7 +86,7 @@ def set_main_window(main_window: 'QWidget') -> None:
     Called by main window on startup.
 
     Args:
-        main_window: Reference to ImxUploadGUI main window
+        main_window: Reference to BBDropGUI main window
     """
     global _main_window
     with _lock:

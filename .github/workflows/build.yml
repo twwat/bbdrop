@@ -136,10 +136,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          echo Building ImXup for Windows...
+          echo Building BBDrop for Windows...
           if exist dist rmdir /s /q dist
           if exist build rmdir /s /q build
-          pyinstaller imxup.spec --clean -y
+          pyinstaller bbdrop.spec --clean -y
 
           echo Copying assets to dist...
           xcopy /E /I /Y assets dist\assets
@@ -151,9 +151,9 @@ jobs:
       - name: Build (Unix)
         if: runner.os != 'Windows'
         run: |
-          echo "Building ImXup for ${{ runner.os }}..."
+          echo "Building BBDrop for ${{ runner.os }}..."
           rm -rf dist build
-          pyinstaller imxup.spec --clean -y
+          pyinstaller bbdrop.spec --clean -y
 
           echo "Copying assets to dist..."
           cp -r assets dist/
@@ -186,9 +186,9 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
-          $filename = "imxup-$version-${{ matrix.platform }}-${{ matrix.arch }}-portable"
-          Rename-Item dist imxup
-          Compress-Archive -Path imxup -DestinationPath "$filename.zip" -Force
+          $filename = "bbdrop-$version-${{ matrix.platform }}-${{ matrix.arch }}-portable"
+          Rename-Item dist bbdrop
+          Compress-Archive -Path bbdrop -DestinationPath "$filename.zip" -Force
 
       # Create Windows installer with Inno Setup
       - name: Create Inno Setup script
@@ -198,38 +198,38 @@ jobs:
           $version = "${{ steps.version.outputs.VERSION }}"
           $issContent = @"
           [Setup]
-          AppName=ImXup
+          AppName=BBDrop
           AppVersion=$version
-          AppPublisher=ImXup
-          DefaultDirName={autopf}\ImXup
-          DefaultGroupName=ImXup
+          AppPublisher=BBDrop
+          DefaultDirName={autopf}\BBDrop
+          DefaultGroupName=BBDrop
           OutputDir=.
-          OutputBaseFilename=imxup-$version-${{ matrix.platform }}-${{ matrix.arch }}-setup
+          OutputBaseFilename=bbdrop-$version-${{ matrix.platform }}-${{ matrix.arch }}-setup
           Compression=lzma2
           SolidCompression=yes
           ArchitecturesAllowed=x64compatible
           ArchitecturesInstallIn64BitMode=x64compatible
 
           [Files]
-          Source: "imxup\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+          Source: "bbdrop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
           [Icons]
-          Name: "{group}\ImXup"; Filename: "{app}\imxup.exe"
-          Name: "{autodesktop}\ImXup"; Filename: "{app}\imxup.exe"; Tasks: desktopicon
+          Name: "{group}\BBDrop"; Filename: "{app}\bbdrop.exe"
+          Name: "{autodesktop}\BBDrop"; Filename: "{app}\bbdrop.exe"; Tasks: desktopicon
 
           [Tasks]
           Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Additional icons:"
 
           [Run]
-          Filename: "{app}\imxup.exe"; Description: "Launch ImXup"; Flags: nowait postinstall skipifsilent
+          Filename: "{app}\bbdrop.exe"; Description: "Launch BBDrop"; Flags: nowait postinstall skipifsilent
           "@
-          $issContent | Out-File -FilePath "imxup.iss" -Encoding UTF8
+          $issContent | Out-File -FilePath "bbdrop.iss" -Encoding UTF8
 
       - name: Build Windows Installer (exe)
         if: runner.os == 'Windows'
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
         with:
-          path: imxup.iss
+          path: bbdrop.iss
 
       # Create Windows MSI installer with WiX
       - name: Create WiX script
@@ -244,16 +244,16 @@ jobs:
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
             <Product Id="*"
-                     Name="ImXup"
+                     Name="BBDrop"
                      Language="1033"
                      Version="$version.0"
-                     Manufacturer="ImXup"
+                     Manufacturer="BBDrop"
                      UpgradeCode="F8E7D6C5-B4A3-4210-9F8E-7D6C5B4A3210">
               <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
               <MediaTemplate EmbedCab="yes" />
 
-              <Feature Id="ProductFeature" Title="ImXup" Level="1">
+              <Feature Id="ProductFeature" Title="BBDrop" Level="1">
                 <ComponentGroupRef Id="HeatGenerated" />
                 <ComponentRef Id="StartMenuShortcut" />
                 <ComponentRef Id="DesktopShortcut" />
@@ -261,10 +261,10 @@ jobs:
 
               <Directory Id="TARGETDIR" Name="SourceDir">
                 <Directory Id="ProgramFiles64Folder">
-                  <Directory Id="INSTALLFOLDER" Name="ImXup" />
+                  <Directory Id="INSTALLFOLDER" Name="BBDrop" />
                 </Directory>
                 <Directory Id="ProgramMenuFolder">
-                  <Directory Id="ApplicationProgramsFolder" Name="ImXup" />
+                  <Directory Id="ApplicationProgramsFolder" Name="BBDrop" />
                 </Directory>
                 <Directory Id="DesktopFolder" Name="Desktop" />
               </Directory>
@@ -272,27 +272,27 @@ jobs:
               <DirectoryRef Id="ApplicationProgramsFolder">
                 <Component Id="StartMenuShortcut" Guid="*">
                   <Shortcut Id="StartMenuShortcut"
-                            Name="ImXup"
-                            Target="[INSTALLFOLDER]imxup.exe"
+                            Name="BBDrop"
+                            Target="[INSTALLFOLDER]bbdrop.exe"
                             WorkingDirectory="INSTALLFOLDER" />
                   <RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" />
-                  <RegistryValue Root="HKCU" Key="Software\ImXup" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+                  <RegistryValue Root="HKCU" Key="Software\BBDrop" Name="installed" Type="integer" Value="1" KeyPath="yes" />
                 </Component>
               </DirectoryRef>
 
               <DirectoryRef Id="DesktopFolder">
                 <Component Id="DesktopShortcut" Guid="*">
                   <Shortcut Id="DesktopShortcut"
-                            Name="ImXup"
-                            Target="[INSTALLFOLDER]imxup.exe"
+                            Name="BBDrop"
+                            Target="[INSTALLFOLDER]bbdrop.exe"
                             WorkingDirectory="INSTALLFOLDER" />
-                  <RegistryValue Root="HKCU" Key="Software\ImXup" Name="desktop" Type="integer" Value="1" KeyPath="yes" />
+                  <RegistryValue Root="HKCU" Key="Software\BBDrop" Name="desktop" Type="integer" Value="1" KeyPath="yes" />
                 </Component>
               </DirectoryRef>
             </Product>
           </Wix>
           "@
-          $wxsContent | Out-File -FilePath "imxup.wxs" -Encoding UTF8
+          $wxsContent | Out-File -FilePath "bbdrop.wxs" -Encoding UTF8
 
       - name: Build Windows MSI
         if: runner.os == 'Windows'
@@ -300,9 +300,9 @@ jobs:
           choco install wixtoolset -y
           $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.14\bin"
           # Use HeatGenerated as the component group name, -arch x64 for 64-bit components
-          heat dir imxup -cg HeatGenerated -dr INSTALLFOLDER -scom -sreg -srd -var var.SourceDir -gg -sfrag -arch x64 -out components.wxs
-          candle -arch x64 -dSourceDir=imxup imxup.wxs components.wxs
-          light -ext WixUIExtension -out "imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.msi" imxup.wixobj components.wixobj
+          heat dir bbdrop -cg HeatGenerated -dr INSTALLFOLDER -scom -sreg -srd -var var.SourceDir -gg -sfrag -arch x64 -out components.wxs
+          candle -arch x64 -dSourceDir=bbdrop bbdrop.wxs components.wxs
+          light -ext WixUIExtension -out "bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.msi" bbdrop.wixobj components.wixobj
         shell: pwsh
 
       # Package Unix (portable tarball)
@@ -310,9 +310,9 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          FILENAME="imxup-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}-portable"
-          mv dist imxup
-          tar -czvf "$FILENAME.tar.gz" imxup
+          FILENAME="bbdrop-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}-portable"
+          mv dist bbdrop
+          tar -czvf "$FILENAME.tar.gz" bbdrop
 
       # Create Linux packages (deb, rpm, AppImage)
       - name: Create Linux packages
@@ -327,55 +327,55 @@ jobs:
 
           # Create .deb package
           fpm -s dir -t deb \
-            -n imxup \
+            -n bbdrop \
             -v "$VERSION" \
             -a amd64 \
             --description "Professional image gallery uploader for imx.to" \
-            --url "https://github.com/twwat/imxup" \
+            --url "https://github.com/twwat/bbdrop" \
             --license "MIT" \
-            --prefix /opt/imxup \
+            --prefix /opt/bbdrop \
             --after-install <(echo '#!/bin/bash
-              ln -sf /opt/imxup/imxup /usr/local/bin/imxup
-              cat > /usr/share/applications/imxup.desktop << EOD
+              ln -sf /opt/bbdrop/bbdrop /usr/local/bin/bbdrop
+              cat > /usr/share/applications/bbdrop.desktop << EOD
           [Desktop Entry]
-          Name=ImXup
-          Exec=/opt/imxup/imxup --gui
-          Icon=/opt/imxup/assets/imxup-main-icon.png
+          Name=BBDrop
+          Exec=/opt/bbdrop/bbdrop --gui
+          Icon=/opt/bbdrop/assets/bbdrop-main-icon.png
           Type=Application
           Categories=Utility;Network;
           EOD') \
             --after-remove <(echo '#!/bin/bash
-              rm -f /usr/local/bin/imxup
-              rm -f /usr/share/applications/imxup.desktop') \
-            imxup/=/opt/imxup/
+              rm -f /usr/local/bin/bbdrop
+              rm -f /usr/share/applications/bbdrop.desktop') \
+            bbdrop/=/opt/bbdrop/
 
-          mv *.deb "imxup-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}.deb"
+          mv *.deb "bbdrop-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}.deb"
 
           # Create .rpm package
           fpm -s dir -t rpm \
-            -n imxup \
+            -n bbdrop \
             -v "$VERSION" \
             -a x86_64 \
             --description "Professional image gallery uploader for imx.to" \
-            --url "https://github.com/twwat/imxup" \
+            --url "https://github.com/twwat/bbdrop" \
             --license "MIT" \
-            --prefix /opt/imxup \
+            --prefix /opt/bbdrop \
             --after-install <(echo '#!/bin/bash
-              ln -sf /opt/imxup/imxup /usr/local/bin/imxup
-              cat > /usr/share/applications/imxup.desktop << EOD
+              ln -sf /opt/bbdrop/bbdrop /usr/local/bin/bbdrop
+              cat > /usr/share/applications/bbdrop.desktop << EOD
           [Desktop Entry]
-          Name=ImXup
-          Exec=/opt/imxup/imxup --gui
-          Icon=/opt/imxup/assets/imxup-main-icon.png
+          Name=BBDrop
+          Exec=/opt/bbdrop/bbdrop --gui
+          Icon=/opt/bbdrop/assets/bbdrop-main-icon.png
           Type=Application
           Categories=Utility;Network;
           EOD') \
             --after-remove <(echo '#!/bin/bash
-              rm -f /usr/local/bin/imxup
-              rm -f /usr/share/applications/imxup.desktop') \
-            imxup/=/opt/imxup/
+              rm -f /usr/local/bin/bbdrop
+              rm -f /usr/share/applications/bbdrop.desktop') \
+            bbdrop/=/opt/bbdrop/
 
-          mv *.rpm "imxup-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}.rpm"
+          mv *.rpm "bbdrop-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}.rpm"
 
           # Create AppImage
           sudo apt-get install -y libfuse2
@@ -383,67 +383,67 @@ jobs:
           chmod +x appimagetool
 
           # Create AppDir structure
-          mkdir -p ImXup.AppDir/usr/bin
-          mkdir -p ImXup.AppDir/usr/share/applications
-          mkdir -p ImXup.AppDir/usr/share/icons/hicolor/256x256/apps
-          cp -r imxup/* ImXup.AppDir/usr/bin/
-          cp imxup/assets/imxup-main-icon.png ImXup.AppDir/usr/share/icons/hicolor/256x256/apps/imxup.png
-          cp imxup/assets/imxup-main-icon.png ImXup.AppDir/imxup.png
+          mkdir -p BBDrop.AppDir/usr/bin
+          mkdir -p BBDrop.AppDir/usr/share/applications
+          mkdir -p BBDrop.AppDir/usr/share/icons/hicolor/256x256/apps
+          cp -r bbdrop/* BBDrop.AppDir/usr/bin/
+          cp bbdrop/assets/bbdrop-main-icon.png BBDrop.AppDir/usr/share/icons/hicolor/256x256/apps/bbdrop.png
+          cp bbdrop/assets/bbdrop-main-icon.png BBDrop.AppDir/bbdrop.png
 
           # Create desktop file (no leading spaces, single category)
-          cat > ImXup.AppDir/imxup.desktop << 'EOD'
+          cat > BBDrop.AppDir/bbdrop.desktop << 'EOD'
           [Desktop Entry]
-          Name=ImXup
-          Exec=imxup --gui
-          Icon=imxup
+          Name=BBDrop
+          Exec=bbdrop --gui
+          Icon=bbdrop
           Type=Application
           Categories=Network;
           EOD
           # Remove leading spaces from heredoc
-          sed -i 's/^          //' ImXup.AppDir/imxup.desktop
-          cp ImXup.AppDir/imxup.desktop ImXup.AppDir/usr/share/applications/
+          sed -i 's/^          //' BBDrop.AppDir/bbdrop.desktop
+          cp BBDrop.AppDir/bbdrop.desktop BBDrop.AppDir/usr/share/applications/
 
           # Create AppRun
-          cat > ImXup.AppDir/AppRun << 'EOD'
+          cat > BBDrop.AppDir/AppRun << 'EOD'
           #!/bin/bash
           SELF=$(readlink -f "$0")
           HERE=${SELF%/*}
           export PATH="${HERE}/usr/bin:${PATH}"
-          exec "${HERE}/usr/bin/imxup" "$@"
+          exec "${HERE}/usr/bin/bbdrop" "$@"
           EOD
-          sed -i 's/^          //' ImXup.AppDir/AppRun
-          chmod +x ImXup.AppDir/AppRun
+          sed -i 's/^          //' BBDrop.AppDir/AppRun
+          chmod +x BBDrop.AppDir/AppRun
 
           # Build AppImage
-          ARCH=x86_64 ./appimagetool ImXup.AppDir "imxup-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}.AppImage"
+          ARCH=x86_64 ./appimagetool BBDrop.AppDir "bbdrop-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}.AppImage"
 
       # Create macOS DMG
       - name: Create macOS DMG
         if: runner.os == 'macOS'
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          FILENAME="imxup-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}"
+          FILENAME="bbdrop-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}"
 
           # Install create-dmg
           brew install create-dmg
 
           # Create .app bundle structure
-          mkdir -p ImXup.app/Contents/MacOS
-          mkdir -p ImXup.app/Contents/Resources
-          cp -r imxup/* ImXup.app/Contents/MacOS/
+          mkdir -p BBDrop.app/Contents/MacOS
+          mkdir -p BBDrop.app/Contents/Resources
+          cp -r bbdrop/* BBDrop.app/Contents/MacOS/
 
           # Create Info.plist
-          cat > ImXup.app/Contents/Info.plist << EOF
+          cat > BBDrop.app/Contents/Info.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
               <key>CFBundleExecutable</key>
-              <string>imxup</string>
+              <string>bbdrop</string>
               <key>CFBundleIdentifier</key>
-              <string>com.imxup.app</string>
+              <string>com.bbdrop.app</string>
               <key>CFBundleName</key>
-              <string>ImXup</string>
+              <string>BBDrop</string>
               <key>CFBundleVersion</key>
               <string>$VERSION</string>
               <key>CFBundleShortVersionString</key>
@@ -460,22 +460,22 @@ jobs:
 
           # Create DMG
           create-dmg \
-            --volname "ImXup $VERSION" \
+            --volname "BBDrop $VERSION" \
             --window-pos 200 120 \
             --window-size 600 400 \
             --icon-size 100 \
-            --icon "ImXup.app" 150 185 \
-            --hide-extension "ImXup.app" \
+            --icon "BBDrop.app" 150 185 \
+            --hide-extension "BBDrop.app" \
             --app-drop-link 450 185 \
             "$FILENAME.dmg" \
-            "ImXup.app" || true  # create-dmg returns non-zero even on success sometimes
+            "BBDrop.app" || true  # create-dmg returns non-zero even on success sometimes
 
       # Upload portable artifact
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-portable
-          path: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-portable${{ matrix.asset_ext }}
+          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-portable
+          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-portable${{ matrix.asset_ext }}
           retention-days: 30
 
       # Upload Windows installer (raw .exe, not zipped)
@@ -483,8 +483,8 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup
-          path: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup.exe
+          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup
+          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup.exe
           compression-level: 0  # Don't compress the .exe
           retention-days: 30
 
@@ -493,8 +493,8 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-msi
-          path: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.msi
+          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-msi
+          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.msi
           retention-days: 30
 
       # Upload macOS DMG
@@ -502,8 +502,8 @@ jobs:
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-dmg
-          path: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.dmg
+          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-dmg
+          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.dmg
           compression-level: 0  # DMG is already compressed
           retention-days: 30
 
@@ -512,8 +512,8 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-deb
-          path: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.deb
+          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-deb
+          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.deb
           retention-days: 30
 
       # Upload Linux .rpm
@@ -521,8 +521,8 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-rpm
-          path: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.rpm
+          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-rpm
+          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.rpm
           retention-days: 30
 
       # Upload Linux AppImage
@@ -530,8 +530,8 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-appimage
-          path: imxup-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.AppImage
+          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-appimage
+          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.AppImage
           retention-days: 30
 
   # Create release when triggered by tag

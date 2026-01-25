@@ -15,7 +15,7 @@ class TestSettingsDialogInit:
     """Test ComprehensiveSettingsDialog initialization"""
 
     @patch('src.gui.settings_dialog.load_user_defaults')
-    def test_settings_dialog_creates(self, mock_load, qtbot, mock_config_file, mock_imxup_functions):
+    def test_settings_dialog_creates(self, mock_load, qtbot, mock_config_file, mock_bbdrop_functions):
         """Test ComprehensiveSettingsDialog instantiation"""
         mock_load.return_value = {}
 

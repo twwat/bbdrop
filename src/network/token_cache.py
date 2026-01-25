@@ -9,8 +9,8 @@ import time
 from typing import Optional, Dict, Any
 from PyQt6.QtCore import QSettings
 
-# Import encryption functions from imxup module
-from imxup import encrypt_password, decrypt_password
+# Import encryption functions from bbdrop module
+from bbdrop import encrypt_password, decrypt_password
 
 
 class TokenCache:
@@ -18,7 +18,7 @@ class TokenCache:
 
     def __init__(self):
         """Initialize token cache."""
-        self.settings = QSettings("ImxUploader", "ImxUploadGUI")
+        self.settings = QSettings("BBDropUploader", "BBDropGUI")
 
     def store_token(self, host_id: str, token: str, ttl: Optional[int] = None) -> None:
         """Store an authentication token with optional TTL.

@@ -14,7 +14,7 @@ Tests cover:
 - Mode tracking and retrieval
 
 Target: 70%+ coverage with 50+ tests
-Environment: pytest-qt, PyQt6, venv ~/imxup-venv-314
+Environment: pytest-qt, PyQt6, venv ~/bbdrop-venv
 """
 
 import pytest

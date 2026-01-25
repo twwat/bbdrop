@@ -1,4 +1,4 @@
-"""Worker signal handling for IMXuploader GUI.
+"""Worker signal handling for BBDrop GUI.
 
 This module handles all worker-related signal operations extracted from main_window.py
 to improve maintainability and separation of concerns.
@@ -21,17 +21,17 @@ from src.utils.format_utils import format_binary_size
 from src.gui.bandwidth_manager import BandwidthManager
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
 
 
 class WorkerSignalHandler(QObject):
     """Handles worker signals and status updates for the main window."""
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize the WorkerSignalHandler.
 
         Args:
-            main_window: Reference to the main ImxUploadGUI window
+            main_window: Reference to the main BBDropGUI window
         """
         super().__init__()
         self._main_window = main_window
@@ -508,7 +508,7 @@ class WorkerSignalHandler(QObject):
             mw.speed_current_value_label.setText(speed_str)
 
             # Update fastest speed record if needed
-            settings = QSettings("ImxUploader", "Stats")
+            settings = QSettings("BBDropUploader", "Stats")
             fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
             if total_kbps > fastest_kbps and total_kbps < 10000:  # Sanity check
                 settings.setValue("fastest_kbps", total_kbps)

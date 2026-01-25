@@ -2,7 +2,7 @@
 System utility functions for platform detection, environment handling, and system operations.
 
 This module provides cross-platform utilities for system-level operations
-used throughout the imxup application.
+used throughout the bbdrop application.
 """
 
 import os
@@ -63,13 +63,13 @@ def get_home_directory() -> Path:
     return Path.home()
 
 
-def get_app_data_directory(app_name: str = 'imxup') -> Path:
+def get_app_data_directory(app_name: str = 'bbdrop') -> Path:
     """
     Get the appropriate application data directory for the current platform.
 
-    On Windows: %APPDATA%/imxup
-    On macOS: ~/Library/Application Support/imxup
-    On Linux: ~/.config/imxup
+    On Windows: %APPDATA%/bbdrop
+    On macOS: ~/Library/Application Support/bbdrop
+    On Linux: ~/.config/bbdrop
 
     Args:
         app_name: Name of the application
@@ -89,7 +89,7 @@ def get_app_data_directory(app_name: str = 'imxup') -> Path:
     return app_dir
 
 
-def get_temp_directory(app_name: str = 'imxup') -> Path:
+def get_temp_directory(app_name: str = 'bbdrop') -> Path:
     """
     Get a temporary directory for the application.
 

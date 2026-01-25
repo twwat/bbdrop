@@ -1,4 +1,4 @@
-"""Centralized bandwidth tracking system for IMXuploader.
+"""Centralized bandwidth tracking system for BBDrop.
 
 This module provides a unified approach to bandwidth monitoring across all upload
 sources (IMX.to, file hosts, link checker). It implements asymmetric EMA smoothing
@@ -179,7 +179,7 @@ class BandwidthManager(QObject):
         super().__init__(parent)
 
         # Load smoothing parameters from settings
-        settings = QSettings("ImxUploader", "Settings")
+        settings = QSettings("BBDropUploader", "Settings")
         self._alpha_up = settings.value(
             self.SETTINGS_KEY_ALPHA_UP,
             self.DEFAULT_ALPHA_UP,
@@ -445,7 +445,7 @@ class BandwidthManager(QObject):
         locker.unlock()
 
         # Persist to settings
-        settings = QSettings("ImxUploader", "Settings")
+        settings = QSettings("BBDropUploader", "Settings")
         settings.setValue(self.SETTINGS_KEY_ALPHA_UP, self._alpha_up)
         settings.setValue(self.SETTINGS_KEY_ALPHA_DOWN, self._alpha_down)
 

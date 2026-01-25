@@ -1,4 +1,4 @@
-"""Theme management for IMXuploader GUI.
+"""Theme management for BBDrop GUI.
 
 This module handles theme switching and font size management extracted from
 main_window.py to improve maintainability and separation of concerns.
@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import QApplication
 from src.utils.logger import log
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
 
 
 # Module-level token cache to avoid repeated file reads
@@ -47,7 +47,7 @@ def get_assets_dir() -> str:
     Returns:
         str: Absolute path to project_root/assets directory
     """
-    from imxup import get_project_root
+    from bbdrop import get_project_root
     return os.path.join(get_project_root(), "assets")
 
 
@@ -59,7 +59,7 @@ def is_dark_mode() -> bool:
     """
     from PyQt6.QtCore import QSettings
     # MUST use same org/app name as main_window.py to read from correct registry location
-    settings = QSettings("ImxUploader", "ImxUploadGUI")
+    settings = QSettings("BBDropUploader", "BBDropGUI")
     return settings.value('ui/theme', 'dark') == 'dark'
 
 
@@ -112,7 +112,7 @@ class ThemeManager(QObject):
     2. Legacy (fallback): Loads monolithic styles.qss with embedded theme markers
 
     Attributes:
-        _main_window: Reference to the main ImxUploadGUI window
+        _main_window: Reference to the main BBDropGUI window
         _cached_base_qss: Cached base stylesheet content (legacy mode)
         _cached_dark_qss: Cached dark theme stylesheet content (legacy mode)
         _cached_light_qss: Cached light theme stylesheet content (legacy mode)
@@ -121,11 +121,11 @@ class ThemeManager(QObject):
         _modular_qss_available: Whether modular QSS structure exists
     """
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize the ThemeManager.
 
         Args:
-            main_window: Reference to the main ImxUploadGUI window
+            main_window: Reference to the main BBDropGUI window
         """
         super().__init__()
         self._main_window = main_window

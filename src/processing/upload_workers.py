@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Upload worker threads for imxup
+Upload worker threads for bbdrop
 Handles gallery uploads and completion tracking in background threads
 """
 
@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex
 
-from imxup import (
+from bbdrop import (
     timestamp, load_user_defaults, rename_all_unnamed_with_session,
     save_gallery_artifacts, get_unnamed_galleries
 )
@@ -27,7 +27,7 @@ try:
 except ImportError:
     RenameWorker = None  # type: ignore[misc,assignment]  # Will be handled gracefully in __init__
 
-# Stub for generate_bbcode_from_results (for testing - doesn't exist in imxup)
+# Stub for generate_bbcode_from_results (for testing - doesn't exist in bbdrop)
 # Tests will patch this, real code imports locally
 generate_bbcode_from_results = None
 
@@ -505,7 +505,7 @@ class CompletionWorker(QThread):
             global generate_bbcode_from_results
             if generate_bbcode_from_results is None:
                 # Not patched, use real function
-                from imxup import generate_bbcode_from_template
+                from bbdrop import generate_bbcode_from_template
                 _gen_func = generate_bbcode_from_template
             else:
                 # Patched by test or set to real function

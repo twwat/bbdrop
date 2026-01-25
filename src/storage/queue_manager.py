@@ -1,5 +1,5 @@
 """
-Queue Manager for ImxUp application.
+Queue Manager for BBDrop application.
 Manages the gallery upload queue with persistence and state tracking.
 """
 
@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, QSettings, QTimer
 
 from src.storage.database import QueueStore
-from imxup import sanitize_gallery_name, load_user_defaults, timestamp
+from bbdrop import sanitize_gallery_name, load_user_defaults, timestamp
 from src.utils.logger import log
 from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
@@ -108,7 +108,7 @@ class QueueManager(QObject):
         self.items: Dict[str, GalleryQueueItem] = {}
         self.queue = Queue()
         self.mutex = QMutex()
-        self.settings = QSettings("ImxUploader", "QueueManager")
+        self.settings = QSettings("BBDropUploader", "QueueManager")
         self.store = QueueStore()
         self._next_order = 0
         self._next_db_id = 1  # Track next database ID for predictive assignment
@@ -254,7 +254,7 @@ class QueueManager(QObject):
                         #print(f"DEBUG: SAVING TO DATABASE NOW - status is ready, tab_name='{item.tab_name}'")
                         
                         # Check if auto-start uploads is enabled
-                        # load_user_defaults already imported from imxup at top of file
+                        # load_user_defaults already imported from bbdrop at top of file
                         defaults = load_user_defaults()
                         if defaults.get('auto_start_upload', False):
                             log(f"Auto-start enabled: queuing {path} for upload", level="debug", category="queue")
@@ -377,7 +377,7 @@ class QueueManager(QObject):
             if dims:
                 # Use the outlier exclusion utility if configured
                 from src.utils.sampling_utils import calculate_dimensions_with_outlier_exclusion
-                settings = QSettings("ImxUploader", "ImxUploadGUI")
+                settings = QSettings("BBDropUploader", "BBDropGUI")
                 exclude_outliers = settings.value('scanning/stats_exclude_outliers', False, type=bool)
                 use_median = settings.value('scanning/use_median', True, type=bool)
 
@@ -403,7 +403,7 @@ class QueueManager(QObject):
             from src.utils.sampling_utils import get_sample_indices, calculate_dimensions_with_outlier_exclusion
 
             # Get enhanced config from settings (use same location as main GUI)
-            settings = QSettings("ImxUploader", "ImxUploadGUI")
+            settings = QSettings("BBDropUploader", "BBDropGUI")
             enhanced_config = {
                 'sampling_method': settings.value('scanning/sampling_method', 0, type=int),
                 'sampling_fixed_count': settings.value('scanning/sampling_fixed_count', 25, type=int),
@@ -466,7 +466,7 @@ class QueueManager(QObject):
                 item.scan_complete = True
                 
                 # Log scan failure
-                from imxup import timestamp
+                from bbdrop import timestamp
                 log(f"Scan failed - {item.name or os.path.basename(path)}: {error}", level="warning", category="scan")
                 
         
@@ -517,7 +517,7 @@ class QueueManager(QObject):
                         failed_count = len(item.failed_files) if hasattr(item, 'failed_files') and item.failed_files else 0
                         remaining_images = (item.total_images or 0) - (item.uploaded_images or 0)
                         
-                        from imxup import timestamp
+                        from bbdrop import timestamp
                         log(f"Retrying {item.name or os.path.basename(path)}: {remaining_images} images ({item.uploaded_images} already uploaded)", category="queue")
                         
                         # Clear failed files list so they can be retried
@@ -531,7 +531,7 @@ class QueueManager(QObject):
                         item.uploaded_images = 0
                         item.progress = 0
                         
-                        from imxup import timestamp
+                        from bbdrop import timestamp
                         log(f"Full retry for {item.name or os.path.basename(path)}", level="debug", category="queue")
                     
                     # Emit status change signal
@@ -572,7 +572,7 @@ class QueueManager(QObject):
                         item.scan_complete = True
                         item.error_message = ""
                         
-                        from imxup import timestamp
+                        from bbdrop import timestamp
                         uploaded = item.uploaded_images or 0
                         log(f"Rescan of {item.name or os.path.basename(path)}: Found {new_images} new images ({uploaded} uploaded, {current_count - uploaded} remaining)", category="scan")
                         
@@ -589,7 +589,7 @@ class QueueManager(QObject):
                         if item.total_images > 0:
                             item.progress = int((item.uploaded_images or 0) / item.total_images * 100)
                         
-                        from imxup import timestamp
+                        from bbdrop import timestamp
                         log(f"{item.name or os.path.basename(path)}: {removed} images removed, {current_count} total", category="scan")
                     else:
                         # Same count - just clear error if any, but preserve completed status
@@ -600,7 +600,7 @@ class QueueManager(QObject):
                             pass  # Don't change completed status when no files changed
                         item.error_message = ""
                         
-                        from imxup import timestamp
+                        from bbdrop import timestamp
                         log(f"{item.name or os.path.basename(path)}: No changes detected, cleared errors", category="scan")
                     
                     # Emit status change if changed
@@ -608,7 +608,7 @@ class QueueManager(QObject):
                         QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, item.status))
                     
                 except Exception as e:
-                    from imxup import timestamp
+                    from bbdrop import timestamp
                     self.mark_scan_failed(path, f"Additive rescan error: {e}")
                     log(f"Additive rescan error: {e}", level="error", category="scan")
         
@@ -638,7 +638,7 @@ class QueueManager(QObject):
                 item.uploaded_images_data = []  # Clear uploaded image metadata
                 item.uploaded_bytes = 0  # Clear uploaded bytes counter
                 
-                from imxup import timestamp
+                from bbdrop import timestamp
                 log(f"{item.name or os.path.basename(path)}: Complete reset, starting fresh scan", category="scan")
                 
                 # Emit status change signal
@@ -687,7 +687,7 @@ class QueueManager(QObject):
                         item = self.items[path]
                         item.status = QUEUE_STATE_READY
                         item.scan_complete = True
-                        from imxup import timestamp
+                        from bbdrop import timestamp
                         log(f"{item.name or os.path.basename(path)}: Marked ready for validation", level="debug", category="scan")
                 
                 self._schedule_debounced_save([path])
@@ -698,7 +698,7 @@ class QueueManager(QObject):
     def _get_scanning_config(self) -> dict:
         """Get scanning configuration"""
         try:
-            settings = QSettings("ImxUploader", "ImxUploadGUI")
+            settings = QSettings("BBDropUploader", "BBDropGUI")
             return {
                 'fast_scan': settings.value('scanning/fast_scan', True, type=bool),
                 'pil_sampling': settings.value('scanning/pil_sampling', 2, type=int)

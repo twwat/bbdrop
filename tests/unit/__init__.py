@@ -1,4 +1,4 @@
 #!/usr/bin/env python3
 """
-Unit tests package for imxup
+Unit tests package for bbdrop
 """

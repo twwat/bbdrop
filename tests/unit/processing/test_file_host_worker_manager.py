@@ -658,7 +658,7 @@ class TestInitEnabledHosts:
     """Test initializing enabled hosts at startup."""
 
     @patch('src.processing.file_host_worker_manager.get_config_manager')
-    @patch('imxup.get_config_path')
+    @patch('bbdrop.get_config_path')
     def test_init_enabled_hosts_calls_enable_for_enabled(self, mock_config_path,
                                                          mock_config_mgr,
                                                          manager):
@@ -693,7 +693,7 @@ class TestInitEnabledHosts:
             mock_enable.assert_called_once_with('rapidgator', persist=False)
 
     @patch('src.processing.file_host_worker_manager.get_config_manager')
-    @patch('imxup.get_config_path')
+    @patch('bbdrop.get_config_path')
     def test_init_enabled_hosts_skips_disabled(self, mock_config_path,
                                               mock_config_mgr,
                                               manager):
@@ -721,7 +721,7 @@ class TestInitEnabledHosts:
             mock_enable.assert_not_called()
 
     @patch('src.processing.file_host_worker_manager.get_config_manager')
-    @patch('imxup.get_config_path')
+    @patch('bbdrop.get_config_path')
     def test_init_enabled_hosts_empty_config(self, mock_config_path, mock_config_mgr, manager):
         """Test init with no hosts in config."""
         mock_config_path.return_value = '/config.ini'
@@ -733,7 +733,7 @@ class TestInitEnabledHosts:
         assert len(manager.workers) == 0
 
     @patch('src.processing.file_host_worker_manager.get_config_manager')
-    @patch('imxup.get_config_path')
+    @patch('bbdrop.get_config_path')
     def test_init_enabled_hosts_multiple_mixed(self, mock_config_path,
                                               mock_config_mgr,
                                               manager):

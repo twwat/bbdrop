@@ -118,11 +118,11 @@ def mock_splash():
 def gui_window(qtbot, mock_single_instance_server, mock_completion_worker,
                mock_file_host_manager, mock_queue_manager, mock_icon_manager,
                mock_get_icon, mock_splash):
-    """Create a properly mocked ImxUploadGUI window for testing."""
-    from src.gui.main_window import ImxUploadGUI
+    """Create a properly mocked BBDropGUI window for testing."""
+    from src.gui.main_window import BBDropGUI
 
     # Create window with mocked dependencies
-    window = ImxUploadGUI(splash=mock_splash)
+    window = BBDropGUI(splash=mock_splash)
     qtbot.addWidget(window)
 
     yield window
@@ -139,10 +139,10 @@ class TestWindowVisibility:
                                      mock_queue_manager, mock_icon_manager,
                                      mock_get_icon, mock_splash):
         """Test that window becomes visible in < 2 seconds."""
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         start_time = time.time()
-        window = ImxUploadGUI(splash=mock_splash)
+        window = BBDropGUI(splash=mock_splash)
         qtbot.addWidget(window)
         window.show()
         qtbot.waitExposed(window)

@@ -1,10 +1,10 @@
 """
-Central constants file for ImxUp application.
+Central constants file for BBDrop application.
 All magic numbers, configuration values, and constant strings.
 """
 
 # Application Info
-APP_NAME = "ImxUp"
+APP_NAME = "BBDrop"
 APP_AUTHOR = "twat"
 
 # Network Configuration
@@ -110,9 +110,9 @@ DEFAULT_CHUNK_SIZE = 8192
 MAX_QUEUE_SIZE = 1000
 
 # File Paths
-CONFIG_DIR_NAME = ".imxup"
-CONFIG_FILE_NAME = "imxup.ini"
-DATABASE_FILE_NAME = "imxup.db"
+CONFIG_DIR_NAME = ".bbdrop"
+CONFIG_FILE_NAME = "bbdrop.ini"
+DATABASE_FILE_NAME = "bbdrop.db"
 TEMPLATES_DIR_NAME = "templates"
 GALLERIES_DIR_NAME = "galleries"
 LOGS_DIR_NAME = "logs"

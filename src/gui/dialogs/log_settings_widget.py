@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Log Settings Widget for imxup
+Log Settings Widget for bbdrop
 Provides log configuration UI that can be embedded in settings dialog
 """
 

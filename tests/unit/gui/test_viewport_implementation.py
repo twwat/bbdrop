@@ -341,7 +341,7 @@ class TestIntegrationWithRealCode:
     def test_real_mainwindow_has_viewport_methods(self):
         """Verify the real MainWindow class has viewport methods"""
         try:
-            from src.gui.main_window import ImxUploadGUI as MainWindow
+            from src.gui.main_window import BBDropGUI as MainWindow
 
             # Check for required methods
             assert hasattr(MainWindow, '_get_visible_row_range'), (

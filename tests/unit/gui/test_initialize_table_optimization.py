@@ -79,7 +79,7 @@ def create_gallery_items():
             item.path = f"/tmp/gallery_{i+1}"
             item.status = "ready"
             item.gallery_id = f"id_{i+1}"
-            item.gallery_url = f"https://imx.to/g/{i+1}"
+            item.gallery_url = f"https://example.com/g/{i+1}"
             item.tab_name = "Main"
             item.tab_id = 1
             item.progress = 0.0
@@ -123,10 +123,10 @@ class TestSetUpdatesEnabledOptimization:
         mock_main_window.gallery_table.setUpdatesEnabled = track_set_updates
 
         # Import the method we're testing
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+        BBDropGUI._initialize_table_from_queue(mock_main_window)
 
         # Assert
         assert len(updates_enabled_calls) >= 2, "setUpdatesEnabled should be called at least twice"
@@ -153,10 +153,10 @@ class TestSetUpdatesEnabledOptimization:
         mock_main_window._populate_table_row = track_populate_row
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+        BBDropGUI._initialize_table_from_queue(mock_main_window)
 
         # Assert
         assert len(call_order) > 0, "Should have recorded calls"
@@ -193,10 +193,10 @@ class TestSetUpdatesEnabledOptimization:
         mock_main_window._populate_table_row = track_populate_row
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+        BBDropGUI._initialize_table_from_queue(mock_main_window)
 
         # Assert
         # Find last populate_row call
@@ -230,10 +230,10 @@ class TestProgressCallbackOptimization:
             progress_calls.append((current, total))
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
+        BBDropGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
 
         # Assert
         assert len(progress_calls) == 1, \
@@ -260,10 +260,10 @@ class TestProgressCallbackOptimization:
         mock_main_window._populate_table_row = track_populate_row
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
+        BBDropGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
 
         # Assert
         # Find all populate_row calls
@@ -286,11 +286,11 @@ class TestProgressCallbackOptimization:
         mock_main_window.queue_manager.get_all_items = Mock(return_value=items)
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act & Assert - should not raise exception
         try:
-            ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+            BBDropGUI._initialize_table_from_queue(mock_main_window)
             success = True
         except Exception as e:
             success = False
@@ -319,10 +319,10 @@ class TestProcessEventsOptimization:
             mock_process_events.side_effect = lambda: process_events_calls.append(1)
 
             # Import the method
-            from src.gui.main_window import ImxUploadGUI
+            from src.gui.main_window import BBDropGUI
 
             # Act
-            ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+            BBDropGUI._initialize_table_from_queue(mock_main_window)
 
             # Assert
             assert len(process_events_calls) == 0, \
@@ -350,10 +350,10 @@ class TestProcessEventsOptimization:
             mock_process_events.side_effect = track_call
 
             # Import the method
-            from src.gui.main_window import ImxUploadGUI
+            from src.gui.main_window import BBDropGUI
 
             # Act
-            ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+            BBDropGUI._initialize_table_from_queue(mock_main_window)
 
             # Assert
             # Allow up to 2 processEvents calls (for critical operations only)
@@ -384,11 +384,11 @@ class TestPerformanceImprovement:
         mock_main_window._populate_table_row = minimal_populate
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
         start_time = time.time()
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+        BBDropGUI._initialize_table_from_queue(mock_main_window)
         elapsed_time = time.time() - start_time
 
         # Assert
@@ -402,7 +402,7 @@ class TestPerformanceImprovement:
     def test_linear_scaling_performance(self, mock_main_window, create_gallery_items, qtbot):
         """Verify performance scales linearly (not quadratically) with item count"""
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Use minimal mock for _populate_table_row
         def minimal_populate(row, item):
@@ -427,7 +427,7 @@ class TestPerformanceImprovement:
 
             # Measure time
             start = time.time()
-            ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+            BBDropGUI._initialize_table_from_queue(mock_main_window)
             elapsed = time.time() - start
             times.append(elapsed)
 
@@ -477,11 +477,11 @@ class TestFullOptimizationIntegration:
             mock_process_events.side_effect = lambda: process_events_calls.append(1)
 
             # Import the method
-            from src.gui.main_window import ImxUploadGUI
+            from src.gui.main_window import BBDropGUI
 
             # Act
             start_time = time.time()
-            ImxUploadGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
+            BBDropGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
             elapsed_time = time.time() - start_time
 
         # Assert all optimizations
@@ -530,10 +530,10 @@ class TestBatchLoadingOptimization:
         mock_main_window.queue_manager.store.get_all_file_host_uploads_batch = track_batch_load
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+        BBDropGUI._initialize_table_from_queue(mock_main_window)
 
         # Assert
         assert len(batch_load_calls) == 1, \
@@ -553,10 +553,10 @@ class TestBatchLoadingOptimization:
         mock_main_window.queue_manager.store.get_all_file_host_uploads_batch = Mock(return_value=batch_data)
 
         # Import the method
-        from src.gui.main_window import ImxUploadGUI
+        from src.gui.main_window import BBDropGUI
 
         # Act
-        ImxUploadGUI._initialize_table_from_queue(mock_main_window)
+        BBDropGUI._initialize_table_from_queue(mock_main_window)
 
         # Assert
         assert hasattr(mock_main_window, '_file_host_uploads_cache'), \

@@ -31,14 +31,14 @@ def find_gallery_json_by_id(gallery_id: str, gallery_path: Optional[str] = None)
 
     # Check central storage
     try:
-        from imxup import get_central_storage_path
+        from bbdrop import get_central_storage_path
         central_path = get_central_storage_path()
         if os.path.exists(central_path):
             search_locations.append(central_path)
     except (ImportError, Exception):
         # Fallback to hardcoded path if imports fail
         home = os.path.expanduser("~")
-        fallback_central = os.path.join(home, ".imxup", "galleries")
+        fallback_central = os.path.join(home, ".bbdrop", "galleries")
         if os.path.exists(fallback_central):
             search_locations.append(fallback_central)
 

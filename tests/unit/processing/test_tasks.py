@@ -342,7 +342,7 @@ class TestTableUpdateQueue:
 class TestCredentialFunctions:
     """Test credential checking functions"""
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_check_stored_credentials_with_username_password(self, mock_get_credential):
         """Test credential check with username and password"""
         mock_get_credential.side_effect = lambda key: {
@@ -354,7 +354,7 @@ class TestCredentialFunctions:
         result = check_stored_credentials()
         assert result is True
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_check_stored_credentials_with_api_key(self, mock_get_credential):
         """Test credential check with API key only"""
         mock_get_credential.side_effect = lambda key: {
@@ -366,7 +366,7 @@ class TestCredentialFunctions:
         result = check_stored_credentials()
         assert result is True
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_check_stored_credentials_none(self, mock_get_credential):
         """Test credential check with no credentials"""
         mock_get_credential.return_value = None
@@ -374,7 +374,7 @@ class TestCredentialFunctions:
         result = check_stored_credentials()
         assert result is False
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_check_stored_credentials_exception(self, mock_get_credential):
         """Test credential check with exception"""
         mock_get_credential.side_effect = Exception("Import error")
@@ -382,7 +382,7 @@ class TestCredentialFunctions:
         result = check_stored_credentials()
         assert result is False
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_api_key_is_set_true(self, mock_get_credential):
         """Test API key check when set"""
         mock_get_credential.return_value = 'encrypted_api_key'
@@ -390,7 +390,7 @@ class TestCredentialFunctions:
         result = api_key_is_set()
         assert result is True
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_api_key_is_set_false(self, mock_get_credential):
         """Test API key check when not set"""
         mock_get_credential.return_value = None
@@ -398,7 +398,7 @@ class TestCredentialFunctions:
         result = api_key_is_set()
         assert result is False
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_api_key_is_set_exception(self, mock_get_credential):
         """Test API key check with exception"""
         mock_get_credential.side_effect = Exception("Import error")

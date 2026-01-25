@@ -125,7 +125,7 @@ for binary in all_binaries:
 print("=" * 50 + "\n")
 
 a = Analysis(
-    ['imxup.py'],
+    ['bbdrop.py'],
     pathex=[],
     binaries=all_binaries,
     datas=pycurl_datas,
@@ -146,7 +146,7 @@ exe_gui = EXE(
     a.binaries,
     a.datas,
     [],
-    name='imxup',
+    name='bbdrop',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -159,7 +159,7 @@ exe_gui = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['imxup.ico'],
+    icon=['bbdrop.ico'],
 )
 
 # CLI executable (with console) - for command-line usage and debugging GUI
@@ -169,7 +169,7 @@ exe_cli = EXE(
     a.binaries,
     a.datas,
     [],
-    name='imxup-cli',
+    name='bbdrop-cli',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -182,5 +182,5 @@ exe_cli = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['imxup.ico'],
+    icon=['bbdrop.ico'],
 )

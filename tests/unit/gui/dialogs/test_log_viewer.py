@@ -69,11 +69,11 @@ def temp_log_dir(tmp_path):
     log_dir.mkdir()
 
     # Create sample log files
-    log_file = log_dir / "imxup.log"
+    log_file = log_dir / "bbdrop.log"
     log_file.write_text("2025-11-13 12:00:00 INFO: [general] Test log entry\n")
 
     # Create gzipped log file
-    gz_file = log_dir / "imxup.log.1.gz"
+    gz_file = log_dir / "bbdrop.log.1.gz"
     with gzip.open(gz_file, 'wb') as f:
         f.write(b"2025-11-13 11:00:00 INFO: [general] Old log entry\n")
 
@@ -148,7 +148,7 @@ class TestLogViewerDialogInitialization:
         from src.gui.dialogs.log_viewer import LogViewerDialog
 
         # Save a custom value
-        settings = QSettings("imxup", "imxup")
+        settings = QSettings("bbdrop", "bbdrop")
         settings.beginGroup("log_viewer")
         settings.setValue("level_filter", "WARNING+")
         settings.endGroup()
@@ -324,7 +324,7 @@ class TestLogFiltering:
         qtbot.wait(100)
 
         # Check settings
-        settings = QSettings("imxup", "imxup")
+        settings = QSettings("bbdrop", "bbdrop")
         settings.beginGroup("log_viewer")
         saved_value = settings.value("level_filter")
         settings.endGroup()

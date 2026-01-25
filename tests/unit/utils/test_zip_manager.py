@@ -402,7 +402,7 @@ class TestGenerateZipName:
         """Test filename without gallery name"""
         manager = ZIPManager(temp_dir=tmp_path)
         name = manager._generate_zip_name(42)
-        assert name == "imxup_gallery_42.zip"
+        assert name == "bbdrop_gallery_42.zip"
 
     def test_name_sanitization(self, tmp_path):
         """Test gallery name is sanitized"""
@@ -425,4 +425,4 @@ class TestGenerateZipName:
         """Test empty gallery name uses default format"""
         manager = ZIPManager(temp_dir=tmp_path)
         name = manager._generate_zip_name(1, "")
-        assert name == "imxup_gallery_1.zip"
+        assert name == "bbdrop_gallery_1.zip"

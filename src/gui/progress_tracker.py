@@ -1,4 +1,4 @@
-"""Progress tracking and bandwidth monitoring for IMXuploader GUI.
+"""Progress tracking and bandwidth monitoring for BBDrop GUI.
 
 This module handles all progress-related operations extracted from main_window.py
 to improve maintainability and separation of concerns.
@@ -17,7 +17,7 @@ from src.gui.widgets.gallery_table import GalleryTableWidget
 from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget
 
 if TYPE_CHECKING:
-    from src.gui.main_window import ImxUploadGUI
+    from src.gui.main_window import BBDropGUI
 
 
 def format_timestamp_for_display(timestamp_value, include_seconds=False):
@@ -36,7 +36,7 @@ def format_timestamp_for_display(timestamp_value, include_seconds=False):
 class ProgressTracker(QObject):
     """Handles progress tracking and bandwidth monitoring for the main window."""
 
-    def __init__(self, main_window: 'ImxUploadGUI'):
+    def __init__(self, main_window: 'BBDropGUI'):
         """Initialize the ProgressTracker."""
         super().__init__()
         self._main_window = main_window
@@ -44,8 +44,8 @@ class ProgressTracker(QObject):
         self._bandwidth_samples = []
 
         # Cache QSettings instances to avoid disk/registry I/O on every call
-        self._stats_settings = QSettings("ImxUploader", "Stats")
-        self._gui_settings = QSettings("ImxUploader", "ImxUploadGUI")
+        self._stats_settings = QSettings("BBDropUploader", "Stats")
+        self._gui_settings = QSettings("BBDropUploader", "BBDropGUI")
 
         # Cache stats values with periodic refresh
         self._cached_stats: dict = {}
@@ -213,7 +213,7 @@ class ProgressTracker(QObject):
     def _update_unnamed_count_background(self):
         """Update unnamed gallery count in background."""
         try:
-            from imxup import get_unnamed_galleries
+            from bbdrop import get_unnamed_galleries
             unnamed_galleries = get_unnamed_galleries()
             unnamed_count = len(unnamed_galleries)
             QTimer.singleShot(0, lambda: self._main_window.stats_unnamed_value_label.setText(f"{unnamed_count}"))

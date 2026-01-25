@@ -299,7 +299,7 @@ class GalleryContextMenuHelper(QObject):
             return
             
         try:
-            from imxup import load_templates
+            from bbdrop import load_templates
             templates = load_templates()
             template_names = list(templates.keys())
             
@@ -328,7 +328,7 @@ class GalleryContextMenuHelper(QObject):
         bbcode_regenerated = 0
         
         try:
-            from imxup import timestamp
+            from bbdrop import timestamp
             import os
             
             # Update each gallery's template

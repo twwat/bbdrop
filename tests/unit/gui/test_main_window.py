@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pytest-qt tests for ImxUploadGUI (main_window.py)
+pytest-qt tests for BBDropGUI (main_window.py)
 Tests main window initialization, UI components, menus, signals, and basic interactions
 """
 
@@ -20,7 +20,7 @@ from PyQt6.QtGui import QIcon
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.gui.main_window import (
-    ImxUploadGUI, CompletionWorker, SingleInstanceServer,
+    BBDropGUI, CompletionWorker, SingleInstanceServer,
     LogTextEdit, NumericTableWidgetItem, get_icon,
     check_stored_credentials, api_key_is_set, format_timestamp_for_display
 )
@@ -57,7 +57,7 @@ class TestModuleFunctions:
         assert isinstance(display, str)
         assert isinstance(tooltip, str)
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_check_stored_credentials_with_username_password(self, mock_get_cred):
         """Test credential check with username and password"""
         mock_get_cred.side_effect = lambda x: {
@@ -68,7 +68,7 @@ class TestModuleFunctions:
 
         assert check_stored_credentials() is True
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_check_stored_credentials_with_api_key(self, mock_get_cred):
         """Test credential check with API key only"""
         mock_get_cred.side_effect = lambda x: {
@@ -79,19 +79,19 @@ class TestModuleFunctions:
 
         assert check_stored_credentials() is True
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_check_stored_credentials_none(self, mock_get_cred):
         """Test credential check with no credentials"""
         mock_get_cred.return_value = None
         assert check_stored_credentials() is False
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_api_key_is_set_true(self, mock_get_cred):
         """Test API key check when set"""
         mock_get_cred.return_value = 'encrypted_api_key'
         assert api_key_is_set() is True
 
-    @patch('imxup.get_credential')
+    @patch('bbdrop.get_credential')
     def test_api_key_is_set_false(self, mock_get_cred):
         """Test API key check when not set"""
         mock_get_cred.return_value = None
@@ -247,17 +247,17 @@ class TestSingleInstanceServer:
 
 
 # ============================================================================
-# ImxUploadGUI Initialization Tests
+# BBDropGUI Initialization Tests
 # ============================================================================
 
 @pytest.fixture
 def mock_dependencies(monkeypatch, tmp_path):
-    """Mock all dependencies for ImxUploadGUI"""
-    # Mock imxup functions
-    monkeypatch.setattr('imxup.get_project_root', lambda: str(tmp_path))
-    monkeypatch.setattr('imxup.get_config_path', lambda: str(tmp_path / '.imxup'))
-    monkeypatch.setattr('imxup.load_user_defaults', lambda: {})
-    monkeypatch.setattr('imxup.get_credential', lambda x: None)
+    """Mock all dependencies for BBDropGUI"""
+    # Mock bbdrop functions
+    monkeypatch.setattr('bbdrop.get_project_root', lambda: str(tmp_path))
+    monkeypatch.setattr('bbdrop.get_config_path', lambda: str(tmp_path / '.bbdrop'))
+    monkeypatch.setattr('bbdrop.load_user_defaults', lambda: {})
+    monkeypatch.setattr('bbdrop.get_credential', lambda x: None)
     monkeypatch.setattr('src.utils.logger.set_main_window', lambda x: None)
 
     # Mock IconManager
@@ -319,8 +319,8 @@ def mock_dependencies(monkeypatch, tmp_path):
     }
 
 
-class TestImxUploadGUIInitialization:
-    """Test ImxUploadGUI initialization"""
+class TestBBDropGUIInitialization:
+    """Test BBDropGUI initialization"""
 
     @patch('src.gui.main_window.QSettings')
     def test_main_window_creation(self, mock_qsettings, qtbot, mock_dependencies):
@@ -330,10 +330,10 @@ class TestImxUploadGUIInitialization:
         mock_qsettings.return_value = mock_settings
 
         with patch.object(MenuManager, 'setup_menu_bar'):
-            with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                with patch.object(ImxUploadGUI, 'restore_settings'):
-                    with patch.object(ImxUploadGUI, 'check_credentials'):
-                        window = ImxUploadGUI()
+            with patch.object(BBDropGUI, 'setup_system_tray'):
+                with patch.object(BBDropGUI, 'restore_settings'):
+                    with patch.object(BBDropGUI, 'check_credentials'):
+                        window = BBDropGUI()
                         qtbot.addWidget(window)
 
                         assert window is not None
@@ -346,12 +346,12 @@ class TestImxUploadGUIInitialization:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert hasattr(window, 'queue_manager')
@@ -363,12 +363,12 @@ class TestImxUploadGUIInitialization:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert hasattr(window, 'completion_worker')
@@ -380,12 +380,12 @@ class TestImxUploadGUIInitialization:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert hasattr(window, 'server')
@@ -397,12 +397,12 @@ class TestImxUploadGUIInitialization:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert window.acceptDrops() is True
@@ -412,7 +412,7 @@ class TestImxUploadGUIInitialization:
 # UI Setup Tests
 # ============================================================================
 
-class TestImxUploadGUISetup:
+class TestBBDropGUISetup:
     """Test UI component setup"""
 
     @patch('src.gui.main_window.QSettings')
@@ -423,10 +423,10 @@ class TestImxUploadGUISetup:
         mock_qsettings.return_value = mock_settings
 
         with patch.object(MenuManager, 'setup_menu_bar'):
-            with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                with patch.object(ImxUploadGUI, 'restore_settings'):
-                    with patch.object(ImxUploadGUI, 'check_credentials'):
-                        window = ImxUploadGUI()
+            with patch.object(BBDropGUI, 'setup_system_tray'):
+                with patch.object(BBDropGUI, 'restore_settings'):
+                    with patch.object(BBDropGUI, 'check_credentials'):
+                        window = BBDropGUI()
                         qtbot.addWidget(window)
 
                         # setup_ui is called as part of initialization
@@ -439,12 +439,12 @@ class TestImxUploadGUISetup:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar') as mock_menu:
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             mock_menu.assert_called_once()
@@ -456,12 +456,12 @@ class TestImxUploadGUISetup:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray') as mock_tray:
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray') as mock_tray:
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             mock_tray.assert_called_once()
@@ -471,7 +471,7 @@ class TestImxUploadGUISetup:
 # Helper Method Tests
 # ============================================================================
 
-class TestImxUploadGUIHelpers:
+class TestBBDropGUIHelpers:
     """Test helper methods"""
 
     @patch('src.gui.main_window.QSettings')
@@ -481,12 +481,12 @@ class TestImxUploadGUIHelpers:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Test KiB/s
@@ -504,12 +504,12 @@ class TestImxUploadGUIHelpers:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Test bytes
@@ -535,12 +535,12 @@ class TestImxUploadGUIHelpers:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             result = window._format_size_consistent(0)
@@ -554,7 +554,7 @@ class TestImxUploadGUIHelpers:
 # Signal Connection Tests
 # ============================================================================
 
-class TestImxUploadGUISignals:
+class TestBBDropGUISignals:
     """Test signal connections"""
 
     @patch('src.gui.main_window.QSettings')
@@ -564,12 +564,12 @@ class TestImxUploadGUISignals:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Verify signals exist
@@ -583,12 +583,12 @@ class TestImxUploadGUISignals:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Verify signal exists
@@ -599,7 +599,7 @@ class TestImxUploadGUISignals:
 # Cleanup Tests
 # ============================================================================
 
-class TestImxUploadGUICleanup:
+class TestBBDropGUICleanup:
     """Test cleanup and shutdown"""
 
     @patch('src.gui.main_window.QSettings')
@@ -609,12 +609,12 @@ class TestImxUploadGUICleanup:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Verify worker exists
@@ -625,7 +625,7 @@ class TestImxUploadGUICleanup:
 # Resize Event Tests
 # ============================================================================
 
-class TestImxUploadGUIResize:
+class TestBBDropGUIResize:
     """Test resize event handling"""
 
     @patch('src.gui.main_window.QSettings')
@@ -635,12 +635,12 @@ class TestImxUploadGUIResize:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Create mock right panel
@@ -659,7 +659,7 @@ class TestImxUploadGUIResize:
 # Filter and Refresh Tests
 # ============================================================================
 
-class TestImxUploadGUIFilter:
+class TestBBDropGUIFilter:
     """Test filter and refresh functionality"""
 
     @patch('src.gui.main_window.QSettings')
@@ -669,12 +669,12 @@ class TestImxUploadGUIFilter:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Mock gallery_table
@@ -693,7 +693,7 @@ class TestImxUploadGUIFilter:
 # Icon Tests
 # ============================================================================
 
-class TestImxUploadGUIIcons:
+class TestBBDropGUIIcons:
     """Test icon handling"""
 
     @patch('src.gui.main_window.QSettings')
@@ -703,12 +703,12 @@ class TestImxUploadGUIIcons:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Mock gallery_table
@@ -726,7 +726,7 @@ class TestImxUploadGUIIcons:
 # Confirmation Dialog Tests
 # ============================================================================
 
-class TestImxUploadGUIConfirmation:
+class TestBBDropGUIConfirmation:
     """Test confirmation dialogs"""
 
     @patch('src.gui.main_window.QSettings')
@@ -740,12 +740,12 @@ class TestImxUploadGUIConfirmation:
         mock_defaults.return_value = {'confirm_delete': True}
         mock_msg.return_value = QMessageBox.StandardButton.Yes
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             result = window._confirm_removal(['/path/1'], ['Gallery 1'])
@@ -761,12 +761,12 @@ class TestImxUploadGUIConfirmation:
         mock_qsettings.return_value = mock_settings
         mock_defaults.return_value = {'confirm_delete': False}
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             result = window._confirm_removal(['/path/1'], ['Gallery 1'])
@@ -783,12 +783,12 @@ class TestImxUploadGUIConfirmation:
         mock_defaults.return_value = {'confirm_delete': False}
         mock_msg.return_value = QMessageBox.StandardButton.Yes
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             paths = [f'/path/{i}' for i in range(60)]
@@ -801,7 +801,7 @@ class TestImxUploadGUIConfirmation:
 # Background Tab Update Tests
 # ============================================================================
 
-class TestImxUploadGUIBackgroundUpdates:
+class TestBBDropGUIBackgroundUpdates:
     """Test background tab update system"""
 
     @patch('src.gui.main_window.QSettings')
@@ -811,12 +811,12 @@ class TestImxUploadGUIBackgroundUpdates:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Should have background update tracking
@@ -830,12 +830,12 @@ class TestImxUploadGUIBackgroundUpdates:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Add fake update
@@ -852,7 +852,7 @@ class TestImxUploadGUIBackgroundUpdates:
 # Animation Tests
 # ============================================================================
 
-class TestImxUploadGUIAnimation:
+class TestBBDropGUIAnimation:
     """Test animation functionality"""
 
     @patch('src.gui.main_window.QSettings')
@@ -862,12 +862,12 @@ class TestImxUploadGUIAnimation:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert hasattr(window, '_upload_animation_timer')
@@ -878,7 +878,7 @@ class TestImxUploadGUIAnimation:
 # Path Mapping Tests
 # ============================================================================
 
-class TestImxUploadGUIPathMapping:
+class TestBBDropGUIPathMapping:
     """Test path-to-row mapping"""
 
     @patch('src.gui.main_window.QSettings')
@@ -888,12 +888,12 @@ class TestImxUploadGUIPathMapping:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert hasattr(window, 'path_to_row')
@@ -906,7 +906,7 @@ class TestImxUploadGUIPathMapping:
 # Settings Tests
 # ============================================================================
 
-class TestImxUploadGUISettings:
+class TestBBDropGUISettings:
     """Test settings management"""
 
     @patch('src.gui.main_window.QSettings')
@@ -915,12 +915,12 @@ class TestImxUploadGUISettings:
         mock_settings = Mock()
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert hasattr(window, 'settings')
@@ -930,7 +930,7 @@ class TestImxUploadGUISettings:
 # Log Display Tests
 # ============================================================================
 
-class TestImxUploadGUILogDisplay:
+class TestBBDropGUILogDisplay:
     """Test log display functionality"""
 
     @patch('src.gui.main_window.QSettings')
@@ -940,12 +940,12 @@ class TestImxUploadGUILogDisplay:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                                 # Should have log display settings cached
@@ -957,7 +957,7 @@ class TestImxUploadGUILogDisplay:
 # Update Timer Tests
 # ============================================================================
 
-class TestImxUploadGUIUpdateTimer:
+class TestBBDropGUIUpdateTimer:
     """Test update timer functionality"""
 
     @patch('src.gui.main_window.QSettings')
@@ -967,12 +967,12 @@ class TestImxUploadGUIUpdateTimer:
         mock_settings.value.return_value = 0
         mock_qsettings.return_value = mock_settings
 
-        with patch.object(ImxUploadGUI, 'setup_ui'):
+        with patch.object(BBDropGUI, 'setup_ui'):
             with patch.object(MenuManager, 'setup_menu_bar'):
-                with patch.object(ImxUploadGUI, 'setup_system_tray'):
-                    with patch.object(ImxUploadGUI, 'restore_settings'):
-                        with patch.object(ImxUploadGUI, 'check_credentials'):
-                            window = ImxUploadGUI()
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        with patch.object(BBDropGUI, 'check_credentials'):
+                            window = BBDropGUI()
                             qtbot.addWidget(window)
 
                             assert hasattr(window, 'update_timer')

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Splash screen with animated GIF and random status updates for imxup GUI
+Splash screen with animated GIF and random status updates for bbdrop GUI
 """
 
 import os
@@ -21,10 +21,10 @@ class SplashScreen(QSplashScreen):
         pixmap.fill(QColor(29, 22, 22))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
-        # Load the imxup logo
+        # Load the bbdrop logo
         try:
-            from imxup import get_project_root
-            logo_path = os.path.join(get_project_root(), 'assets', 'imxup2.png')
+            from bbdrop import get_project_root
+            logo_path = os.path.join(get_project_root(), 'assets', 'bbdrop2.png')
             self.logo_pixmap = QPixmap(logo_path)
             if self.logo_pixmap.isNull():
                 self.logo_pixmap = None
@@ -33,7 +33,7 @@ class SplashScreen(QSplashScreen):
             
         # Get version info
         try:
-            from imxup import get_version
+            from bbdrop import get_version
             APP_VERSION = get_version()
             self.version = f"{APP_VERSION}  "
         except (ImportError, ModuleNotFoundError):
@@ -53,7 +53,7 @@ class SplashScreen(QSplashScreen):
             "adjusting", "dehumidifying", "hiding", "setting fire to", "vacuuming"
         ]
         
-        self.status_text = f"{random.choice(self.action_words).title()} ImXup v{APP_VERSION}"
+        self.status_text = f"{random.choice(self.action_words).title()} BBDrop v{APP_VERSION}"
         self.progress_dots = ""
 
 

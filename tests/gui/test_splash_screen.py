@@ -18,8 +18,8 @@ class TestSplashScreenInit:
 
     def test_splash_screen_creates_successfully(self, qtbot):
         """Test that SplashScreen can be instantiated"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -28,8 +28,8 @@ class TestSplashScreenInit:
 
     def test_splash_screen_has_correct_size(self, qtbot):
         """Test that splash screen has expected dimensions"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -40,8 +40,8 @@ class TestSplashScreenInit:
     def test_splash_screen_initializes_with_version(self, qtbot):
         """Test version is properly initialized"""
         test_version = '2.5.3'
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value=test_version):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value=test_version):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -49,8 +49,8 @@ class TestSplashScreenInit:
 
     def test_splash_screen_has_status_text(self, qtbot):
         """Test that splash screen initializes with status text"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -59,8 +59,8 @@ class TestSplashScreenInit:
 
     def test_splash_screen_has_action_words(self, qtbot):
         """Test that splash screen has action words list"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -74,8 +74,8 @@ class TestSplashScreenStatusUpdates:
 
     def test_update_status_changes_text(self, qtbot):
         """Test that update_status changes the status text"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -88,8 +88,8 @@ class TestSplashScreenStatusUpdates:
 
     def test_update_status_adds_progress_dot(self, qtbot):
         """Test that update_status can add progress dots"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -102,8 +102,8 @@ class TestSplashScreenStatusUpdates:
 
     def test_set_status_updates_text(self, qtbot):
         """Test set_status method"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -114,8 +114,8 @@ class TestSplashScreenStatusUpdates:
 
     def test_set_status_adds_progress_dot(self, qtbot):
         """Test that set_status adds a progress dot"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -127,8 +127,8 @@ class TestSplashScreenStatusUpdates:
 
     def test_set_random_status(self, qtbot):
         """Test set_random_status method"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -145,7 +145,7 @@ class TestSplashScreenLogoHandling:
     def test_logo_loads_when_file_exists(self, qtbot, tmp_path):
         """Test that logo loads successfully when file exists"""
         # Create a minimal PNG file
-        logo_path = tmp_path / 'assets' / 'imxup2.png'
+        logo_path = tmp_path / 'assets' / 'bbdrop.png'
         logo_path.parent.mkdir(parents=True, exist_ok=True)
         logo_path.write_bytes(
             b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
@@ -154,8 +154,8 @@ class TestSplashScreenLogoHandling:
             b'\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
         )
 
-        with patch('imxup.get_project_root', return_value=str(tmp_path)):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value=str(tmp_path)):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -164,8 +164,8 @@ class TestSplashScreenLogoHandling:
 
     def test_logo_handles_missing_file(self, qtbot):
         """Test that splash handles missing logo file gracefully"""
-        with patch('imxup.get_project_root', return_value='/nonexistent/path'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/nonexistent/path'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -178,8 +178,8 @@ class TestSplashScreenVisibility:
 
     def test_finish_and_hide_hides_splash(self, qtbot):
         """Test that finish_and_hide hides the splash screen"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -197,8 +197,8 @@ class TestSplashScreenPainting:
 
     def test_paint_event_executes_without_error(self, qtbot):
         """Test that paintEvent executes successfully"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -211,8 +211,8 @@ class TestSplashScreenPainting:
 
     def test_paint_event_with_status_update(self, qtbot):
         """Test painting after status update"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -229,8 +229,8 @@ class TestSplashScreenEdgeCases:
 
     def test_multiple_status_updates_in_sequence(self, qtbot):
         """Test multiple rapid status updates"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -242,8 +242,8 @@ class TestSplashScreenEdgeCases:
 
     def test_empty_status_text(self, qtbot):
         """Test handling of empty status text"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
@@ -254,8 +254,8 @@ class TestSplashScreenEdgeCases:
 
     def test_very_long_status_text(self, qtbot):
         """Test handling of very long status text"""
-        with patch('imxup.get_project_root', return_value='/tmp/test'):
-            with patch('imxup.get_version', return_value='1.0.0'):
+        with patch('bbdrop.get_project_root', return_value='/tmp/test'):
+            with patch('bbdrop.get_version', return_value='1.0.0'):
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 

@@ -1,5 +1,5 @@
 """
-Worker Status Widget for imxup.
+Worker Status Widget for bbdrop.
 
 Displays real-time status of upload workers for both imx.to and file hosts.
 Shows active workers with icons, hostnames, speed, and status in a table view.
@@ -629,7 +629,7 @@ class WorkerStatusWidget(QWidget):
             True if logos should be shown, False for text display
         """
         # Must use same org/app name as settings dialog to read correct registry location
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
         return settings.value('ui/show_worker_logos', True, type=bool)
 
     def _load_host_logo(self, host_id: str, height: int = 20) -> Optional[QLabel]:
@@ -894,7 +894,7 @@ class WorkerStatusWidget(QWidget):
             storage_used = 0
             storage_total = 0
             if worker_type == 'filehost':
-                settings = QSettings("ImxUploader", "ImxUploadGUI")
+                settings = QSettings("BBDropUploader", "BBDropGUI")
                 total_str = settings.value(f"FileHosts/{hostname.lower()}/storage_total", "0")
                 left_str = settings.value(f"FileHosts/{hostname.lower()}/storage_left", "0")
                 try:
@@ -1717,7 +1717,7 @@ class WorkerStatusWidget(QWidget):
                         if worker_id not in self._workers:
                             is_enabled = get_file_host_setting(host_id, "enabled", "bool")
                             # Load cached storage data from QSettings for filehost placeholders
-                            settings = QSettings("ImxUploader", "ImxUploadGUI")
+                            settings = QSettings("BBDropUploader", "BBDropGUI")
                             total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
                             left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
                             try:
@@ -1776,7 +1776,7 @@ class WorkerStatusWidget(QWidget):
                             worker_id = f"filehost_{host_id}"
                             if worker_id not in self._workers:
                                 # Load cached storage data from QSettings for enabled filehost placeholders
-                                settings = QSettings("ImxUploader", "ImxUploadGUI")
+                                settings = QSettings("BBDropUploader", "BBDropGUI")
                                 total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
                                 left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
                                 try:
@@ -2280,7 +2280,7 @@ class WorkerStatusWidget(QWidget):
         if not self._active_columns:
             return
 
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
 
         # Save visible column IDs (in logical order)
         visible_ids = [col.id for col in self._active_columns]
@@ -2316,7 +2316,7 @@ class WorkerStatusWidget(QWidget):
 
     def _load_column_settings(self):
         """Load column settings from QSettings."""
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
 
         # Load visible column IDs in saved order
         visible_ids = settings.value("worker_status/visible_columns", None, type=list)
@@ -2437,7 +2437,7 @@ class WorkerStatusWidget(QWidget):
 
     def _reset_column_settings(self):
         """Reset columns to default settings."""
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
         settings.remove("worker_status/visible_columns")
         settings.remove("worker_status/column_widths")
 

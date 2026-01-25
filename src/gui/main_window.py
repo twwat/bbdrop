@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Main window and application entry point for IMXuploader GUI.
+"""Main window and application entry point for BBDrop GUI.
 
-This module provides the primary PyQt6-based graphical user interface for the IMXuploader
+This module provides the primary PyQt6-based graphical user interface for the BBDrop
 application, which manages batch image uploads to imx.to galleries with support for
 multiple file hosts and advanced queue management.
 
@@ -18,7 +18,7 @@ Key Features:
     - Single-instance application architecture
 
 Main Classes:
-    ImxUploadGUI: Primary application window and controller
+    BBDropGUI: Primary application window and controller
     CompletionWorker: Background thread for post-upload processing
     SingleInstanceServer: TCP server for single-instance communication
     AdaptiveGroupBox: Custom QGroupBox with proper size hint propagation
@@ -28,7 +28,7 @@ Main Classes:
 Architecture:
     The GUI follows an MVC-like pattern where:
     - QueueManager (model) manages gallery queue state and database persistence
-    - ImxUploadGUI (view/controller) handles UI rendering and user interactions
+    - BBDropGUI (view/controller) handles UI rendering and user interactions
     - UploadWorker threads (workers) perform actual upload operations
     - FileHostWorkerManager coordinates parallel file host uploads
 
@@ -90,8 +90,8 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup, QDrag
 
 # Import the core uploader functionality
-from imxup import ImxToUploader, get_project_root, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
-from imxup import create_windows_context_menu, remove_windows_context_menu
+from bbdrop import ImxToUploader, get_project_root, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from bbdrop import create_windows_context_menu, remove_windows_context_menu
 from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
 from src.utils.logger import log, set_main_window
 from src.gui.splash_screen import SplashScreen
@@ -254,9 +254,9 @@ def check_stored_credentials():
 
     Note:
         Credentials are stored encrypted in Windows Registry under
-        HKEY_CURRENT_USER\\Software\\ImxUploader\\ImxUploadGUI
+        HKEY_CURRENT_USER\\Software\\BBDropUploader\\BBDropGUI
     """
-    from imxup import get_credential
+    from bbdrop import get_credential
 
     username = get_credential('username')
     encrypted_password = get_credential('password')
@@ -276,7 +276,7 @@ def api_key_is_set() -> bool:
     Note:
         API key authentication is preferred over username/password.
     """
-    from imxup import get_credential
+    from bbdrop import get_credential
     encrypted_api_key = get_credential('api_key')
     return bool(encrypted_api_key)
 
@@ -387,8 +387,8 @@ class SingleInstanceServer(QThread):
         self.running = False
         self.wait()
 
-class ImxUploadGUI(QMainWindow):
-    """Main application window for IMXuploader GUI.
+class BBDropGUI(QMainWindow):
+    """Main application window for BBDrop GUI.
 
     This is the primary controller class that coordinates all GUI components,
     manages upload workers, handles user interactions, and maintains application state.
@@ -474,7 +474,7 @@ class ImxUploadGUI(QMainWindow):
         # Guard against double initialization
         if hasattr(self, '_init_complete'):
             caller = traceback.extract_stack()[-2]
-            log(f"WARNING: ImxUploadGUI.__init__ called twice! (from {caller.filename}:{caller.lineno} in {caller.name})",
+            log(f"WARNING: BBDropGUI.__init__ called twice! (from {caller.filename}:{caller.lineno} in {caller.name})",
                 level="warning", category="startup")
             return  # Skip re-initialization
 
@@ -646,7 +646,7 @@ class ImxUploadGUI(QMainWindow):
                 self.file_host_manager = None
 
         self.table_progress_widgets = {}
-        self.settings = QSettings("ImxUploader", "ImxUploadGUI")
+        self.settings = QSettings("BBDropUploader", "BBDropGUI")
         
         # Track path-to-row mapping to avoid expensive table rebuilds
         self.path_to_row = {}  # Maps gallery path to table row number
@@ -877,7 +877,7 @@ class ImxUploadGUI(QMainWindow):
 
         # Mark initialization complete
         self._init_complete = True
-        log(f"ImxUploadGUI.__init__ Completed", level="debug")
+        log(f"BBDropGUI.__init__ Completed", level="debug")
 
     def _load_galleries_phase1(self):
         """Phase 1 - Load critical gallery data in single pass.
@@ -1362,13 +1362,13 @@ class ImxUploadGUI(QMainWindow):
             QTimer.singleShot(3000, self._check_for_updates_silently)
     
     def _cache_format_functions(self):
-        """Pre-cache ALL imxup functions to avoid blocking imports during runtime"""
+        """Pre-cache ALL bbdrop functions to avoid blocking imports during runtime"""
         try:
-            from imxup import (
+            from bbdrop import (
                 format_binary_rate, format_binary_size, get_unnamed_galleries,
-                check_if_gallery_exists, timestamp, get_central_storage_path, 
+                check_if_gallery_exists, timestamp, get_central_storage_path,
                 build_gallery_filenames, save_gallery_artifacts, generate_bbcode_from_template,
-                load_templates, get_template_path, __version__, 
+                load_templates, get_template_path, __version__,
                 get_central_store_base_path, set_central_store_base_path
             )
             self._format_binary_rate = format_binary_rate
@@ -1392,22 +1392,22 @@ class ImxUploadGUI(QMainWindow):
             self._get_unnamed_galleries = lambda: {}
             self._check_if_gallery_exists = lambda name: []
             self._timestamp = lambda: time.strftime("%H:%M:%S")
-            self._get_central_storage_path = lambda: os.path.expanduser("~/.imxup")
+            self._get_central_storage_path = lambda: os.path.expanduser("~/.bbdrop")
             self._build_gallery_filenames = lambda name, id: (f"{name}_{id}.json", f"{name}_{id}.json", f"{name}_{id}_bbcode.txt")
             self._save_gallery_artifacts = lambda *args, **kwargs: {}
             self._generate_bbcode_from_template = lambda *args, **kwargs: ""
             self._load_templates = lambda: {"default": ""}
-            self._get_template_path = lambda: os.path.expanduser("~/.imxup/templates")
+            self._get_template_path = lambda: os.path.expanduser("~/.bbdrop/templates")
             self._version = "unknown"
-            self._get_central_store_base_path = lambda: os.path.expanduser("~/.imxup")
+            self._get_central_store_base_path = lambda: os.path.expanduser("~/.bbdrop")
             self._set_central_store_base_path = lambda path: None
         
     def setup_ui(self):
         try:
-            from imxup import __version__
-            self.setWindowTitle(f"IMXup {__version__}")
+            from bbdrop import __version__
+            self.setWindowTitle(f"BBDrop {__version__}")
         except Exception:
-            self.setWindowTitle("IMXup")
+            self.setWindowTitle("BBDrop")
         self.setMinimumSize(800, 650)  # Allow log to shrink to accommodate Settings
         
         central_widget = QWidget()
@@ -1641,7 +1641,7 @@ class ImxUploadGUI(QMainWindow):
         self.template_combo = QComboBox()
         self.template_combo.setToolTip("Template to use for generating bbcode files")
         # Load available templates
-        from imxup import load_templates
+        from bbdrop import load_templates
         templates = load_templates()
         for template_name in templates.keys():
             self.template_combo.addItem(template_name)
@@ -1656,7 +1656,7 @@ class ImxUploadGUI(QMainWindow):
         # Watch template directory for changes and refresh dropdown automatically
         try:
             from PyQt6.QtCore import QFileSystemWatcher
-            from imxup import get_template_path
+            from bbdrop import get_template_path
             self._template_watcher = QFileSystemWatcher([get_template_path()])
             self._template_watcher.directoryChanged.connect(self._on_templates_directory_changed)
         except Exception:
@@ -2228,7 +2228,7 @@ class ImxUploadGUI(QMainWindow):
                     Only show dialog if update is available.
         """
         from src.network.update_checker import UpdateChecker
-        from imxup import __version__, GITHUB_OWNER, GITHUB_REPO
+        from bbdrop import __version__, GITHUB_OWNER, GITHUB_REPO
 
         self._update_checker = UpdateChecker(__version__, GITHUB_OWNER, GITHUB_REPO)
         self._update_checker.update_available.connect(
@@ -2251,7 +2251,7 @@ class ImxUploadGUI(QMainWindow):
             silent: Ignored for updates (updates are always shown).
         """
         from src.gui.dialogs.update_dialog import UpdateDialog
-        from imxup import __version__
+        from bbdrop import __version__
 
         # Check if user has skipped this version
         skipped_version = self.settings.value('updates/skipped_version', '', type=str)
@@ -2327,7 +2327,7 @@ class ImxUploadGUI(QMainWindow):
 
     def refresh_template_combo(self, preferred: str | None = None):
         """Reload templates into the dropdown, preserving selection when possible."""
-        from imxup import load_templates
+        from bbdrop import load_templates
         templates = load_templates()
         current = preferred if preferred is not None else self.template_combo.currentText()
         self.template_combo.blockSignals(True)
@@ -2412,7 +2412,7 @@ class ImxUploadGUI(QMainWindow):
         if result == QDialog.DialogCode.Accepted:
             log(f"Comprehensive settings updated successfully",level="debug")
             # Reload settings into quick settings UI
-            from imxup import load_user_defaults
+            from bbdrop import load_user_defaults
             defaults = load_user_defaults()
             self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
         else:
@@ -2459,7 +2459,7 @@ class ImxUploadGUI(QMainWindow):
         if not already recorded. Called once during __init__.
         """
         from datetime import datetime
-        settings = QSettings("ImxUploader", "Stats")
+        settings = QSettings("BBDropUploader", "Stats")
 
         # Increment startup count
         count = settings.value("app_startup_count", 0, type=int)
@@ -2488,7 +2488,7 @@ class ImxUploadGUI(QMainWindow):
         if duration <= 0:
             return
 
-        settings = QSettings("ImxUploader", "Stats")
+        settings = QSettings("BBDropUploader", "Stats")
         total = settings.value("total_session_time_seconds", 0, type=int)
         settings.setValue("total_session_time_seconds", total + duration)
         settings.sync()
@@ -2806,7 +2806,7 @@ class ImxUploadGUI(QMainWindow):
         # For now, we'll do the check but it's still somewhat blocking
         # TODO: Move to a proper worker thread for complete non-blocking operation
         try:
-            from imxup import check_if_gallery_exists
+            from bbdrop import check_if_gallery_exists
             existing_files = check_if_gallery_exists(gallery_name)
             
             # Use QTimer to ensure dialog shows on main thread
@@ -3309,7 +3309,7 @@ class ImxUploadGUI(QMainWindow):
             if item.status == "uploading":
                 current_rate_kib = float(getattr(item, 'current_kibps', 0.0) or 0.0)
                 try:
-                    from imxup import format_binary_rate
+                    from bbdrop import format_binary_rate
                     if current_rate_kib > 0:
                         transfer_text = format_binary_rate(current_rate_kib, precision=2)
                     else:
@@ -3487,7 +3487,7 @@ class ImxUploadGUI(QMainWindow):
         self._update_specific_gallery_display(path)
 
         # Auto-clear completed gallery if enabled
-        from imxup import load_user_defaults
+        from bbdrop import load_user_defaults
         defaults = load_user_defaults()
         if defaults.get('auto_clear_completed', False):
             # Get item to check if it's actually completed (not failed)
@@ -3516,7 +3516,7 @@ class ImxUploadGUI(QMainWindow):
         """Update cumulative stats in background"""
         try:
             successful_count = results.get('successful_count', 0)
-            settings = QSettings("ImxUploader", "Stats")
+            settings = QSettings("BBDropUploader", "Stats")
             total_galleries = settings.value("total_galleries", 0, type=int) + 1
             total_images_acc = settings.value("total_images", 0, type=int) + successful_count
             base_total_str = settings.value("total_size_bytes_v2", "0")
@@ -4271,11 +4271,11 @@ class ImxUploadGUI(QMainWindow):
         folder_name = os.path.basename(path)
         
         # Import here to avoid circular imports  
-        from imxup import get_central_storage_path
+        from bbdrop import get_central_storage_path
         central_path = get_central_storage_path()
         
         # Try central location first with standardized naming, fallback to legacy
-        from imxup import build_gallery_filenames
+        from bbdrop import build_gallery_filenames
         item = self.queue_manager.get_item(path)
         if item and item.gallery_id and (item.name or folder_name):
             log(f"BBcode copy: item.name='{item.name}', folder_name='{folder_name}', gallery_id='{item.gallery_id}'", level="debug", category="fileio")
@@ -4523,7 +4523,7 @@ class ImxUploadGUI(QMainWindow):
                 current_rate_kib = float(getattr(item, 'current_kibps', 0.0) or 0.0)
                 final_rate_kib = float(getattr(item, 'final_kibps', 0.0) or 0.0)
                 try:
-                    from imxup import format_binary_rate
+                    from bbdrop import format_binary_rate
                     if item.status == "uploading" and current_rate_kib > 0:
                         transfer_text = format_binary_rate(current_rate_kib, precision=2)
                     elif final_rate_kib > 0:
@@ -4756,7 +4756,7 @@ class ImxUploadGUI(QMainWindow):
         if hasattr(self, 'tray_icon') and self.tray_icon:
             self.hide()
             self.tray_icon.showMessage(
-                "IMXuploader",
+                "BBDrop",
                 "Minimized to tray. Uploads will continue in background.",
                 QSystemTrayIcon.MessageIcon.Information,
                 2000
@@ -4896,7 +4896,7 @@ class ImxUploadGUI(QMainWindow):
         
         # Show simple dialog instead of inline combo
         from PyQt6.QtWidgets import QInputDialog
-        from imxup import load_templates
+        from bbdrop import load_templates
         
         try:
             templates = load_templates()
@@ -5102,8 +5102,8 @@ def check_single_instance(folder_path=None):
 # ==============================================================================
 # ORPHANED MAIN FUNCTION - COMMENTED OUT
 # ==============================================================================
-# This main() function is never called. The actual application entry is in imxup.py.
-# The file host initialization code (lines 7374-7391) has been moved to imxup.py
+# This main() function is never called. The actual application entry is in bbdrop.py.
+# The file host initialization code (lines 7374-7391) has been moved to bbdrop.py
 # around line 2611 where it runs AFTER window.show() but BEFORE app.exec().
 #
 # def main():
@@ -5131,14 +5131,14 @@ def check_single_instance(folder_path=None):
 #     else:
 #         # Check for existing instance even when no folders provided
 #         if check_single_instance():
-#             print(f"{timestamp()} WARNING: ImxUp GUI already running, attempting to bring existing instance to front.")
+#             print(f"{timestamp()} WARNING: BBDrop GUI already running, attempting to bring existing instance to front.")
 #             splash.finish_and_hide()
 #             return
 # 
 #     splash.set_status("Qt")
 # 
 #     # Create main window with splash updates
-#     window = ImxUploadGUI(splash)
+#     window = BBDropGUI(splash)
 # 
 #     # Add folder from command line if provided
 #     if folders_to_add:
@@ -5193,7 +5193,7 @@ def check_single_instance(folder_path=None):
 # 
 # 
 # 
-# # ComprehensiveSettingsDialog moved to imxup_settings.py
+# # ComprehensiveSettingsDialog moved to bbdrop_settings.py
 # 
 # # if __name__ == "__main__":
 # #     main()

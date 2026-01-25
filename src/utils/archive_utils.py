@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Archive utilities for imxup
+Archive utilities for bbdrop
 Handles archive detection, validation, and path inspection
 """
 
@@ -112,7 +112,7 @@ def validate_temp_extraction_path(base_temp_dir: str | Path, archive_path: str |
     """Generate a safe, unique temp directory path for archive extraction
 
     Args:
-        base_temp_dir: Base temporary directory (e.g., ~/.imxup/temp)
+        base_temp_dir: Base temporary directory (e.g., ~/.bbdrop/temp)
         archive_path: Path to the archive file
 
     Returns:

@@ -2,7 +2,7 @@
 SQLite-backed storage for uploader internal state.
 
 Responsibilities:
-- Initialize database in the central data dir (e.g., ~/.imxup/imxup.db)
+- Initialize database in the central data dir (e.g., ~/.bbdrop/bbdrop.db)
 - Provide CRUD for galleries and images used by the queue
 - Migrate legacy QSettings queue to SQLite on first use
 - Keep operations short and safe for concurrent readers with WAL
@@ -24,12 +24,12 @@ from src.utils.logger import log
 
 
 # Access central data dir path from shared helper
-from imxup import get_central_store_base_path
+from bbdrop import get_central_store_base_path
 
 
 def _get_db_path() -> str:
     base_dir = get_central_store_base_path()
-    return os.path.join(base_dir, "imxup.db")
+    return os.path.join(base_dir, "bbdrop.db")
 
 
 def _connect(db_path: Optional[str] = None) -> sqlite3.Connection:
@@ -356,7 +356,7 @@ def _migrate_unnamed_galleries_to_db(conn: sqlite3.Connection) -> None:
         import os
         
         # Use the same config path logic as the original function
-        from imxup import get_config_path
+        from bbdrop import get_config_path
         config_file = get_config_path()
         
         if not os.path.exists(config_file):
