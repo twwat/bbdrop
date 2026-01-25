@@ -19,43 +19,18 @@ from src.gui.widgets.custom_widgets import CopyableLogListWidget
 
 
 class AsteriskPasswordEdit(QLineEdit):
-    """Custom QLineEdit that shows asterisks (*) instead of password dots when masked"""
+    """Password field with show/hide toggle using Qt's built-in EchoMode"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._is_masked = True
-        self._actual_text = ""
-        self.textChanged.connect(self._on_text_changed)
-
-    def _on_text_changed(self, text):
-        """Track actual text separately when masked"""
-        if not self._is_masked:
-            self._actual_text = text
-
-    def setText(self, text):
-        """Override setText to handle initial value loading"""
-        self._actual_text = text
-        if self._is_masked:
-            super().setText("*" * len(text))
-        else:
-            super().setText(text)
-
-    def text(self):
-        """Override text() to return actual text, not asterisks"""
-        return self._actual_text if self._is_masked else super().text()
+        self.setEchoMode(QLineEdit.EchoMode.Password)
 
     def set_masked(self, masked: bool):
-        """Toggle between masked (asterisks) and visible mode"""
-        self._is_masked = masked
+        """Toggle between masked (dots) and visible mode"""
         if masked:
-            # Save actual text before masking
-            self._actual_text = super().text()
-            super().setText("*" * len(self._actual_text))
-            self.setReadOnly(True)  # Prevent editing while masked
+            self.setEchoMode(QLineEdit.EchoMode.Password)
         else:
-            # Show actual text
-            super().setText(self._actual_text)
-            self.setReadOnly(False)  # Allow editing when visible
+            self.setEchoMode(QLineEdit.EchoMode.Normal)
 
 
 class FileHostConfigDialog(QDialog):
@@ -628,7 +603,7 @@ class FileHostConfigDialog(QDialog):
         self.test_connection_btn = QPushButton("Test Connection")
         self.test_connection_btn.setToolTip("Run full test: credentials, user info, upload, and delete")
         # Set initial state: disabled if host is not enabled (worker is None)
-        self.test_connection_btn.setEnabled(self.worker is not None)
+        self.test_connection_btn.setEnabled(True)
         test_button_layout.addWidget(self.test_connection_btn)
         test_button_layout.addStretch()
         test_group_layout.addLayout(test_button_layout)
@@ -720,17 +695,11 @@ class FileHostConfigDialog(QDialog):
             self.enable_button.setProperty("class", "host-disable-btn")
             self.enable_button.style().unpolish(self.enable_button)
             self.enable_button.style().polish(self.enable_button)
-            # Only enable Test Connection button when worker is enabled
-            if hasattr(self, 'test_connection_btn'):
-                self.test_connection_btn.setEnabled(True)
         else:
             self.enable_button.setText(f"Enable {self.host_config.name}")
             self.enable_button.setProperty("class", "host-enable-btn")
             self.enable_button.style().unpolish(self.enable_button)
             self.enable_button.style().polish(self.enable_button)
-            # Only disable Test Connection button - user needs to edit credentials to enable!
-            if hasattr(self, 'test_connection_btn'):
-                self.test_connection_btn.setEnabled(False)
 
     def _on_enable_button_clicked(self):
         """Handle enable/disable button click - power button paradigm"""
@@ -968,6 +937,123 @@ class FileHostConfigDialog(QDialog):
         label.style().unpolish(label)
         label.style().polish(label)
 
+    def _run_standalone_test(self, credentials: str):
+        """Run standalone test without worker (for disabled hosts).
+
+        Creates a temporary FileHostClient to test credentials only.
+        Does not test upload/delete (requires full worker context).
+
+        Args:
+            credentials: Credentials string to test
+        """
+        from src.utils.logger import log
+        from src.network.file_host_client import FileHostClient
+        from src.core.file_host_config import get_config_manager
+
+        results = {
+            'timestamp': int(time.time()),
+            'credentials_valid': False,
+            'user_info_valid': False,
+            'upload_success': False,
+            'delete_success': False,
+            'error_message': ''
+        }
+
+        try:
+            config_manager = get_config_manager()
+            host_config = config_manager.get_host(self.host_id)
+            if not host_config:
+                raise Exception(f"Host config not found: {self.host_id}")
+
+            # Create standalone client with credentials
+            client = FileHostClient(
+                host_config=host_config,
+                bandwidth_counter=None,
+                credentials=credentials,
+                host_id=self.host_id,
+                log_callback=lambda msg, level="info": log(f"{host_config.name} Test: {msg}", level=level, category="file_hosts")
+            )
+
+            # Test credentials only (no upload/delete without worker)
+            cred_result = client.test_credentials()
+
+            if cred_result.get('success'):
+                results['credentials_valid'] = True
+                results['user_info_valid'] = bool(cred_result.get('user_info'))
+
+                # Cache storage if available
+                user_info = cred_result.get('user_info', {})
+                if user_info:
+                    storage_total = user_info.get('storage_total')
+                    storage_left = user_info.get('storage_left')
+                    if storage_total is not None and storage_left is not None:
+                        try:
+                            total = int(storage_total)
+                            left = int(storage_left)
+                            # Save to QSettings cache
+                            self.settings.setValue(f"FileHosts/{self.host_id}/storage_ts", int(time.time()))
+                            self.settings.setValue(f"FileHosts/{self.host_id}/storage_total", str(total))
+                            self.settings.setValue(f"FileHosts/{self.host_id}/storage_left", str(left))
+                            self.settings.sync()
+                            # Update storage bar if present
+                            if self.storage_bar:
+                                self._load_storage_from_cache()
+                        except (ValueError, TypeError) as e:
+                            log(f"Failed to parse storage during standalone test: {e}", level="debug", category="file_hosts")
+            else:
+                results['error_message'] = cred_result.get('message', 'Credential test failed')
+
+        except Exception as e:
+            results['error_message'] = str(e)
+            log(f"Standalone test failed for {self.host_id}: {e}", level="warning", category="file_hosts")
+
+        # Save test results to cache
+        prefix = f"FileHosts/TestResults/{self.host_id}"
+        self.settings.setValue(f"{prefix}/timestamp", results['timestamp'])
+        self.settings.setValue(f"{prefix}/credentials_valid", results['credentials_valid'])
+        self.settings.setValue(f"{prefix}/user_info_valid", results['user_info_valid'])
+        self.settings.setValue(f"{prefix}/upload_success", results['upload_success'])
+        self.settings.setValue(f"{prefix}/delete_success", results['delete_success'])
+        self.settings.setValue(f"{prefix}/error_message", results['error_message'])
+        self.settings.sync()
+
+        # Update UI with results (same as _on_worker_test_completed)
+        self.test_connection_btn.setEnabled(True)
+
+        self._set_test_label(self.test_credentials_label, results['credentials_valid'])
+        self._set_test_label(self.test_userinfo_label, results['user_info_valid'])
+        # Mark upload/delete as "Not tested" for standalone test
+        self.test_upload_label.setText("Not tested (host disabled)")
+        self.test_upload_label.setProperty("class", "status-warning-light")
+        self.test_upload_label.style().unpolish(self.test_upload_label)
+        self.test_upload_label.style().polish(self.test_upload_label)
+        self.test_delete_label.setText("Not tested (host disabled)")
+        self.test_delete_label.setProperty("class", "status-warning-light")
+        self.test_delete_label.style().unpolish(self.test_delete_label)
+        self.test_delete_label.style().polish(self.test_delete_label)
+
+        self.test_error_label.setText(results['error_message'])
+
+        # Update timestamp
+        test_time = datetime.fromtimestamp(results['timestamp'])
+        time_str = test_time.strftime("%Y-%m-%d %H:%M")
+
+        tests_passed = sum([
+            results['credentials_valid'],
+            results['user_info_valid']
+        ])
+
+        self.test_timestamp_label.setText(f"{time_str} ({tests_passed}/2 credential tests passed)")
+
+        if tests_passed == 2:
+            self.test_timestamp_label.setProperty("class", "status-success")
+        elif tests_passed == 0:
+            self.test_timestamp_label.setProperty("class", "status-error")
+        else:
+            self.test_timestamp_label.setProperty("class", "status-warning")
+        self.test_timestamp_label.style().unpolish(self.test_timestamp_label)
+        self.test_timestamp_label.style().polish(self.test_timestamp_label)
+
     def run_full_test(self):
         """Run complete test sequence via worker: credentials, user info, upload, delete"""
         # Warn about unsaved changes
@@ -984,13 +1070,18 @@ class FileHostConfigDialog(QDialog):
             self.test_timestamp_label.style().polish(self.test_timestamp_label)
             return
 
-        # Check if worker available
+        # Check if worker available - use standalone test if not
         if not self.worker:
-            self.test_timestamp_label.setText("Error: Host not enabled")
-            # Use QSS class for theme-aware styling
-            self.test_timestamp_label.setProperty("class", "status-error")
-            self.test_timestamp_label.style().unpolish(self.test_timestamp_label)
-            self.test_timestamp_label.style().polish(self.test_timestamp_label)
+            # Update UI to show testing
+            self.test_connection_btn.setEnabled(False)
+            self.test_timestamp_label.setText("Testing credentials (host disabled)...")
+            self.test_credentials_label.setText("Running...")
+            self.test_userinfo_label.setText("Waiting...")
+            self.test_upload_label.setText("Skipped (host disabled)")
+            self.test_delete_label.setText("Skipped (host disabled)")
+            self.test_error_label.setText("")
+            # Run standalone test (credentials only, no upload/delete)
+            self._run_standalone_test(credentials)
             return
 
         # Update UI to show testing
@@ -1145,12 +1236,7 @@ class FileHostConfigDialog(QDialog):
 
     def get_trigger_settings(self):
         """Get trigger setting from dropdown as single string value"""
-        # Return saved value if dialog already closed, otherwise read from widget
-        if hasattr(self, 'saved_trigger'):
-            return self.saved_trigger
-
         selected_trigger = self.trigger_combo.currentData()
-        # Return the trigger string ("disabled", "on_added", "on_started", "on_completed")
         return selected_trigger if selected_trigger else "disabled"
 
     def get_credentials(self):
@@ -1161,10 +1247,6 @@ class FileHostConfigDialog(QDialog):
         - "username:password" for session/token_login hosts
         - "api_key|username:password" for mixed auth hosts
         """
-        # Return saved value if dialog already closed
-        if hasattr(self, 'saved_credentials'):
-            return self.saved_credentials
-
         # Build credentials from dynamic fields based on auth type
         if self.host_config.auth_type in ["api_key", "bearer"]:
             # API key only
@@ -1200,10 +1282,6 @@ class FileHostConfigDialog(QDialog):
 
     def get_enabled_state(self):
         """Get enabled checkbox state"""
-        # Return saved value if dialog already closed, otherwise read from widget
-        if hasattr(self, 'saved_enabled'):
-            return self.saved_enabled
-
         return self.worker_manager.is_enabled(self.host_id) if self.worker_manager else False
 
     def _load_initial_logs(self):
