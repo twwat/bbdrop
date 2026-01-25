@@ -2,7 +2,7 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QMessageBox, QListWidget, QListWidgetItem
+    QGroupBox, QMessageBox, QListWidget, QListWidgetItem, QRadioButton, QButtonGroup
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
@@ -29,17 +29,36 @@ class ProxySettingsWidget(QWidget):
         """Setup the proxy settings UI."""
         layout = QVBoxLayout(self)
 
-        # Intro text
-        intro_label = QLabel(
-            "Create proxy pools and assign them to services. "
-            "Each pool contains your proxy servers and rotation settings."
-        )
-        intro_label.setWordWrap(True)
-        layout.addWidget(intro_label)
+        # Proxy Mode Selection Group
+        mode_group = QGroupBox("Proxy Configuration")
+        mode_layout = QVBoxLayout(mode_group)
 
-        # Global Settings Group
-        global_group = QGroupBox("Global Settings")
-        global_layout = QVBoxLayout(global_group)
+        # Radio buttons for proxy modes
+        self.proxy_mode_group = QButtonGroup(self)
+
+        self.no_proxy_radio = QRadioButton("No proxy")
+        self.no_proxy_radio.setToolTip("Direct connection - no proxy used")
+        self.proxy_mode_group.addButton(self.no_proxy_radio, 0)
+        mode_layout.addWidget(self.no_proxy_radio)
+
+        self.system_proxy_radio = QRadioButton("Use system proxy settings")
+        self.system_proxy_radio.setToolTip("Use operating system's configured proxy")
+        self.proxy_mode_group.addButton(self.system_proxy_radio, 1)
+        mode_layout.addWidget(self.system_proxy_radio)
+
+        self.custom_proxy_radio = QRadioButton("Custom proxy configuration")
+        self.custom_proxy_radio.setToolTip("Configure custom proxy pools and assignments")
+        self.proxy_mode_group.addButton(self.custom_proxy_radio, 2)
+        mode_layout.addWidget(self.custom_proxy_radio)
+
+        # Connect radio button change signal
+        self.proxy_mode_group.buttonClicked.connect(self._on_proxy_mode_changed)
+
+        layout.addWidget(mode_group)
+
+        # Global Settings Group (disabled unless custom mode)
+        self.global_group = QGroupBox("Global Settings")
+        global_layout = QVBoxLayout(self.global_group)
 
         global_info = QLabel(
             "Set the default proxy for all connections. Categories and services can override this."
@@ -56,11 +75,11 @@ class ProxySettingsWidget(QWidget):
         self.global_proxy_control.value_changed.connect(self._on_settings_changed)
         global_layout.addWidget(self.global_proxy_control)
 
-        layout.addWidget(global_group)
+        layout.addWidget(self.global_group)
 
-        # Proxy Pools Group
-        pools_group = QGroupBox("Proxy Pools")
-        pools_layout = QVBoxLayout(pools_group)
+        # Proxy Pools Group (disabled unless custom mode)
+        self.pools_group = QGroupBox("Proxy Pools")
+        pools_layout = QVBoxLayout(self.pools_group)
 
         pools_info = QLabel(
             "Each pool contains your proxy servers. Create a pool, paste your proxies, done."
@@ -101,11 +120,11 @@ class ProxySettingsWidget(QWidget):
         pool_btn_layout.addStretch()
         pools_layout.addLayout(pool_btn_layout)
 
-        layout.addWidget(pools_group)
+        layout.addWidget(self.pools_group)
 
-        # Category Overrides Group
-        category_group = QGroupBox("Category Overrides")
-        category_layout = QVBoxLayout(category_group)
+        # Category Overrides Group (disabled unless custom mode)
+        self.category_group = QGroupBox("Category Overrides")
+        category_layout = QVBoxLayout(self.category_group)
 
         category_info = QLabel(
             "Override the global proxy for specific categories. "
@@ -147,8 +166,12 @@ class ProxySettingsWidget(QWidget):
         self.api_control.value_changed.connect(self._on_settings_changed)
         category_layout.addWidget(self.api_control)
 
-        layout.addWidget(category_group)
+        layout.addWidget(self.category_group)
         layout.addStretch()
+
+        # Set initial proxy mode based on current settings
+        self._load_proxy_mode()
+        self._update_ui_state()
 
     def load_pools(self):
         """Load proxy pools from storage."""
@@ -185,6 +208,47 @@ class ProxySettingsWidget(QWidget):
     def _on_settings_changed(self):
         """Handle any settings change from InheritableProxyControl widgets."""
         self.settings_changed.emit()
+
+    def _load_proxy_mode(self):
+        """Load and set the appropriate proxy mode radio button."""
+        # Check current global settings to determine mode
+        use_os_proxy = self.storage.get_use_os_proxy()
+        default_pool = self.storage.get_global_default_pool()
+
+        if use_os_proxy:
+            self.system_proxy_radio.setChecked(True)
+        elif default_pool or len(self.storage.list_pools()) > 0:
+            # Has pools configured = custom mode
+            self.custom_proxy_radio.setChecked(True)
+        else:
+            # No proxy configured
+            self.no_proxy_radio.setChecked(True)
+
+    def _on_proxy_mode_changed(self):
+        """Handle proxy mode radio button change."""
+        selected_mode = self.proxy_mode_group.checkedId()
+
+        if selected_mode == 0:  # No proxy
+            # Set global to direct connection
+            self.storage.set_global_default_pool(None)
+            self.storage.set_use_os_proxy(False)
+        elif selected_mode == 1:  # System proxy
+            # Set global to use OS proxy
+            self.storage.set_global_default_pool(None)
+            self.storage.set_use_os_proxy(True)
+        # For custom mode (2), don't change anything - let user configure
+
+        self._update_ui_state()
+        self.settings_changed.emit()
+
+    def _update_ui_state(self):
+        """Enable/disable proxy configuration sections based on selected mode."""
+        is_custom_mode = self.custom_proxy_radio.isChecked()
+
+        # Enable/disable all proxy configuration sections
+        self.global_group.setEnabled(is_custom_mode)
+        self.pools_group.setEnabled(is_custom_mode)
+        self.category_group.setEnabled(is_custom_mode)
 
     def _on_pool_selected(self):
         """Handle pool selection change."""
