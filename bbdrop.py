@@ -1060,6 +1060,16 @@ def apply_template(template_content, data):
     result = process_conditionals(template_content, data)
 
     # Replace placeholders with actual data
+    # hostLinks and allImages are expanded FIRST so that any main placeholders
+    # embedded inside them (e.g. #folderSize# in a filehost bbcode_format)
+    # get resolved in the second pass.
+    composite_replacements = {
+        '#hostLinks#': data.get('host_links', ''),
+        '#allImages#': data.get('all_images', ''),
+    }
+    for placeholder, value in composite_replacements.items():
+        result = result.replace(placeholder, value)
+
     replacements = {
         '#folderName#': data.get('folder_name', ''),
         '#width#': str(data.get('width', 0)),
@@ -1069,8 +1079,6 @@ def apply_template(template_content, data):
         '#pictureCount#': str(data.get('picture_count', 0)),
         '#folderSize#': data.get('folder_size', ''),
         '#galleryLink#': data.get('gallery_link', ''),
-        '#allImages#': data.get('all_images', ''),
-        '#hostLinks#': data.get('host_links', ''),
         '#custom1#': data.get('custom1', ''),
         '#custom2#': data.get('custom2', ''),
         '#custom3#': data.get('custom3', ''),
@@ -1080,7 +1088,6 @@ def apply_template(template_content, data):
         '#ext3#': data.get('ext3', ''),
         '#ext4#': data.get('ext4', '')
     }
-    
     for placeholder, value in replacements.items():
         result = result.replace(placeholder, value)
     
