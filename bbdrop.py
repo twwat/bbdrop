@@ -2082,6 +2082,9 @@ def main():
         except (AttributeError, OSError, TypeError):
             pass  # Not Windows or check failed, don't auto-launch GUI
 
+    # Migrate from old imxup installation if needed (first run after upgrade)
+    migrate_from_imxup()
+
     # Load user defaults
     user_defaults = load_user_defaults()
 
