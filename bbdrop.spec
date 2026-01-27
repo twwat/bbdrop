@@ -159,7 +159,7 @@ exe_gui = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['bbdrop.ico'],
+    icon=['assets/bbdrop.ico'],
 )
 
 # CLI executable (with console) - for command-line usage and debugging GUI
@@ -182,5 +182,5 @@ exe_cli = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['bbdrop.ico'],
+    icon=['assets/bbdrop.ico'],
 )
