@@ -4189,6 +4189,16 @@ class BBDropGUI(QMainWindow):
         # Force full table repaint
         table.viewport().update()
 
+    def regenerate_bbcode_for_gallery(self, gallery_path: str):
+        """Delegate to artifact_handler for BBCode regeneration."""
+        if self.artifact_handler:
+            self.artifact_handler.regenerate_bbcode_for_gallery(gallery_path, force=True)
+
+    def regenerate_bbcode_for_gallery_multi(self, paths):
+        """Delegate to artifact_handler for multi-gallery BBCode regeneration."""
+        if self.artifact_handler:
+            self.artifact_handler.regenerate_bbcode_for_gallery_multi(paths)
+
     def handle_view_button(self, path: str):
         """Handle view button click - show BBCode for completed, start upload for ready, retry/file manager for failed"""
         item = self.queue_manager.get_item(path)
