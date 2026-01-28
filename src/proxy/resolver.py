@@ -41,13 +41,13 @@ class ProxyResolver:
         Resolve proxy for a given context.
 
         Resolution hierarchy:
-        1. Service pool assignment (e.g., file_hosts/rapidgator -> "Fast Pool")
-        2. Category pool assignment (e.g., file_hosts -> "Main Pool")
-        3. Global default pool
-        4. OS proxy (if enabled)
-        5. None (direct connection)
-
-        Special values "__direct__" and "__os_proxy__" short-circuit the hierarchy.
+        1. Global "No Proxy" or "OS Proxy" - takes absolute precedence
+        2. Category "No Proxy" or "OS Proxy" - takes precedence over per-service
+        3. Service pool assignment (e.g., file_hosts/rapidgator -> "Fast Pool")
+        4. Category pool assignment (e.g., file_hosts -> "Main Pool")
+        5. Global default pool
+        6. OS proxy (if enabled as fallback)
+        7. None (direct connection)
 
         Args:
             context: ProxyContext with category and service_id
@@ -57,7 +57,26 @@ class ProxyResolver:
         """
         service_key = f"{context.category}/{context.service_id}" if context.service_id else context.category
 
-        # 1. Check service-level pool assignment (if service_id provided)
+        # 1. Check global setting FIRST - "No Proxy" or "OS Proxy" takes absolute precedence
+        global_pool = self._storage.get_global_default_pool()
+        use_os = self._storage.get_use_os_proxy()
+
+        if not global_pool:
+            # Global is either Direct (no pool, use_os=False) or OS Proxy (no pool, use_os=True)
+            if use_os:
+                return self._get_os_proxy()
+            else:
+                return None  # Direct connection - no proxy
+
+        # 2. Check category pool assignment - special values take precedence
+        cat_pool_id = self._storage.get_pool_assignment(context.category)
+        if cat_pool_id:
+            if cat_pool_id == PROXY_DIRECT:
+                return None
+            if cat_pool_id == PROXY_OS_PROXY:
+                return self._get_os_proxy()
+
+        # 3. Check service-level pool assignment (if service_id provided)
         if context.service_id:
             pool_id = self._storage.get_pool_assignment(context.category, context.service_id)
             if pool_id:
@@ -73,37 +92,23 @@ class ProxyResolver:
                     if proxy:
                         return proxy
 
-        # 2. Check category pool assignment
-        pool_id = self._storage.get_pool_assignment(context.category)
-        if pool_id:
-            # Handle special values
-            if pool_id == PROXY_DIRECT:
-                return None
-            if pool_id == PROXY_OS_PROXY:
-                return self._get_os_proxy()
-
-            pool = self._storage.load_pool(pool_id)
+        # 4. Check category pool (if it's an actual pool, not special value)
+        if cat_pool_id and cat_pool_id not in (PROXY_DIRECT, PROXY_OS_PROXY):
+            pool = self._storage.load_pool(cat_pool_id)
             if pool and pool.enabled and pool.proxies:
                 proxy = self._rotator.get_next_proxy(pool, service_key)
                 if proxy:
                     return proxy
 
-        # 3. Check global default pool
-        pool_id = self._storage.get_global_default_pool()
-        if pool_id:
-            pool = self._storage.load_pool(pool_id)
+        # 5. Check global default pool
+        if global_pool:
+            pool = self._storage.load_pool(global_pool)
             if pool and pool.enabled and pool.proxies:
                 proxy = self._rotator.get_next_proxy(pool, service_key)
                 if proxy:
                     return proxy
 
-        # 4. Check OS proxy (if enabled)
-        if self._storage.get_use_os_proxy():
-            proxy = self._get_os_proxy()
-            if proxy:
-                return proxy
-
-        # 5. Direct connection
+        # 6. Direct connection
         return None
 
     def report_result(self, pool_id: str, proxy_index: int, success: bool) -> None:
