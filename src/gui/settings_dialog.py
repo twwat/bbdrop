@@ -65,20 +65,19 @@ from src.utils.format_utils import timestamp, format_binary_size
 from src.utils.logger import log
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
-from src.gui.dialogs.credential_setup import CredentialSetupDialog
 from src.gui.widgets.advanced_settings_widget import AdvancedSettingsWidget
 
 
 class TabIndex:
     """Named constants for settings tab indices to prevent index mismatch bugs."""
     GENERAL = 0
-    CREDENTIALS = 1
-    TEMPLATES = 2
-    LOGS = 3
+    IMAGE_HOSTS = 1
+    FILE_HOSTS = 2
+    TEMPLATES = 3
     IMAGE_SCAN = 4
     HOOKS = 5
-    FILE_HOSTS = 6
-    PROXY = 7
+    PROXY = 6
+    LOGS = 7
     ADVANCED = 8
 
 
@@ -279,15 +278,15 @@ class ComprehensiveSettingsDialog(QDialog):
 
         # Create tabs
         self.setup_general_tab()
-        self.setup_credentials_tab()
+        self.setup_image_hosts_tab()
+        self.setup_file_hosts_tab()
         self.setup_templates_tab()
         self.setup_tabs_tab()  # Create widgets but don't add tab
         self.setup_icons_tab()  # Create widgets but don't add tab
-        self.setup_logs_tab()
         self.setup_scanning_tab()
         self.setup_external_apps_tab()
-        self.setup_file_hosts_tab()
         self.setup_proxy_tab()
+        self.setup_logs_tab()
         self.setup_advanced_tab()
 
         # Buttons
@@ -323,98 +322,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Load defaults
         defaults = load_user_defaults()
-        
-        # Upload settings group
-        upload_group = QGroupBox("Connection")
-        upload_layout = QGridLayout(upload_group)
-        
-        # Max retries
-        upload_layout.addWidget(QLabel("<b>Max Retries</b>:"), 0, 0)
-        retries_widget = QWidget()
-        retries_layout = QHBoxLayout(retries_widget)
-        retries_layout.setContentsMargins(0, 0, 0, 0)
-        self.max_retries_slider = QSlider(Qt.Orientation.Horizontal)
-        self.max_retries_slider.setRange(1, 5)
-        self.max_retries_slider.setValue(get_image_host_setting('imx', 'max_retries', 'int'))
-        self.max_retries_value = QLabel(str(get_image_host_setting('imx', 'max_retries', 'int')))
-        self.max_retries_value.setMinimumWidth(20)
-        retries_layout.addWidget(self.max_retries_slider)
-        retries_layout.addWidget(self.max_retries_value)
-        self.max_retries_slider.valueChanged.connect(lambda v: self.max_retries_value.setText(str(v)))
-        upload_layout.addWidget(retries_widget, 0, 1)
-        
-        # Concurrent uploads
-        upload_layout.addWidget(QLabel("<b>Concurrent Uploads</b>:"), 1, 0)
-        concurrent_widget = QWidget()
-        concurrent_layout = QHBoxLayout(concurrent_widget)
-        concurrent_layout.setContentsMargins(0, 0, 0, 0)
-        self.batch_size_slider = QSlider(Qt.Orientation.Horizontal)
-        self.batch_size_slider.setRange(1, 8)
-        self.batch_size_slider.setValue(get_image_host_setting('imx', 'parallel_batch_size', 'int'))
-        self.batch_size_slider.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
-        self.batch_size_value = QLabel(str(get_image_host_setting('imx', 'parallel_batch_size', 'int')))
-        self.batch_size_value.setMinimumWidth(20)
-        concurrent_layout.addWidget(self.batch_size_slider)
-        concurrent_layout.addWidget(self.batch_size_value)
-        self.batch_size_slider.valueChanged.connect(lambda v: self.batch_size_value.setText(str(v)))
-        upload_layout.addWidget(concurrent_widget, 1, 1)
-        
-        # Upload timeouts
-        upload_layout.addWidget(QLabel("<b>Connect Timeout (s)</b>:"), 2, 0)
-        connect_timeout_widget = QWidget()
-        connect_timeout_layout = QHBoxLayout(connect_timeout_widget)
-        connect_timeout_layout.setContentsMargins(0, 0, 0, 0)
-        self.connect_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.connect_timeout_slider.setRange(10, 180)
-        self.connect_timeout_slider.setValue(get_image_host_setting('imx', 'upload_connect_timeout', 'int'))
-        self.connect_timeout_slider.setToolTip("Maximum time to wait for server connection. Increase if you have slow internet.")
-        self.connect_timeout_value = QLabel(str(get_image_host_setting('imx', 'upload_connect_timeout', 'int')))
-        self.connect_timeout_value.setMinimumWidth(30)
-        connect_timeout_layout.addWidget(self.connect_timeout_slider)
-        connect_timeout_layout.addWidget(self.connect_timeout_value)
-        self.connect_timeout_slider.valueChanged.connect(lambda v: self.connect_timeout_value.setText(str(v)))
-        upload_layout.addWidget(connect_timeout_widget, 2, 1)
-        
-        upload_layout.addWidget(QLabel("<b>Read Timeout (s)</b>:"), 3, 0)
-        read_timeout_widget = QWidget()
-        read_timeout_layout = QHBoxLayout(read_timeout_widget)
-        read_timeout_layout.setContentsMargins(0, 0, 0, 0)
-        self.read_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.read_timeout_slider.setRange(20, 600)
-        self.read_timeout_slider.setValue(get_image_host_setting('imx', 'upload_read_timeout', 'int'))
-        self.read_timeout_slider.setToolTip("Maximum time to wait for server response. Increase for large images or slow servers.")
-        self.read_timeout_value = QLabel(str(get_image_host_setting('imx', 'upload_read_timeout', 'int')))
-        self.read_timeout_value.setMinimumWidth(30)
-        read_timeout_layout.addWidget(self.read_timeout_slider)
-        read_timeout_layout.addWidget(self.read_timeout_value)
-        self.read_timeout_slider.valueChanged.connect(lambda v: self.read_timeout_value.setText(str(v)))
-        upload_layout.addWidget(read_timeout_widget, 3, 1)
 
-
-        # Thumbnail settings
-        thumb_group = QGroupBox("Thumbnails")
-        thumb_layout = QGridLayout(thumb_group)
-        
-        # Thumbnail size
-        thumb_layout.addWidget(QLabel("<b>Thumbnail Size</b>:"), 0, 0)
-        self.thumbnail_size_combo = QComboBox()
-        self.thumbnail_size_combo.addItems([
-            "100x100", "180x180", "250x250", "300x300", "150x150"
-        ])
-        self.thumbnail_size_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_size', 'int') - 1)
-        thumb_layout.addWidget(self.thumbnail_size_combo, 0, 1)
-
-        # Thumbnail format
-        thumb_layout.addWidget(QLabel("<b>Thumbnail Format</b>:"), 1, 0)
-        self.thumbnail_format_combo = QComboBox()
-        self.thumbnail_format_combo.addItems([
-            "Fixed width", "Proportional", "Square", "Fixed height"
-        ])
-        self.thumbnail_format_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_format', 'int') - 1)
-        thumb_layout.addWidget(self.thumbnail_format_combo, 1, 1)
-        
-        
-        
         # General settings group
         general_group = QGroupBox("General Options")
         general_layout = QGridLayout(general_group)
@@ -423,35 +331,30 @@ class ComprehensiveSettingsDialog(QDialog):
         self.confirm_delete_check = QCheckBox("Confirm when removing galleries")
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
         general_layout.addWidget(self.confirm_delete_check, 0, 0)
-        
-        # Auto-rename
-        self.auto_rename_check = QCheckBox("Automatically rename galleries on imx.to")
-        self.auto_rename_check.setChecked(get_image_host_setting('imx', 'auto_rename', 'bool'))
-        general_layout.addWidget(self.auto_rename_check, 1, 0)
 
         # Auto-regenerate BBCode
         self.auto_regenerate_bbcode_check = QCheckBox("Auto-regenerate artifacts when data changes")
         self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
         self.auto_regenerate_bbcode_check.setToolTip("Automatically regenerate BBCode when template, gallery name, or custom fields change")
-        general_layout.addWidget(self.auto_regenerate_bbcode_check, 2, 0)
+        general_layout.addWidget(self.auto_regenerate_bbcode_check, 1, 0)
 
         # Auto-start uploads
         self.auto_start_upload_check = QCheckBox("Start uploads automatically")
         self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
         self.auto_start_upload_check.setToolTip("Automatically start uploads when scanning completes instead of waiting for manual start")
-        general_layout.addWidget(self.auto_start_upload_check, 3, 0)
+        general_layout.addWidget(self.auto_start_upload_check, 2, 0)
 
         # Auto-clear completed uploads
         self.auto_clear_completed_check = QCheckBox("Clear completed items automatically")
         self.auto_clear_completed_check.setChecked(defaults.get('auto_clear_completed', False))
         self.auto_clear_completed_check.setToolTip("Automatically remove completed galleries from the queue")
-        general_layout.addWidget(self.auto_clear_completed_check, 4, 0)
+        general_layout.addWidget(self.auto_clear_completed_check, 3, 0)
 
         # Check for updates on startup
         self.check_updates_checkbox = QCheckBox("Check for updates on startup")
         self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
         self.check_updates_checkbox.setToolTip("Automatically check for new versions when the application starts")
-        general_layout.addWidget(self.check_updates_checkbox, 5, 0)
+        general_layout.addWidget(self.check_updates_checkbox, 4, 0)
 
         # Storage options group
         storage_group = QGroupBox("Central Storage")
@@ -607,17 +510,15 @@ class ComprehensiveSettingsDialog(QDialog):
         theme_layout.setColumnStretch(0, 1)  # Label column 50%
         theme_layout.setColumnStretch(1, 1)  # Control column 50%
         
-        # Add all groups to layout in 2x2 grid with 40/60 split
+        # Add all groups to layout in 2x2 grid
         grid_layout = QGridLayout()
         grid_layout.setVerticalSpacing(12)  # Extra vertical spacing between groups
-        grid_layout.addWidget(upload_group, 0, 0)      # Top left
-        grid_layout.addWidget(general_group, 0, 1)     # Top Right
-        grid_layout.addWidget(thumb_group, 1, 0)       # Bottom left
-        grid_layout.addWidget(theme_group, 1, 1)       # Bottom right
-        grid_layout.addWidget(storage_group, 2, 0)     # Row 2 left
-        grid_layout.addWidget(artifacts_group, 2, 1)   # Row 2 right
+        grid_layout.addWidget(general_group, 0, 0)     # Top left
+        grid_layout.addWidget(theme_group, 0, 1)       # Top right
+        grid_layout.addWidget(storage_group, 1, 0)     # Row 1 left
+        grid_layout.addWidget(artifacts_group, 1, 1)   # Row 1 right
 
-        # Set column stretch factors for 40/60 split
+        # Set column stretch factors for 50/50 split
         grid_layout.setColumnStretch(0, 50)  # Left column 50%
         grid_layout.setColumnStretch(1, 50)  # Right column 50%
         
@@ -625,14 +526,7 @@ class ComprehensiveSettingsDialog(QDialog):
         layout.addStretch()
         
         # Connect change signals to mark tab as dirty
-        self.thumbnail_size_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.thumbnail_format_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.max_retries_slider.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.batch_size_slider.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.connect_timeout_slider.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.read_timeout_slider.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
         self.confirm_delete_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.auto_rename_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
         self.auto_regenerate_bbcode_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
         self.auto_start_upload_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
         self.auto_clear_completed_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
@@ -649,23 +543,15 @@ class ComprehensiveSettingsDialog(QDialog):
         self.show_worker_logos_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
 
         self.tab_widget.addTab(general_widget, "General")
-        
-    def setup_credentials_tab(self):
-        """Setup the Credentials tab with integrated credential management"""
-        credentials_widget = QWidget()
-        layout = QVBoxLayout(credentials_widget)
-        
-        # Create and integrate the credential setup dialog
-        self.credential_dialog = CredentialSetupDialog(self)
-        self.credential_dialog.setParent(credentials_widget)
-        self.credential_dialog.setWindowFlags(Qt.WindowType.Widget)  # Make it a child widget
-        self.credential_dialog.setModal(False)  # Not modal when embedded
 
-        # Add the credential dialog to the layout
-        layout.addWidget(self.credential_dialog)
-        
-        self.tab_widget.addTab(credentials_widget, "Credentials")
-        
+    def setup_image_hosts_tab(self):
+        """Setup the Image Hosts tab using dedicated widget"""
+        from src.gui.widgets.image_hosts_settings_widget import ImageHostsSettingsWidget
+
+        self.image_hosts_widget = ImageHostsSettingsWidget(self)
+        self.image_hosts_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_HOSTS))
+        self.tab_widget.addTab(self.image_hosts_widget, "Image Hosts")
+
     def setup_templates_tab(self):
         """Setup the Templates tab with integrated template management and selection"""
         templates_widget = QWidget()
@@ -2939,18 +2825,12 @@ class ComprehensiveSettingsDialog(QDialog):
             # Save to .ini file via parent
             if self.parent_window:
                 # Update parent's settings objects for checkboxes
-                self.parent_window.confirm_delete_check.setChecked(self.confirm_delete_check.isChecked())
-                self.parent_window.auto_rename_check.setChecked(self.auto_rename_check.isChecked())
-                self.parent_window.store_in_uploaded_check.setChecked(self.store_in_uploaded_check.isChecked())
-                self.parent_window.store_in_central_check.setChecked(self.store_in_central_check.isChecked())
-                
-                # Update parent's settings objects for upload settings
-                self.parent_window.thumbnail_size_combo.setCurrentIndex(self.thumbnail_size_combo.currentIndex())
-                self.parent_window.thumbnail_format_combo.setCurrentIndex(self.thumbnail_format_combo.currentIndex())
-                # Template selection is now handled in the Templates tab
-                
-                # Save via parent
-                self.parent_window.save_upload_settings()
+                if hasattr(self.parent_window, 'confirm_delete_check'):
+                    self.parent_window.confirm_delete_check.setChecked(self.confirm_delete_check.isChecked())
+                if hasattr(self.parent_window, 'store_in_uploaded_check'):
+                    self.parent_window.store_in_uploaded_check.setChecked(self.store_in_uploaded_check.isChecked())
+                if hasattr(self.parent_window, 'store_in_central_check'):
+                    self.parent_window.store_in_central_check.setChecked(self.store_in_central_check.isChecked())
                 
                 # Save theme
                 if hasattr(self.parent_window, 'settings'):
@@ -3117,18 +2997,30 @@ class ComprehensiveSettingsDialog(QDialog):
     def _handle_reset_confirmation(self, result):
         """Handle the reset confirmation result"""
         if result == QMessageBox.StandardButton.Yes:
-            # Reset upload settings
-            self.thumbnail_size_combo.setCurrentIndex(2)  # 250x250 (default)
-            self.thumbnail_format_combo.setCurrentIndex(1)  # Proportional (default)
-            self.max_retries_slider.setValue(3)  # 3 retries (default)
-            self.batch_size_slider.setValue(4)  # 4 concurrent (default)
-            self.connect_timeout_slider.setValue(30)  # 30 seconds (default)
-            self.read_timeout_slider.setValue(120)  # 120 seconds (default)
-            # Template selection is now handled in the Templates tab
-            
+            # Reset image host settings via config system
+            save_image_host_setting('imx', 'thumbnail_size', 3)      # 250x250
+            save_image_host_setting('imx', 'thumbnail_format', 2)    # Proportional
+            save_image_host_setting('imx', 'max_retries', 3)
+            save_image_host_setting('imx', 'parallel_batch_size', 4)
+            save_image_host_setting('imx', 'upload_connect_timeout', 30)
+            save_image_host_setting('imx', 'upload_read_timeout', 120)
+            save_image_host_setting('imx', 'auto_rename', True)
+
+            # Refresh Image Hosts tab if it exists
+            if hasattr(self, 'image_hosts_widget') and self.image_hosts_widget:
+                for panel in self.image_hosts_widget.panels.values():
+                    # Rebuild panel UI to reflect reset values
+                    panel.max_retries_slider.setValue(3)
+                    panel.batch_size_slider.setValue(4)
+                    panel.connect_timeout_slider.setValue(30)
+                    panel.read_timeout_slider.setValue(120)
+                    panel.thumbnail_size_combo.setCurrentIndex(2)
+                    panel.thumbnail_format_combo.setCurrentIndex(1)
+                    if hasattr(panel, 'auto_rename_check'):
+                        panel.auto_rename_check.setChecked(True)
+
             # Reset checkboxes
             self.confirm_delete_check.setChecked(True)
-            self.auto_rename_check.setChecked(True)
             self.store_in_uploaded_check.setChecked(True)
             self.store_in_central_check.setChecked(True)
             
@@ -3263,12 +3155,15 @@ class ComprehensiveSettingsDialog(QDialog):
 
         try:
             # NOTE: Tabs and Icons tabs are created but not added to tab widget
-            # Actual tab order: General(0), Credentials(1), Templates(2), Logs(3), Image Scanning(4),
-            #                   Hooks(5), File Hosts(6), Proxy(7), Advanced(8)
+            # Actual tab order: General(0), Image Hosts(1), File Hosts(2), Templates(3),
+            #                   Image Scan(4), Hooks(5), Proxy(6), Logs(7), Advanced(8)
             if current_index == TabIndex.GENERAL:
                 return self._save_general_tab()
-            elif current_index == TabIndex.CREDENTIALS:
-                return self._save_credentials_tab()
+            elif current_index == TabIndex.IMAGE_HOSTS:
+                return self._save_image_hosts_tab()
+            elif current_index == TabIndex.FILE_HOSTS:
+                self._save_file_hosts_settings()
+                return True
             elif current_index == TabIndex.TEMPLATES:
                 return self._save_templates_tab()
             elif current_index == TabIndex.LOGS:
@@ -3278,9 +3173,6 @@ class ComprehensiveSettingsDialog(QDialog):
                 return True
             elif current_index == TabIndex.HOOKS:
                 self._save_external_apps_settings()
-                return True
-            elif current_index == TabIndex.FILE_HOSTS:
-                self._save_file_hosts_settings()
                 return True
             elif current_index == TabIndex.PROXY:
                 return self._save_proxy_settings()
@@ -3458,19 +3350,12 @@ class ComprehensiveSettingsDialog(QDialog):
     def _reload_general_tab(self):
         """Reload General tab form values from saved settings"""
         defaults = load_user_defaults()
-        
-        # Reload upload settings
-        self.thumbnail_size_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_size', 'int') - 1)
-        self.thumbnail_format_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_format', 'int') - 1)
-        self.max_retries_slider.setValue(get_image_host_setting('imx', 'max_retries', 'int'))
-        self.batch_size_slider.setValue(get_image_host_setting('imx', 'parallel_batch_size', 'int'))
-        self.connect_timeout_slider.setValue(get_image_host_setting('imx', 'upload_connect_timeout', 'int'))
-        self.read_timeout_slider.setValue(get_image_host_setting('imx', 'upload_read_timeout', 'int'))
-
 
         # Reload general settings
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
-        self.auto_rename_check.setChecked(get_image_host_setting('imx', 'auto_rename', 'bool'))
+        self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
+        self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
+        self.auto_clear_completed_check.setChecked(defaults.get('auto_clear_completed', False))
         self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
 
         # Reload storage settings
@@ -3514,32 +3399,9 @@ class ComprehensiveSettingsDialog(QDialog):
             
             if 'DEFAULTS' not in config:
                 config.add_section('DEFAULTS')
-                
-            # Save image host settings via new config system
-            save_image_host_setting('imx', 'thumbnail_size', self.thumbnail_size_combo.currentIndex() + 1)
-            save_image_host_setting('imx', 'thumbnail_format', self.thumbnail_format_combo.currentIndex() + 1)
-            save_image_host_setting('imx', 'max_retries', self.max_retries_slider.value())
-
-            # Check if batch size changed to trigger connection pool refresh
-            old_batch_size = get_image_host_setting('imx', 'parallel_batch_size', 'int')
-            new_batch_size = self.batch_size_slider.value()
-            save_image_host_setting('imx', 'parallel_batch_size', new_batch_size)
-
-            # Signal uploader to refresh connection pool if batch size changed
-            if old_batch_size != new_batch_size and self.parent_window and hasattr(self.parent_window, 'uploader'):
-                try:
-                    self.parent_window.uploader.refresh_session_pool()
-                except Exception as e:
-                    log(f"Failed to refresh connection pool: {e}", level="warning", category="settings")
-
-            # Save timeout settings
-            save_image_host_setting('imx', 'upload_connect_timeout', self.connect_timeout_slider.value())
-            save_image_host_setting('imx', 'upload_read_timeout', self.read_timeout_slider.value())
-
 
             # Save general settings
             config.set('DEFAULTS', 'confirm_delete', str(self.confirm_delete_check.isChecked()))
-            save_image_host_setting('imx', 'auto_rename', self.auto_rename_check.isChecked())
             config.set('DEFAULTS', 'auto_regenerate_bbcode', str(self.auto_regenerate_bbcode_check.isChecked()))
             config.set('DEFAULTS', 'auto_start_upload', str(self.auto_start_upload_check.isChecked()))
             config.set('DEFAULTS', 'auto_clear_completed', str(self.auto_clear_completed_check.isChecked()))
@@ -3680,14 +3542,9 @@ class ComprehensiveSettingsDialog(QDialog):
             
             # Update parent GUI controls
             if self.parent_window:
-                self.parent_window.thumbnail_size_combo.setCurrentIndex(self.thumbnail_size_combo.currentIndex())
-                self.parent_window.thumbnail_format_combo.setCurrentIndex(self.thumbnail_format_combo.currentIndex())
-                
                 # Update storage settings (only those that exist in parent)
                 if hasattr(self.parent_window, 'confirm_delete_check'):
                     self.parent_window.confirm_delete_check.setChecked(self.confirm_delete_check.isChecked())
-                if hasattr(self.parent_window, 'auto_rename_check'):
-                    self.parent_window.auto_rename_check.setChecked(self.auto_rename_check.isChecked())
                 if hasattr(self.parent_window, 'store_in_uploaded_check'):
                     self.parent_window.store_in_uploaded_check.setChecked(self.store_in_uploaded_check.isChecked())
                 if hasattr(self.parent_window, 'store_in_central_check'):
@@ -3820,6 +3677,24 @@ class ComprehensiveSettingsDialog(QDialog):
             QMessageBox.critical(self, "Migration Failed", 
                                f"Failed to migrate data: {str(e)}\n\nThe settings have been saved but data was not migrated.\nPlease manually copy your data or revert the settings.")
     
+    def _save_image_hosts_tab(self):
+        """Save Image Hosts tab settings"""
+        try:
+            if hasattr(self, 'image_hosts_widget') and self.image_hosts_widget:
+                results = self.image_hosts_widget.save()
+                # Check if any batch size changed to trigger pool refresh
+                for old_batch, new_batch in results:
+                    if old_batch != new_batch and self.parent_window and hasattr(self.parent_window, 'uploader'):
+                        try:
+                            self.parent_window.uploader.refresh_session_pool()
+                        except Exception as e:
+                            log(f"Failed to refresh connection pool: {e}", level="warning", category="settings")
+                        break  # Only need to refresh once
+            return True
+        except Exception as e:
+            log(f"Error saving Image Hosts tab: {e}", level="warning", category="settings")
+            return False
+
     def _save_upload_tab(self):
         """Save Upload/Credentials tab settings only"""
         try:
@@ -3829,7 +3704,7 @@ class ComprehensiveSettingsDialog(QDialog):
         except Exception as e:
             log(f"Error saving upload settings: {e}", level="warning", category="settings")
             return False
-    
+
     def _save_templates_tab(self):
         """Save Templates tab settings only"""
         try:
