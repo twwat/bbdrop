@@ -458,13 +458,32 @@ class FileHostConfigDialog(QDialog):
         self._adjust_bbcode_height()  # Initial adjustment
         settings_layout.addRow("BBCode Format:", self.bbcode_format_edit)
 
-        # 8. Proxy - SimpleProxyDropdown widget for per-host proxy configuration
+        # 8. Proxy - SimpleProxyDropdown widget with test button
+        proxy_widget = QWidget()
+        proxy_layout = QHBoxLayout(proxy_widget)
+        proxy_layout.setContentsMargins(0, 0, 0, 0)
+        proxy_layout.setSpacing(4)
+
         self.proxy_dropdown = SimpleProxyDropdown(
             category="file_hosts",
             service_id=self.host_id
         )
         self.proxy_dropdown.value_changed.connect(self._mark_dirty)
-        settings_layout.addRow("Proxy:", self.proxy_dropdown)
+        self.proxy_dropdown.value_changed.connect(self._update_proxy_test_button)
+        proxy_layout.addWidget(self.proxy_dropdown)
+
+        self.proxy_test_btn = QPushButton("Test")
+        self.proxy_test_btn.setFixedWidth(60)
+        self.proxy_test_btn.setToolTip("Test proxy connection")
+        self.proxy_test_btn.clicked.connect(self._test_proxy)
+        proxy_layout.addWidget(self.proxy_test_btn)
+
+        # Check if global/category proxy disables per-host config
+        self._update_proxy_section_state()
+        # Update test button state based on current selection
+        self._update_proxy_test_button()
+
+        settings_layout.addRow("Proxy:", proxy_widget)
 
         content_layout.addWidget(settings_group)
 
@@ -1361,6 +1380,101 @@ class FileHostConfigDialog(QDialog):
         """Mark dialog as having unsaved changes"""
         self.has_unsaved_changes = True
         self.apply_btn.setEnabled(True)
+
+    def _update_proxy_section_state(self):
+        """Disable proxy dropdown when global/category is No Proxy or OS Proxy."""
+        from src.proxy.storage import ProxyStorage
+        storage = ProxyStorage()
+
+        # Check category-level first
+        category_pool = storage.get_pool_assignment("file_hosts", None)
+
+        # Category overrides global
+        if category_pool:
+            # Category has explicit setting
+            if category_pool in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY):
+                is_locked = True
+                is_direct = category_pool == SimpleProxyDropdown.VALUE_DIRECT
+            else:
+                # Category has a pool - allow per-host override
+                is_locked = False
+                is_direct = False
+        else:
+            # No category override - check global
+            global_pool = storage.get_global_default_pool()
+            use_os = storage.get_use_os_proxy()
+
+            if global_pool:
+                # Global has a pool - allow per-host override
+                is_locked = False
+                is_direct = False
+            else:
+                # Global is either Direct (use_os=False) or OS Proxy (use_os=True)
+                is_locked = True
+                is_direct = not use_os
+
+        self.proxy_dropdown.setEnabled(not is_locked)
+        self.proxy_test_btn.setEnabled(not is_locked)
+
+        if is_locked:
+            # Set dropdown to show the effective value
+            self.proxy_dropdown.blockSignals(True)
+            target_value = SimpleProxyDropdown.VALUE_DIRECT if is_direct else SimpleProxyDropdown.VALUE_OS_PROXY
+            for i in range(self.proxy_dropdown.count()):
+                if self.proxy_dropdown.itemData(i) == target_value:
+                    self.proxy_dropdown.setCurrentIndex(i)
+                    break
+            self.proxy_dropdown.blockSignals(False)
+
+            if is_direct:
+                self.proxy_dropdown.setToolTip("Proxy disabled globally (Direct Connection)")
+            else:
+                self.proxy_dropdown.setToolTip("Using OS system proxy (set globally)")
+
+    def _update_proxy_test_button(self):
+        """Update proxy test button state based on current selection."""
+        # Skip if already disabled by global setting
+        if not self.proxy_dropdown.isEnabled():
+            return
+        value = self.proxy_dropdown.currentData()
+        # Disable for Direct Connection or OS System Proxy
+        is_pool = value not in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, None)
+        self.proxy_test_btn.setEnabled(is_pool)
+        self.proxy_test_btn.setToolTip("Test proxy connection" if is_pool else "Select a proxy pool to test")
+
+    def _test_proxy(self):
+        """Test the currently selected proxy pool."""
+        from src.proxy.storage import ProxyStorage
+        from src.proxy.tester import ProxyTester
+        from PyQt6.QtWidgets import QMessageBox
+
+        value = self.proxy_dropdown.currentData()
+        if value in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, None):
+            QMessageBox.information(self, "No Proxy", "Select a proxy pool to test.")
+            return
+
+        storage = ProxyStorage()
+        pool = storage.get_pool(value)
+        if not pool or not pool.proxies:
+            QMessageBox.warning(self, "Empty Pool", "Selected pool has no proxies.")
+            return
+
+        proxy = pool.proxies[0]
+        self.proxy_test_btn.setEnabled(False)
+        self.proxy_test_btn.setText("Testing...")
+
+        try:
+            tester = ProxyTester()
+            result = tester.test_proxy(proxy)
+            if result.success:
+                QMessageBox.information(self, "Success", f"Proxy {proxy.host}:{proxy.port} working.\nResponse: {result.response_time_ms:.0f}ms")
+            else:
+                QMessageBox.warning(self, "Failed", f"Proxy {proxy.host}:{proxy.port} failed.\nError: {result.error}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Test error: {e}")
+        finally:
+            self.proxy_test_btn.setEnabled(True)
+            self.proxy_test_btn.setText("Test")
 
     def _adjust_bbcode_height(self):
         """Adjust BBCode format text edit height based on content (1-3 lines)."""
