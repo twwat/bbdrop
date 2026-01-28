@@ -197,9 +197,9 @@ class ProxySelector(QWidget):
                 self.storage.set_assignment(None, self.category, self.service_id)
                 self.storage.set_pool_assignment(None, self.category, self.service_id)
             elif sel_type == self.TYPE_DIRECT:
-                # Clear pool, set profile to empty string (explicit direct)
-                self.storage.set_assignment("__direct__", self.category, self.service_id)
-                self.storage.set_pool_assignment(None, self.category, self.service_id)
+                # Store special value in pool assignment - resolver checks pool first
+                self.storage.set_pool_assignment("__direct__", self.category, self.service_id)
+                self.storage.set_assignment(None, self.category, self.service_id)
             elif sel_type == self.TYPE_PROFILE:
                 self.storage.set_assignment(sel_id, self.category, self.service_id)
                 self.storage.set_pool_assignment(None, self.category, self.service_id)
