@@ -51,6 +51,7 @@ import threading
 from tqdm import tqdm
 from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.utils.logger import log
+from src.network.image_host_client import ImageHostClient
 import configparser
 import hashlib
 import getpass
@@ -1368,7 +1369,7 @@ class ProgressEstimator:
             time.sleep(0.1)  # Update every 100ms
 
 
-class ImxToUploader:
+class ImxToUploader(ImageHostClient):
     # Type hints for attributes set externally by GUI worker threads
     worker_thread: Optional[Any] = None  # Set by UploadWorker when used in GUI mode
 
@@ -1432,6 +1433,15 @@ class ImxToUploader:
             log(f"Warning: Failed to refresh session pool: {e}", level="warning")
 
     def __init__(self):
+        # Initialize image host config (ABC parent)
+        from src.core.image_host_config import get_image_host_config_manager, get_image_host_setting
+        _cfg = get_image_host_config_manager().get_host('imx')
+        if _cfg is None:
+            # Fallback: create minimal config if JSON not loaded
+            from src.core.image_host_config import ImageHostConfig
+            _cfg = ImageHostConfig(name="IMX.to", host_id="imx")
+        super().__init__(_cfg)
+
         # Get credentials from stored config
         self.username, self.password, self.api_key = self._get_credentials()
 
@@ -1450,14 +1460,13 @@ class ImxToUploader:
             if not is_gui_mode:
                 sys.exit(1)
 
-        # Load timeout settings
-        defaults = load_user_defaults()
-        self.upload_connect_timeout = defaults.get('upload_connect_timeout', 30)
-        self.upload_read_timeout = defaults.get('upload_read_timeout', 120)
+        # Load timeout settings via image host config system (3-tier fallback)
+        self.upload_connect_timeout = get_image_host_setting('imx', 'upload_connect_timeout', 'int')
+        self.upload_read_timeout = get_image_host_setting('imx', 'upload_read_timeout', 'int')
         log(f"Timeout settings loaded: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s", level="debug", category="network")
 
         self.base_url = "https://api.imx.to/v1"
-        self.web_url = "https://imx.to"
+        self._web_url = "https://imx.to"
         self.upload_url = f"{self.base_url}/upload.php"
 
         # Connection tracking for visibility
@@ -1477,7 +1486,7 @@ class ImxToUploader:
             self.headers = {}
 
         # Session for web interface with connection pooling
-        parallel_batch_size = defaults.get('parallel_batch_size', 4)
+        parallel_batch_size = get_image_host_setting('imx', 'parallel_batch_size', 'int')
         self.session = self._setup_resilient_session(parallel_batch_size)
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0',
@@ -1525,7 +1534,12 @@ class ImxToUploader:
             curl = self._curl_local.curl
             curl.setopt(pycurl.COOKIELIST, "ALL")
             log("Cleared pycurl API cookies for new gallery", level="debug", category="uploads")
-    
+
+    @property
+    def web_url(self) -> str:
+        """Base web URL for IMX.to (implements ImageHostClient ABC)."""
+        return self._web_url
+
     def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None, progress_callback=None):
         """
         Upload a single image to imx.to

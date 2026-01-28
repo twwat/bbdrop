@@ -22,6 +22,7 @@ from typing import Callable, Iterable, Optional, Tuple, List, Dict, Any, Set
 
 from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.utils.logger import log
+from src.network.image_host_client import ImageHostClient
 
 
 class AtomicCounter:
@@ -86,7 +87,7 @@ class UploadEngine:
       - attributes: web_url (for links)
     """
 
-    def __init__(self, uploader: Any, rename_worker: Any = None,
+    def __init__(self, uploader: ImageHostClient, rename_worker: Any = None,
                  global_byte_counter: Optional[AtomicCounter] = None,
                  gallery_byte_counter: Optional[AtomicCounter] = None,
                  worker_thread: Optional[Any] = None):

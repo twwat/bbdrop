@@ -60,6 +60,7 @@ from PyQt6.QtGui import QSyntaxHighlighter
 
 # Import local modules
 from bbdrop import load_user_defaults, get_config_path, encrypt_password, decrypt_password
+from src.core.image_host_config import get_image_host_setting, save_image_host_setting
 from src.utils.format_utils import timestamp, format_binary_size
 from src.utils.logger import log
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
@@ -334,8 +335,8 @@ class ComprehensiveSettingsDialog(QDialog):
         retries_layout.setContentsMargins(0, 0, 0, 0)
         self.max_retries_slider = QSlider(Qt.Orientation.Horizontal)
         self.max_retries_slider.setRange(1, 5)
-        self.max_retries_slider.setValue(defaults.get('max_retries', 3))
-        self.max_retries_value = QLabel(str(defaults.get('max_retries', 3)))
+        self.max_retries_slider.setValue(get_image_host_setting('imx', 'max_retries', 'int'))
+        self.max_retries_value = QLabel(str(get_image_host_setting('imx', 'max_retries', 'int')))
         self.max_retries_value.setMinimumWidth(20)
         retries_layout.addWidget(self.max_retries_slider)
         retries_layout.addWidget(self.max_retries_value)
@@ -349,9 +350,9 @@ class ComprehensiveSettingsDialog(QDialog):
         concurrent_layout.setContentsMargins(0, 0, 0, 0)
         self.batch_size_slider = QSlider(Qt.Orientation.Horizontal)
         self.batch_size_slider.setRange(1, 8)
-        self.batch_size_slider.setValue(defaults.get('parallel_batch_size', 4))
+        self.batch_size_slider.setValue(get_image_host_setting('imx', 'parallel_batch_size', 'int'))
         self.batch_size_slider.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
-        self.batch_size_value = QLabel(str(defaults.get('parallel_batch_size', 4)))
+        self.batch_size_value = QLabel(str(get_image_host_setting('imx', 'parallel_batch_size', 'int')))
         self.batch_size_value.setMinimumWidth(20)
         concurrent_layout.addWidget(self.batch_size_slider)
         concurrent_layout.addWidget(self.batch_size_value)
@@ -365,9 +366,9 @@ class ComprehensiveSettingsDialog(QDialog):
         connect_timeout_layout.setContentsMargins(0, 0, 0, 0)
         self.connect_timeout_slider = QSlider(Qt.Orientation.Horizontal)
         self.connect_timeout_slider.setRange(10, 180)
-        self.connect_timeout_slider.setValue(defaults.get('upload_connect_timeout', 30))
+        self.connect_timeout_slider.setValue(get_image_host_setting('imx', 'upload_connect_timeout', 'int'))
         self.connect_timeout_slider.setToolTip("Maximum time to wait for server connection. Increase if you have slow internet.")
-        self.connect_timeout_value = QLabel(str(defaults.get('upload_connect_timeout', 30)))
+        self.connect_timeout_value = QLabel(str(get_image_host_setting('imx', 'upload_connect_timeout', 'int')))
         self.connect_timeout_value.setMinimumWidth(30)
         connect_timeout_layout.addWidget(self.connect_timeout_slider)
         connect_timeout_layout.addWidget(self.connect_timeout_value)
@@ -380,9 +381,9 @@ class ComprehensiveSettingsDialog(QDialog):
         read_timeout_layout.setContentsMargins(0, 0, 0, 0)
         self.read_timeout_slider = QSlider(Qt.Orientation.Horizontal)
         self.read_timeout_slider.setRange(20, 600)
-        self.read_timeout_slider.setValue(defaults.get('upload_read_timeout', 90))
+        self.read_timeout_slider.setValue(get_image_host_setting('imx', 'upload_read_timeout', 'int'))
         self.read_timeout_slider.setToolTip("Maximum time to wait for server response. Increase for large images or slow servers.")
-        self.read_timeout_value = QLabel(str(defaults.get('upload_read_timeout', 90)))
+        self.read_timeout_value = QLabel(str(get_image_host_setting('imx', 'upload_read_timeout', 'int')))
         self.read_timeout_value.setMinimumWidth(30)
         read_timeout_layout.addWidget(self.read_timeout_slider)
         read_timeout_layout.addWidget(self.read_timeout_value)
@@ -400,16 +401,16 @@ class ComprehensiveSettingsDialog(QDialog):
         self.thumbnail_size_combo.addItems([
             "100x100", "180x180", "250x250", "300x300", "150x150"
         ])
-        self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
+        self.thumbnail_size_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_size', 'int') - 1)
         thumb_layout.addWidget(self.thumbnail_size_combo, 0, 1)
-        
+
         # Thumbnail format
         thumb_layout.addWidget(QLabel("<b>Thumbnail Format</b>:"), 1, 0)
         self.thumbnail_format_combo = QComboBox()
         self.thumbnail_format_combo.addItems([
             "Fixed width", "Proportional", "Square", "Fixed height"
         ])
-        self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
+        self.thumbnail_format_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_format', 'int') - 1)
         thumb_layout.addWidget(self.thumbnail_format_combo, 1, 1)
         
         
@@ -425,7 +426,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Auto-rename
         self.auto_rename_check = QCheckBox("Automatically rename galleries on imx.to")
-        self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
+        self.auto_rename_check.setChecked(get_image_host_setting('imx', 'auto_rename', 'bool'))
         general_layout.addWidget(self.auto_rename_check, 1, 0)
 
         # Auto-regenerate BBCode
@@ -3459,17 +3460,17 @@ class ComprehensiveSettingsDialog(QDialog):
         defaults = load_user_defaults()
         
         # Reload upload settings
-        self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
-        self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
-        self.max_retries_slider.setValue(defaults.get('max_retries', 3))
-        self.batch_size_slider.setValue(defaults.get('parallel_batch_size', 4))
-        self.connect_timeout_slider.setValue(defaults.get('upload_connect_timeout', 30))
-        self.read_timeout_slider.setValue(defaults.get('upload_read_timeout', 120))
+        self.thumbnail_size_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_size', 'int') - 1)
+        self.thumbnail_format_combo.setCurrentIndex(get_image_host_setting('imx', 'thumbnail_format', 'int') - 1)
+        self.max_retries_slider.setValue(get_image_host_setting('imx', 'max_retries', 'int'))
+        self.batch_size_slider.setValue(get_image_host_setting('imx', 'parallel_batch_size', 'int'))
+        self.connect_timeout_slider.setValue(get_image_host_setting('imx', 'upload_connect_timeout', 'int'))
+        self.read_timeout_slider.setValue(get_image_host_setting('imx', 'upload_read_timeout', 'int'))
 
 
         # Reload general settings
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
-        self.auto_rename_check.setChecked(defaults.get('auto_rename', True))
+        self.auto_rename_check.setChecked(get_image_host_setting('imx', 'auto_rename', 'bool'))
         self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
 
         # Reload storage settings
@@ -3514,17 +3515,15 @@ class ComprehensiveSettingsDialog(QDialog):
             if 'DEFAULTS' not in config:
                 config.add_section('DEFAULTS')
                 
-            # Save thumbnail settings
-            config.set('DEFAULTS', 'thumbnail_size', str(self.thumbnail_size_combo.currentIndex() + 1))
-            config.set('DEFAULTS', 'thumbnail_format', str(self.thumbnail_format_combo.currentIndex() + 1))
-            config.set('DEFAULTS', 'max_retries', str(self.max_retries_slider.value()))
+            # Save image host settings via new config system
+            save_image_host_setting('imx', 'thumbnail_size', self.thumbnail_size_combo.currentIndex() + 1)
+            save_image_host_setting('imx', 'thumbnail_format', self.thumbnail_format_combo.currentIndex() + 1)
+            save_image_host_setting('imx', 'max_retries', self.max_retries_slider.value())
 
             # Check if batch size changed to trigger connection pool refresh
-            # load_user_defaults already imported from bbdrop at top of file
-            current_defaults = load_user_defaults()
-            old_batch_size = current_defaults.get('parallel_batch_size', 4)
+            old_batch_size = get_image_host_setting('imx', 'parallel_batch_size', 'int')
             new_batch_size = self.batch_size_slider.value()
-            config.set('DEFAULTS', 'parallel_batch_size', str(new_batch_size))
+            save_image_host_setting('imx', 'parallel_batch_size', new_batch_size)
 
             # Signal uploader to refresh connection pool if batch size changed
             if old_batch_size != new_batch_size and self.parent_window and hasattr(self.parent_window, 'uploader'):
@@ -3534,13 +3533,13 @@ class ComprehensiveSettingsDialog(QDialog):
                     log(f"Failed to refresh connection pool: {e}", level="warning", category="settings")
 
             # Save timeout settings
-            config.set('DEFAULTS', 'upload_connect_timeout', str(self.connect_timeout_slider.value()))
-            config.set('DEFAULTS', 'upload_read_timeout', str(self.read_timeout_slider.value()))
+            save_image_host_setting('imx', 'upload_connect_timeout', self.connect_timeout_slider.value())
+            save_image_host_setting('imx', 'upload_read_timeout', self.read_timeout_slider.value())
 
 
             # Save general settings
             config.set('DEFAULTS', 'confirm_delete', str(self.confirm_delete_check.isChecked()))
-            config.set('DEFAULTS', 'auto_rename', str(self.auto_rename_check.isChecked()))
+            save_image_host_setting('imx', 'auto_rename', self.auto_rename_check.isChecked())
             config.set('DEFAULTS', 'auto_regenerate_bbcode', str(self.auto_regenerate_bbcode_check.isChecked()))
             config.set('DEFAULTS', 'auto_start_upload', str(self.auto_start_upload_check.isChecked()))
             config.set('DEFAULTS', 'auto_clear_completed', str(self.auto_clear_completed_check.isChecked()))
