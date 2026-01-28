@@ -4250,11 +4250,11 @@ class BBDropGUI(QMainWindow):
             action: Action to perform (start, stop, cancel, view, view_error)
         """
         if action == "start":
-            self.queue_controller.start_gallery(path)
+            self.gallery_queue_controller.start_gallery(path)
         elif action == "stop":
-            self.queue_controller.stop_gallery(path)
+            self.gallery_queue_controller.stop_gallery(path)
         elif action == "cancel":
-            self.queue_controller.cancel_gallery(path)
+            self.gallery_queue_controller.cancel_gallery(path)
         elif action == "view":
             self.view_bbcode_files(path)
         elif action == "view_error":
