@@ -169,7 +169,6 @@ from src.processing.upload_workers import UploadWorker
 # Import dialog classes
 from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
 from src.gui.dialogs.log_viewer import LogViewerDialog
-from src.gui.dialogs.credential_setup import CredentialSetupDialog
 from src.gui.dialogs.bbcode_viewer import BBCodeViewerDialog
 from src.gui.dialogs.help_dialog import HelpDialog
 
@@ -1760,7 +1759,8 @@ class BBDropGUI(QMainWindow):
         except Exception as e:
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
-        self.hooks_btn.clicked.connect(lambda: self.open_comprehensive_settings(tab_index=5))
+        from src.gui.settings_dialog import TabIndex as _TabIndex
+        self.hooks_btn.clicked.connect(lambda: self.open_comprehensive_settings(tab_index=_TabIndex.HOOKS))
 
         # File Hosts button (opens comprehensive settings to File Hosts tab)
         self.file_hosts_btn = QPushButton("")
@@ -2166,24 +2166,12 @@ class BBDropGUI(QMainWindow):
     def check_credentials(self):
         """Prompt to set credentials only if API key is not set."""
         if not api_key_is_set():
-            log(f"No API key set. Showing credential dialog...", level="warning", category="auth")
-            self.credential_dialog = CredentialSetupDialog(self, standalone=True)
-            # Use non-blocking show() instead of blocking exec() to prevent GUI freezing
-            self.credential_dialog.show()
-            self.credential_dialog.finished.connect(lambda result: self._handle_credential_dialog_result(result))
-            # Auto-cleanup when dialog is destroyed
-            self.credential_dialog.finished.connect(lambda: setattr(self, 'credential_dialog', None))
+            log(f"No API key set. Opening settings at Image Hosts tab...", level="warning", category="auth")
+            from src.gui.settings_dialog import TabIndex
+            self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
         else:
             log(f"API key found", category="auth", level="info")
         
-    
-    def _handle_credential_dialog_result(self, result):
-        """Handle credential dialog result without blocking GUI"""
-        if result == QDialog.DialogCode.Accepted:
-            log(f"Credentials saved securely", category="auth", level="info")
-        else:
-            log(f"Credential setup cancelled", category="ui", level="debug")
-    
     def retry_login(self, credentials_only: bool = False):
         """Invalidate RenameWorker session to force re-login on next rename."""
         try:
@@ -2315,7 +2303,8 @@ class BBDropGUI(QMainWindow):
 
     def manage_templates(self):
         """Open comprehensive settings to templates tab"""
-        self.open_comprehensive_settings(tab_index=2)  # Templates tab
+        from src.gui.settings_dialog import TabIndex
+        self.open_comprehensive_settings(tab_index=TabIndex.TEMPLATES)  # Templates tab
         # Refresh template combo box after dialog closes
         current_template = self.template_combo.currentText()
         self.refresh_template_combo(preferred=current_template)
@@ -2343,12 +2332,14 @@ class BBDropGUI(QMainWindow):
         self.template_combo.blockSignals(False)
     
     def manage_credentials(self):
-        """Open comprehensive settings to credentials tab"""
-        self.open_comprehensive_settings(tab_index=1)  # Credentials tab
+        """Open comprehensive settings to Image Hosts tab"""
+        from src.gui.settings_dialog import TabIndex
+        self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
 
     def manage_file_hosts(self):
         """Open comprehensive settings to file hosts tab"""
-        self.open_comprehensive_settings(tab_index=6)  # File Hosts tab
+        from src.gui.settings_dialog import TabIndex
+        self.open_comprehensive_settings(tab_index=TabIndex.FILE_HOSTS)
 
     def open_comprehensive_settings(self, tab_index=0):
         """Open comprehensive settings dialog to specific tab"""
@@ -3772,7 +3763,8 @@ class BBDropGUI(QMainWindow):
 
     def open_log_viewer(self):
         """Open comprehensive settings to logs tab"""
-        self.open_comprehensive_settings(tab_index=5)  # Logs tab
+        from src.gui.settings_dialog import TabIndex
+        self.open_comprehensive_settings(tab_index=TabIndex.LOGS)
 
     def open_log_viewer_popup(self):
         """Open standalone log viewer dialog popup"""

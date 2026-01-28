@@ -174,21 +174,22 @@ class MenuManager(QObject):
 
             # Settings menu
             settings_menu = menu_bar.addMenu("Settings")
+            from src.gui.settings_dialog import TabIndex
             action_general = settings_menu.addAction("General")
-            action_general.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=0))
-            action_credentials = settings_menu.addAction("Credentials")
-            action_credentials.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=1))
-            action_templates = settings_menu.addAction("Templates")
-            action_templates.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=2))
-            # Tabs and Icons menu items removed - functionality hidden
-            action_logs = settings_menu.addAction("Log Settings")
-            action_logs.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=3))
-            action_scanning = settings_menu.addAction("Image Scanning")
-            action_scanning.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=4))
-            action_external_apps = settings_menu.addAction("Hooks (External Apps)")
-            action_external_apps.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=5))
+            action_general.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.GENERAL))
+            action_image_hosts = settings_menu.addAction("Image Hosts")
+            action_image_hosts.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS))
             action_file_hosts = settings_menu.addAction("File Hosts")
-            action_file_hosts.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=6))
+            action_file_hosts.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.FILE_HOSTS))
+            action_templates = settings_menu.addAction("Templates")
+            action_templates.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.TEMPLATES))
+            # Tabs and Icons menu items removed - functionality hidden
+            action_scanning = settings_menu.addAction("Image Scanning")
+            action_scanning.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.IMAGE_SCAN))
+            action_external_apps = settings_menu.addAction("Hooks (External Apps)")
+            action_external_apps.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.HOOKS))
+            action_logs = settings_menu.addAction("Log Settings")
+            action_logs.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.LOGS))
 
             # Tools menu
             tools_menu = menu_bar.addMenu("Tools")
