@@ -1,0 +1,30 @@
+{
+    "name": "IMX.to",
+    "icon": "imx.png",
+    "requires_auth": true,
+    "auth_type": "api_key_or_session",
+    "gallery_url_template": "https://imx.to/g/{gallery_id}",
+    "thumbnail_url_template": "https://imx.to/u/t/{img_id}{ext}",
+    "thumbnail_sizes": [
+        {"id": 1, "label": "100x100"},
+        {"id": 2, "label": "180x180"},
+        {"id": 3, "label": "250x250"},
+        {"id": 4, "label": "300x300"},
+        {"id": 6, "label": "150x150"}
+    ],
+    "thumbnail_formats": [
+        {"id": 1, "label": "Fixed width"},
+        {"id": 2, "label": "Proportional"},
+        {"id": 3, "label": "Square"},
+        {"id": 4, "label": "Fixed height"}
+    ],
+    "defaults": {
+        "max_retries": 3,
+        "parallel_batch_size": 4,
+        "upload_connect_timeout": 30,
+        "upload_read_timeout": 120,
+        "thumbnail_size": 3,
+        "thumbnail_format": 2,
+        "auto_rename": true
+    }
+}
