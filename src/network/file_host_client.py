@@ -541,6 +541,8 @@ class FileHostClient:
                 curl.setopt(pycurl.URL, upload_page_url)
                 curl.setopt(pycurl.WRITEDATA, buffer)
                 curl.setopt(pycurl.TIMEOUT, 30)
+                curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                curl.setopt(pycurl.FOLLOWLOCATION, True)
 
                 # Send session cookies for authentication
                 if self.cookie_jar:
@@ -848,6 +850,7 @@ class FileHostClient:
             curl.setopt(pycurl.LOW_SPEED_LIMIT, 1024)  # 1 KB/s minimum
 
             curl.setopt(pycurl.FOLLOWLOCATION, True)
+            curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
             # Set up progress callbacks
             curl.setopt(pycurl.NOPROGRESS, False)
@@ -894,11 +897,13 @@ class FileHostClient:
                         page_curl.setopt(pycurl.URL, upload_page_url)
                         page_curl.setopt(pycurl.WRITEDATA, page_buffer)
                         page_curl.setopt(pycurl.TIMEOUT, 30)
-                        
+                        page_curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        page_curl.setopt(pycurl.FOLLOWLOCATION, True)
+
                         # Use session cookies
                         if self.cookie_jar:
                             page_curl.setopt(pycurl.COOKIE, cookie_str)
-                        
+
                         page_curl.perform()
                         page_html = page_buffer.getvalue().decode('utf-8')
                         
@@ -1258,7 +1263,8 @@ class FileHostClient:
             curl.setopt(pycurl.URL, get_server_url)
             curl.setopt(pycurl.WRITEDATA, response_buffer)
             curl.setopt(pycurl.TIMEOUT, 10)
-            
+            curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
             # Add auth headers if needed
             headers = self._prepare_headers()
             if headers:
@@ -1438,6 +1444,10 @@ class FileHostClient:
                 # Initialize delete_url (needed for redirect validation)
                 delete_url = self.config.delete_url or ""
 
+                # Common curl options
+                curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                curl.setopt(pycurl.FOLLOWLOCATION, True)
+
                 # Check if we need POST with JSON body (K2S-style)
                 if self.config.delete_body_json:
                     body = {
@@ -1604,6 +1614,8 @@ class FileHostClient:
                 curl.setopt(pycurl.URL, info_url)
                 curl.setopt(pycurl.WRITEDATA, response_buffer)
                 curl.setopt(pycurl.TIMEOUT, 30)
+                curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                curl.setopt(pycurl.FOLLOWLOCATION, True)
 
                 # Check if we need POST with JSON body (K2S-style)
                 if self.config.user_info_method == "POST" and self.config.user_info_body_json:
