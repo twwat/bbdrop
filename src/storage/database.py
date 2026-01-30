@@ -303,6 +303,28 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE galleries ADD COLUMN imx_status_checked INTEGER")
             log("+ Added imx_status_checked column", level="info", category="database")
 
+        # Migration: Add part_number column to file_host_uploads for split archives
+        cursor = conn.execute("PRAGMA table_info(file_host_uploads)")
+        fh_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'part_number' not in fh_columns:
+            log("Adding part_number column to file_host_uploads table...", level="info", category="database")
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN part_number INTEGER DEFAULT 0")
+            log("+ Added part_number column", level="info", category="database")
+
+            # Drop old unique constraint and create new one with part_number
+            # SQLite doesn't support DROP CONSTRAINT, so we recreate via index
+            # The UNIQUE constraint in CREATE TABLE can't be altered, but INSERT OR REPLACE
+            # uses the unique index. We create a new unique index that includes part_number.
+            # The old UNIQUE(gallery_fk, host_name) is baked into the table definition,
+            # but we can work around it by using INSERT with explicit conflict handling.
+            log("Creating unique index for gallery+host+part...", level="info", category="database")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS file_host_uploads_gallery_host_part_idx "
+                "ON file_host_uploads(gallery_fk, host_name, part_number)"
+            )
+            log("+ Added gallery_host_part unique index", level="info", category="database")
+
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
         # Continue anyway - the app should still work
@@ -1363,7 +1385,8 @@ class QueueStore:
         self,
         gallery_path: str,
         host_name: str,
-        status: str = 'pending'
+        status: str = 'pending',
+        part_number: int = 0
     ) -> Optional[int]:
         """Add a new file host upload record for a gallery.
 
@@ -1371,6 +1394,7 @@ class QueueStore:
             gallery_path: Path to the gallery folder
             host_name: Name of the file host (e.g., 'rapidgator', 'gofile')
             status: Initial status ('pending', 'uploading', 'completed', 'failed', 'cancelled')
+            part_number: Archive part number (0 for non-split, 1+ for split parts)
 
         Returns:
             Upload ID if created, None if failed
@@ -1417,10 +1441,10 @@ class QueueStore:
                 cursor = conn.execute(
                     """
                     INSERT OR REPLACE INTO file_host_uploads
-                    (gallery_fk, host_name, status, created_ts)
-                    VALUES (?, ?, ?, strftime('%s', 'now'))
+                    (gallery_fk, host_name, status, part_number, created_ts)
+                    VALUES (?, ?, ?, ?, strftime('%s', 'now'))
                     """,
-                    (gallery_id, host_name, status)
+                    (gallery_id, host_name, status, part_number)
                 )
                 return cursor.lastrowid
             except Exception as e:
@@ -1446,11 +1470,12 @@ class QueueStore:
                     fh.zip_path, fh.started_ts, fh.finished_ts,
                     fh.uploaded_bytes, fh.total_bytes,
                     fh.download_url, fh.file_id, fh.file_name, fh.error_message,
-                    fh.raw_response, fh.retry_count, fh.created_ts
+                    fh.raw_response, fh.retry_count, fh.created_ts,
+                    COALESCE(fh.part_number, 0)
                 FROM file_host_uploads fh
                 JOIN galleries g ON fh.gallery_fk = g.id
                 WHERE g.path = ?
-                ORDER BY fh.created_ts ASC
+                ORDER BY fh.host_name ASC, fh.part_number ASC
                 """,
                 (gallery_path,)
             )
@@ -1474,6 +1499,7 @@ class QueueStore:
                     'raw_response': row[13],
                     'retry_count': row[14],
                     'created_ts': row[15],
+                    'part_number': row[16],
                 })
 
             return uploads
@@ -1505,10 +1531,11 @@ class QueueStore:
                     fh.zip_path, fh.started_ts, fh.finished_ts,
                     fh.uploaded_bytes, fh.total_bytes,
                     fh.download_url, fh.file_id, fh.file_name, fh.error_message,
-                    fh.raw_response, fh.retry_count, fh.created_ts
+                    fh.raw_response, fh.retry_count, fh.created_ts,
+                    COALESCE(fh.part_number, 0)
                 FROM file_host_uploads fh
                 JOIN galleries g ON fh.gallery_fk = g.id
-                ORDER BY g.path, fh.created_ts ASC
+                ORDER BY g.path, fh.host_name ASC, fh.part_number ASC
                 """
             )
 
@@ -1531,6 +1558,7 @@ class QueueStore:
                     'raw_response': row[14],
                     'retry_count': row[15],
                     'created_ts': row[16],
+                    'part_number': row[17],
                 }
 
                 if path not in uploads_by_path:
@@ -1628,11 +1656,12 @@ class QueueStore:
                     SELECT
                         fh.id, fh.gallery_fk, fh.host_name, fh.status,
                         fh.retry_count, fh.created_ts,
-                        g.path, g.name, g.status as gallery_status
+                        g.path, g.name, g.status as gallery_status,
+                        COALESCE(fh.part_number, 0)
                     FROM file_host_uploads fh
                     JOIN galleries g ON fh.gallery_fk = g.id
                     WHERE fh.status = 'pending' AND fh.host_name = ?
-                    ORDER BY fh.created_ts ASC
+                    ORDER BY fh.created_ts ASC, fh.part_number ASC
                     """,
                     (host_name,)
                 )
@@ -1642,11 +1671,12 @@ class QueueStore:
                     SELECT
                         fh.id, fh.gallery_fk, fh.host_name, fh.status,
                         fh.retry_count, fh.created_ts,
-                        g.path, g.name, g.status as gallery_status
+                        g.path, g.name, g.status as gallery_status,
+                        COALESCE(fh.part_number, 0)
                     FROM file_host_uploads fh
                     JOIN galleries g ON fh.gallery_fk = g.id
                     WHERE fh.status = 'pending'
-                    ORDER BY fh.created_ts ASC
+                    ORDER BY fh.created_ts ASC, fh.part_number ASC
                     """
                 )
 
@@ -1662,6 +1692,7 @@ class QueueStore:
                     'gallery_path': row[6],
                     'gallery_name': row[7],
                     'gallery_status': row[8],
+                    'part_number': row[9],
                 })
 
             return uploads

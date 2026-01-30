@@ -23,7 +23,7 @@ from src.proxy.resolver import ProxyResolver
 from src.proxy.models import ProxyContext
 from src.storage.database import QueueStore
 from src.utils.logger import log
-from src.utils.zip_manager import get_zip_manager
+from src.utils.archive_manager import get_archive_manager
 from src.utils.format_utils import format_binary_size
 
 
@@ -67,7 +67,7 @@ class FileHostWorker(QThread):
         self.queue_store = queue_store
         self.config_manager = get_config_manager()
         self.coordinator = get_coordinator()
-        self.zip_manager = get_zip_manager()
+        self.archive_manager = get_archive_manager()
         self.settings = QSettings("BBDropUploader", "BBDropGUI")
 
         # Get display name for logs (e.g., "RapidGator" instead of "rapidgator")
@@ -703,8 +703,9 @@ class FileHostWorker(QThread):
         )
 
         try:
-            # Step 1: Create or reuse ZIP (with WSL2 path conversion)
+            # Step 1: Create or reuse archive (with WSL2 path conversion)
             from src.utils.system_utils import convert_to_wsl_path
+            from bbdrop import load_user_defaults
             folder_path = convert_to_wsl_path(gallery_path)
 
             if not folder_path.exists():
@@ -713,22 +714,23 @@ class FileHostWorker(QThread):
                     error_msg += f" (WSL2 path: {folder_path})"
                 raise FileNotFoundError(error_msg)
 
-            zip_path = self.zip_manager.create_or_reuse_zip(
+            # Load archive settings
+            defaults = load_user_defaults()
+            archive_format = defaults.get('archive_format', 'zip')
+            archive_compression = defaults.get('archive_compression', 'store')
+            split_enabled = defaults.get('archive_split_enabled', False)
+            split_size_mb = defaults.get('archive_split_size_mb', 0) if split_enabled else 0
+
+            archive_paths = self.archive_manager.create_or_reuse_archive(
                 db_id=db_id,
                 folder_path=folder_path,
-                gallery_name=gallery_name
+                gallery_name=gallery_name,
+                archive_format=archive_format,
+                compression=archive_compression,
+                split_size_mb=split_size_mb,
             )
 
-            zip_size = zip_path.stat().st_size
-
-            # Update ZIP path and total bytes
-            self.queue_store.update_file_host_upload(
-                upload_id,
-                zip_path=str(zip_path),
-                total_bytes=zip_size
-            )
-
-            # Step 2: Create client and upload (reuses session if available)
+            # Step 2: Create client (reuses session if available)
             client = self._create_client(host_config)
 
             def on_progress(uploaded: int, total: int, speed_bps: float = 0.0):
@@ -773,70 +775,110 @@ class FileHostWorker(QThread):
                 """Check if upload should be cancelled."""
                 return self._should_stop_current or self._stop_event.is_set()
 
-            # Reset upload timing just before actual transfer (after ZIP creation)
-            upload_start_time = time.time()
+            # Upload each archive part
+            for part_idx, archive_path in enumerate(archive_paths):
+                if should_stop():
+                    break
 
-            # Perform upload
-            result = client.upload_file(
-                file_path=zip_path,
-                on_progress=on_progress,
-                should_stop=should_stop
-            )
+                part_size = archive_path.stat().st_size
 
-            # Calculate transfer time for metrics
-            upload_elapsed_time = time.time() - upload_start_time
+                # For first part (part_idx=0), use the existing upload_id
+                # For additional parts, create new file_host_upload rows
+                if part_idx == 0:
+                    current_upload_id = upload_id
+                    self.queue_store.update_file_host_upload(
+                        current_upload_id,
+                        zip_path=str(archive_path),
+                        total_bytes=part_size
+                    )
+                else:
+                    current_upload_id = self.queue_store.add_file_host_upload(
+                        gallery_path=gallery_path,
+                        host_name=host_name,
+                        status='uploading',
+                        part_number=part_idx
+                    )
+                    if not current_upload_id:
+                        raise RuntimeError(
+                            f"Failed to create upload record for part {part_idx + 1}"
+                        )
+                    self.queue_store.update_file_host_upload(
+                        current_upload_id,
+                        zip_path=str(archive_path),
+                        total_bytes=part_size,
+                        started_ts=int(time.time())
+                    )
 
-            # Step 4: Handle result
-            if result.get('status') == 'success':
-                download_url = result.get('url', '')
-                file_id = result.get('upload_id') or result.get('file_id', '')
+                if len(archive_paths) > 1:
+                    self._log(
+                        f"Uploading part {part_idx + 1}/{len(archive_paths)} "
+                        f"({part_size / (1024*1024):.1f} MB): {archive_path.name}",
+                        level="info")
 
-                # CRITICAL: Emit signal FIRST before any blocking operations
-                # This ensures GUI gets immediate notification without waiting for DB writes
-                self.upload_completed.emit(db_id, host_name, result)
+                # Reset upload timing just before actual transfer
+                upload_start_time = time.time()
 
-                self._cleanup_upload_throttle_state(db_id, host_name)
-
-                # Update database with success (AFTER signal emission)
-                self.queue_store.update_file_host_upload(
-                    upload_id,
-                    status='completed',
-                    finished_ts=int(time.time()),
-                    download_url=download_url,
-                    file_id=file_id,
-                    file_name=zip_path.name,
-                    raw_response=str(result.get('raw_response', {}))[:10000],  # Limit size
-                    uploaded_bytes=zip_size
+                # Perform upload for this part
+                result = client.upload_file(
+                    file_path=archive_path,
+                    on_progress=on_progress,
+                    should_stop=should_stop
                 )
 
-                # Record success (fast operation, no blocking)
-                self.coordinator.record_completion(success=True)
+                # Calculate transfer time for metrics
+                upload_elapsed_time = time.time() - upload_start_time
 
-                # Record metrics for successful transfer (async via queue)
-                from src.utils.metrics_store import get_metrics_store
-                metrics_store = get_metrics_store()
-                if metrics_store:
-                    metrics_store.record_transfer(
-                        host_name=self.host_id,
-                        bytes_uploaded=zip_size,
-                        transfer_time=upload_elapsed_time,
-                        success=True
-                    )
-                self._log(
-                    f"Successfully uploaded {gallery_name}: {download_url}",
-                    level="info")
+                # Handle result for this part
+                if result.get('status') == 'success':
+                    download_url = result.get('url', '')
+                    file_id = result.get('upload_id') or result.get('file_id', '')
 
-                # Log raw server response for debugging (with linebreaks as \n text)
-                raw_resp = result.get('raw_response', {})
-                if raw_resp:
-                    resp_str = json.dumps(raw_resp, ensure_ascii=False).replace('\n', '\\n')
-                    self._log(f"Server response: {resp_str}", level="debug")
+                    # Update database with success for this part
+                    if current_upload_id:
+                        self.queue_store.update_file_host_upload(
+                            current_upload_id,
+                            status='completed',
+                            finished_ts=int(time.time()),
+                            download_url=download_url,
+                            file_id=file_id,
+                            file_name=archive_path.name,
+                            raw_response=str(result.get('raw_response', {}))[:10000],
+                            uploaded_bytes=part_size
+                        )
 
-                # Update session after successful upload (in case tokens refreshed)
-                self._update_session_from_client(client)
+                    # Record metrics for successful transfer
+                    from src.utils.metrics_store import get_metrics_store
+                    metrics_store = get_metrics_store()
+                    if metrics_store:
+                        metrics_store.record_transfer(
+                            host_name=self.host_id,
+                            bytes_uploaded=part_size,
+                            transfer_time=upload_elapsed_time,
+                            success=True
+                        )
+                    self._log(
+                        f"Successfully uploaded {gallery_name}"
+                        f"{f' (part {part_idx + 1})' if len(archive_paths) > 1 else ''}"
+                        f": {download_url}",
+                        level="info")
 
-            else:
-                raise Exception(result.get('error', 'Upload failed'))
+                    # Log raw server response for debugging
+                    raw_resp = result.get('raw_response', {})
+                    if raw_resp:
+                        resp_str = json.dumps(raw_resp, ensure_ascii=False).replace('\n', '\\n')
+                        self._log(f"Server response: {resp_str}", level="debug")
+
+                    # Update session after successful upload (in case tokens refreshed)
+                    self._update_session_from_client(client)
+
+                else:
+                    raise Exception(result.get('error', f'Upload failed for part {part_idx + 1}'))
+
+            # All parts uploaded successfully
+            # CRITICAL: Emit signal FIRST before any blocking operations
+            self.upload_completed.emit(db_id, host_name, result)
+            self._cleanup_upload_throttle_state(db_id, host_name)
+            self.coordinator.record_completion(success=True)
 
         except Exception as e:
             error_msg = str(e)
@@ -910,7 +952,7 @@ class FileHostWorker(QThread):
 
         finally:
             # Release ZIP reference
-            self.zip_manager.release_zip(db_id)
+            self.archive_manager.release_archive(db_id)
 
             # Clear current upload tracking
             self.current_upload_id = None
