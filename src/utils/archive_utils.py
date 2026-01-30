@@ -9,11 +9,53 @@ from pathlib import Path
 from typing import Optional
 
 
-# Supported archive extensions (ZIP format only - uses Python's built-in zipfile)
+# Supported archive extensions (multiple formats)
 SUPPORTED_ARCHIVE_EXTENSIONS = {
     '.zip',
-    '.cbz',  # Comic book ZIP archive
+    '.cbz',     # Comic book ZIP archive
+    '.rar',     # RAR archive
+    '.7z',      # 7-Zip archive
+    '.tar',     # TAR archive
+    '.tar.gz',  # TAR+GZIP archive
+    '.tgz',     # TAR+GZIP archive (short form)
+    '.tar.bz2', # TAR+BZIP2 archive
+    '.tbz2',    # TAR+BZIP2 archive (short form)
 }
+
+
+def get_archive_type(path: str | Path) -> str:
+    """Determine the archive type from file extension
+
+    Args:
+        path: Path to archive file
+
+    Returns:
+        Archive type: 'zip', 'rar', '7z', or 'tar'
+    """
+    if not path:
+        return ''
+
+    path_obj = Path(path)
+    path_lower = str(path_obj).lower()
+
+    # Handle double extensions for tar archives
+    if path_lower.endswith('.tar.gz') or path_lower.endswith('.tgz'):
+        return 'tar'
+    elif path_lower.endswith('.tar.bz2') or path_lower.endswith('.tbz2'):
+        return 'tar'
+    elif path_lower.endswith('.tar'):
+        return 'tar'
+
+    # Single extension archives
+    suffix = path_obj.suffix.lower()
+    if suffix in {'.zip', '.cbz'}:
+        return 'zip'
+    elif suffix == '.rar':
+        return 'rar'
+    elif suffix == '.7z':
+        return '7z'
+
+    return ''
 
 
 def is_archive_file(path: str | Path) -> bool:
@@ -29,6 +71,13 @@ def is_archive_file(path: str | Path) -> bool:
         return False
 
     path_obj = Path(path)
+    path_lower = str(path_obj).lower()
+
+    # Handle double extensions for tar archives
+    if (path_lower.endswith('.tar.gz') or path_lower.endswith('.tgz') or
+        path_lower.endswith('.tar.bz2') or path_lower.endswith('.tbz2')):
+        return True
+
     suffix = path_obj.suffix.lower()
 
     # Handle edge case: ".zip" (hidden file) should be treated as having .zip extension
@@ -77,6 +126,17 @@ def get_archive_name(path: str | Path) -> str:
 
     # Get the filename component (everything after last separator)
     filename = path_str.split('/')[-1] if '/' in path_str else path_str
+
+    # Handle double extensions for tar archives
+    filename_lower = filename.lower()
+    if filename_lower.endswith('.tar.gz'):
+        return filename[:-7]  # Remove .tar.gz
+    elif filename_lower.endswith('.tar.bz2'):
+        return filename[:-8]  # Remove .tar.bz2
+    elif filename_lower.endswith('.tgz'):
+        return filename[:-4]  # Remove .tgz
+    elif filename_lower.endswith('.tbz2'):
+        return filename[:-5]  # Remove .tbz2
 
     # Remove extension
     if '.' in filename:

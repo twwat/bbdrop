@@ -14,6 +14,12 @@ certifi>=2024.0.0
 keyring>=25.0.0
 markdown>=3.4.0
 
+# Archive format support
+py7zr>=0.20.0
+rarfile>=4.1
+splitfile>=0.1.0
+multivolumefile>=0.2.3
+
 # Windows-specific
 colorama==0.4.6
 pywin32-ctypes==0.2.3
