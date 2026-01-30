@@ -31,6 +31,7 @@ class ImageHostsSettingsWidget(QWidget):
             "Configure image hosting services. Click Configure to set credentials and upload settings."
         )
         intro_label.setWordWrap(True)
+        intro_label.setProperty("class", "tab-description")
         layout.addWidget(intro_label)
 
         # Available Hosts Group

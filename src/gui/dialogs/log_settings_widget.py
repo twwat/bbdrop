@@ -28,6 +28,11 @@ class LogSettingsWidget(QWidget):
         """Setup the UI"""
         layout = QVBoxLayout(self)
 
+        desc = QLabel("Configure log output for the GUI console and file logging.")
+        desc.setWordWrap(True)
+        desc.setProperty("class", "tab-description")
+        layout.addWidget(desc)
+
         # Top buttons row
         top_buttons = QHBoxLayout()
         view_log_btn = QPushButton("Open Log Viewer")

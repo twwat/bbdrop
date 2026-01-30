@@ -56,6 +56,7 @@ class FileHostsSettingsWidget(QWidget):
             "as ZIP files (automatically or manually, as per settings)"
         )
         intro_label.setWordWrap(True)
+        intro_label.setProperty("class", "tab-description")
         layout.addWidget(intro_label)
 
         # Connection Limits Group

@@ -33,6 +33,11 @@ class ProxySettingsWidget(QWidget):
         """Setup the proxy settings UI."""
         layout = QVBoxLayout(self)
 
+        desc = QLabel("Configure proxy pools and per-category overrides for network requests.")
+        desc.setWordWrap(True)
+        desc.setProperty("class", "tab-description")
+        layout.addWidget(desc)
+
         # Proxy Mode Selection Group
         mode_group = QGroupBox("Proxy Configuration")
         mode_layout = QVBoxLayout(mode_group)
