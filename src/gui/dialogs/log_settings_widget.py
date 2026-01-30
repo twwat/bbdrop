@@ -149,6 +149,7 @@ class LogSettingsWidget(QWidget):
         upload_label.setStyleSheet("font-weight: bold;")
         file_grid.addWidget(upload_label, 3, 2)
         self.cmb_log_file_upload_mode = QComboBox()
+        self.cmb_log_file_upload_mode.setToolTip("Detail level for upload messages in file log")
         self.cmb_log_file_upload_mode.addItems(["none", "file", "gallery", "both"])
         file_grid.addWidget(self.cmb_log_file_upload_mode, 3, 3)
 
