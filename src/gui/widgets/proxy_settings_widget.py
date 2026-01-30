@@ -247,6 +247,15 @@ class ProxySettingsWidget(QWidget):
         self.pools_group.setEnabled(is_custom_mode)
         self.category_group.setEnabled(is_custom_mode)
 
+        # Apply dimmed style class when not in custom mode
+        dimmed_class = "" if is_custom_mode else "dimmed"
+        for group in (self.pools_group, self.category_group):
+            for widget in [group] + group.findChildren(QWidget):
+                widget.setProperty("class", dimmed_class)
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+                widget.update()
+
     def _on_pool_selected(self):
         """Handle pool selection change."""
         has_selection = len(self.pools_list.selectedItems()) > 0
