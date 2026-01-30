@@ -17,7 +17,7 @@ QWidget  { color: #d0d0d0; }
 QDialog  { background-color: $colors.dark.background.secondary; color: $colors.dark.text.primary; }
 QToolTip { color: $colors.dark.text.tooltip; background-color: $colors.dark.background.tooltip; border: 1px solid #555; }
 QLabel   { color: $colors.dark.text.primary; }
-QLabel[class="tab-description"] { color: $colors.dark.text.secondary; }
+QLabel[class="tab-description"] { color: $colors.dark.text.secondary; background-color: $colors.dark.background.secondary; }
 
 /* Console text */
 QTextEdit[class="console"] { color: #e1e1e1; }
