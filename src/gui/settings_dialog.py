@@ -66,6 +66,7 @@ from src.utils.logger import log
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
 from src.gui.widgets.advanced_settings_widget import AdvancedSettingsWidget
+from src.gui.widgets.archive_settings_widget import ArchiveSettingsWidget
 
 
 class TabIndex:
@@ -78,7 +79,8 @@ class TabIndex:
     HOOKS = 5
     PROXY = 6
     LOGS = 7
-    ADVANCED = 8
+    ARCHIVE = 8
+    ADVANCED = 9
 
 
 class IconDropFrame(QFrame):
@@ -287,6 +289,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.setup_external_apps_tab()
         self.setup_proxy_tab()
         self.setup_logs_tab()
+        self.setup_archive_tab()
         self.setup_advanced_tab()
 
         # Buttons
@@ -319,7 +322,12 @@ class ComprehensiveSettingsDialog(QDialog):
         """Setup the General settings tab"""
         general_widget = QWidget()
         layout = QVBoxLayout(general_widget)
-        
+
+        desc = QLabel("Application-wide preferences including storage location, theme, and automation behavior.")
+        desc.setWordWrap(True)
+        desc.setProperty("class", "tab-description")
+        layout.addWidget(desc)
+
         # Load defaults
         defaults = load_user_defaults()
 
@@ -330,6 +338,7 @@ class ComprehensiveSettingsDialog(QDialog):
         # Confirm delete
         self.confirm_delete_check = QCheckBox("Confirm when removing galleries")
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
+        self.confirm_delete_check.setToolTip("Show confirmation dialog before removing a gallery")
         general_layout.addWidget(self.confirm_delete_check, 0, 0)
 
         # Auto-regenerate BBCode
@@ -378,8 +387,11 @@ class ComprehensiveSettingsDialog(QDialog):
         # Display home path with ~ instead of full username path for privacy/brevity
         home_display = home_path.replace(os.path.expanduser("~"), "~")
         self.home_radio = QRadioButton(f"Home folder: {home_display}")
+        self.home_radio.setToolTip("Store data in your home directory")
         self.portable_radio = QRadioButton(f"App folder (portable): {portable_path}")
+        self.portable_radio.setToolTip("Store data alongside the application for portable use")
         self.custom_radio = QRadioButton("Custom location:")
+        self.custom_radio.setToolTip("Store data in a custom directory")
 
         # Determine which radio to check based on ACTUAL current path
         current_norm = os.path.normpath(current_path)
@@ -400,6 +412,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.path_edit = QLineEdit(current_path if storage_mode == 'custom' else '')
         self.path_edit.setReadOnly(True)
         self.browse_btn = QPushButton("Browse...")
+        self.browse_btn.setToolTip("Browse for custom data directory")
         self.browse_btn.clicked.connect(self.browse_central_store)
         
         # Layout radio buttons and custom path controls
@@ -434,11 +447,13 @@ class ComprehensiveSettingsDialog(QDialog):
         artifacts_layout.addWidget(artifacts_info)
         # Store in uploaded folder
         self.store_in_uploaded_check = QCheckBox("Save artifacts in '.uploaded' subfolder within the gallery")
+        self.store_in_uploaded_check.setToolTip("Save BBCode in the uploaded folder for each gallery")
         self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
         artifacts_layout.addWidget(self.store_in_uploaded_check)
 
         # Store in central location
         self.store_in_central_check = QCheckBox("Save artifacts in central storage")
+        self.store_in_central_check.setToolTip("Save all BBCode in a central location")
         self.store_in_central_check.setChecked(defaults.get('store_in_central', True))
         artifacts_layout.addWidget(self.store_in_central_check)
 
@@ -448,6 +463,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Theme setting
         self.theme_combo = QComboBox()
+        self.theme_combo.setToolTip("Select light or dark UI theme")
         self.theme_combo.addItems(["light", "dark"])
 
         # Load current theme from QSettings
@@ -579,7 +595,12 @@ class ComprehensiveSettingsDialog(QDialog):
         # Keep a reference to prevent garbage collection
         self.tabs_widget_ref = tabs_widget
         layout = QVBoxLayout(tabs_widget)
-        
+
+        desc = QLabel("Create, rename, reorder, and hide gallery tabs.")
+        desc.setWordWrap(True)
+        desc.setProperty("class", "tab-description")
+        layout.addWidget(desc)
+
         # Initialize tab manager reference
         self.tab_manager = None
         if self.parent_window and hasattr(self.parent_window, 'tab_manager'):
@@ -614,15 +635,18 @@ class ComprehensiveSettingsDialog(QDialog):
         tab_buttons_layout = QHBoxLayout()
         
         self.create_tab_btn = QPushButton("Create Tab")
+        self.create_tab_btn.setToolTip("Create a new gallery tab")
         self.create_tab_btn.clicked.connect(self.create_new_tab)
         tab_buttons_layout.addWidget(self.create_tab_btn)
         
         self.rename_tab_btn = QPushButton("Rename")
+        self.rename_tab_btn.setToolTip("Rename the selected tab")
         self.rename_tab_btn.clicked.connect(self.rename_selected_tab)
         self.rename_tab_btn.setEnabled(False)
         tab_buttons_layout.addWidget(self.rename_tab_btn)
         
         self.delete_tab_btn = QPushButton("Delete")
+        self.delete_tab_btn.setToolTip("Delete the selected tab and its galleries")
         self.delete_tab_btn.clicked.connect(self.delete_selected_tab)
         self.delete_tab_btn.setEnabled(False)
         tab_buttons_layout.addWidget(self.delete_tab_btn)
@@ -630,11 +654,13 @@ class ComprehensiveSettingsDialog(QDialog):
         tab_buttons_layout.addStretch()
         
         self.move_tab_up_btn = QPushButton("Move Up")
+        self.move_tab_up_btn.setToolTip("Move tab up in order")
         self.move_tab_up_btn.clicked.connect(self.move_tab_up)
         self.move_tab_up_btn.setEnabled(False)
         tab_buttons_layout.addWidget(self.move_tab_up_btn)
         
         self.move_tab_down_btn = QPushButton("Move Down")
+        self.move_tab_down_btn.setToolTip("Move tab down in order")
         self.move_tab_down_btn.clicked.connect(self.move_tab_down)
         self.move_tab_down_btn.setEnabled(False)
         tab_buttons_layout.addWidget(self.move_tab_down_btn)
@@ -649,17 +675,20 @@ class ComprehensiveSettingsDialog(QDialog):
         # Default tab for new galleries
         tab_prefs_layout.addWidget(QLabel("Default tab for new galleries:"), 0, 0)
         self.default_tab_combo = QComboBox()
+        self.default_tab_combo.setToolTip("Select which tab is active on startup")
         self.default_tab_combo.currentTextChanged.connect(self.on_default_tab_changed)
         tab_prefs_layout.addWidget(self.default_tab_combo, 0, 1)
         
         # Hide/Show selected tab
         self.hide_tab_check = QCheckBox("Hide selected tab")
+        self.hide_tab_check.setToolTip("Hide the selected tab from the main window")
         self.hide_tab_check.setEnabled(False)
         self.hide_tab_check.toggled.connect(self.on_hide_tab_toggled)
         tab_prefs_layout.addWidget(self.hide_tab_check, 1, 0, 1, 2)
         
         # Reset tab order button
         self.reset_order_btn = QPushButton("Reset to Default Order")
+        self.reset_order_btn.setToolTip("Reset tabs to default order")
         self.reset_order_btn.clicked.connect(self.reset_tab_order)
         tab_prefs_layout.addWidget(self.reset_order_btn, 2, 0, 1, 2)
         
@@ -1042,6 +1071,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Fast scanning with imghdr
         self.fast_scan_check = QCheckBox("Use fast corruption checking (imghdr)")
+        self.fast_scan_check.setToolTip("Use fast imghdr-based corruption detection")
         self.fast_scan_check.setChecked(True)  # Default enabled
         strategy_layout.addWidget(self.fast_scan_check)
         
@@ -1061,21 +1091,25 @@ class ComprehensiveSettingsDialog(QDialog):
         method_layout.addWidget(method_label)
 
         self.sampling_fixed_radio = QRadioButton("Fixed count")
+        self.sampling_fixed_radio.setToolTip("Sample a fixed number of images")
         self.sampling_fixed_radio.setProperty("class", "scanning-radio")
         self.sampling_fixed_radio.setChecked(True)
         method_layout.addWidget(self.sampling_fixed_radio)
 
         self.sampling_fixed_spin = QSpinBox()
+        self.sampling_fixed_spin.setToolTip("Number of images to sample")
         self.sampling_fixed_spin.setRange(1, 100)
         self.sampling_fixed_spin.setValue(25)
         self.sampling_fixed_spin.setSuffix(" images")
         method_layout.addWidget(self.sampling_fixed_spin)
 
         self.sampling_percent_radio = QRadioButton("Percentage")
+        self.sampling_percent_radio.setToolTip("Sample a percentage of images")
         self.sampling_percent_radio.setProperty("class", "scanning-radio")
         method_layout.addWidget(self.sampling_percent_radio)
 
         self.sampling_percent_spin = QSpinBox()
+        self.sampling_percent_spin.setToolTip("Percentage of images to sample")
         self.sampling_percent_spin.setRange(1, 100)
         self.sampling_percent_spin.setValue(10)
         self.sampling_percent_spin.setSuffix("%")
@@ -1114,9 +1148,11 @@ class ComprehensiveSettingsDialog(QDialog):
         # Exclude small images
         small_layout = QHBoxLayout()
         self.exclude_small_check = QCheckBox("Skip images smaller than")
+        self.exclude_small_check.setToolTip("Exclude images below a size threshold")
         small_layout.addWidget(self.exclude_small_check)
 
         self.exclude_small_spin = QSpinBox()
+        self.exclude_small_spin.setToolTip("Size threshold as percentage of largest image")
         self.exclude_small_spin.setRange(10, 90)
         self.exclude_small_spin.setValue(50)
         self.exclude_small_spin.setSuffix("% of largest")
@@ -1133,11 +1169,13 @@ class ComprehensiveSettingsDialog(QDialog):
         pattern_layout = QVBoxLayout()
         pattern_h_layout = QHBoxLayout()
         self.exclude_patterns_check = QCheckBox("Skip filenames matching:")
+        self.exclude_patterns_check.setToolTip("Exclude images matching filename patterns")
         pattern_h_layout.addWidget(self.exclude_patterns_check)
         pattern_h_layout.addStretch()
         pattern_layout.addLayout(pattern_h_layout)
 
         self.exclude_patterns_edit = QLineEdit()
+        self.exclude_patterns_edit.setToolTip("Comma-separated wildcard patterns (e.g. cover*, thumb*)")
         self.exclude_patterns_edit.setPlaceholderText("e.g., cover*, poster*, thumb*, *_small.* (comma-separated patterns)")
         self.exclude_patterns_edit.setEnabled(False)
         pattern_layout.addWidget(self.exclude_patterns_edit)
@@ -1222,13 +1260,16 @@ class ComprehensiveSettingsDialog(QDialog):
         intro_label = QLabel("Run external programs at different stages of gallery processing. "
                             "Programs can output JSON to populate ext1-4 fields for use in templates.")
         intro_label.setWordWrap(True)
+        intro_label.setProperty("class", "tab-description")
         layout.addWidget(intro_label)
 
         # Execution mode
         exec_mode_group = QGroupBox("Execution Mode")
         exec_mode_layout = QHBoxLayout(exec_mode_group)
         self.hooks_parallel_radio = QRadioButton("Run hooks in parallel")
+        self.hooks_parallel_radio.setToolTip("Run all hooks simultaneously")
         self.hooks_sequential_radio = QRadioButton("Run hooks sequentially")
+        self.hooks_sequential_radio.setToolTip("Run hooks one at a time in order")
         self.hooks_parallel_radio.setChecked(True)
         exec_mode_layout.addWidget(self.hooks_parallel_radio)
         exec_mode_layout.addWidget(self.hooks_sequential_radio)
@@ -1265,6 +1306,7 @@ class ComprehensiveSettingsDialog(QDialog):
         # Top row: Enable checkbox + Configure button
         top_row = QHBoxLayout()
         enable_check = QCheckBox(f"Enable this hook: called when galleries are {hook_titles.get(hook_type, hook_type.title())}")
+        enable_check.setToolTip("Enable this hook")
         setattr(self, f'hook_{hook_type}_enabled', enable_check)
         top_row.addWidget(enable_check, 2)  # Stretch factor 2 (left 2/3)
 
@@ -1281,6 +1323,7 @@ class ComprehensiveSettingsDialog(QDialog):
         command_layout.addWidget(QLabel("Command:"))
 
         command_input = QLineEdit()
+        command_input.setToolTip("Command to run (use %variables for gallery data)")
         command_input.setPlaceholderText(f'python script.py "%p" or muh.py gofile "%z"')
         # Apply monospace font
         mono_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
@@ -2227,6 +2270,12 @@ class ComprehensiveSettingsDialog(QDialog):
         self.advanced_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ADVANCED))
         self.tab_widget.addTab(self.advanced_widget, "Advanced")
 
+    def setup_archive_tab(self):
+        """Setup the Archive settings tab."""
+        self.archive_widget = ArchiveSettingsWidget()
+        self.archive_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ARCHIVE))
+        self.tab_widget.addTab(self.archive_widget, "Archive")
+
     def _load_advanced_settings(self):
         """Load advanced settings from INI file and QSettings."""
         from bbdrop import get_config_path
@@ -2317,6 +2366,38 @@ class ComprehensiveSettingsDialog(QDialog):
                 handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down)
 
         return True
+
+    def _save_archive_settings(self):
+        """Save archive settings to INI file."""
+        from bbdrop import get_config_path
+
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+
+        if os.path.exists(config_file):
+            config.read(config_file, encoding='utf-8')
+
+        if not config.has_section('DEFAULTS'):
+            config.add_section('DEFAULTS')
+
+        # Get settings from widget
+        archive_settings = self.archive_widget.get_settings()
+
+        # Save to DEFAULTS section
+        config.set('DEFAULTS', 'archive_format', archive_settings['archive_format'])
+        config.set('DEFAULTS', 'archive_compression', archive_settings['archive_compression'])
+        config.set('DEFAULTS', 'archive_split_enabled', str(archive_settings['archive_split_enabled']))
+        config.set('DEFAULTS', 'archive_split_size_mb', str(archive_settings['archive_split_size_mb']))
+
+        with open(config_file, 'w', encoding='utf-8') as f:
+            config.write(f)
+
+        return True
+
+    def _load_archive_settings(self):
+        """Load archive settings from user defaults."""
+        settings = load_user_defaults()
+        self.archive_widget.load_settings(settings)
 
     def setup_icons_tab(self):
         """Setup the Icon Manager tab with improved side-by-side light/dark preview"""
@@ -2561,6 +2642,8 @@ class ComprehensiveSettingsDialog(QDialog):
         self._load_file_hosts_settings()
         # Load advanced settings
         self._load_advanced_settings()
+        # Load archive settings
+        self._load_archive_settings()
 
     def _load_scanning_settings(self):
         """Load scanning settings from INI file"""
@@ -3178,6 +3261,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 return self._save_proxy_settings()
             elif current_index == TabIndex.ADVANCED:
                 return self._save_advanced_settings()
+            elif current_index == TabIndex.ARCHIVE:
+                return self._save_archive_settings()
             else:
                 return True
         except Exception as e:

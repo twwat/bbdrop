@@ -645,6 +645,10 @@ def load_user_defaults():
         'use_median': True,
         'stats_exclude_outliers': False,
         'check_updates_on_startup': True,
+        'archive_format': 'zip',
+        'archive_compression': 'store',
+        'archive_split_enabled': False,
+        'archive_split_size_mb': 500,
     }
 
     config = read_config()
@@ -652,17 +656,21 @@ def load_user_defaults():
     if 'DEFAULTS' in config:
             # Load integer settings
             for key in ['thumbnail_size', 'thumbnail_format', 'max_retries',
-                       'parallel_batch_size', 'upload_connect_timeout', 'upload_read_timeout']:
+                       'parallel_batch_size', 'upload_connect_timeout', 'upload_read_timeout',
+                       'archive_split_size_mb']:
                 defaults[key] = config.getint('DEFAULTS', key, fallback=defaults[key])
 
             # Load boolean settings
             for key in ['confirm_delete', 'auto_rename', 'auto_start_upload',
                        'auto_regenerate_bbcode', 'store_in_uploaded', 'store_in_central',
-                       'use_median', 'stats_exclude_outliers', 'check_updates_on_startup']:
+                       'use_median', 'stats_exclude_outliers', 'check_updates_on_startup',
+                       'archive_split_enabled']:
                 defaults[key] = config.getboolean('DEFAULTS', key, fallback=defaults[key])
 
             # Load string settings
             defaults['template_name'] = config.get('DEFAULTS', 'template_name', fallback='default')
+            defaults['archive_format'] = config.get('DEFAULTS', 'archive_format', fallback='zip')
+            defaults['archive_compression'] = config.get('DEFAULTS', 'archive_compression', fallback='store')
 
             # Load central store path with fallback handling
             try:
