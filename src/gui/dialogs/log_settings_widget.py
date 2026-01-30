@@ -36,8 +36,10 @@ class LogSettingsWidget(QWidget):
         # Top buttons row
         top_buttons = QHBoxLayout()
         view_log_btn = QPushButton("Open Log Viewer")
+        view_log_btn.setToolTip("Open the log viewer")
         view_log_btn.clicked.connect(self.open_log_viewer)
         open_dir_btn = QPushButton("Open Logs Folder")
+        open_dir_btn.setToolTip("Open logs folder in file explorer")
         open_dir_btn.clicked.connect(self.open_logs_folder)
         top_buttons.addWidget(view_log_btn)
         top_buttons.addWidget(open_dir_btn)
@@ -65,6 +67,7 @@ class LogSettingsWidget(QWidget):
         gui_grid = QGridLayout(gui_group)
 
         self.cmb_log_gui_level = QComboBox()
+        self.cmb_log_gui_level.setToolTip("Minimum log level shown in GUI")
         self.cmb_log_gui_level.addItems(levels)
         gui_level_label = QLabel("Log level:")
         gui_level_label.setStyleSheet("font-weight: bold;")
@@ -75,12 +78,15 @@ class LogSettingsWidget(QWidget):
         gui_upload_label.setStyleSheet("font-weight: bold;")
         gui_grid.addWidget(gui_upload_label, 0, 2)
         self.cmb_log_gui_upload_mode = QComboBox()
+        self.cmb_log_gui_upload_mode.setToolTip("Detail level for upload messages in GUI")
         self.cmb_log_gui_upload_mode.addItems(["none", "file", "gallery", "both"])
         gui_grid.addWidget(self.cmb_log_gui_upload_mode, 0, 3)
 
         # GUI display formatting options
         self.chk_show_level_gui = QCheckBox("Show log level prefix (DEBUG:, ERROR:, etc.)")
+        self.chk_show_level_gui.setToolTip("Show log level prefixes (DEBUG, ERROR, etc.)")
         self.chk_show_category_gui = QCheckBox("Show category tags ([network], [uploads], etc.)")
+        self.chk_show_category_gui.setToolTip("Show category tags in log entries")
         gui_grid.addWidget(self.chk_show_level_gui, 1, 0, 1, 2)
         gui_grid.addWidget(self.chk_show_category_gui, 1, 2, 1, 2)
         # GUI categories header
@@ -92,6 +98,7 @@ class LogSettingsWidget(QWidget):
         for idx, (cat_key, cat_label) in enumerate(cats):
             gui_key = f"cats_gui_{cat_key}"
             chk_gui = QCheckBox(cat_label)
+            chk_gui.setToolTip(f"Show {cat_label.lower()} logs in GUI")
             row = 3 + (idx // 5)
             col = idx % 5
             gui_grid.addWidget(chk_gui, row, col)
@@ -104,28 +111,34 @@ class LogSettingsWidget(QWidget):
         file_grid = QGridLayout(file_group)
 
         self.chk_log_enabled = QCheckBox("Enable file logging")
+        self.chk_log_enabled.setToolTip("Write logs to file")
         file_grid.addWidget(self.chk_log_enabled, 0, 0, 1, 2)
 
         self.cmb_log_rotation = QComboBox()
+        self.cmb_log_rotation.setToolTip("Log rotation strategy (daily or by size)")
         self.cmb_log_rotation.addItems(["daily", "size"])
         file_grid.addWidget(QLabel("Rotation:"), 1, 0)
         file_grid.addWidget(self.cmb_log_rotation, 1, 1)
 
         self.spn_log_backup = QSpinBox()
+        self.spn_log_backup.setToolTip("Number of old log files to keep")
         self.spn_log_backup.setRange(0, 3650)
         file_grid.addWidget(QLabel("Backups to keep:"), 1, 2)
         file_grid.addWidget(self.spn_log_backup, 1, 3)
 
         self.chk_log_compress = QCheckBox("Compress rotated logs (.gz)")
+        self.chk_log_compress.setToolTip("Compress rotated log files")
         file_grid.addWidget(self.chk_log_compress, 2, 0, 1, 2)
 
         self.spn_log_max_bytes = QSpinBox()
+        self.spn_log_max_bytes.setToolTip("Maximum log file size before rotation")
         self.spn_log_max_bytes.setRange(1024, 1024 * 1024 * 1024)
         self.spn_log_max_bytes.setSingleStep(1024 * 1024)
         file_grid.addWidget(QLabel("Max size (bytes, size mode):"), 2, 2)
         file_grid.addWidget(self.spn_log_max_bytes, 2, 3)
 
         self.cmb_log_file_level = QComboBox()
+        self.cmb_log_file_level.setToolTip("Minimum log level written to file")
         self.cmb_log_file_level.addItems(levels)
         level_label = QLabel("Log level:")
         level_label.setStyleSheet("font-weight: bold;")
