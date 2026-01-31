@@ -107,7 +107,7 @@ All hosts support automatic retry, connection pooling, and token caching.
 
 - **Upload engine** -- concurrent workers, batch processing, drag-and-drop queue, resume, duplicate detection, progress tracking
 - **BBCode templates** -- 18 placeholders, multiple templates, switch on the fly
-- **Archive management** -- create ZIP, 7Z, RAR, TAR archives with configurable compression and split support
+- **Archive management** -- create ZIP/7Z archives with configurable compression and split support; extract ZIP, 7Z, RAR, TAR
 - **File host uploads** -- upload to any combination of 6 file hosts alongside imx.to
 - **Proxy system** -- per-host SOCKS5/HTTP proxy support
 - **Statistics** -- upload history, bandwidth tracking, per-host metrics
