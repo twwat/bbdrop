@@ -2,9 +2,10 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QCheckBox, QSpinBox, QGroupBox, QFormLayout
+    QCheckBox, QSpinBox, QGroupBox, QFormLayout, QSlider,
+    QPushButton, QFileDialog
 )
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt, QSettings
 from PyQt6.QtGui import QFont
 import logging
 
@@ -105,17 +106,62 @@ class ArchiveSettingsWidget(QWidget):
         self.split_enabled_checkbox.toggled.connect(self._on_split_enabled_changed)
         split_layout.addWidget(self.split_enabled_checkbox)
 
-        # Split size spinbox
-        size_layout = QFormLayout()
+        # 7z CLI warning — only needed for 7z format splits, not ZIP
+        from src.utils.archive_manager import HAS_7Z_CLI
+        self._7z_warning = QLabel(
+            '7-Zip is required for split 7z archives. '
+            '<a href="https://www.7-zip.org/download.html">Download 7-Zip</a>'
+        )
+        self._7z_warning.setOpenExternalLinks(True)
+        self._7z_warning.setStyleSheet("color: red; font-weight: bold;")
+        self._7z_warning.setVisible(False)  # Shown dynamically based on format
+        split_layout.addWidget(self._7z_warning)
+
+        browse_row = QHBoxLayout()
+        self._7z_browse_label = QLabel("If 7-Zip is installed, locate it manually:")
+        browse_row.addWidget(self._7z_browse_label)
+        self._7z_browse_btn = QPushButton("Browse...")
+        self._7z_browse_btn.setFixedWidth(80)
+        self._7z_browse_btn.clicked.connect(self._browse_for_7z)
+        browse_row.addWidget(self._7z_browse_btn)
+        browse_row.addStretch()
+        self._7z_browse_label.setVisible(False)
+        self._7z_browse_btn.setVisible(False)
+        split_layout.addLayout(browse_row)
+
+        # Split size: slider + spinbox on same row
+        size_row = QHBoxLayout()
+        size_label = QLabel("Size of split parts:")
+        size_label.setToolTip("100 MiB to 4,095 MiB (~4 GiB)")
+        size_row.addWidget(size_label)
+
+        self.split_size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.split_size_slider.setRange(100, 4095)
+        self.split_size_slider.setValue(500)
+        self.split_size_slider.setSingleStep(100)
+        self.split_size_slider.setPageStep(500)
+        self.split_size_slider.setEnabled(False)
+        self.split_size_slider.setToolTip("100 MiB to 4,095 MiB (~4 GiB)")
+        size_row.addWidget(self.split_size_slider, 1)
+
         self.split_size_spinbox = QSpinBox()
-        self.split_size_spinbox.setToolTip("Maximum size per archive part in MB")
-        self.split_size_spinbox.setRange(100, 10240)  # 100MB to 10GB
+        self.split_size_spinbox.setToolTip("100 MiB to 4,095 MiB (~4 GiB)")
+        self.split_size_spinbox.setRange(100, 4095)
         self.split_size_spinbox.setValue(500)
-        self.split_size_spinbox.setSuffix(" MB")
+        self.split_size_spinbox.setSuffix(" MiB")
         self.split_size_spinbox.setEnabled(False)
+        size_row.addWidget(self.split_size_spinbox)
+
+        # Sync slider <-> spinbox
+        self.split_size_slider.valueChanged.connect(self.split_size_spinbox.setValue)
+        self.split_size_spinbox.valueChanged.connect(self.split_size_slider.setValue)
         self.split_size_spinbox.valueChanged.connect(self._on_settings_changed)
-        size_layout.addRow("Part size:", self.split_size_spinbox)
-        split_layout.addLayout(size_layout)
+
+        split_layout.addLayout(size_row)
+
+        split_note = QLabel("Maximum 4,095 MiB per volume (ZIP format limit without ZIP64)")
+        split_note.setStyleSheet("color: gray; font-size: 11px;")
+        split_layout.addWidget(split_note)
 
         layout.addWidget(split_group)
 
@@ -125,9 +171,20 @@ class ArchiveSettingsWidget(QWidget):
         # Initialize format-specific UI
         self._on_format_changed()
 
+    def _update_7z_split_warning(self):
+        """Show/hide the 7z warning based on format and split state."""
+        from src.utils.archive_manager import HAS_7Z_CLI
+        is_7z = self.format_combo.currentData() != 'zip'
+        split_on = self.split_enabled_checkbox.isChecked()
+        show = is_7z and split_on and not HAS_7Z_CLI
+        self._7z_warning.setVisible(show)
+        self._7z_browse_label.setVisible(show)
+        self._7z_browse_btn.setVisible(show)
+
     def _on_format_changed(self):
         """Handle format selection change."""
         format_value = self.format_combo.currentData()
+        self._update_7z_split_warning()
 
         # Update compression options based on format
         self.compression_combo.blockSignals(True)
@@ -167,9 +224,39 @@ class ArchiveSettingsWidget(QWidget):
             info_texts.get(compression_value, '')
         )
 
+    def _browse_for_7z(self):
+        """Let user browse for 7z binary manually."""
+        import sys
+        if sys.platform == 'win32':
+            filter_str = "7z executable (7z.exe 7za.exe 7zz.exe);;All files (*)"
+        else:
+            filter_str = "All files (*)"
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Locate 7-Zip executable", "", filter_str
+        )
+        if not path:
+            return
+        # Save the custom path
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        settings.setValue("Archive/7z_path", path)
+        # Update the module-level detection
+        import src.utils.archive_manager as am
+        am.HAS_7Z_CLI = True
+        am._custom_7z_path = path
+        # Enable the UI
+        self.split_enabled_checkbox.setEnabled(True)
+        self.split_enabled_checkbox.setToolTip(
+            "Split large archives into multiple parts for easier upload/download"
+        )
+        if hasattr(self, '_7z_warning'):
+            self._7z_warning.setText(f"7-Zip found: {path}")
+            self._7z_warning.setStyleSheet("color: green; font-weight: bold;")
+
     def _on_split_enabled_changed(self, checked: bool):
         """Handle split enabled checkbox change."""
+        self.split_size_slider.setEnabled(checked)
         self.split_size_spinbox.setEnabled(checked)
+        self._update_7z_split_warning()
         self._on_settings_changed()
 
     def _on_settings_changed(self):
@@ -180,6 +267,9 @@ class ArchiveSettingsWidget(QWidget):
 
     def load_settings(self, settings: dict):
         """Load archive settings from dict."""
+        # Block signals during load to avoid false dirty state
+        self.blockSignals(True)
+
         # Load format
         archive_format = settings.get('archive_format', 'zip')
         for i in range(self.format_combo.count()):
@@ -200,6 +290,8 @@ class ArchiveSettingsWidget(QWidget):
 
         split_size_mb = settings.get('archive_split_size_mb', 500)
         self.split_size_spinbox.setValue(split_size_mb)
+
+        self.blockSignals(False)
 
     def get_settings(self) -> dict:
         """Get current archive settings as dict."""

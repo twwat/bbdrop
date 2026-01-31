@@ -17,8 +17,7 @@ markdown>=3.4.0
 # Archive format support
 py7zr>=0.20.0
 rarfile>=4.1
-splitfile>=0.1.0
-multivolumefile>=0.2.3
+splitzip>=0.2.0
 
 # Windows-specific
 colorama==0.4.6

@@ -8,6 +8,8 @@ Replaces the ZIP-only ZIPManager with format-agnostic archive creation.
 """
 
 import os
+import shutil
+import subprocess
 import tempfile
 import threading
 import zipfile
@@ -22,17 +24,39 @@ try:
 except ImportError:
     HAS_7Z_LIB = False
 
-try:
-    import splitfile
-    HAS_SPLITFILE = True
-except ImportError:
-    HAS_SPLITFILE = False
 
-try:
-    import multivolumefile
-    HAS_MULTIVOLUMEFILE = True
-except ImportError:
-    HAS_MULTIVOLUMEFILE = False
+_custom_7z_path: Optional[str] = None
+
+
+def _find_7z_binary() -> Optional[str]:
+    """Find the 7z binary on the system."""
+    # Check user-configured custom path first
+    if _custom_7z_path and os.path.isfile(_custom_7z_path):
+        return _custom_7z_path
+    # Check saved QSettings path
+    try:
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        saved = settings.value("Archive/7z_path", "")
+        if saved and os.path.isfile(saved):
+            return saved
+    except Exception:
+        pass
+    # Check common names on PATH
+    for name in ('7z', '7za', '7zz'):
+        path = shutil.which(name)
+        if path:
+            return path
+    # Windows: check common install locations
+    for prog_dir in (os.environ.get('ProgramFiles', ''), os.environ.get('ProgramFiles(x86)', '')):
+        if prog_dir:
+            candidate = os.path.join(prog_dir, '7-Zip', '7z.exe')
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
+HAS_7Z_CLI = _find_7z_binary() is not None
 
 
 # Compression method mappings
@@ -56,7 +80,7 @@ class ArchiveManager:
     """Manages temporary archive files with reference counting for reuse across hosts.
 
     Supports ZIP and 7Z formats with configurable compression and optional
-    split archive creation via splitfile and multivolumefile.
+    split archive creation via splitzip and 7z CLI.
     """
 
     def __init__(self, temp_dir: Optional[Path] = None):
@@ -134,7 +158,7 @@ class ArchiveManager:
                 total_size = sum(p.stat().st_size for p in paths)
                 size_mb = total_size / (1024 * 1024)
                 log(
-                    f"Created archive: {len(paths)} part(s), {size_mb:.2f} MB total",
+                    f"Created archive: {len(paths)} part(s), {size_mb:.2f} MiB total",
                     level="info", category="file_hosts"
                 )
                 return paths
@@ -311,7 +335,11 @@ class ArchiveManager:
         compression: str,
         split_size_mb: int,
     ) -> List[Path]:
-        """Create a split archive using pure Python libraries."""
+        """Create a split archive.
+
+        ZIP: uses splitzip (pure Python, proper split ZIP spec).
+        7z: uses 7z CLI (requires 7-Zip installed).
+        """
         image_files = self._get_image_files(folder_path)
         if not image_files:
             raise ValueError(f"No image files found in: {folder_path}")
@@ -319,54 +347,83 @@ class ArchiveManager:
         split_size_bytes = split_size_mb * 1024 * 1024
 
         if archive_format == 'zip':
-            if not HAS_SPLITFILE:
-                raise RuntimeError("splitfile library not available. Install with: pip install splitfile")
+            return self._create_split_zip(image_files, base_name, compression, split_size_bytes)
+        else:
+            return self._create_split_7z(image_files, base_name, compression, split_size_mb)
 
-            archive_path = self.temp_dir / f"{base_name}.zip"
-            with splitfile.SplitFile(str(archive_path), 'wb', maxsize=split_size_bytes) as sf:
-                compression_type = ZIP_COMPRESSION_MAP.get(compression, zipfile.ZIP_STORED)
-                with zipfile.ZipFile(sf, 'w', compression_type) as zf:
-                    for image_file in image_files:
-                        zf.write(image_file, arcname=image_file.name)
+    def _create_split_zip(
+        self, image_files: List[Path], base_name: str,
+        compression: str, split_size_bytes: int
+    ) -> List[Path]:
+        """Create a split ZIP using splitzip (proper split ZIP spec)."""
+        from splitzip import SplitZipWriter, STORED, DEFLATED
 
-            parts = [archive_path]
-            i = 1
-            while True:
-                part = self.temp_dir / f"{base_name}.zip.{i:03d}"
-                if part.exists():
-                    parts.append(part)
-                    i += 1
-                else:
-                    break
-            return parts
+        compression_map = {
+            'store': STORED,
+            'deflate': DEFLATED,
+        }
+        comp = compression_map.get(compression, STORED)
 
-        else:  # 7z
-            if not HAS_MULTIVOLUMEFILE:
-                raise RuntimeError("multivolumefile library not available. Install with: pip install multivolumefile")
-            if not HAS_7Z_LIB:
-                raise RuntimeError("py7zr library not available. Install with: pip install py7zr")
+        archive_path = self.temp_dir / f"{base_name}.zip"
+        with SplitZipWriter(str(archive_path), split_size=split_size_bytes, compression=comp) as zf:
+            for image_file in image_files:
+                zf.write(str(image_file), arcname=image_file.name)
 
-            archive_path = self.temp_dir / f"{base_name}.7z"
-            with multivolumefile.open(str(archive_path), mode='wb', volume=split_size_bytes) as mf:
-                compression_name = SEVENZ_COMPRESSION_MAP.get(compression, 'COPY')
-                filter_map = {
-                    'LZMA2': py7zr.FILTER_LZMA2,
-                    'LZMA': py7zr.FILTER_LZMA,
-                    'DEFLATE': py7zr.FILTER_DEFLATE,
-                    'BZIP2': py7zr.FILTER_BZIP2,
-                    'COPY': py7zr.FILTER_COPY,
-                }
-                filters = [{'id': filter_map.get(compression_name, py7zr.FILTER_COPY)}]
-                with py7zr.SevenZipFile(mf, 'w', filters=filters) as sz:
-                    for image_file in image_files:
-                        sz.write(image_file, arcname=image_file.name)
+        # splitzip creates: .z01, .z02, ..., .zip (final volume)
+        # Collect all parts in order
+        parts = sorted(self.temp_dir.glob(f"{base_name}.z[0-9]*"))
+        zip_final = self.temp_dir / f"{base_name}.zip"
+        if zip_final.exists():
+            parts.append(zip_final)
 
-            parts = sorted(self.temp_dir.glob(f"{base_name}.7z.*"))
-            if not parts:
-                if archive_path.exists():
-                    return [archive_path]
-                raise RuntimeError(f"No archive parts found for {base_name}")
-            return parts
+        if not parts:
+            raise RuntimeError(f"No archive files found for {base_name}")
+        return parts
+
+    def _create_split_7z(
+        self, image_files: List[Path], base_name: str,
+        compression: str, split_size_mb: int
+    ) -> List[Path]:
+        """Create a split 7z archive using the 7z CLI."""
+        sz_bin = _find_7z_binary()
+        if not sz_bin:
+            raise RuntimeError(
+                "7-Zip is required for split 7z archives but was not found.\n"
+                "Install from: https://www.7-zip.org/download.html"
+            )
+
+        archive_path = self.temp_dir / f"{base_name}.7z"
+
+        compression_map = {
+            'store': '0', 'copy': '0',
+            'deflate': '5', 'lzma': '9', 'lzma2': '9', 'bzip2': '7',
+        }
+        mx_level = compression_map.get(compression, '0')
+
+        cmd = [
+            sz_bin, 'a',
+            '-t7z',
+            f'-mx{mx_level}',
+            f'-v{split_size_mb}m',
+            str(archive_path),
+        ]
+        for image_file in image_files:
+            cmd.append(str(image_file))
+
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=600
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"7z failed (exit {result.returncode}): {result.stderr or result.stdout}"
+            )
+
+        parts = sorted(self.temp_dir.glob(f"{base_name}.7z.*"))
+        if not parts:
+            if archive_path.exists():
+                return [archive_path]
+            raise RuntimeError(f"No archive files found for {base_name}")
+        return parts
 
     def _get_image_files(self, folder_path: Path) -> List[Path]:
         """Get sorted list of image files in a folder."""
