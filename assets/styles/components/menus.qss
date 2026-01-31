@@ -29,6 +29,7 @@ QMenuBar::item:pressed { background-color: $colors.light.accent.highlight; color
 QMenu                { background-color: $colors.light.menu.background; color: $colors.light.menu.text; border: 1px solid $colors.light.menu.border; }
 QMenu::item          { background-color: transparent; }
 QMenu::item:selected { background-color: $colors.light.menu.selected_bg; color: $colors.light.menu.selected_text; }
+QMenu::item:disabled { color: rgba(0, 0, 0, 0.38); }
 
 /* Lists */
 QListWidget::item:selected, QListView::item:selected, QTreeView::item:selected { background-color: $colors.light.accent.highlight; color: $colors.light.text.inverse; }
@@ -51,6 +52,7 @@ QMenuBar::item:pressed { background-color: $colors.dark.menu.selected_bg; color:
 QMenu                { background-color: $colors.dark.menu.background; color: $colors.dark.menu.text; border: 1px solid $colors.dark.menu.border; }
 QMenu::item          { background-color: transparent; }
 QMenu::item:selected { background-color: $colors.dark.menu.selected_bg; color: white; }
+QMenu::item:disabled { color: rgba(255, 255, 255, 0.38); }
 
 /* Lists */
 QListWidget::item:selected { background-color: #1f6aa5; color: white; }
