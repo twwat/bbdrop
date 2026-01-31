@@ -1,6 +1,6 @@
-# ImXup - Multi-Host Gallery Uploader
+# BBDrop - Multi-Host Gallery Uploader
 
-![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.8.2-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.14+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Mac-lightgrey.svg)
@@ -13,7 +13,7 @@ Drag-and-drop support, queue management, batch operations, and comprehensive BBC
 
 ## Overview
 
-**ImXup** is a professional-grade gallery uploader that streamlines the process of uploading, managing, and sharing image collections. Originally designed for imx.to, it has evolved into a comprehensive multi-host upload solution supporting 6 major file hosting providers with advanced authentication, token management, and automated workflows.
+**BBDrop** is a professional-grade gallery uploader that streamlines the process of uploading, managing, and sharing image collections. Originally designed for imx.to, it has evolved into a comprehensive multi-host upload solution supporting 6 major file hosting providers with advanced authentication, token management, and automated workflows.
 
 - **Multi-Host Support**: Upload to 7 different services (IMX.to + 6 file hosts)
 - **Cross-Platform**: Windows, Mac, Linux (or run using Python)
@@ -37,7 +37,7 @@ Drag-and-drop support, queue management, batch operations, and comprehensive BBC
 
 ### Advanced Features
 - **BBCode Template System**: Create multiple custom templates with 18 dynamic placeholders, conditional logic, switch on-the-fly
-- **Archive Management**: Automatic ZIP extraction and compression support
+- **Archive Management**: Multi-format archives (ZIP, 7Z, RAR, TAR) with configurable compression and split support
 - **Credential Management**: Secure storage using system keyring
 - **Hook System**: External script integration for custom workflows
 - **Bandwidth Tracking**: Monitor upload/download speeds and usage
@@ -88,9 +88,9 @@ Drag-and-drop support, queue management, batch operations, and comprehensive BBC
 
 ## Quick Installation
 
-1. Go to the [Releases](https://github.com/twwat/imxup/releases) page
+1. Go to the [Releases](https://github.com/twwat/bbdrop/releases) page
 2. Download the latest version for your operating system (portable version recommended)
-3. Extract and run xecutable (imxup)
+3. Extract and run xecutable (bbdrop)
 
 Alternatively, you can run using Python 3.14 or build your own executables from source.
 
@@ -104,14 +104,14 @@ Alternatively, you can run using Python 3.14 or build your own executables from 
 
 ```bash
 # Clone the repository
-git clone https://github.com/twwat/imxup.git
-cd imxup
+git clone https://github.com/twwat/bbdrop.git
+cd bbdrop
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Launch GUI
-python imxup.py --gui
+python bbdrop.py --gui
 ```
 
 ### Development Setup
@@ -119,8 +119,8 @@ python imxup.py --gui
 
 ```bash
 # Clone the repository
-git clone https://github.com/twwat/imxup.git
-cd imxup
+git clone https://github.com/twwat/bbdrop.git
+cd bbdrop
 
 # Create virtual environment
 python -m venv venv
@@ -149,17 +149,17 @@ pytest tests/
 
 ```bash
 # Launch the GUI
-python imxup.py --gui
+python bbdrop.py --gui
 
 # Add a folder via command line to existing GUI
-python imxup.py --gui "/path/to/gallery/folder"
+python bbdrop.py --gui "/path/to/gallery/folder"
 
 # Start with specific template
-python imxup.py --gui --template "Detailed Example"
+python bbdrop.py --gui --template "Detailed Example"
 ```
 
 #### Basic Workflow:
-1. **Launch** the GUI with `python imxup.py --gui`
+1. **Launch** the GUI with `python bbdrop.py --gui`
 2. **Drag folders** into the upload queue area
 3. **Configure** settings (BBCode template, file hosts, etc.)
 4. **Click "Start All"** to begin uploading
@@ -169,20 +169,20 @@ python imxup.py --gui --template "Detailed Example"
 
 ```bash
 # Upload a single gallery
-python imxup.py /path/to/images
+python bbdrop.py /path/to/images
 
 # With custom name and template
-python imxup.py /path/to/images --name "Vacation 2025" --template "Forum Post"
+python bbdrop.py /path/to/images --name "Vacation 2025" --template "Forum Post"
 
 # Show help
-python imxup.py --help
+python bbdrop.py --help
 ```
 
 ### Windows Context Menu
 
 ```bash
 # Install right-click integration
-python imxup.py --install-context-menu
+python bbdrop.py --install-context-menu
 
 # Now you can:
 # 1. Right-click any folder
@@ -242,7 +242,7 @@ Templates allow you to customize the BBCode output format with dynamic placehold
 5. Use the placeholder buttons to insert dynamic values
 6. Save and select from the dropdown
 
-Templates are stored in `~/.imxup/*.template.txt` (unless you changed the central storage path from the default location)
+Templates are stored in `~/.bbdrop/*.template.txt` (unless you changed the central storage path from the default location)
 
 ---
 
@@ -265,7 +265,7 @@ Templates are stored in `~/.imxup/*.template.txt` (unless you changed the centra
 - **Visibility**: Set galleries as public/private
 - **Retry Logic**: Adjust max retry attempts (default: 3)
 - **Parallel Uploads**: Control simultaneous upload workers
-- **Archive Handling**: Auto-extract ZIP files before upload
+- **Archive Handling**: Auto-extract archives, configurable format/compression, split uploads
 
 ---
 
@@ -325,7 +325,7 @@ See `requirements.txt` for complete list.
 ### Project Structure
 
 ```
-imxup/
+bbdrop/
 ├── src/
 │   ├── core/           # Core upload engine
 │   ├── gui/            # PyQt6 GUI components
@@ -337,7 +337,7 @@ imxup/
 ├── docs/               # Documentation
 ├── tests/              # Test suite
 ├── hooks/              # External hook scripts
-└── imxup.py           # Main entry point
+└── bbdrop.py           # Main entry point
 ```
 
 ### Running Tests
@@ -358,7 +358,7 @@ pytest -v tests/
 
 ### Manual build with PyInstaller
 ```bash
-pyinstaller imxup.spec
+pyinstaller bbdrop.spec
 ```
 
 ### Contributing
@@ -386,16 +386,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Getting Help
 
 - **Documentation**: Check the `docs/` directory
-- **Issues**: [GitHub Issues](https://github.com/twwat/imxup/issues)
+- **Issues**: [GitHub Issues](https://github.com/twwat/bbdrop/issues)
 - **[Troubleshooting Guide](docs/user/troubleshooting.md)**
-- **Discussions**: [GitHub Discussions](https://github.com/twwat/imxup/discussions)
+- **Discussions**: [GitHub Discussions](https://github.com/twwat/bbdrop/discussions)
 
 For more issues, see **[Troubleshooting Guide](docs/user/troubleshooting.md)**
 
 ### Bug Reports
 
 When reporting bugs, please include:
-1. ImXup version (`Help → About`)
+1. BBDrop version (`Help → About`)
 2. Operating system and version
 3. Steps to reproduce
 4. Error messages (check logs: `Help → View Logs`)
@@ -424,10 +424,10 @@ See **[CHANGELOG.md](CHANGELOG.md)** for complete version history.
 
 ## Project Status
 
-**Active Development** - ImXup is actively maintained and receives regular updates. The latest stable version is v0.7.1.
+**Active Development** - BBDrop is actively maintained and receives regular updates. The latest stable version is v0.8.1.
 
 ---
 
-**Made with ❤️ by the ImXup team**
+**Made with ❤️ by the BBDrop team**
 
-[⬆ Back to top](#imxup---multi-host-gallery-uploader)
+[⬆ Back to top](#bbdrop---multi-host-gallery-uploader)
