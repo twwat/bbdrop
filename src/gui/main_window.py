@@ -3216,6 +3216,7 @@ class BBDropGUI(QMainWindow):
                     if upload_id:
                         log(f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
                             level="info", category="file_hosts")
+                        self.worker_signal_handler._update_filehost_queue_for_host(host_id)
                     else:
                         log(f"Failed to queue file host upload for {path} to {host_config.name}",
                             level="error", category="file_hosts")
@@ -3432,6 +3433,7 @@ class BBDropGUI(QMainWindow):
 
                     if upload_id:
                         log(f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})", level="info", category="file_hosts")
+                        self.worker_signal_handler._update_filehost_queue_for_host(host_id)
                     else:
                         log(f"Failed to queue file host upload for {path} to {host_config.name}", level="error", category="file_hosts")
         except Exception as e:
@@ -4242,7 +4244,7 @@ class BBDropGUI(QMainWindow):
             action: Action to perform (start, stop, cancel, view, view_error)
         """
         if action == "start":
-            self.gallery_queue_controller.start_gallery(path)
+            self.start_single_item(path)
         elif action == "stop":
             self.gallery_queue_controller.stop_gallery(path)
         elif action == "cancel":
