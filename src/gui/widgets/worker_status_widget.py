@@ -22,7 +22,7 @@ from PyQt6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor, QFontMetrics
 from src.utils.format_utils import format_binary_rate
 from src.utils.logger import log
 from src.gui.icon_manager import get_icon_manager
-from src.core.file_host_config import get_config_manager, get_file_host_setting
+from src.core.file_host_config import get_config_manager, get_file_host_setting, save_file_host_setting
 from src.gui.widgets.custom_widgets import StorageProgressBar
 from src.core.constants import (
     METRIC_FONT_SIZE_SMALL,
@@ -288,7 +288,7 @@ CORE_COLUMNS = [
     ColumnConfig('icon', '', 30, ColumnType.ICON, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('hostname', 'host', 120, ColumnType.TEXT),
     ColumnConfig('speed', 'speed', 90, ColumnType.SPEED, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('status', 'status', 30, ColumnType.ICON, default_visible=True, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig('status', 'status', 34, ColumnType.ICON, default_visible=True, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('status_text', 'status text', 100, ColumnType.TEXT, default_visible=True, alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('files_remaining', 'queue (files)', 90, ColumnType.COUNT, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('bytes_remaining', 'queue (bytes)', 110, ColumnType.BYTES, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
@@ -535,6 +535,10 @@ class WorkerStatusWidget(QWidget):
         # Double-click signal
         self.status_table.itemDoubleClicked.connect(self._on_row_double_clicked)
 
+        # Right-click context menu for worker rows
+        self.status_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.status_table.customContextMenuRequested.connect(self._show_row_context_menu)
+
         main_layout.addWidget(self.status_table)
 
     def _load_icons(self):
@@ -561,6 +565,11 @@ class WorkerStatusWidget(QWidget):
         self._icon_cache['retry_pending'] = icon_mgr.get_icon('status_idle')
         self._icon_cache['failed'] = icon_mgr.get_icon('status_error')
         self._icon_cache['network_error'] = icon_mgr.get_icon('status_error')
+
+        # Enabled/disabled/auto state icons
+        self._icon_cache['host_enabled'] = icon_mgr.get_icon('host_enabled')
+        self._icon_cache['host_disabled'] = icon_mgr.get_icon('host_disabled')
+        self._icon_cache['auto'] = icon_mgr.get_icon('auto')
 
         # Host type icons (will load dynamically based on host)
 
@@ -1169,13 +1178,29 @@ class WorkerStatusWidget(QWidget):
         elif base_status == 'paused':
             status_color = QColor("#B8860B")  # Dark goldenrod
 
-        # Update icon column
+        # Update icon column - show enabled/disabled/auto state
         icon_col_idx = self._get_column_index('status')
         if icon_col_idx >= 0:
             icon_item = self.status_table.item(row, icon_col_idx)
             if icon_item:
-                # Use base_status for icon lookup
-                status_icon = self._icon_cache.get(base_status, QIcon())
+                worker = self._workers.get(worker_id)
+                if worker and worker.worker_type == 'filehost':
+                    host_id = worker.hostname.lower()
+                    enabled = get_file_host_setting(host_id, "enabled", "bool")
+                    trigger = get_file_host_setting(host_id, "trigger", "str")
+                    has_auto = enabled and trigger and trigger != "disabled"
+                    if has_auto:
+                        status_icon = self._icon_cache.get('auto', QIcon())
+                        tooltip_text = f"Auto-upload: {trigger}"
+                    elif enabled:
+                        status_icon = self._icon_cache.get('host_enabled', QIcon())
+                        tooltip_text = "Enabled"
+                    else:
+                        status_icon = self._icon_cache.get('host_disabled', QIcon())
+                        tooltip_text = "Disabled"
+                else:
+                    status_icon = self._icon_cache.get('host_enabled', QIcon())
+                    tooltip_text = "Enabled"
                 icon_item.setIcon(status_icon)
                 icon_item.setToolTip(tooltip_text)
 
@@ -1492,13 +1517,30 @@ class WorkerStatusWidget(QWidget):
                     self.status_table.setItem(row_idx, col_idx, speed_item)
 
                 elif col_config.id == 'status':
-                    # Status icon column (icon only)
+                    # Status icon column - shows enabled/disabled/auto state
                     status_icon_item = QTableWidgetItem()
-                    # Use status directly for icon - no mapping needed
-                    status_icon = self._icon_cache.get(worker.status, QIcon())
-                    status_icon_item.setIcon(status_icon)
+                    # Determine enabled/disabled/auto state
+                    if worker.worker_type == 'filehost':
+                        host_id = worker.hostname.lower()
+                        enabled = get_file_host_setting(host_id, "enabled", "bool")
+                        trigger = get_file_host_setting(host_id, "trigger", "str")
+                        has_auto = enabled and trigger and trigger != "disabled"
+                        if has_auto:
+                            icon = self._icon_cache.get('auto', QIcon())
+                            tooltip = f"Auto-upload: {trigger}"
+                        elif enabled:
+                            icon = self._icon_cache.get('host_enabled', QIcon())
+                            tooltip = "Enabled"
+                        else:
+                            icon = self._icon_cache.get('host_disabled', QIcon())
+                            tooltip = "Disabled"
+                    else:
+                        # IMX is always enabled
+                        icon = self._icon_cache.get('host_enabled', QIcon())
+                        tooltip = "Enabled"
+                    status_icon_item.setIcon(icon)
                     status_icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    status_icon_item.setToolTip(f"Status: {worker.status.capitalize()}")
+                    status_icon_item.setToolTip(tooltip)
                     status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
                     self.status_table.setItem(row_idx, col_idx, status_icon_item)
 
@@ -1998,6 +2040,89 @@ class WorkerStatusWidget(QWidget):
     # Column Context Menu and Settings Persistence
     # =========================================================================
 
+    def _show_row_context_menu(self, position):
+        """Show right-click context menu for worker rows."""
+        # Get the row under cursor
+        index = self.status_table.indexAt(position)
+        if not index.isValid():
+            return
+
+        row = index.row()
+        # Get worker_id from icon column - check cellWidget first (icon is a QPushButton)
+        worker_id = None
+        icon_col_idx = self._get_column_index('icon')
+        if icon_col_idx >= 0:
+            widget = self.status_table.cellWidget(row, icon_col_idx)
+            if widget:
+                worker_id = widget.property("worker_id")
+            else:
+                icon_item = self.status_table.item(row, icon_col_idx)
+                if icon_item:
+                    worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
+
+        if not worker_id:
+            return
+
+        # Handle placeholder workers (not in _workers dict)
+        if worker_id.startswith("placeholder_"):
+            host_part = worker_id[len("placeholder_"):]
+            if host_part == "imx":
+                return  # IMX doesn't have enable/disable/trigger
+            host_id = host_part.lower()
+        elif worker_id in self._workers:
+            worker = self._workers[worker_id]
+            if worker.worker_type != 'filehost':
+                return
+            host_id = worker.hostname.lower()
+        else:
+            return
+        enabled = get_file_host_setting(host_id, "enabled", "bool")
+        trigger = get_file_host_setting(host_id, "trigger", "str")
+
+        menu = QMenu(self)
+
+        # Enable/Disable actions - only show the available option
+        if not enabled:
+            enable_action = menu.addAction("Enable Host")
+            enable_action.triggered.connect(lambda: self._set_host_enabled(host_id, True))
+        else:
+            disable_action = menu.addAction("Disable Host")
+            disable_action.triggered.connect(lambda: self._set_host_enabled(host_id, False))
+
+        menu.addSeparator()
+
+        # Auto-upload trigger submenu
+        trigger_menu = menu.addMenu("Set Auto-Upload Trigger")
+        trigger_options = [
+            ("On Added", "on_added"),
+            ("On Started", "on_started"),
+            ("On Completed", "on_completed"),
+            ("Disabled", "disabled"),
+        ]
+        for label, value in trigger_options:
+            action = trigger_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(trigger == value)
+            action.triggered.connect(lambda checked, v=value: self._set_host_trigger(host_id, v))
+
+        menu.addSeparator()
+
+        # Configure host
+        configure_action = menu.addAction("Configure Host...")
+        configure_action.triggered.connect(lambda: self.open_host_config_requested.emit(host_id))
+
+        menu.exec(self.status_table.viewport().mapToGlobal(position))
+
+    def _set_host_enabled(self, host_id: str, enabled: bool):
+        """Enable or disable a host and refresh the display."""
+        save_file_host_setting(host_id, "enabled", enabled)
+        self._refresh_display()
+
+    def _set_host_trigger(self, host_id: str, trigger: str):
+        """Set auto-upload trigger for a host and refresh the display."""
+        save_file_host_setting(host_id, "trigger", trigger)
+        self._refresh_display()
+
     def _show_column_context_menu(self, position):
         """Show context menu for column visibility and settings."""
         menu = QMenu(self)
@@ -2313,6 +2438,8 @@ class WorkerStatusWidget(QWidget):
         # Save filter selection
         if self.filter_combo:
             settings.setValue("worker_status/filter_index", self.filter_combo.currentIndex())
+
+        settings.sync()
 
     def _load_column_settings(self):
         """Load column settings from QSettings."""
