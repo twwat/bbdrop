@@ -1,8 +1,26 @@
 # Changelog
 
-All notable changes to IMXuploader will be documented in this file.
+All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [0.8.2] - 2026-01-31
+
+### Added
+- **Multi-format archive support**: ZIP and 7Z archive creation; ZIP, 7Z, RAR, and TAR extraction
+- **Archive settings tab**: Configure archive format, compression method, and split size
+- **Split archive uploads**: Large galleries split into parts with per-part tracking and template placeholders (#partLabel#, #partNumber#, #partCount#)
+- **Tab description labels**: Descriptive headers on General, Tabs, Proxy, Logs, File Hosts, and Image Hosts settings tabs
+- **Tooltips**: Added to all interactive settings widgets
+- **Dimmed proxy styles**: Disabled proxy sections visually dimmed in both themes
+
+### Changed
+- Tab description font increased from 11px to 12px with background color
+- Log action buttons moved below File Logging section, right-aligned
+- Infinity symbol on IMX storage bar renders with symmetric loops using centered overlay label
+
+### Fixed
+- Upload workers table column visibility, widths, and order not persisting across restarts (missing QSettings.sync())
 
 ## [0.8.0] - 2026-01-27
 
