@@ -912,14 +912,23 @@ class TabbedGalleryWidget(QWidget):
     def _rename_tab(self, index, old_name, new_name):
         """Rename a tab"""
         self.tab_bar.setTabText(index, new_name)
-        
+
         # Update in manager
         if self.tab_manager:
             self.tab_manager.rename_tab(old_name, new_name)
-        
+
+        # Update in-memory queue items so count queries match the new name
+        parent_window = self.parent()
+        while parent_window and not hasattr(parent_window, 'queue_manager'):
+            parent_window = parent_window.parent()
+        if parent_window and hasattr(parent_window, 'queue_manager'):
+            for item in parent_window.queue_manager.get_all_items():
+                if item.tab_name == old_name:
+                    item.tab_name = new_name
+
         if self.current_tab == old_name:
             self.current_tab = new_name
-        
+
         self.tab_renamed.emit(old_name, new_name)
         self._update_tab_tooltips()
     
