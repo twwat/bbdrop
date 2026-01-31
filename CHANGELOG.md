@@ -149,7 +149,7 @@ v0.7.2: Performance optimization, modular theming, design tokens
 
 v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 
-### Added:
+### Added
 - Statistics dialog (Tools > Statistics) with session/upload/scanner metrics
   - Two-tab interface: General stats and File Hosts breakdown
   - Tracks app startups, first startup timestamp, total time open
@@ -159,7 +159,7 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 - Add session time tracking (accumulated across app launches)
 - Add format_duration() support for days (e.g., "2d 5h 30m")
 
-### Performance:
+### Performance
 - Fix massive UI freeze in ImageStatusDialog (50+ seconds → instant)
   - Disable ResizeToContents during batch table updates
   - Block signals and suspend sorting during bulk operations
@@ -169,12 +169,12 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
   - Batch database writes via bulk_update_gallery_imx_status()
 - Add quick count feature showing "Found: X images" within 2-3 seconds
 
-### Thread Safety:
+### Thread Safety
 - Add threading.Lock to ImageStatusChecker for shared state protection
 - Fix race condition with _cancelled flag preventing stale results
 - Improve dialog cleanup timing (signals remain connected during checks)
 
-### UI/UX:
+### UI/UX
 - Add animated spinner to ImageStatusDialog (4-state dot animation)
 - Add theme-aware status colors (green/amber/red) for online status
 - Add NumericTableItem for proper numeric sorting in tables
@@ -184,13 +184,13 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 - Update worker status widget with clickable icon buttons
 - Optimize host logos (reduced file sizes)
 
-### Other Fixes:
+### Other Fixes
 - Fix is_dark_mode() using correct QSettings organization name
 - Fix fastest_kbps_timestamp not being saved when record set
 - Fix QSettings namespace consistency (ImxUploader/Stats)
 - Fix test expectations for non-breaking space in format functions
 
-### Tests:
+### Tests
 - Add test_statistics_dialog.py (29 tests, 99% coverage)
 - Add test_image_status_checker.py (956 lines)
 - Add test_image_status_dialog.py (717 lines)
@@ -198,13 +198,13 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 - Update test_format_utils.py with NBSP constant and days tests
 - Total: ~3,400 new lines of test code
 
-### Refactoring:
+### Refactoring
 - Extract format_duration() to format_utils.py (DRY principle)
 - Reorganize rename_worker.py structure
 - Standardize button labels in adaptive settings panel
 - Apply code formatting pass to custom_widgets.py
 
-## [00.6.15] - 2025-12-29~
+## [0.6.15] - 2025-12-29
 
 ### Changed
 - Extracted ThemeManager from main_window.py
@@ -511,7 +511,12 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 0.7.1  | 2026-01-07 | Statistics, thread safety, performance | 
+| 0.8.2  | 2026-01-31 | Multi-format archives, split uploads, tooltips |
+| 0.8.0  | 2026-01-27 | Proxy system, bbdrop rebrand, status icons |
+| 0.7.4  | 2026-01-19 | Unified icons, bandwidth manager, table delegates |
+| 0.7.2  | 2026-01-10 | Performance optimization, modular theming, design tokens |
+| 0.7.1  | 2026-01-07 | Statistics, thread safety, performance |
+| 0.6.15 | 2025-12-29 | ThemeManager, SettingsManager, TableRowManager extraction |
 | 0.6.13 | 2025-12-26 | Help dialog, emoji PNG support, quick settings |
 | 0.6.12 | 2025-12-25 | Worker table refactor, ArtifactHandler, worker logos |
 | 0.6.11 | 2025-12-24 | Thread-safety fixes, worker lifecycle improvements |
