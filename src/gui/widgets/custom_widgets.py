@@ -1274,21 +1274,31 @@ class StorageProgressBar(QWidget):
             width: Current widget width in pixels
         """
         if width >= 50:
-            # Show infinity symbol with larger font size
-            self.progress_bar.setFormat("∞")
-
-            # Set larger font on the progress bar itself
-            font = self.progress_bar.font()
-            font.setPointSize(16)
-            self.progress_bar.setFont(font)
+            self.progress_bar.setFormat("")
+            self.progress_bar.setTextVisible(False)
+            self._show_infinity_label(True)
         else:
-            # Very narrow: No text
+            self._show_infinity_label(False)
             self.progress_bar.setFormat("")
 
-            # Reset to normal font size
-            font = self.progress_bar.font()
-            font.setPointSize(10)  # Default size
-            self.progress_bar.setFont(font)
+    def _show_infinity_label(self, show: bool):
+        """Show or hide a centered infinity overlay label on the progress bar."""
+        if not hasattr(self, '_infinity_label'):
+            from PyQt6.QtGui import QFont
+            from PyQt6.QtCore import Qt
+            lbl = QLabel("∞", self.progress_bar)
+            font = QFont()
+            font.setFamilies(["Segoe UI Symbol", "DejaVu Sans", "Symbola"])
+            font.setPointSize(14)
+            lbl.setFont(font)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("background: transparent; color: white;")
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            self._infinity_label = lbl
+
+        self._infinity_label.setVisible(show)
+        if show:
+            self._infinity_label.setGeometry(0, 0, self.progress_bar.width(), self.progress_bar.height())
 
     def resizeEvent(self, event):
         """Update text format when widget is resized.
@@ -1301,6 +1311,8 @@ class StorageProgressBar(QWidget):
         # Check if unlimited mode (sentinel value)
         if self._total_bytes == -1:
             self._update_unlimited_text_format(event.size().width())
+            if hasattr(self, '_infinity_label') and self._infinity_label.isVisible():
+                self._infinity_label.setGeometry(0, 0, self.progress_bar.width(), self.progress_bar.height())
         elif self._total_bytes > 0:
             # Normal storage mode
             self._update_text_format(event.size().width())
