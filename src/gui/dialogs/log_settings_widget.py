@@ -33,19 +33,6 @@ class LogSettingsWidget(QWidget):
         desc.setProperty("class", "tab-description")
         layout.addWidget(desc)
 
-        # Top buttons row
-        top_buttons = QHBoxLayout()
-        view_log_btn = QPushButton("Open Log Viewer")
-        view_log_btn.setToolTip("Open the log viewer")
-        view_log_btn.clicked.connect(self.open_log_viewer)
-        open_dir_btn = QPushButton("Open Logs Folder")
-        open_dir_btn.setToolTip("Open logs folder in file explorer")
-        open_dir_btn.clicked.connect(self.open_logs_folder)
-        top_buttons.addWidget(view_log_btn)
-        top_buttons.addWidget(open_dir_btn)
-        top_buttons.addStretch()
-        layout.addLayout(top_buttons)
-
         levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
         # Define categories for GUI Log section
@@ -164,6 +151,20 @@ class LogSettingsWidget(QWidget):
             self._log_cat_widgets[file_key] = chk_file
 
         layout.addWidget(file_group)
+
+        # Log action buttons — right-aligned below File Logging
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        view_log_btn = QPushButton("Open Log Viewer")
+        view_log_btn.setToolTip("Open the log viewer")
+        view_log_btn.clicked.connect(self.open_log_viewer)
+        btn_row.addWidget(view_log_btn)
+        open_dir_btn = QPushButton("Open Logs Folder")
+        open_dir_btn.setToolTip("Open logs folder in file explorer")
+        open_dir_btn.clicked.connect(self.open_logs_folder)
+        btn_row.addWidget(open_dir_btn)
+        layout.addLayout(btn_row)
+
         layout.addStretch()
 
         # Connect all controls to emit changed signal
