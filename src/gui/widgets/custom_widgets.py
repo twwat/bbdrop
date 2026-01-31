@@ -1298,7 +1298,7 @@ class StorageProgressBar(QWidget):
 
         self._infinity_label.setVisible(show)
         if show:
-            self._infinity_label.setGeometry(0, 0, self.progress_bar.width(), self.progress_bar.height())
+            self._infinity_label.setGeometry(0, -4, self.progress_bar.width(), self.progress_bar.height())
 
     def resizeEvent(self, event):
         """Update text format when widget is resized.
@@ -1312,7 +1312,7 @@ class StorageProgressBar(QWidget):
         if self._total_bytes == -1:
             self._update_unlimited_text_format(event.size().width())
             if hasattr(self, '_infinity_label') and self._infinity_label.isVisible():
-                self._infinity_label.setGeometry(0, 0, self.progress_bar.width(), self.progress_bar.height())
+                self._infinity_label.setGeometry(0, -4, self.progress_bar.width(), self.progress_bar.height())
         elif self._total_bytes > 0:
             # Normal storage mode
             self._update_text_format(event.size().width())
