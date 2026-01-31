@@ -2743,7 +2743,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
             # Check if EXTERNAL_APPS section exists
             if 'EXTERNAL_APPS' not in config:
-                log(f"No EXTERNAL_APPS section in config, using defaults", level="info", category="settings")
+                log(f"No EXTERNAL_APPS section in config, using defaults", level="debug", category="settings")
                 return
 
             # Block signals during loading
