@@ -1292,13 +1292,19 @@ class StorageProgressBar(QWidget):
             font.setPointSize(14)
             lbl.setFont(font)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet("background: transparent; color: white;")
+            from src.gui.theme_manager import is_dark_mode
+            text_color = "white" if is_dark_mode() else "black"
+            lbl.setStyleSheet(f"background: transparent; color: {text_color};")
             lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             self._infinity_label = lbl
 
         self._infinity_label.setVisible(show)
         if show:
-            self._infinity_label.setGeometry(0, -4, self.progress_bar.width(), self.progress_bar.height())
+            # Update color for current theme (handles theme switches)
+            from src.gui.theme_manager import is_dark_mode
+            text_color = "white" if is_dark_mode() else "black"
+            self._infinity_label.setStyleSheet(f"background: transparent; color: {text_color};")
+            self._infinity_label.setGeometry(0, -3, self.progress_bar.width(), self.progress_bar.height())
 
     def resizeEvent(self, event):
         """Update text format when widget is resized.
@@ -1312,7 +1318,7 @@ class StorageProgressBar(QWidget):
         if self._total_bytes == -1:
             self._update_unlimited_text_format(event.size().width())
             if hasattr(self, '_infinity_label') and self._infinity_label.isVisible():
-                self._infinity_label.setGeometry(0, -4, self.progress_bar.width(), self.progress_bar.height())
+                self._infinity_label.setGeometry(0, -3, self.progress_bar.width(), self.progress_bar.height())
         elif self._total_bytes > 0:
             # Normal storage mode
             self._update_text_format(event.size().width())
