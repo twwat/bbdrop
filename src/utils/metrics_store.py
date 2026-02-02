@@ -173,6 +173,7 @@ class MetricsStore:
                         files_failed INTEGER DEFAULT 0,
                         total_transfer_time REAL DEFAULT 0,
                         peak_speed REAL DEFAULT 0,
+                        peak_speed_date TEXT,
                         period_type TEXT NOT NULL CHECK (period_type IN ('session', 'daily', 'all_time')),
                         period_date TEXT,
                         created_ts INTEGER DEFAULT (strftime('%s', 'now')),
@@ -190,6 +191,17 @@ class MetricsStore:
                         ON host_metrics(host_name, period_type, period_date);
                 """)
                 logger.debug("Metrics database schema ensured")
+
+                # Migrate: add peak_speed_date column if missing (existing DBs)
+                try:
+                    cursor = conn.execute("PRAGMA table_info(host_metrics)")
+                    columns = {row[1] for row in cursor.fetchall()}
+                    if 'peak_speed_date' not in columns:
+                        conn.execute("ALTER TABLE host_metrics ADD COLUMN peak_speed_date TEXT")
+                        logger.info("Migrated host_metrics: added peak_speed_date column")
+                except Exception as e:
+                    logger.warning(f"Migration check for peak_speed_date: {e}")
+
             except Exception as e:
                 logger.error(f"Failed to create metrics schema: {e}")
                 raise
@@ -225,6 +237,7 @@ class MetricsStore:
                     'files_failed': 0,
                     'total_transfer_time': 0.0,
                     'peak_speed': 0.0,
+                    'peak_speed_date': None,
                     'speeds': [],  # Rolling window for average calculation
                 }
 
@@ -238,8 +251,10 @@ class MetricsStore:
                 cache['files_failed'] += 1
 
             # Track peak speed
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             if speed > cache['peak_speed']:
                 cache['peak_speed'] = speed
+                cache['peak_speed_date'] = now_str
 
             # Keep rolling window of speeds for average (last 10)
             cache['speeds'].append(speed)
@@ -264,6 +279,7 @@ class MetricsStore:
                         'files_failed': db_metrics.get('files_failed', 0),
                         'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
                         'peak_speed': db_metrics.get('peak_speed', 0.0),
+                        'peak_speed_date': db_metrics.get('peak_speed_date'),
                         'speeds': [],
                         'avg_speed': db_metrics.get('avg_speed', 0.0)
                     }
@@ -274,6 +290,7 @@ class MetricsStore:
                         'files_failed': 0,
                         'total_transfer_time': 0.0,
                         'peak_speed': 0.0,
+                        'peak_speed_date': None,
                         'speeds': [],
                         'avg_speed': 0.0
                     }
@@ -287,6 +304,7 @@ class MetricsStore:
                 today_cache['files_failed'] += 1
             if speed > today_cache['peak_speed']:
                 today_cache['peak_speed'] = speed
+                today_cache['peak_speed_date'] = now_str
             today_cache['speeds'].append(speed)
             if len(today_cache['speeds']) > 10:
                 today_cache['speeds'] = today_cache['speeds'][-10:]
@@ -306,6 +324,7 @@ class MetricsStore:
                         'files_failed': db_metrics.get('files_failed', 0),
                         'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
                         'peak_speed': db_metrics.get('peak_speed', 0.0),
+                        'peak_speed_date': db_metrics.get('peak_speed_date'),
                         'speeds': [],
                         'avg_speed': db_metrics.get('avg_speed', 0.0)
                     }
@@ -316,6 +335,7 @@ class MetricsStore:
                         'files_failed': 0,
                         'total_transfer_time': 0.0,
                         'peak_speed': 0.0,
+                        'peak_speed_date': None,
                         'speeds': [],
                         'avg_speed': 0.0
                     }
@@ -329,6 +349,7 @@ class MetricsStore:
                 all_time_cache['files_failed'] += 1
             if speed > all_time_cache['peak_speed']:
                 all_time_cache['peak_speed'] = speed
+                all_time_cache['peak_speed_date'] = now_str
             all_time_cache['speeds'].append(speed)
             if len(all_time_cache['speeds']) > 10:
                 all_time_cache['speeds'] = all_time_cache['speeds'][-10:]
@@ -377,6 +398,7 @@ class MetricsStore:
             'files_failed': files_failed,
             'total_transfer_time': cache.get('total_transfer_time', 0.0),
             'peak_speed': cache.get('peak_speed', 0.0),
+            'peak_speed_date': cache.get('peak_speed_date'),
             'avg_speed': cache.get('avg_speed', 0.0),
             'success_rate': (files_uploaded / max(1, total_files)) * 100
         }
@@ -433,10 +455,13 @@ class MetricsStore:
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
-                            COALESCE(MAX(peak_speed), 0) as peak_speed
+                            COALESCE(MAX(peak_speed), 0) as peak_speed,
+                            (SELECT peak_speed_date FROM host_metrics
+                             WHERE host_name = ? AND period_type = 'daily' AND period_date = ?
+                             ORDER BY peak_speed DESC LIMIT 1) as peak_speed_date
                         FROM host_metrics
                         WHERE host_name = ? AND period_type = 'daily' AND period_date = ?
-                    """, (host_name, today))
+                    """, (host_name, today, host_name, today))
 
                 elif period == 'week':
                     # Get last 7 days
@@ -447,10 +472,13 @@ class MetricsStore:
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
-                            COALESCE(MAX(peak_speed), 0) as peak_speed
+                            COALESCE(MAX(peak_speed), 0) as peak_speed,
+                            (SELECT peak_speed_date FROM host_metrics
+                             WHERE host_name = ? AND period_type = 'daily' AND period_date >= ?
+                             ORDER BY peak_speed DESC LIMIT 1) as peak_speed_date
                         FROM host_metrics
                         WHERE host_name = ? AND period_type = 'daily' AND period_date >= ?
-                    """, (host_name, week_ago))
+                    """, (host_name, week_ago, host_name, week_ago))
 
                 elif period == 'month':
                     # Get last 30 days
@@ -461,10 +489,13 @@ class MetricsStore:
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
-                            COALESCE(MAX(peak_speed), 0) as peak_speed
+                            COALESCE(MAX(peak_speed), 0) as peak_speed,
+                            (SELECT peak_speed_date FROM host_metrics
+                             WHERE host_name = ? AND period_type = 'daily' AND period_date >= ?
+                             ORDER BY peak_speed DESC LIMIT 1) as peak_speed_date
                         FROM host_metrics
                         WHERE host_name = ? AND period_type = 'daily' AND period_date >= ?
-                    """, (host_name, month_ago))
+                    """, (host_name, month_ago, host_name, month_ago))
 
                 elif period == 'all_time':
                     cursor = conn.execute("""
@@ -473,7 +504,8 @@ class MetricsStore:
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
-                            COALESCE(MAX(peak_speed), 0) as peak_speed
+                            COALESCE(MAX(peak_speed), 0) as peak_speed,
+                            peak_speed_date
                         FROM host_metrics
                         WHERE host_name = ? AND period_type = 'all_time'
                     """, (host_name,))
@@ -494,6 +526,7 @@ class MetricsStore:
                         'files_failed': row['files_failed'],
                         'total_transfer_time': row['total_transfer_time'],
                         'peak_speed': row['peak_speed'],
+                        'peak_speed_date': row['peak_speed_date'],
                         'avg_speed': avg_speed,
                         'success_rate': success_rate
                     }
@@ -510,6 +543,7 @@ class MetricsStore:
             'files_failed': 0,
             'total_transfer_time': 0.0,
             'peak_speed': 0.0,
+            'peak_speed_date': None,
             'avg_speed': 0.0,
             'success_rate': 100.0
         }
@@ -589,11 +623,14 @@ class MetricsStore:
                         COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                         COALESCE(SUM(files_failed), 0) as files_failed,
                         COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
-                        COALESCE(MAX(peak_speed), 0) as peak_speed
+                        COALESCE(MAX(peak_speed), 0) as peak_speed,
+                        (SELECT m2.peak_speed_date FROM host_metrics m2
+                         WHERE m2.host_name = host_metrics.host_name AND {where_clause.replace('?', '?')}
+                         ORDER BY m2.peak_speed DESC LIMIT 1) as peak_speed_date
                     FROM host_metrics
                     WHERE {where_clause}
                     GROUP BY host_name
-                """, params)
+                """, params + params)
 
                 for row in cursor:
                     total_files = row['files_uploaded'] + row['files_failed']
@@ -606,6 +643,7 @@ class MetricsStore:
                         'files_failed': row['files_failed'],
                         'total_transfer_time': row['total_transfer_time'],
                         'peak_speed': row['peak_speed'],
+                        'peak_speed_date': row['peak_speed_date'],
                         'avg_speed': avg_speed,
                         'success_rate': success_rate
                     }
@@ -706,18 +744,21 @@ class MetricsStore:
             try:
                 conn.execute("BEGIN TRANSACTION")
 
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
                 # Update daily metrics
                 conn.execute("""
                     INSERT INTO host_metrics
                         (host_name, bytes_uploaded, files_uploaded, files_failed,
-                         total_transfer_time, peak_speed, period_type, period_date)
-                    VALUES (?, ?, ?, ?, ?, ?, 'daily', ?)
+                         total_transfer_time, peak_speed, peak_speed_date, period_type, period_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'daily', ?)
                     ON CONFLICT(host_name, period_type, period_date) DO UPDATE SET
                         bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
                         files_uploaded = files_uploaded + excluded.files_uploaded,
                         files_failed = files_failed + excluded.files_failed,
                         total_transfer_time = total_transfer_time + excluded.total_transfer_time,
                         peak_speed = MAX(peak_speed, excluded.peak_speed),
+                        peak_speed_date = CASE WHEN excluded.peak_speed > peak_speed THEN excluded.peak_speed_date ELSE peak_speed_date END,
                         updated_ts = strftime('%s', 'now')
                 """, (
                     host_name,
@@ -726,6 +767,7 @@ class MetricsStore:
                     0 if success else 1,
                     transfer_time,
                     speed,
+                    now_str,
                     today
                 ))
 
@@ -733,14 +775,15 @@ class MetricsStore:
                 conn.execute("""
                     INSERT INTO host_metrics
                         (host_name, bytes_uploaded, files_uploaded, files_failed,
-                         total_transfer_time, peak_speed, period_type, period_date)
-                    VALUES (?, ?, ?, ?, ?, ?, 'all_time', NULL)
+                         total_transfer_time, peak_speed, peak_speed_date, period_type, period_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'all_time', NULL)
                     ON CONFLICT(host_name, period_type, period_date) DO UPDATE SET
                         bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
                         files_uploaded = files_uploaded + excluded.files_uploaded,
                         files_failed = files_failed + excluded.files_failed,
                         total_transfer_time = total_transfer_time + excluded.total_transfer_time,
                         peak_speed = MAX(peak_speed, excluded.peak_speed),
+                        peak_speed_date = CASE WHEN excluded.peak_speed > peak_speed THEN excluded.peak_speed_date ELSE peak_speed_date END,
                         updated_ts = strftime('%s', 'now')
                 """, (
                     host_name,
@@ -748,7 +791,8 @@ class MetricsStore:
                     1 if success else 0,
                     0 if success else 1,
                     transfer_time,
-                    speed
+                    speed,
+                    now_str
                 ))
 
                 conn.execute("COMMIT")
@@ -833,7 +877,8 @@ class MetricsStore:
                         files_uploaded,
                         files_failed,
                         total_transfer_time,
-                        peak_speed
+                        peak_speed,
+                        peak_speed_date
                     FROM host_metrics
                     WHERE host_name = ?
                         AND period_type = 'daily'
@@ -850,6 +895,7 @@ class MetricsStore:
                         'files_failed': row['files_failed'],
                         'total_transfer_time': row['total_transfer_time'],
                         'peak_speed': row['peak_speed'],
+                        'peak_speed_date': row['peak_speed_date'],
                         'success_rate': (row['files_uploaded'] / max(1, total_files)) * 100
                     })
 
