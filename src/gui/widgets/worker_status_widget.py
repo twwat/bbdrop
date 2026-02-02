@@ -1184,6 +1184,7 @@ class WorkerStatusWidget(QWidget):
             icon_item = self.status_table.item(row, icon_col_idx)
             if icon_item:
                 worker = self._workers.get(worker_id)
+                is_auto = False
                 if worker and worker.worker_type == 'filehost':
                     host_id = worker.hostname.lower()
                     enabled = get_file_host_setting(host_id, "enabled", "bool")
@@ -1192,6 +1193,7 @@ class WorkerStatusWidget(QWidget):
                     if has_auto:
                         status_icon = self._icon_cache.get('auto', QIcon())
                         tooltip_text = f"Auto-upload: {trigger}"
+                        is_auto = True
                     elif enabled:
                         status_icon = self._icon_cache.get('host_enabled', QIcon())
                         tooltip_text = "Enabled"
@@ -1201,8 +1203,20 @@ class WorkerStatusWidget(QWidget):
                 else:
                     status_icon = self._icon_cache.get('host_enabled', QIcon())
                     tooltip_text = "Enabled"
-                icon_item.setIcon(status_icon)
-                icon_item.setToolTip(tooltip_text)
+
+                if is_auto:
+                    # Use pixmap label at same size as hostname auto icon (32x14)
+                    auto_label = QLabel()
+                    auto_label.setPixmap(status_icon.pixmap(32, 14))
+                    auto_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    auto_label.setToolTip(tooltip_text)
+                    self.status_table.setCellWidget(row, icon_col_idx, auto_label)
+                    icon_item.setIcon(QIcon())  # Clear the item icon
+                else:
+                    # Remove any previous cell widget
+                    self.status_table.removeCellWidget(row, icon_col_idx)
+                    icon_item.setIcon(status_icon)
+                    icon_item.setToolTip(tooltip_text)
 
         # Update text column
         text_col_idx = self._get_column_index('status_text')
@@ -1429,8 +1443,8 @@ class WorkerStatusWidget(QWidget):
                         host_id = 'imx' if worker.worker_type == 'imx' else worker.hostname.lower()
                         logo_label = self._load_host_logo(host_id, height=22)
 
-                    # Decide whether to use widget (logo or auto icon) or plain text
-                    use_widget = has_auto_upload or (show_logos and logo_label is not None)
+                    # Decide whether to use widget (logo) or plain text
+                    use_widget = (show_logos and logo_label is not None)
 
                     if use_widget:
                         # Use a widget with logo and/or auto icon
@@ -1453,18 +1467,6 @@ class WorkerStatusWidget(QWidget):
                                 self._apply_disabled_style(text_label)
 
                             layout.addWidget(text_label)
-
-                        # Stretch pushes auto icon to right edge (if present)
-                        if has_auto_upload:
-                            layout.addStretch()
-
-                            # Add auto icon - smaller size for compact display (right-aligned)
-                            # Use auto-disabled icon when worker is disabled
-                            auto_icon_label = QLabel()
-                            auto_icon_key = 'auto-disabled' if worker.status == 'disabled' else 'auto'
-                            auto_icon = get_icon_manager().get_icon(auto_icon_key)
-                            auto_icon_label.setPixmap(auto_icon.pixmap(32, 14))
-                            layout.addWidget(auto_icon_label)
 
                         tooltip = worker.display_name
                         if has_auto_upload:
@@ -1518,8 +1520,8 @@ class WorkerStatusWidget(QWidget):
 
                 elif col_config.id == 'status':
                     # Status icon column - shows enabled/disabled/auto state
-                    status_icon_item = QTableWidgetItem()
                     # Determine enabled/disabled/auto state
+                    is_auto = False
                     if worker.worker_type == 'filehost':
                         host_id = worker.hostname.lower()
                         enabled = get_file_host_setting(host_id, "enabled", "bool")
@@ -1528,6 +1530,7 @@ class WorkerStatusWidget(QWidget):
                         if has_auto:
                             icon = self._icon_cache.get('auto', QIcon())
                             tooltip = f"Auto-upload: {trigger}"
+                            is_auto = True
                         elif enabled:
                             icon = self._icon_cache.get('host_enabled', QIcon())
                             tooltip = "Enabled"
@@ -1538,11 +1541,25 @@ class WorkerStatusWidget(QWidget):
                         # IMX is always enabled
                         icon = self._icon_cache.get('host_enabled', QIcon())
                         tooltip = "Enabled"
-                    status_icon_item.setIcon(icon)
-                    status_icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    status_icon_item.setToolTip(tooltip)
-                    status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
-                    self.status_table.setItem(row_idx, col_idx, status_icon_item)
+
+                    if is_auto:
+                        # Use pixmap label at same size as hostname auto icon (32x14)
+                        auto_label = QLabel()
+                        auto_label.setPixmap(icon.pixmap(32, 14))
+                        auto_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        auto_label.setToolTip(tooltip)
+                        self.status_table.setCellWidget(row_idx, col_idx, auto_label)
+                        # Still need an item for data storage
+                        status_icon_item = QTableWidgetItem()
+                        status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
+                        self.status_table.setItem(row_idx, col_idx, status_icon_item)
+                    else:
+                        status_icon_item = QTableWidgetItem()
+                        status_icon_item.setIcon(icon)
+                        status_icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        status_icon_item.setToolTip(tooltip)
+                        status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
+                        self.status_table.setItem(row_idx, col_idx, status_icon_item)
 
                 elif col_config.id == 'status_text':
                     # Status text column (text only with color coding)
