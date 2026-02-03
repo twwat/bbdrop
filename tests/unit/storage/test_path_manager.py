@@ -416,12 +416,16 @@ class TestGetSize:
         file1 = subdir / "file1.txt"
         file1.write_text("test")
 
-        # Mock stat to raise PermissionError for one file
+        # Mock stat to raise PermissionError for one file (but not during exists() check)
         original_stat = Path.stat
-        def mock_stat(self):
+        call_count = [0]  # Use list to allow modification in nested function
+        def mock_stat(self, **kwargs):
             if self.name == "file1.txt":
-                raise PermissionError("No access")
-            return original_stat(self)
+                call_count[0] += 1
+                # Only raise on second+ calls (skip the initial exists() check)
+                if call_count[0] > 1:
+                    raise PermissionError("No access")
+            return original_stat(self, **kwargs)
 
         with patch.object(Path, 'stat', mock_stat):
             size = manager.get_size(subdir)
