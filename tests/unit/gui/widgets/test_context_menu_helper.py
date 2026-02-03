@@ -487,7 +487,8 @@ class TestMoveToSubmenu:
 
     def test_move_to_excludes_current_tab(self, context_menu_helper):
         """Test Move to submenu excludes current tab"""
-        context_menu_helper.main_window.current_tab = 'Main'
+        # The implementation gets current_tab from gallery_table, not main_window
+        context_menu_helper.main_window.gallery_table.current_tab = 'Main'
 
         selected_paths = ["/path/to/gallery"]
         menu = context_menu_helper.create_context_menu(QPoint(0, 0), selected_paths)
@@ -678,7 +679,8 @@ class TestDelegation:
         context_menu_helper._delegate_to_main_window('nonexistent_method')
 
         captured = capsys.readouterr()
-        assert "not found" in captured.out
+        # Logger writes to stderr, not stdout
+        assert "not found" in captured.err
 
 
 # ============================================================================
@@ -912,7 +914,8 @@ class TestEdgeCases:
         assert menu is not None
 
         captured = capsys.readouterr()
-        assert "Error loading templates" in captured.out
+        # Logger writes to stderr, not stdout
+        assert "Error loading templates" in captured.err
 
     def test_multiple_status_filters(self, context_menu_helper):
         """Test filtering with multiple statuses"""

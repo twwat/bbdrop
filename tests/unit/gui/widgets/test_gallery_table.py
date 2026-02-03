@@ -547,8 +547,9 @@ class TestGalleryManagementActions:
             item.setData(Qt.ItemDataRole.UserRole, f"/tmp/gallery{i}")
             gallery_table.setItem(i, GalleryTableWidget.COL_NAME, item)
 
+        # Select multiple rows using Ctrl modifier
         gallery_table.selectRow(0)
-        gallery_table.selectRow(2)
+        gallery_table.item(2, GalleryTableWidget.COL_NAME).setSelected(True)
 
         with patch.object(gallery_table, 'parent', return_value=parent_mock):
             gallery_table.start_selected_via_menu()
@@ -597,6 +598,7 @@ class TestUploadStatusOperations:
         """Test cancelling multiple uploads"""
         parent_mock = Mock(spec=QMainWindow)
         parent_mock.queue_manager = mock_queue_manager
+        parent_mock.cancel_single_item = Mock()
         parent_mock.cancel_multiple_items = Mock()
 
         paths = ["/tmp/gallery1", "/tmp/gallery2"]
@@ -795,11 +797,16 @@ class TestDragAndDrop:
         mime_data = QMimeData()
         mime_data.setUrls([QUrl.fromLocalFile("/tmp/test.txt")])
 
+        # Create a mock with spec to ensure it has the right interface
         event = Mock()
-        event.mimeData.return_value = mime_data
+        event.mimeData = Mock(return_value=mime_data)
+        event.acceptProposedAction = Mock()
+        event.ignore = Mock()
 
         with patch('os.path.isfile', return_value=True):
-            gallery_table.dragEnterEvent(event)
+            # Call the handler - it should not accept since .txt is not an image
+            with patch.object(QTableWidget, 'dragEnterEvent'):
+                gallery_table.dragEnterEvent(event)
 
     def test_drop_event_adds_files_to_gallery(self, gallery_table, mock_queue_manager, tmp_path):
         """Test dropping image files on gallery row"""
@@ -866,10 +873,11 @@ class TestMouseKeyboardEvents:
     def test_mouse_press_event_sets_focus(self, gallery_table, qtbot):
         """Test left mouse click sets focus"""
         from PyQt6.QtGui import QMouseEvent
+        from PyQt6.QtCore import QPointF
 
         event = QMouseEvent(
             QMouseEvent.Type.MouseButtonPress,
-            QPoint(10, 10),
+            QPointF(10, 10),
             Qt.MouseButton.LeftButton,
             Qt.MouseButton.LeftButton,
             Qt.KeyboardModifier.NoModifier
@@ -888,9 +896,10 @@ class TestMouseKeyboardEvents:
 
         with patch.object(gallery_table, 'handle_enter_or_double_click') as mock_handler:
             from PyQt6.QtGui import QMouseEvent
+            from PyQt6.QtCore import QPointF
             event = QMouseEvent(
                 QMouseEvent.Type.MouseButtonDblClick,
-                QPoint(10, 10),
+                QPointF(10, 10),
                 Qt.MouseButton.LeftButton,
                 Qt.MouseButton.LeftButton,
                 Qt.KeyboardModifier.NoModifier
@@ -935,11 +944,21 @@ class TestTabManagement:
         parent_mock.queue_manager = mock_queue_manager
         parent_mock.refresh_filter = Mock()
         parent_mock._update_tab_tooltips = Mock()
+        # Configure parent_mock.parent() to return None to break the parent traversal loop
+        parent_mock.parent = Mock(return_value=None)
+
+        # Configure move_galleries_to_tab to return a non-zero count (fixture already creates this)
+        mock_tab_manager.move_galleries_to_tab.return_value = 2
+
+        # The fixture sets gallery_table.tab_manager = None. The while loop checks
+        # "not hasattr(tabbed_widget, 'tab_manager')" - with tab_manager=None, hasattr returns True,
+        # so the loop exits immediately without calling parent(). Delete the attribute to force traversal.
+        delattr(gallery_table, 'tab_manager')
 
         with patch.object(gallery_table, 'parent', return_value=parent_mock):
             gallery_table._move_selected_to_tab(gallery_paths, target_tab)
 
-            mock_tab_manager.move_galleries_to_tab.assert_called_once()
+            mock_tab_manager.move_galleries_to_tab.assert_called_once_with(gallery_paths, target_tab)
             mock_tab_manager.invalidate_tab_cache.assert_called_once()
 
 

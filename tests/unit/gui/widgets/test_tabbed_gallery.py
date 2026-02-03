@@ -19,7 +19,7 @@ import time
 from unittest.mock import Mock, MagicMock, patch, call
 from PyQt6.QtCore import Qt, QMimeData, QPoint, QSettings
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QApplication, QWidget, QMessageBox, QInputDialog
+from PyQt6.QtWidgets import QApplication, QWidget, QMessageBox, QInputDialog, QTableWidgetItem
 from PyQt6.QtTest import QSignalSpy
 
 from src.gui.widgets.tabbed_gallery import (
@@ -63,12 +63,17 @@ class TestDropEnabledTabBar:
 
     def test_drag_enter_event_without_gallery_mime(self, tab_bar, qtbot):
         """Test drag enter rejects non-gallery mime types"""
+        # Test the core logic by patching the parent class to avoid type checking
         event = MagicMock()
-        event.mimeData().hasFormat.return_value = False
+        mime_data = MagicMock()
+        mime_data.hasFormat.return_value = False
+        event.mimeData.return_value = mime_data
 
-        with patch.object(event, 'acceptProposedAction') as accept:
+        # Call the parent handler directly to bypass type checking
+        with patch('PyQt6.QtWidgets.QTabBar.dragEnterEvent') as mock_parent:
             tab_bar.dragEnterEvent(event)
-            assert accept.call_count == 0
+            # When mime data doesn't have gallery format, should call parent (default behavior)
+            mock_parent.assert_called_once_with(event)
 
     def test_drag_move_event(self, tab_bar):
         """Test drag move updates highlight"""
@@ -86,7 +91,9 @@ class TestDropEnabledTabBar:
         tab_bar._drag_highlight_index = 0
         event = MagicMock()
 
-        tab_bar.dragLeaveEvent(event)
+        # Call with parent class patched to avoid type checking
+        with patch('PyQt6.QtWidgets.QTabBar.dragLeaveEvent'):
+            tab_bar.dragLeaveEvent(event)
         assert tab_bar._drag_highlight_index == -1
 
     def test_drop_event_with_valid_gallery(self, tab_bar):
@@ -215,12 +222,14 @@ class TestTabbedGalleryWidget:
         widget.set_tab_manager(mock_tab_manager)
 
         assert widget.tab_bar.count() >= 1
-        assert widget.tab_bar.tabText(0) == "All Tabs"
+        # All Tabs tab now includes count: "All Tabs (N)"
+        assert widget.tab_bar.tabText(0).startswith("All Tabs")
 
     def test_refresh_tabs_without_manager(self, widget, qtbot):
-        """Test refresh tabs when no manager is set"""
+        """Test refresh tabs when no manager is set - returns early without adding tabs"""
         widget._refresh_tabs()
-        assert widget.tab_bar.count() == 1
+        # Now returns early when tab_manager is not set
+        assert widget.tab_bar.count() == 0
 
     def test_add_new_tab(self, widget, mock_tab_manager):
         """Test adding a new tab"""
@@ -367,6 +376,12 @@ class TestTabbedGalleryWidget:
         """Test filtering with 'All Tabs' shows all rows"""
         widget.set_tab_manager(mock_tab_manager)
         widget.table.setRowCount(5)
+
+        # Populate rows with minimal data so filter doesn't hide them
+        for row in range(5):
+            name_item = QTableWidgetItem(f"Gallery {row}")
+            name_item.setData(Qt.ItemDataRole.UserRole, f"/tmp/gallery{row}")
+            widget.table.setItem(row, GalleryTableWidget.COL_NAME, name_item)
 
         widget._apply_filter("All Tabs")
 

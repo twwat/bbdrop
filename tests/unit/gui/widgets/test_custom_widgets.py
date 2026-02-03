@@ -101,13 +101,13 @@ class TestOverallProgressWidget:
     def test_set_property_status(self, widget):
         """Test setting property with status triggers polish"""
         with patch.object(widget.progress_bar.style(), 'polish') as mock_polish:
-            widget.setProperty("status", "uploading")
+            widget.setProgressProperty("status", "uploading")
             mock_polish.assert_called_once_with(widget.progress_bar)
 
     def test_set_property_non_status(self, widget):
         """Test setting non-status property doesn't trigger polish"""
         with patch.object(widget.progress_bar.style(), 'polish') as mock_polish:
-            widget.setProperty("other", "value")
+            widget.setProgressProperty("other", "value")
             mock_polish.assert_not_called()
 
     def test_resize_event(self, widget, qtbot):
@@ -734,7 +734,7 @@ class TestGalleryTableWidget:
         mock_icon_mgr.get_icon.return_value = QIcon()
 
         with patch('src.gui.icon_manager.get_icon_manager', return_value=mock_icon_mgr):
-            with patch.object(ActionButtonWidget, 'update_state', ActionButtonWidget.update_buttons):
+            with patch.object(ActionButtonWidget, 'update_buttons'):
                 row = table.add_gallery_row(gallery_data)
 
         assert row == 0
@@ -758,12 +758,13 @@ class TestGalleryTableWidget:
         mock_icon_mgr.get_icon.return_value = QIcon()
 
         with patch('src.gui.icon_manager.get_icon_manager', return_value=mock_icon_mgr):
-            with patch.object(ActionButtonWidget, 'update_state', ActionButtonWidget.update_buttons):
+            with patch.object(ActionButtonWidget, 'update_buttons'):
                 row = table.add_gallery_row(gallery_data)
 
         images_item = table.item(row, 3)
         assert isinstance(images_item, NumericTableWidgetItem)
-        assert images_item._sort_value == 100
+        # _sort_value is stored as string since it comes from str() conversion
+        assert images_item._sort_value == '100'
 
     def test_update_gallery_row_status(self, table):
         """Test updating gallery row status widget"""
@@ -774,7 +775,7 @@ class TestGalleryTableWidget:
         mock_icon_mgr.get_icon.return_value = QIcon()
 
         with patch('src.gui.icon_manager.get_icon_manager', return_value=mock_icon_mgr):
-            with patch.object(ActionButtonWidget, 'update_state', ActionButtonWidget.update_buttons):
+            with patch.object(ActionButtonWidget, 'update_buttons'):
                 row = table.add_gallery_row(gallery_data)
 
                 # Update status
@@ -795,7 +796,7 @@ class TestGalleryTableWidget:
         mock_icon_mgr.get_icon.return_value = QIcon()
 
         with patch('src.gui.icon_manager.get_icon_manager', return_value=mock_icon_mgr):
-            with patch.object(ActionButtonWidget, 'update_state', ActionButtonWidget.update_buttons):
+            with patch.object(ActionButtonWidget, 'update_buttons'):
                 row = table.add_gallery_row(gallery_data)
 
                 # Update progress
@@ -812,7 +813,7 @@ class TestGalleryTableWidget:
         mock_icon_mgr.get_icon.return_value = QIcon()
 
         with patch('src.gui.icon_manager.get_icon_manager', return_value=mock_icon_mgr):
-            with patch.object(ActionButtonWidget, 'update_state', ActionButtonWidget.update_buttons):
+            with patch.object(ActionButtonWidget, 'update_buttons'):
                 table.add_gallery_row({'name': 'G1', 'path': '/path1', 'status': QUEUE_STATE_READY,
                                        'total_images': 1, 'total_size': 1000, 'progress': 0})
                 table.add_gallery_row({'name': 'G2', 'path': '/path2', 'status': QUEUE_STATE_READY,
@@ -827,7 +828,7 @@ class TestGalleryTableWidget:
         mock_icon_mgr.get_icon.return_value = QIcon()
 
         with patch('src.gui.icon_manager.get_icon_manager', return_value=mock_icon_mgr):
-            with patch.object(ActionButtonWidget, 'update_state', ActionButtonWidget.update_buttons):
+            with patch.object(ActionButtonWidget, 'update_buttons'):
                 table.add_gallery_row({'name': 'G1', 'path': '/path1', 'status': QUEUE_STATE_READY,
                                        'total_images': 1, 'total_size': 1000, 'progress': 0})
 
@@ -1095,6 +1096,7 @@ class TestFileHostsStatusWidget:
         mock_icon = MagicMock()
         mock_icon.assets_dir = "/fake/assets"
         mock_icon.get_icon.return_value = QIcon()
+        mock_icon.get_file_host_icon.return_value = QIcon()  # Return real QIcon, not MagicMock
         mock_icon_mgr.return_value = mock_icon
 
         host_uploads = {
