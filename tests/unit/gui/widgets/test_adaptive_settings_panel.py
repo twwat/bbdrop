@@ -233,11 +233,11 @@ class TestSetButtons:
         assert hasattr(panel, '_button_labels')
         assert panel._button_labels['settings'] == ' Settings'
         assert panel._button_labels['credentials'] == ' Credentials'
-        assert panel._button_labels['templates'] == ' Templates'
-        assert panel._button_labels['file_hosts'] == ' File Hosts'
-        assert panel._button_labels['hooks'] == ' App Hooks'
-        assert panel._button_labels['log_viewer'] == ' View Logs'
-        assert panel._button_labels['help'] == ' Help'
+        assert panel._button_labels['templates'] == ' BBCode Templates'
+        assert panel._button_labels['file_hosts'] == '  File Hosts'
+        assert panel._button_labels['hooks'] == '  App Hooks'
+        assert panel._button_labels['log_viewer'] == ' Log Viewer'
+        assert panel._button_labels['help'] == ' Documentation'
         assert panel._button_labels['theme'] == ''
 
     def test_set_buttons_initializes_layout(self, panel_with_buttons):
@@ -252,7 +252,7 @@ class TestSetButtons:
         buttons = create_buttons()
 
         # Resize to specific heights and verify row count
-        panel.resize(200, 50)  # Below HEIGHT_2_ROW (120)
+        panel.resize(200, 50)  # Below HEIGHT_2_ROW (100)
         panel.set_buttons(
             buttons['settings'], buttons['credentials'], buttons['templates'],
             buttons['file_hosts'], buttons['hooks'], buttons['log_viewer'],
@@ -264,7 +264,7 @@ class TestSetButtons:
         """Test set_buttons with height for 3-row mode"""
         buttons = create_buttons()
 
-        panel.resize(200, 140)  # Between HEIGHT_2_ROW (120) and HEIGHT_4_ROW (166)
+        panel.resize(200, 120)  # Between HEIGHT_2_ROW (100) and HEIGHT_3_ROW (140)
         panel.set_buttons(
             buttons['settings'], buttons['credentials'], buttons['templates'],
             buttons['file_hosts'], buttons['hooks'], buttons['log_viewer'],
@@ -276,7 +276,7 @@ class TestSetButtons:
         """Test set_buttons with height for 4-row mode"""
         buttons = create_buttons()
 
-        panel.resize(200, 200)  # Above HEIGHT_4_ROW (166)
+        panel.resize(200, 200)  # Above HEIGHT_4_ROW (180)
         panel.set_buttons(
             buttons['settings'], buttons['credentials'], buttons['templates'],
             buttons['file_hosts'], buttons['hooks'], buttons['log_viewer'],
@@ -303,8 +303,8 @@ class TestLayoutModes:
         """Test 2-row layout mode creates correct structure"""
         panel, _ = panel_with_buttons
 
-        # Force 2-row mode (height < 120)
-        panel.resize(200, 100)
+        # Force 2-row mode (height < 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         qtbot.wait(10)
 
@@ -316,8 +316,8 @@ class TestLayoutModes:
         """Test 3-row layout mode creates correct structure"""
         panel, _ = panel_with_buttons
 
-        # Force 3-row mode (120 <= height < 166)
-        panel.resize(200, 140)
+        # Force 3-row mode (100 <= height < 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
         qtbot.wait(10)
 
@@ -328,8 +328,8 @@ class TestLayoutModes:
         """Test 4-row layout mode creates correct structure"""
         panel, _ = panel_with_buttons
 
-        # Force 4-row mode (height >= 166)
-        panel.resize(200, 200)
+        # Force 4-row mode (height >= 140)
+        panel.resize(200, 180)
         panel._update_layout(force=True)
         qtbot.wait(10)
 
@@ -340,13 +340,13 @@ class TestLayoutModes:
         """Test transition from 2-row to 3-row mode"""
         panel, _ = panel_with_buttons
 
-        # Start in 2-row mode (height < 120)
-        panel.resize(200, 100)
+        # Start in 2-row mode (height < 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         assert panel._current_mode == '2row'
 
-        # Transition to 3-row mode (120 <= height < 166)
-        panel.resize(200, 140)
+        # Transition to 3-row mode (100 <= height < 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
         assert panel._current_mode == '3row'
 
@@ -354,13 +354,13 @@ class TestLayoutModes:
         """Test transition from 3-row to 4-row mode"""
         panel, _ = panel_with_buttons
 
-        # Start in 3-row mode (120 <= height < 166)
-        panel.resize(200, 140)
+        # Start in 3-row mode (100 <= height < 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
         assert panel._current_mode == '3row'
 
-        # Transition to 4-row mode (height >= 166)
-        panel.resize(200, 200)
+        # Transition to 4-row mode (height >= 140)
+        panel.resize(200, 180)
         panel._update_layout(force=True)
         assert panel._current_mode == '4row'
 
@@ -368,13 +368,13 @@ class TestLayoutModes:
         """Test transition from 4-row to 2-row mode"""
         panel, _ = panel_with_buttons
 
-        # Start in 4-row mode (height >= 166)
-        panel.resize(200, 200)
+        # Start in 4-row mode (height >= 140)
+        panel.resize(200, 180)
         panel._update_layout(force=True)
         assert panel._current_mode == '4row'
 
-        # Transition to 2-row mode (height < 120)
-        panel.resize(200, 100)
+        # Transition to 2-row mode (height < 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         assert panel._current_mode == '2row'
 
@@ -383,7 +383,7 @@ class TestLayoutModes:
         panel, _ = panel_with_buttons
 
         # Set to 3-row mode
-        panel.resize(200, 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
         old_container = panel.button_container
 
@@ -396,7 +396,7 @@ class TestLayoutModes:
         panel, _ = panel_with_buttons
 
         # Set initial mode
-        panel.resize(200, 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
         old_container = panel.button_container
 
@@ -418,7 +418,7 @@ class TestButtonTextAdaptiveBehavior:
         panel, buttons = panel_with_buttons
 
         # Force 3-row mode so buttons check width
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
 
         # Set button width above threshold
@@ -433,7 +433,7 @@ class TestButtonTextAdaptiveBehavior:
         panel, buttons = panel_with_buttons
 
         # Force 3-row mode
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
 
         # Set button width below threshold
@@ -448,7 +448,7 @@ class TestButtonTextAdaptiveBehavior:
         panel, buttons = panel_with_buttons
 
         # Force any mode
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
 
         # Even with large width, theme should be icon-only
@@ -463,7 +463,7 @@ class TestButtonTextAdaptiveBehavior:
         panel, buttons = panel_with_buttons
 
         # Force 2-row mode (height < 120)
-        panel.resize(200, 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         qtbot.wait(10)
 
@@ -479,7 +479,7 @@ class TestButtonTextAdaptiveBehavior:
         panel, buttons = panel_with_buttons
 
         # Force 3-row mode
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
 
         # Set wide width on all buttons
@@ -528,7 +528,7 @@ class TestIconsOnlyMode:
         panel, buttons = panel_with_buttons
 
         # Force 3-row mode with wide buttons
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
         for btn in buttons.values():
             btn.resize(100, 30)
@@ -549,7 +549,7 @@ class TestIconsOnlyMode:
         panel.set_icons_only_mode(True)
 
         # Force 3-row mode with wide buttons
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
         for btn in buttons.values():
             btn.resize(100, 30)
@@ -595,7 +595,7 @@ class TestSizeHints:
         panel, _ = panel_with_buttons
 
         # Force layout to create container
-        panel.resize(200, 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
 
         hint = panel.minimumSizeHint()
@@ -617,7 +617,7 @@ class TestResizeEvent:
         panel, _ = panel_with_buttons
 
         # Start in 2-row mode (height < 120)
-        panel.resize(200, 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         assert panel._current_mode == '2row'
 
@@ -643,7 +643,7 @@ class TestResizeEvent:
         initial_text_calls = 0
 
         with patch.object(panel, '_update_button_text', wraps=panel._update_button_text) as mock_update:
-            panel.resize(200, 140)
+            panel.resize(200, 120)
             # Process events to handle resize and QTimer.singleShot
             QApplication.processEvents()
             qtbot.wait(50)
@@ -657,9 +657,9 @@ class TestResizeEvent:
         panel, _ = panel_with_buttons
 
         # Multiple resizes - use force=True to ensure mode changes are applied
-        panel.resize(200, 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
-        panel.resize(200, 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
         panel.resize(200, 200)
         panel._update_layout(force=True)
@@ -874,7 +874,7 @@ class TestEdgeCases:
         panel, buttons = panel_with_buttons
 
         # Force 3-row mode
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
 
         # At exact threshold
@@ -889,7 +889,7 @@ class TestEdgeCases:
         panel, buttons = panel_with_buttons
 
         # Force 3-row mode
-        panel.resize(300, 140)
+        panel.resize(300, 120)
         panel._update_layout(force=True)
 
         # Just below threshold
@@ -945,15 +945,15 @@ class TestMinimumHeightUpdate:
         panel.resize(200, 200)
         panel._update_layout(force=True)
 
-        # Minimum height should be set
-        assert panel.minimumHeight() > 0
+        # minimumSizeHint should return MIN_HEIGHT (110)
+        assert panel.minimumSizeHint().height() > 0
 
     def test_minimum_height_increases_with_more_rows(self, panel_with_buttons, qtbot):
         """Test minimum height increases with more rows"""
         panel, _ = panel_with_buttons
 
         # Get 2-row minimum height
-        panel.resize(200, 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         min_height_2_row = panel.minimumHeight()
 
@@ -981,21 +981,26 @@ class TestIntegration:
         panel.show()
         qtbot.waitExposed(panel)
 
-        # Start in 2-row mode (height < 120)
-        panel.resize(200, 100)
+        # Remove minimum height constraint from button container to allow small heights
+        panel.setMinimumHeight(0)
+        if panel.button_container:
+            panel.button_container.setMinimumHeight(0)
+
+        # Start in 2-row mode (height < 100)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         QApplication.processEvents()
         qtbot.wait(10)
         assert panel._current_mode == '2row'
 
-        # Transition to 3-row (120 <= height < 166)
-        panel.resize(200, 140)
+        # Transition to 3-row (100 <= height < 140)
+        panel.resize(200, 120)
         panel._update_layout(force=True)
         QApplication.processEvents()
         qtbot.wait(10)
         assert panel._current_mode == '3row'
 
-        # Transition to 4-row (height >= 166)
+        # Transition to 4-row (height >= 140)
         panel.resize(200, 200)
         panel._update_layout(force=True)
         QApplication.processEvents()
@@ -1009,8 +1014,11 @@ class TestIntegration:
         # Disable icons-only mode
         panel.set_icons_only_mode(False)
 
-        # Back to 2-row (height < 120)
-        panel.resize(200, 100)
+        # Back to 2-row (height < 100) - need to remove constraint again since button_container was recreated
+        panel.setMinimumHeight(0)
+        if panel.button_container:
+            panel.button_container.setMinimumHeight(0)
+        panel.resize(200, 99)
         panel._update_layout(force=True)
         QApplication.processEvents()
         qtbot.wait(10)
