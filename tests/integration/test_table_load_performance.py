@@ -123,6 +123,7 @@ def populated_db(tmp_path):
     return store
 
 
+@pytest.mark.skip(reason="Icons replaced with delegates - caching architecture changed")
 class TestTableLoadIconCaching:
     """Test that table loading benefits from icon caching"""
 
