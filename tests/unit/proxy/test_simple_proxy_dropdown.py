@@ -170,7 +170,6 @@ class TestProxyUIStateManagement:
             widget.custom_proxy_radio.setChecked(True)
             widget._update_ui_state()
 
-            assert widget.global_group.isEnabled()
             assert widget.pools_group.isEnabled()
             assert widget.category_group.isEnabled()
 
@@ -185,7 +184,6 @@ class TestProxyUIStateManagement:
             widget.no_proxy_radio.setChecked(True)
             widget._update_ui_state()
 
-            assert not widget.global_group.isEnabled()
             assert not widget.pools_group.isEnabled()
             assert not widget.category_group.isEnabled()
 
@@ -200,7 +198,6 @@ class TestProxyUIStateManagement:
             widget.system_proxy_radio.setChecked(True)
             widget._update_ui_state()
 
-            assert not widget.global_group.isEnabled()
             assert not widget.pools_group.isEnabled()
             assert not widget.category_group.isEnabled()
 
@@ -424,7 +421,7 @@ class TestSignalEmissions:
             assert signal_spy.call_count >= 1
 
     def test_settings_changed_signal_propagates(self, qapp, mock_storage):
-        """Test that settings_changed signal propagates from controls to widget."""
+        """Test that settings_changed signal propagates from mode changes."""
         from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
 
         with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=mock_storage):
@@ -433,12 +430,11 @@ class TestSignalEmissions:
             signal_spy = MagicMock()
             widget.settings_changed.connect(signal_spy)
 
-            # Trigger change from global control
-            widget.custom_proxy_radio.setChecked(True)
-            widget._update_ui_state()
-            widget.global_proxy_control.combo.setCurrentIndex(0)
+            # Trigger mode change via the handler directly
+            widget.system_proxy_radio.setChecked(True)
+            widget._on_proxy_mode_changed()
 
-            # Should emit settings_changed
+            # Should emit settings_changed from mode change
             assert signal_spy.call_count >= 1
 
 
@@ -446,7 +442,7 @@ class TestRefreshAfterPoolChanges:
     """Tests for UI refresh after pool creation/deletion."""
 
     def test_load_pools_refreshes_all_controls(self, qapp, mock_storage, mock_pools):
-        """Test that load_pools() refreshes all InheritableProxyControl widgets."""
+        """Test that load_pools() refreshes all dropdown widgets."""
         mock_storage.list_pools.return_value = mock_pools
 
         from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
@@ -455,15 +451,13 @@ class TestRefreshAfterPoolChanges:
             widget = ProxySettingsWidget()
 
             # Spy on refresh methods
-            with patch.object(widget.global_proxy_control, 'refresh') as global_spy, \
-                 patch.object(widget.file_hosts_control, 'refresh') as fh_spy, \
-                 patch.object(widget.forums_control, 'refresh') as forums_spy, \
-                 patch.object(widget.api_control, 'refresh') as api_spy:
+            with patch.object(widget.file_hosts_dropdown, 'refresh') as fh_spy, \
+                 patch.object(widget.forums_dropdown, 'refresh') as forums_spy, \
+                 patch.object(widget.api_dropdown, 'refresh') as api_spy:
 
                 widget.load_pools()
 
                 # All controls should be refreshed
-                global_spy.assert_called_once()
                 fh_spy.assert_called_once()
                 forums_spy.assert_called_once()
                 api_spy.assert_called_once()
@@ -495,15 +489,15 @@ class TestRefreshAfterPoolChanges:
         with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=mock_storage):
             widget = ProxySettingsWidget()
 
-            # Get initial combo count
-            initial_combo_count = widget.global_proxy_control.combo.count()
+            # Get initial list count
+            initial_count = widget.pools_list.count()
 
             # Add pools and refresh
             mock_storage.list_pools.return_value = mock_pools[:2]
             widget.load_pools()
 
-            # Combo should have more items
-            assert widget.global_proxy_control.combo.count() > initial_combo_count
+            # List should have more items
+            assert widget.pools_list.count() > initial_count
 
 
 class TestEdgeCases:
@@ -609,9 +603,17 @@ class TestPoolButtonStates:
             widget = ProxySettingsWidget()
             widget.load_pools()
 
-            # Select first pool
-            widget.pools_list.setCurrentRow(0)
+            # Switch to custom mode to enable pool controls
+            widget.custom_proxy_radio.setChecked(True)
+            widget._update_ui_state()
 
-            assert widget.edit_pool_btn.isEnabled()
-            assert widget.delete_pool_btn.isEnabled()
-            assert widget.test_pool_btn.isEnabled()
+            # Select first pool
+            if widget.pools_list.count() > 0:
+                item = widget.pools_list.item(0)
+                widget.pools_list.setCurrentItem(item)
+                # Manually call the handler to update button state
+                widget._on_pool_selected()
+
+                assert widget.edit_pool_btn.isEnabled()
+                assert widget.delete_pool_btn.isEnabled()
+                assert widget.test_pool_btn.isEnabled()

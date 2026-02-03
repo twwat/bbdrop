@@ -170,14 +170,18 @@ class TestProxyPool:
 
     def test_pool_with_weights(self):
         """Test pool with weighted proxies."""
+        from src.proxy.models import ProxyEntry, ProxyType
+
         pool = ProxyPool(
             name="Weighted Pool",
-            proxy_ids=["p1", "p2"],
-            rotation_strategy=RotationStrategy.WEIGHTED,
-            weights={"p1": 3, "p2": 1}
+            proxies=[
+                ProxyEntry(host="p1.com", port=8080, proxy_type=ProxyType.HTTP, weight=3),
+                ProxyEntry(host="p2.com", port=8080, proxy_type=ProxyType.HTTP, weight=1)
+            ],
+            rotation_strategy=RotationStrategy.WEIGHTED
         )
-        assert pool.weights["p1"] == 3
-        assert pool.weights["p2"] == 1
+        assert pool.proxies[0].weight == 3
+        assert pool.proxies[1].weight == 1
 
     def test_sticky_sessions(self):
         """Test sticky session configuration."""

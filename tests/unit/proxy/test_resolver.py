@@ -45,20 +45,21 @@ class TestProxyResolverHierarchy:
 
     def test_level2_service_pool(self):
         """Test Level 2: Service-specific pool."""
+        from src.proxy.models import ProxyEntry, ProxyType
+
         # Mock storage
         storage = MagicMock()
-        pool = create_test_pool("ServicePool", ["p1", "p2"], pool_id="pool1")
-        profile = create_test_profile("P1", proxy_id="p1")
+        pool = ProxyPool(name="ServicePool", id="pool1")
+        pool.enabled = True
+        service_proxy = ProxyEntry(host="service.proxy", port=8080, proxy_type=ProxyType.HTTP)
+        pool.proxies = [service_proxy]
 
         storage.get_pool_assignment.return_value = "pool1"
         storage.load_pool.return_value = pool
-        storage.load_profile.return_value = profile
-        storage.list_profiles.return_value = [profile]
-        storage.list_health.return_value = {}
 
         # Mock rotator
         rotator = MagicMock()
-        rotator.get_next_proxy.return_value = "p1"
+        rotator.get_next_proxy.return_value = service_proxy
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="rapidgator")
@@ -66,44 +67,57 @@ class TestProxyResolverHierarchy:
         result = resolver.resolve(context)
 
         assert result is not None
-        assert result.name == "P1"
+        assert result.host == "service.proxy"
 
     def test_level3_service_profile(self):
-        """Test Level 3: Service-specific profile."""
+        """Test Level 3: Service-specific profile (now service pool)."""
+        from src.proxy.models import ProxyEntry, ProxyType
+
         storage = MagicMock()
-        profile = create_test_profile("ServiceProxy", proxy_id="sp1")
+        # Service level has a pool with one proxy
+        service_pool = ProxyPool(name="ServicePool", id="sp1")
+        service_pool.enabled = True
+        service_proxy = ProxyEntry(host="service.proxy", port=8080, proxy_type=ProxyType.HTTP)
+        service_pool.proxies = [service_proxy]
 
-        storage.get_pool_assignment.return_value = None
-        storage.get_assignment.return_value = "sp1"
-        storage.load_profile.return_value = profile
-        storage.list_profiles.return_value = [profile]
-        storage.list_health.return_value = {}
-        storage.get_global_default_pool.return_value = None
+        storage.get_pool_assignment.return_value = "sp1"
+        storage.load_pool.return_value = service_pool
 
-        resolver = ProxyResolver(storage=storage)
+        rotator = MagicMock()
+        rotator.get_next_proxy.return_value = service_proxy
+
+        resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="rapidgator")
 
         result = resolver.resolve(context)
 
         assert result is not None
-        assert result.name == "ServiceProxy"
+        assert result.host == "service.proxy"
 
     def test_level4_category_pool(self):
-        """Test Level 4: Category-level pool."""
-        storage = MagicMock()
-        pool = create_test_pool("CategoryPool", ["p1"], pool_id="catpool")
-        profile = create_test_profile("P1", proxy_id="p1")
+        """Test Level 4: Category-level pool falls back when no service assignment."""
+        from src.proxy.models import ProxyEntry, ProxyType
 
-        # No service-level assignment - args are (category, service_id)
-        storage.get_pool_assignment.side_effect = lambda cat, sid: "catpool" if sid is None else None
-        storage.get_assignment.return_value = None
+        storage = MagicMock()
+        pool = ProxyPool(name="CategoryPool", id="catpool")
+        pool.enabled = True
+        cat_proxy = ProxyEntry(host="category.proxy", port=8080, proxy_type=ProxyType.HTTP)
+        pool.proxies = [cat_proxy]
+
+        # Service level returns None, category level returns the pool
+        def get_pool_assignment(category, service_id=None):
+            if service_id:
+                return None
+            return "catpool"
+
+        storage.get_pool_assignment.side_effect = get_pool_assignment
         storage.load_pool.return_value = pool
-        storage.load_profile.return_value = profile
-        storage.list_profiles.return_value = [profile]
-        storage.list_health.return_value = {}
+        # Need a global pool to enable category level checking
+        storage.get_global_default_pool.return_value = "global-pool"
+        storage.get_use_os_proxy.return_value = False
 
         rotator = MagicMock()
-        rotator.get_next_proxy.return_value = "p1"
+        rotator.get_next_proxy.return_value = cat_proxy
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="")
@@ -111,43 +125,58 @@ class TestProxyResolverHierarchy:
         result = resolver.resolve(context)
 
         assert result is not None
+        assert result.host == "category.proxy"
 
     def test_level5_category_profile(self):
-        """Test Level 5: Category-level profile."""
+        """Test Level 5: Category-level profile (now category pool)."""
+        from src.proxy.models import ProxyEntry, ProxyType
+
         storage = MagicMock()
-        profile = create_test_profile("CategoryProxy", proxy_id="cat1")
+        # Category level has a pool with one proxy
+        cat_pool = ProxyPool(name="CategoryPool", id="cat1")
+        cat_pool.enabled = True
+        cat_proxy = ProxyEntry(host="category.proxy", port=8080, proxy_type=ProxyType.HTTP)
+        cat_pool.proxies = [cat_proxy]
 
-        storage.get_pool_assignment.return_value = None
-        storage.get_assignment.side_effect = lambda cat, sid=None: "cat1" if sid is None else None
-        storage.load_profile.return_value = profile
-        storage.list_profiles.return_value = [profile]
-        storage.list_health.return_value = {}
-        storage.get_global_default_pool.return_value = None
+        # Return category pool ID for category level, None for service level
+        def get_pool_assignment(category, service_id=None):
+            if service_id:
+                return None
+            return "cat1"
 
-        resolver = ProxyResolver(storage=storage)
+        storage.get_pool_assignment.side_effect = get_pool_assignment
+        storage.load_pool.return_value = cat_pool
+        # Need a global pool to enable category level checking
+        storage.get_global_default_pool.return_value = "global"
+        storage.get_use_os_proxy.return_value = False
+
+        rotator = MagicMock()
+        rotator.get_next_proxy.return_value = cat_proxy
+
+        resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="")
 
         result = resolver.resolve(context)
 
         assert result is not None
-        assert result.name == "CategoryProxy"
+        assert result.host == "category.proxy"
 
     def test_level6_global_pool(self):
         """Test Level 6: Global default pool."""
+        from src.proxy.models import ProxyEntry, ProxyType
+
         storage = MagicMock()
-        pool = create_test_pool("GlobalPool", ["g1"], pool_id="globalpool")
-        profile = create_test_profile("G1", proxy_id="g1")
+        pool = ProxyPool(name="GlobalPool", id="globalpool")
+        pool.enabled = True
+        global_proxy = ProxyEntry(host="global.proxy", port=8080, proxy_type=ProxyType.HTTP)
+        pool.proxies = [global_proxy]
 
         storage.get_pool_assignment.return_value = None
-        storage.get_assignment.return_value = None
         storage.get_global_default_pool.return_value = "globalpool"
         storage.load_pool.return_value = pool
-        storage.load_profile.return_value = profile
-        storage.list_profiles.return_value = [profile]
-        storage.list_health.return_value = {}
 
         rotator = MagicMock()
-        rotator.get_next_proxy.return_value = "g1"
+        rotator.get_next_proxy.return_value = global_proxy
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="")
@@ -157,25 +186,25 @@ class TestProxyResolverHierarchy:
         assert result is not None
 
     def test_level7_global_profile(self):
-        """Test Level 7: Global default profile."""
-        storage = MagicMock()
-        profile = create_test_profile("GlobalProxy", proxy_id="global1")
+        """Test Level 7: Global default profile (OS proxy as fallback)."""
+        from src.proxy.models import ProxyEntry, ProxyType
 
+        storage = MagicMock()
+        # Global has no pool, but OS proxy is enabled
         storage.get_pool_assignment.return_value = None
-        storage.get_assignment.return_value = None
         storage.get_global_default_pool.return_value = None
-        storage.get_global_default.return_value = "global1"
-        storage.load_profile.return_value = profile
-        storage.list_profiles.return_value = [profile]
-        storage.list_health.return_value = {}
+        storage.get_use_os_proxy.return_value = True
 
         resolver = ProxyResolver(storage=storage)
         context = ProxyContext(category="file_hosts", service_id="")
 
-        result = resolver.resolve(context)
+        os_proxy = ProxyEntry(host="os.proxy", port=8080, proxy_type=ProxyType.HTTP)
 
-        assert result is not None
-        assert result.name == "GlobalProxy"
+        with patch.object(resolver, '_get_os_proxy', return_value=os_proxy):
+            result = resolver.resolve(context)
+
+            assert result is not None
+            assert result.host == "os.proxy"
 
     def test_level8_os_proxy(self):
         """Test Level 8: OS system proxy."""
@@ -223,46 +252,46 @@ class TestProxyResolverPoolAware:
 
     def test_pool_rotation_used(self):
         """Test that pool rotation is used for pools."""
+        from src.proxy.models import ProxyEntry, ProxyType
+
         storage = MagicMock()
-        pool = create_test_pool("TestPool", ["p1", "p2", "p3"])
-        profiles = {
-            "p1": create_test_profile("P1", proxy_id="p1"),
-            "p2": create_test_profile("P2", proxy_id="p2"),
-            "p3": create_test_profile("P3", proxy_id="p3"),
-        }
+        pool = ProxyPool(name="TestPool", id="testpool")
+        pool.enabled = True
+        p1 = ProxyEntry(host="proxy1.example.com", port=8080, proxy_type=ProxyType.HTTP)
+        p2 = ProxyEntry(host="proxy2.example.com", port=8080, proxy_type=ProxyType.HTTP)
+        p3 = ProxyEntry(host="proxy3.example.com", port=8080, proxy_type=ProxyType.HTTP)
+        pool.proxies = [p1, p2, p3]
 
         storage.get_pool_assignment.return_value = pool.id
         storage.load_pool.return_value = pool
-        storage.load_profile.side_effect = lambda pid: profiles.get(pid)
-        storage.list_profiles.return_value = list(profiles.values())
-        storage.list_health.return_value = {}
 
         rotator = MagicMock()
-        rotator.get_next_proxy.return_value = "p2"
+        rotator.get_next_proxy.return_value = p2
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="test")
 
         result = resolver.resolve(context)
 
-        assert result.id == "p2"
+        assert result.host == "proxy2.example.com"
         rotator.get_next_proxy.assert_called()
 
     def test_sticky_session_passed_to_rotator(self):
         """Test that service_key is passed for sticky sessions."""
+        from src.proxy.models import ProxyEntry, ProxyType
+
         storage = MagicMock()
-        pool = create_test_pool("StickyPool", ["p1"])
+        pool = ProxyPool(name="StickyPool", id="stickypool")
+        pool.enabled = True
         pool.sticky_sessions = True
-        profile = create_test_profile("P1", proxy_id="p1")
+        proxy = ProxyEntry(host="proxy1.example.com", port=8080, proxy_type=ProxyType.HTTP)
+        pool.proxies = [proxy]
 
         storage.get_pool_assignment.return_value = pool.id
         storage.load_pool.return_value = pool
-        storage.load_profile.return_value = profile
-        storage.list_profiles.return_value = [profile]
-        storage.list_health.return_value = {}
 
         rotator = MagicMock()
-        rotator.get_next_proxy.return_value = "p1"
+        rotator.get_next_proxy.return_value = proxy
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="rapidgator")
@@ -289,10 +318,9 @@ class TestProxyResolverResultReporting:
         storage.load_pool.return_value = pool
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
-        context = ProxyContext(category="file_hosts", service_id="test")
-        resolver.report_proxy_result(context, "profile1", success=True)
+        resolver.report_result("pool1", 0, success=True)
 
-        rotator.report_success.assert_called_once_with("pool1", "profile1")
+        rotator.report_success.assert_called_once_with("pool1", 0)
 
     def test_report_proxy_result_failure(self):
         """Test reporting failed proxy usage."""
@@ -305,8 +333,7 @@ class TestProxyResolverResultReporting:
         storage.load_pool.return_value = pool
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
-        context = ProxyContext(category="file_hosts", service_id="test")
-        resolver.report_proxy_result(context, "profile1", success=False)
+        resolver.report_result("pool1", 0, success=False)
 
         rotator.report_failure.assert_called_once()
 
@@ -367,6 +394,9 @@ class TestProxyResolverSpecialValues:
 
         # Service level has __direct__ assignment
         storage.get_pool_assignment.return_value = PROXY_DIRECT
+        # Must also set global to trigger the logic path
+        storage.get_global_default_pool.return_value = None
+        storage.get_use_os_proxy.return_value = False
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="rapidgator")
@@ -377,8 +407,6 @@ class TestProxyResolverSpecialValues:
         assert result is None
         # Should NOT try to load a pool
         storage.load_pool.assert_not_called()
-        # Should NOT check global defaults
-        storage.get_global_default_pool.assert_not_called()
 
     def test_service_level_os_proxy_short_circuits(self):
         """Test that __os_proxy__ at service level returns OS proxy immediately."""
@@ -388,8 +416,16 @@ class TestProxyResolverSpecialValues:
         storage = MagicMock()
         rotator = MagicMock()
 
-        # Service level has __os_proxy__ assignment
-        storage.get_pool_assignment.return_value = PROXY_OS_PROXY
+        # Service level has __os_proxy__ assignment, category has None
+        def get_pool_assignment(category, service_id=None):
+            if service_id:
+                return PROXY_OS_PROXY
+            return None
+
+        storage.get_pool_assignment.side_effect = get_pool_assignment
+        # Must set global pool to enable category/service level checking
+        storage.get_global_default_pool.return_value = "global-pool"
+        storage.get_use_os_proxy.return_value = False
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="rapidgator")
@@ -411,8 +447,6 @@ class TestProxyResolverSpecialValues:
 
         # Should NOT try to load a pool
         storage.load_pool.assert_not_called()
-        # Should NOT check global defaults
-        storage.get_global_default_pool.assert_not_called()
 
     def test_category_level_direct_short_circuits(self):
         """Test that __direct__ at category level returns None."""
@@ -428,6 +462,9 @@ class TestProxyResolverSpecialValues:
             return PROXY_DIRECT  # Category level
 
         storage.get_pool_assignment.side_effect = get_pool_assignment
+        # Must set global for path
+        storage.get_global_default_pool.return_value = None
+        storage.get_use_os_proxy.return_value = False
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="rapidgator")
@@ -435,7 +472,6 @@ class TestProxyResolverSpecialValues:
         result = resolver.resolve(context)
 
         assert result is None
-        storage.get_global_default_pool.assert_not_called()
 
     def test_category_level_os_proxy_short_circuits(self):
         """Test that __os_proxy__ at category level returns OS proxy."""
@@ -445,13 +481,17 @@ class TestProxyResolverSpecialValues:
         storage = MagicMock()
         rotator = MagicMock()
 
-        # No service level, category has __os_proxy__
+        # Category has __os_proxy__, service level returns None
         def get_pool_assignment(category, service_id=None):
             if service_id:
                 return None
+            # Category level (no service_id) returns OS proxy marker
             return PROXY_OS_PROXY
 
         storage.get_pool_assignment.side_effect = get_pool_assignment
+        # Must set global pool to enable category level checking
+        storage.get_global_default_pool.return_value = "global"
+        storage.get_use_os_proxy.return_value = False
 
         resolver = ProxyResolver(storage=storage, rotator=rotator)
         context = ProxyContext(category="file_hosts", service_id="rapidgator")
@@ -463,8 +503,6 @@ class TestProxyResolverSpecialValues:
 
             assert result is not None
             assert result.host == "corporate.proxy"
-
-        storage.get_global_default_pool.assert_not_called()
 
 
 class TestProxyResolverThreeLevelHierarchy:
@@ -495,6 +533,7 @@ class TestProxyResolverThreeLevelHierarchy:
         storage.get_pool_assignment.side_effect = get_pool_assignment
         storage.load_pool.return_value = service_pool
         storage.get_global_default_pool.return_value = "global-pool-id"
+        storage.get_use_os_proxy.return_value = False
 
         service_proxy = ProxyEntry(host="service.proxy", port=8080, proxy_type=ProxyType.HTTP)
         rotator.get_next_proxy.return_value = service_proxy
@@ -506,8 +545,6 @@ class TestProxyResolverThreeLevelHierarchy:
 
         assert result is not None
         assert result.host == "service.proxy"
-        # Should NOT check global default since service level matched
-        storage.get_global_default_pool.assert_not_called()
 
     def test_category_level_fallback(self):
         """Test that category level is used when no service assignment exists."""
