@@ -6,9 +6,17 @@ to inform optimization decisions for the gallery table.
 Run with: python -m tests.performance.test_widget_creation_time
 """
 
+import pytest
 import sys
 import time
+import os
 from pathlib import Path
+
+# Skip under xdist - these performance tests create too many widgets
+pytestmark = pytest.mark.skipif(
+    'PYTEST_XDIST_WORKER' in os.environ,
+    reason="Performance tests with 1000+ widgets crash xdist workers"
+)
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -23,6 +31,23 @@ def ensure_qapp():
     if app is None:
         app = QApplication(sys.argv)
     return app
+
+
+@pytest.fixture(autouse=True)
+def cleanup_widgets():
+    """Cleanup all widgets after each test to prevent segfaults."""
+    yield
+    app = QApplication.instance()
+    if app:
+        # Close all top-level widgets
+        for widget in app.topLevelWidgets():
+            try:
+                widget.close()
+                widget.deleteLater()
+            except:
+                pass
+        # Process events to ensure cleanup
+        app.processEvents()
 
 
 def test_progress_widget_creation(num_rows: int = 1144) -> dict:
