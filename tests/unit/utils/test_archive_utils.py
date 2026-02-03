@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 from src.utils.archive_utils import (
     SUPPORTED_ARCHIVE_EXTENSIONS,
+    get_archive_type,
     is_archive_file,
     is_valid_archive,
     get_archive_name,
@@ -23,10 +24,50 @@ class TestConstants:
     """Test module constants"""
 
     def test_supported_extensions(self):
-        """Test supported archive extensions are defined"""
+        """Test all supported archive extensions are defined"""
         assert '.zip' in SUPPORTED_ARCHIVE_EXTENSIONS
         assert '.cbz' in SUPPORTED_ARCHIVE_EXTENSIONS
-        assert len(SUPPORTED_ARCHIVE_EXTENSIONS) >= 2
+        assert '.rar' in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert '.7z' in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert '.tar' in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert '.tar.gz' in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert '.tgz' in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert '.tar.bz2' in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert '.tbz2' in SUPPORTED_ARCHIVE_EXTENSIONS
+        assert len(SUPPORTED_ARCHIVE_EXTENSIONS) == 9
+
+
+class TestGetArchiveType:
+    """Test archive type detection"""
+
+    @pytest.mark.parametrize("path,expected", [
+        ("archive.zip", "zip"),
+        ("comic.cbz", "zip"),
+        ("archive.CBZ", "zip"),
+        ("archive.rar", "rar"),
+        ("archive.RAR", "rar"),
+        ("archive.7z", "7z"),
+        ("archive.tar", "tar"),
+        ("archive.tar.gz", "tar"),
+        ("archive.tgz", "tar"),
+        ("archive.tar.bz2", "tar"),
+        ("archive.tbz2", "tar"),
+        ("archive.TGZ", "tar"),
+        ("archive.TAR.GZ", "tar"),
+        # Not archives
+        ("file.txt", ""),
+        ("image.jpg", ""),
+        ("", ""),
+    ])
+    def test_type_detection(self, path, expected):
+        assert get_archive_type(path) == expected
+
+    def test_path_object(self):
+        assert get_archive_type(Path("test.7z")) == "7z"
+
+    def test_full_path(self):
+        assert get_archive_type("/some/path/archive.tar.bz2") == "tar"
+        assert get_archive_type("C:\\Users\\test\\file.rar") == "rar"
 
 
 class TestIsArchiveFile:
@@ -38,13 +79,20 @@ class TestIsArchiveFile:
         ("ARCHIVE.ZIP", True),
         ("comic.cbz", True),
         ("COMIC.CBZ", True),
+        # Additional supported formats
+        ("archive.rar", True),
+        ("archive.RAR", True),
+        ("archive.7z", True),
+        ("archive.tar", True),
+        ("archive.tar.gz", True),
+        ("archive.tgz", True),
+        ("archive.tar.bz2", True),
+        ("archive.tbz2", True),
+        ("archive.TGZ", True),
         # Unsupported formats
         ("file.txt", False),
         ("image.jpg", False),
         ("document.pdf", False),
-        ("archive.rar", False),
-        ("archive.7z", False),
-        ("archive.tar.gz", False),
         # Edge cases
         ("", False),
         (".zip", True),  # Hidden file
@@ -94,6 +142,36 @@ class TestIsValidArchive:
         cbz_file.touch()
         assert is_valid_archive(cbz_file) == True
 
+    def test_valid_rar_file(self, tmp_path):
+        """Test valid RAR file returns True"""
+        f = tmp_path / "archive.rar"
+        f.touch()
+        assert is_valid_archive(f) == True
+
+    def test_valid_7z_file(self, tmp_path):
+        """Test valid 7z file returns True"""
+        f = tmp_path / "archive.7z"
+        f.touch()
+        assert is_valid_archive(f) == True
+
+    def test_valid_tar_gz_file(self, tmp_path):
+        """Test valid tar.gz file returns True"""
+        f = tmp_path / "archive.tar.gz"
+        f.touch()
+        assert is_valid_archive(f) == True
+
+    def test_valid_tgz_file(self, tmp_path):
+        """Test valid tgz file returns True"""
+        f = tmp_path / "archive.tgz"
+        f.touch()
+        assert is_valid_archive(f) == True
+
+    def test_valid_tar_bz2_file(self, tmp_path):
+        """Test valid tar.bz2 file returns True"""
+        f = tmp_path / "archive.tar.bz2"
+        f.touch()
+        assert is_valid_archive(f) == True
+
     def test_nonexistent_file(self, tmp_path):
         """Test nonexistent file returns False"""
         zip_file = tmp_path / "nonexistent.zip"
@@ -130,6 +208,13 @@ class TestGetArchiveName:
         ("C:\\Users\\test\\backup.zip", "backup"),
         ("file.with.dots.zip", "file.with.dots"),
         (".hidden.zip", ".hidden"),
+        ("backup.7z", "backup"),
+        ("data.rar", "data"),
+        ("files.tar", "files"),
+        ("files.tar.gz", "files"),
+        ("files.tgz", "files"),
+        ("files.tar.bz2", "files"),
+        ("files.tbz2", "files"),
     ])
     def test_name_extraction(self, path, expected):
         """Test extracting archive name without extension"""
