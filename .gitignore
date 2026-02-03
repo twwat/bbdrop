@@ -132,3 +132,8 @@ CLAUDE.md
 docs/plans/
 agents/
 docs/dev/CLAUDE_FLOW_CHEAT_SHEET.md
+scripts/
+ruvector-postgres/
+venv/
+winvenv/
+.venv/
