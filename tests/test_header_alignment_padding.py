@@ -79,8 +79,8 @@ class TestHeaderVerticalAlignment:
     def test_header_default_alignment_in_stylesheet(self):
         """Test 1.1: Verify header alignment rule exists in stylesheet"""
         # Check styles.qss for header alignment configuration
-        styles_path = project_root / "assets" / "styles.qss"
-        assert styles_path.exists(), "styles.qss file not found"
+        styles_path = project_root / "assets" / "styles" / "components" / "tables.qss"
+        assert styles_path.exists(), "tables.qss file not found"
 
         with open(styles_path, 'r') as f:
             content = f.read()
@@ -299,7 +299,7 @@ class TestVisualConsistency:
 
     def test_stylesheet_covers_both_themes(self):
         """Test 3.3: Verify stylesheet has light and dark theme rules"""
-        styles_path = project_root / "assets" / "styles.qss"
+        styles_path = project_root / "assets" / "styles" / "components" / "tables.qss"
 
         with open(styles_path, 'r') as f:
             content = f.read()
@@ -316,7 +316,7 @@ class TestVisualConsistency:
 
     def test_header_styling_in_both_themes(self):
         """Test 3.4: Verify header styling defined for both themes"""
-        styles_path = project_root / "assets" / "styles.qss"
+        styles_path = project_root / "assets" / "styles" / "components" / "tables.qss"
 
         with open(styles_path, 'r') as f:
             content = f.read()

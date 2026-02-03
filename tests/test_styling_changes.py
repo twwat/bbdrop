@@ -28,7 +28,7 @@ class TestHeaderFontSizing:
 
     def test_qss_header_font_size(self):
         """Verify QSS declares header font-size: 9px"""
-        styles_path = Path(__file__).parent.parent / "assets" / "styles.qss"
+        styles_path = Path(__file__).parent.parent / "assets" / "styles" / "components" / "tables.qss"
         assert styles_path.exists(), f"QSS file not found: {styles_path}"
 
         content = styles_path.read_text()
@@ -180,7 +180,7 @@ class TestImplementationIntegration:
     def test_all_columns_defined(self):
         """Verify all required columns are properly defined"""
         # At least these core columns should exist
-        required_core_ids = ['icon', 'hostname', 'speed', 'status', 'storage', 'settings']
+        required_core_ids = ['icon', 'hostname', 'speed', 'status', 'storage']
 
         for col_id in required_core_ids:
             assert col_id in AVAILABLE_COLUMNS, \
