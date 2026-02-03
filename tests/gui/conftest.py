@@ -200,6 +200,8 @@ def temp_assets_dir(tmp_path) -> Generator[Path, None, None]:
         'status_failed-dark.png',
         'action_start-light.png',
         'action_start-dark.png',
+        'status_uploading-light.png',
+        'status_uploading-dark.png',
         'bbdrop.ico',
         'bbdrop.png',
     ]

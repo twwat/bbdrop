@@ -172,3 +172,44 @@ def mock_qmessagebox_for_unit_tests(monkeypatch):
     monkeypatch.setattr(QMessageBox, 'critical', mock_critical)
 
     yield
+
+
+@pytest.fixture(autouse=True)
+def auto_shutdown_bbdrop_windows():
+    """Auto-shutdown any BBDropGUI instances after each test to prevent
+    background threads from crashing xdist workers."""
+    yield
+    try:
+        from src.gui.main_window import BBDropGUI
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            for widget in app.topLevelWidgets():
+                if isinstance(widget, BBDropGUI):
+                    shutdown_bbdrop_window(widget)
+    except Exception:
+        pass
+
+
+def shutdown_bbdrop_window(window):
+    """Shut down BBDropGUI background threads to prevent fatal aborts.
+
+    Call this in fixture teardown (after yield) for any test that
+    instantiates BBDropGUI.
+    """
+    if hasattr(window, 'artifact_handler'):
+        try:
+            window.artifact_handler.stop()
+        except Exception:
+            pass
+    if hasattr(window, 'queue_manager'):
+        try:
+            window.queue_manager.shutdown()
+        except Exception:
+            pass
+    if hasattr(window, '_loader_thread') and window._loader_thread is not None:
+        try:
+            window._loader_thread.stop()
+            window._loader_thread.wait(2000)
+        except Exception:
+            pass

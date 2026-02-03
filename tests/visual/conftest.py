@@ -13,6 +13,16 @@ from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPainter
 
+
+def pytest_addoption(parser):
+    """Add --update-baselines option."""
+    parser.addoption(
+        "--update-baselines",
+        action="store_true",
+        default=False,
+        help="Update baseline screenshots instead of comparing"
+    )
+
 # Directories
 VISUAL_DIR = Path(__file__).parent
 BASELINES_DIR = VISUAL_DIR / "baselines"
