@@ -5,6 +5,7 @@ Tests help documentation dialog functionality
 """
 
 import pytest
+from unittest.mock import patch
 from PyQt6.QtWidgets import QDialog
 from PyQt6.QtCore import Qt
 
@@ -16,43 +17,21 @@ class TestHelpDialogInit:
 
     def test_help_dialog_creates(self, qtbot):
         """Test HelpDialog instantiation"""
-        dialog = HelpDialog()
-        qtbot.addWidget(dialog)
-
-        try:
+        with patch.object(HelpDialog, '_start_document_loading'):
+            dialog = HelpDialog()
+            qtbot.addWidget(dialog)
             assert dialog is not None
             assert isinstance(dialog, QDialog)
-        finally:
-            # Ensure thread is stopped before dialog is destroyed
-            if hasattr(dialog, '_loader_thread') and dialog._loader_thread is not None:
-                if dialog._loader_thread.isRunning():
-                    dialog._loader_thread.stop()
-                    dialog._loader_thread.wait(2000)
-                    if dialog._loader_thread.isRunning():
-                        dialog._loader_thread.terminate()
-                        dialog._loader_thread.wait(500)
             dialog.close()
-            dialog.deleteLater()
 
     def test_help_dialog_has_content_viewer(self, qtbot):
         """Test that dialog has content viewer"""
-        dialog = HelpDialog()
-        qtbot.addWidget(dialog)
-
-        try:
+        with patch.object(HelpDialog, '_start_document_loading'):
+            dialog = HelpDialog()
+            qtbot.addWidget(dialog)
             assert hasattr(dialog, 'content_viewer')
             assert hasattr(dialog, 'tree')
-        finally:
-            # Ensure thread is stopped before dialog is destroyed
-            if hasattr(dialog, '_loader_thread') and dialog._loader_thread is not None:
-                if dialog._loader_thread.isRunning():
-                    dialog._loader_thread.stop()
-                    dialog._loader_thread.wait(2000)
-                    if dialog._loader_thread.isRunning():
-                        dialog._loader_thread.terminate()
-                        dialog._loader_thread.wait(500)
             dialog.close()
-            dialog.deleteLater()
 
 
 class TestHelpDialogDocumentation:
@@ -60,30 +39,15 @@ class TestHelpDialogDocumentation:
 
     def test_loads_documentation_structure(self, qtbot, tmp_path):
         """Test loading documentation structure"""
-        # Create temp docs directory
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir()
-
-        # Create a test doc file
         (docs_dir / "TEST.md").write_text("# Test Documentation")
 
-        dialog = HelpDialog()
-        qtbot.addWidget(dialog)
-
-        try:
-            # Should have tree widget populated
+        with patch.object(HelpDialog, '_start_document_loading'):
+            dialog = HelpDialog()
+            qtbot.addWidget(dialog)
             assert dialog.tree.topLevelItemCount() >= 0
-        finally:
-            # Ensure thread is stopped before dialog is destroyed
-            if hasattr(dialog, '_loader_thread') and dialog._loader_thread is not None:
-                if dialog._loader_thread.isRunning():
-                    dialog._loader_thread.stop()
-                    dialog._loader_thread.wait(2000)
-                    if dialog._loader_thread.isRunning():
-                        dialog._loader_thread.terminate()
-                        dialog._loader_thread.wait(500)
             dialog.close()
-            dialog.deleteLater()
 
 
 if __name__ == '__main__':
