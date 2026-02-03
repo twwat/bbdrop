@@ -26,6 +26,8 @@ except ImportError:
     MARKDOWN_AVAILABLE = False
     render_markdown = None
 
+_pygments_preloaded = False
+
 
 class DocumentLoaderThread(QThread):
     """Background thread for loading and parsing documentation files.
@@ -418,6 +420,19 @@ class HelpDialog(QDialog):
         self._loader_thread.all_loaded.connect(self._on_all_loaded)
         self._loader_thread.error.connect(self._on_loader_error)
 
+        # Pre-load pygments lexer modules in main thread (once) to avoid
+        # fatal abort from concurrent imports in worker threads.
+        global _pygments_preloaded
+        if not _pygments_preloaded:
+            try:
+                from pygments.lexers import _iter_lexerclasses
+                # Force all lazy lexer module imports in main thread
+                for _ in _iter_lexerclasses():
+                    pass
+            except (ImportError, AttributeError):
+                pass
+            _pygments_preloaded = True
+
         # Start loading
         self._loader_thread.start()
 
@@ -784,18 +799,18 @@ class HelpDialog(QDialog):
         Args:
             event: Close event
         """
-        if self._loader_thread is not None and self._loader_thread.isRunning():
-            self._loader_thread.stop()
-            self._loader_thread.wait(1000)  # Wait up to 1 second
-            if self._loader_thread.isRunning():
-                self._loader_thread.terminate()
+        self._stop_loader_thread()
         super().closeEvent(event)
 
     def reject(self):
         """Handle dialog rejection (Escape key or Close button)."""
+        self._stop_loader_thread()
+        super().reject()
+
+    def _stop_loader_thread(self):
+        """Safely stop the loader thread. Never terminate — it causes
+        fatal aborts when the thread is mid-import (pygments lexers)."""
         if self._loader_thread is not None and self._loader_thread.isRunning():
             self._loader_thread.stop()
-            self._loader_thread.wait(1000)
-            if self._loader_thread.isRunning():
-                self._loader_thread.terminate()
+            self._loader_thread.wait(5000)
         super().reject()
