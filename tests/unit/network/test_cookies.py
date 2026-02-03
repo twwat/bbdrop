@@ -13,13 +13,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
-# Mock logging BEFORE importing cookies module to prevent .bbdrop directory creation
-import sys
-from unittest.mock import MagicMock
-
-mock_log = MagicMock(return_value=None)
-sys.modules['src.utils.logger'] = MagicMock(log=mock_log)
-
 from src.network.cookies import (
     get_firefox_cookies,
     load_cookies_from_file,
