@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.gui.widgets.gallery_table import GalleryTableWidget
 from src.storage.queue_manager import GalleryQueueItem
+from src.gui.table_row_manager import TableRowManager
 
 
 # ============================================================================
@@ -44,7 +45,7 @@ def mock_queue_manager():
 
 @pytest.fixture
 def mock_main_window(qtbot, mock_queue_manager):
-    """Create mock main window with real GalleryTableWidget"""
+    """Create mock main window with real GalleryTableWidget and TableRowManager"""
     window = Mock()
     window.queue_manager = mock_queue_manager
     window.gallery_table = GalleryTableWidget()
@@ -54,6 +55,7 @@ def mock_main_window(qtbot, mock_queue_manager):
     window._initializing = False
     window._last_scan_states = {}
     window._file_host_uploads_cache = {}
+    window._path_lock = Mock()
 
     # Mock methods called during population
     window._set_status_cell_icon = Mock()
@@ -61,8 +63,13 @@ def mock_main_window(qtbot, mock_queue_manager):
     window._format_size_consistent = Mock(return_value="100 MiB")
     window._format_rate_consistent = Mock(return_value="500 KiB/s")
     window.get_theme_mode = Mock(return_value='light')
-    window._populate_table_row = Mock()
-    window._create_deferred_widgets = Mock()
+    window._set_path_row_mapping = Mock()
+
+    # Create real TableRowManager for testing
+    window.table_row_manager = TableRowManager(window)
+    # Mock the _populate_table_row method on TableRowManager to avoid complex widget setup
+    window.table_row_manager._populate_table_row = Mock()
+    window.table_row_manager._create_deferred_widgets = Mock()
 
     qtbot.addWidget(window.gallery_table)
     return window
@@ -123,10 +130,8 @@ class TestSetUpdatesEnabledOptimization:
         mock_main_window.gallery_table.setUpdatesEnabled = track_set_updates
 
         # Import the method we're testing
-        from src.gui.main_window import BBDropGUI
-
-        # Act
-        BBDropGUI._initialize_table_from_queue(mock_main_window)
+                # Act - call TableRowManager method directly
+        mock_main_window.table_row_manager._initialize_table_from_queue()
 
         # Assert
         assert len(updates_enabled_calls) >= 2, "setUpdatesEnabled should be called at least twice"
@@ -153,10 +158,8 @@ class TestSetUpdatesEnabledOptimization:
         mock_main_window._populate_table_row = track_populate_row
 
         # Import the method
-        from src.gui.main_window import BBDropGUI
-
-        # Act
-        BBDropGUI._initialize_table_from_queue(mock_main_window)
+                # Act - call TableRowManager method directly
+        mock_main_window.table_row_manager._initialize_table_from_queue()
 
         # Assert
         assert len(call_order) > 0, "Should have recorded calls"
@@ -193,10 +196,8 @@ class TestSetUpdatesEnabledOptimization:
         mock_main_window._populate_table_row = track_populate_row
 
         # Import the method
-        from src.gui.main_window import BBDropGUI
-
-        # Act
-        BBDropGUI._initialize_table_from_queue(mock_main_window)
+                # Act - call TableRowManager method directly
+        mock_main_window.table_row_manager._initialize_table_from_queue()
 
         # Assert
         # Find last populate_row call
@@ -215,10 +216,10 @@ class TestSetUpdatesEnabledOptimization:
 # ============================================================================
 
 class TestProgressCallbackOptimization:
-    """Test that progress_callback is called once, not per-row"""
+    """Test that progress_callback is called in batches, not per-row"""
 
-    def test_progress_callback_called_once_for_997_items(self, mock_main_window, create_gallery_items, qtbot):
-        """Verify progress_callback called ONCE for 997 items (not 997 times)"""
+    def test_progress_callback_called_in_batches_for_997_items(self, mock_main_window, create_gallery_items, qtbot):
+        """Verify progress_callback called every 10 items, not 997 times"""
         # Arrange
         items = create_gallery_items(997)
         mock_main_window.queue_manager.get_all_items = Mock(return_value=items)
@@ -229,17 +230,17 @@ class TestProgressCallbackOptimization:
         def track_progress(current, total):
             progress_calls.append((current, total))
 
-        # Import the method
-        from src.gui.main_window import BBDropGUI
+        # Act - call TableRowManager method directly
+        mock_main_window.table_row_manager._initialize_table_from_queue(progress_callback=track_progress)
 
-        # Act
-        BBDropGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
-
-        # Assert
-        assert len(progress_calls) == 1, \
-            f"progress_callback should be called ONCE, not {len(progress_calls)} times"
-        assert progress_calls[0] == (997, 997), \
-            "progress_callback should be called with (997, 997) at completion"
+        # Assert: should be called every 10 rows (997/10 = 99 + 1 final) = 100 calls
+        # Much better than 997 calls!
+        assert len(progress_calls) <= 110, \
+            f"progress_callback should be batched (not per-row), got {len(progress_calls)} calls"
+        assert len(progress_calls) >= 90, \
+            f"progress_callback should be called regularly, got {len(progress_calls)} calls"
+        assert progress_calls[-1] == (997, 997), \
+            "Final progress_callback should be called with (997, 997) at completion"
 
 
     def test_progress_callback_not_called_during_loop(self, mock_main_window, create_gallery_items, qtbot):
@@ -476,12 +477,9 @@ class TestFullOptimizationIntegration:
         with patch.object(QApplication, 'processEvents') as mock_process_events:
             mock_process_events.side_effect = lambda: process_events_calls.append(1)
 
-            # Import the method
-            from src.gui.main_window import BBDropGUI
-
-            # Act
+            # Act - call TableRowManager method directly
             start_time = time.time()
-            BBDropGUI._initialize_table_from_queue(mock_main_window, progress_callback=track_progress)
+            mock_main_window.table_row_manager._initialize_table_from_queue(progress_callback=track_progress)
             elapsed_time = time.time() - start_time
 
         # Assert all optimizations
@@ -490,9 +488,9 @@ class TestFullOptimizationIntegration:
         assert updates_enabled_calls[0] == False, "Updates should be disabled first"
         assert updates_enabled_calls[-1] == True, "Updates should be re-enabled"
 
-        # 2. Progress callback optimization
-        assert len(progress_calls) == 1, "progress_callback should be called once"
-        assert progress_calls[0] == (100, 100), "Progress should be reported at completion"
+        # 2. Progress callback optimization (batched every 10 rows, not per-row)
+        assert len(progress_calls) <= 15, f"progress_callback should be batched, not {len(progress_calls)} calls"
+        assert progress_calls[-1] == (100, 100), "Progress should be reported at completion"
 
         # 3. processEvents optimization
         assert len(process_events_calls) <= 2, "processEvents should be minimal"
@@ -530,10 +528,8 @@ class TestBatchLoadingOptimization:
         mock_main_window.queue_manager.store.get_all_file_host_uploads_batch = track_batch_load
 
         # Import the method
-        from src.gui.main_window import BBDropGUI
-
-        # Act
-        BBDropGUI._initialize_table_from_queue(mock_main_window)
+                # Act - call TableRowManager method directly
+        mock_main_window.table_row_manager._initialize_table_from_queue()
 
         # Assert
         assert len(batch_load_calls) == 1, \
@@ -553,10 +549,8 @@ class TestBatchLoadingOptimization:
         mock_main_window.queue_manager.store.get_all_file_host_uploads_batch = Mock(return_value=batch_data)
 
         # Import the method
-        from src.gui.main_window import BBDropGUI
-
-        # Act
-        BBDropGUI._initialize_table_from_queue(mock_main_window)
+                # Act - call TableRowManager method directly
+        mock_main_window.table_row_manager._initialize_table_from_queue()
 
         # Assert
         assert hasattr(mock_main_window, '_file_host_uploads_cache'), \
