@@ -4,6 +4,8 @@
 import time
 from unittest.mock import Mock, patch
 
+import pytest
+
 def test_upload_gallery_with_hooks_FIXED():
     """
     FIXED VERSION: Test upload with hook execution

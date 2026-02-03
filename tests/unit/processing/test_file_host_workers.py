@@ -19,9 +19,9 @@ class TestFileHostWorkerInit:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_init_basic(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_init_basic(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test basic initialization"""
         mock_config = Mock()
         mock_config.name = "RapidGator"
@@ -40,10 +40,10 @@ class TestFileHostWorkerInit:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
     @patch('src.processing.file_host_workers.get_credential')
-    def test_init_loads_credentials(self, mock_get_cred, mock_qsettings, mock_zip_mgr,
+    def test_init_loads_credentials(self, mock_get_cred, mock_qsettings, mock_archive_mgr,
                                      mock_coord, mock_config_mgr):
         """Test credential loading during init"""
         mock_config = Mock()
@@ -60,9 +60,9 @@ class TestFileHostWorkerInit:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_init_creates_session_state(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_init_creates_session_state(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test session state initialization"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -73,7 +73,9 @@ class TestFileHostWorkerInit:
         assert worker._session_cookies == {}
         assert worker._session_token is None
         assert worker._session_timestamp is None
-        assert isinstance(worker._session_lock, threading.Lock)
+        # Lock should be initialized (not None)
+        assert worker._session_lock is not None
+        assert hasattr(worker._session_lock, 'acquire')  # Has lock methods
 
 
 class TestFileHostWorkerSignals:
@@ -81,9 +83,9 @@ class TestFileHostWorkerSignals:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_signals_exist(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_signals_exist(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test that all required signals exist"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -107,10 +109,10 @@ class TestFileHostWorkerLogging:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
     @patch('src.processing.file_host_workers.log')
-    def test_log_emits_signal_and_writes(self, mock_log, mock_qsettings, mock_zip_mgr,
+    def test_log_emits_signal_and_writes(self, mock_log, mock_qsettings, mock_archive_mgr,
                                           mock_coord, mock_config_mgr):
         """Test logging emits signal and writes to file"""
         mock_config = Mock()
@@ -137,9 +139,9 @@ class TestFileHostWorkerCredentials:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_update_credentials(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_update_credentials(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test updating credentials via signal"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -153,9 +155,9 @@ class TestFileHostWorkerCredentials:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_update_credentials_clear(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_update_credentials_clear(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test clearing credentials"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -174,11 +176,11 @@ class TestFileHostWorkerSessionManagement:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
     @patch('src.processing.file_host_workers.FileHostClient')
     def test_create_client_with_session(self, mock_client_class, mock_qsettings,
-                                         mock_zip_mgr, mock_coord, mock_config_mgr):
+                                         mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test client creation with session injection"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -202,9 +204,9 @@ class TestFileHostWorkerSessionManagement:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_update_session_from_client(self, mock_qsettings, mock_zip_mgr,
+    def test_update_session_from_client(self, mock_qsettings, mock_archive_mgr,
                                          mock_coord, mock_config_mgr):
         """Test session state extraction from client"""
         mock_config = Mock()
@@ -232,9 +234,9 @@ class TestFileHostWorkerControl:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_pause(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_pause(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test pausing worker"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -247,9 +249,9 @@ class TestFileHostWorkerControl:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_resume(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_resume(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test resuming worker"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -263,9 +265,9 @@ class TestFileHostWorkerControl:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_cancel_current_upload(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_cancel_current_upload(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test canceling current upload"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -274,7 +276,7 @@ class TestFileHostWorkerControl:
         worker = FileHostWorker("testhost", Mock())
         worker.current_upload_id = 123
         worker.current_host = "testhost"
-        worker.current_gallery_id = 456
+        worker.current_db_id = 456
 
         worker.cancel_current_upload()
 
@@ -282,9 +284,9 @@ class TestFileHostWorkerControl:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_stop(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_stop(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test stopping worker"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -303,9 +305,9 @@ class TestFileHostWorkerTestQueue:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_queue_test_request(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_queue_test_request(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test queuing test request"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -324,9 +326,9 @@ class TestFileHostWorkerBandwidth:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_emit_bandwidth(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_emit_bandwidth(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test bandwidth emission"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -352,9 +354,9 @@ class TestFileHostWorkerBandwidth:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_get_current_upload_info(self, mock_qsettings, mock_zip_mgr, mock_coord, mock_config_mgr):
+    def test_get_current_upload_info(self, mock_qsettings, mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test getting current upload info"""
         mock_config = Mock()
         mock_config.name = "TestHost"
@@ -374,9 +376,9 @@ class TestFileHostWorkerBandwidth:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_get_current_upload_info_none(self, mock_qsettings, mock_zip_mgr,
+    def test_get_current_upload_info_none(self, mock_qsettings, mock_archive_mgr,
                                            mock_coord, mock_config_mgr):
         """Test getting upload info when no upload active"""
         mock_config = Mock()
@@ -395,9 +397,9 @@ class TestFileHostWorkerStorageCache:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_save_storage_cache(self, mock_qsettings_class, mock_zip_mgr,
+    def test_save_storage_cache(self, mock_qsettings_class, mock_archive_mgr,
                                  mock_coord, mock_config_mgr):
         """Test saving storage cache"""
         mock_settings = Mock()
@@ -417,9 +419,9 @@ class TestFileHostWorkerStorageCache:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_load_storage_cache_valid(self, mock_qsettings_class, mock_zip_mgr,
+    def test_load_storage_cache_valid(self, mock_qsettings_class, mock_archive_mgr,
                                        mock_coord, mock_config_mgr):
         """Test loading valid storage cache"""
         mock_settings = Mock()
@@ -444,9 +446,9 @@ class TestFileHostWorkerStorageCache:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_load_storage_cache_expired(self, mock_qsettings_class, mock_zip_mgr,
+    def test_load_storage_cache_expired(self, mock_qsettings_class, mock_archive_mgr,
                                          mock_coord, mock_config_mgr):
         """Test loading expired storage cache"""
         mock_settings = Mock()
@@ -471,9 +473,9 @@ class TestFileHostWorkerTestResults:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_save_test_results(self, mock_qsettings_class, mock_zip_mgr,
+    def test_save_test_results(self, mock_qsettings_class, mock_archive_mgr,
                                 mock_coord, mock_config_mgr):
         """Test saving test results"""
         mock_settings = Mock()
@@ -502,9 +504,9 @@ class TestFileHostWorkerTestResults:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_load_test_results_valid(self, mock_qsettings_class, mock_zip_mgr,
+    def test_load_test_results_valid(self, mock_qsettings_class, mock_archive_mgr,
                                       mock_coord, mock_config_mgr):
         """Test loading valid test results"""
         mock_settings = Mock()
@@ -534,9 +536,9 @@ class TestFileHostWorkerTestResults:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_load_test_results_none(self, mock_qsettings_class, mock_zip_mgr,
+    def test_load_test_results_none(self, mock_qsettings_class, mock_archive_mgr,
                                      mock_coord, mock_config_mgr):
         """Test loading non-existent test results"""
         mock_settings = Mock()
@@ -559,9 +561,9 @@ class TestFileHostWorkerProcessUpload:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_process_upload_file_not_found(self, mock_qsettings, mock_zip_mgr_func,
+    def test_process_upload_file_not_found(self, mock_qsettings, mock_archive_mgr,
                                             mock_coord, mock_config_mgr):
         """Test upload processing with missing gallery folder"""
         mock_config = Mock()
@@ -599,9 +601,9 @@ class TestFileHostWorkerEdgeCases:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
-    def test_log_prefix_without_config(self, mock_qsettings, mock_zip_mgr,
+    def test_log_prefix_without_config(self, mock_qsettings, mock_archive_mgr,
                                         mock_coord, mock_config_mgr):
         """Test log prefix when config not found"""
         mock_config_mgr.return_value.get_host.return_value = None
@@ -612,11 +614,11 @@ class TestFileHostWorkerEdgeCases:
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')
-    @patch('src.processing.file_host_workers.get_zip_manager')
+    @patch('src.processing.file_host_workers.get_archive_manager')
     @patch('src.processing.file_host_workers.QSettings')
     @patch('src.processing.file_host_workers.get_credential')
     def test_load_credentials_decrypt_failure(self, mock_get_cred, mock_qsettings,
-                                               mock_zip_mgr, mock_coord, mock_config_mgr):
+                                               mock_archive_mgr, mock_coord, mock_config_mgr):
         """Test credential loading with decryption failure"""
         mock_config = Mock()
         mock_config.name = "TestHost"

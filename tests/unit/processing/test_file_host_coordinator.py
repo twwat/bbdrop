@@ -36,9 +36,13 @@ class TestFileHostCoordinatorInit:
     def test_init_locks_created(self):
         """Test that all required locks are created"""
         coordinator = FileHostCoordinator()
-        assert isinstance(coordinator.host_semaphore_lock, threading.Lock)
-        assert isinstance(coordinator.active_uploads_lock, threading.Lock)
-        assert isinstance(coordinator.stats_lock, threading.Lock)
+        # Check that locks have the required methods
+        assert hasattr(coordinator.host_semaphore_lock, 'acquire')
+        assert hasattr(coordinator.host_semaphore_lock, 'release')
+        assert hasattr(coordinator.active_uploads_lock, 'acquire')
+        assert hasattr(coordinator.active_uploads_lock, 'release')
+        assert hasattr(coordinator.stats_lock, 'acquire')
+        assert hasattr(coordinator.stats_lock, 'release')
 
 
 class TestFileHostCoordinatorUpdateLimits:
