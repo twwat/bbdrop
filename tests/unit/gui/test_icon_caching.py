@@ -23,20 +23,39 @@ def temp_assets_dir(tmp_path):
     assets = tmp_path / "assets"
     assets.mkdir()
 
-    # Create dummy icon files for testing
+    # Create minimal valid PNG data for testing
+    minimal_png = (
+        b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+        b'\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f'
+        b'\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82'
+    )
+
+    # Create icon files matching actual ICON_MAP structure
     test_icons = [
-        "status_completed-light.png",
-        "status_completed-dark.png",
-        "status_failed-light.png",
-        "status_failed-dark.png",
-        "status_uploading-light.png",
-        "status_uploading-dark.png",
-        "action_start-light.png",
-        "action_start-dark.png",
+        # Single-file icons (no light/dark variants)
+        "status_completed.png",
+        "status_failed.png",
+        "status_paused.png",
+        "action_start.png",
+        "action_stop.png",
+        # Light/dark pairs from ICON_MAP
+        ("status_uploading-light.png", "status_uploading-dark.png"),
+        ("status_scanning-light.png", "status_scanning-dark.png"),
+        ("status_validating-light.png", "status_validating-dark.png"),
+        ("action_resume-light.png", "action_resume-dark.png"),
+        # Animation frames
+        "status_uploading-001.png",
+        "status_uploading-002.png",
+        "status_uploading-003.png",
     ]
 
-    for icon_file in test_icons:
-        (assets / icon_file).write_bytes(b"fake icon data")
+    for icon_spec in test_icons:
+        if isinstance(icon_spec, tuple):
+            # Handle light/dark pairs
+            for icon_file in icon_spec:
+                (assets / icon_file).write_bytes(minimal_png)
+        else:
+            (assets / icon_spec).write_bytes(minimal_png)
 
     return str(assets)
 
@@ -61,9 +80,9 @@ class TestIconCacheReuse:
 
     def test_icon_cache_reuses_loaded_icons(self, icon_manager, qt_app):
         """Verify icons are cached and reused"""
-        # Get same icon twice
-        icon1 = icon_manager.get_icon('status_completed', 'light')
-        icon2 = icon_manager.get_icon('status_completed', 'light')
+        # Get same icon twice - use single-file icon (status_completed.png)
+        icon1 = icon_manager.get_icon('status_completed')
+        icon2 = icon_manager.get_icon('status_completed')
 
         # Verify only 1 disk read occurred
         stats = icon_manager.get_cache_stats()
@@ -78,19 +97,19 @@ class TestIconCacheReuse:
 
     def test_multiple_icons_cached_independently(self, icon_manager, qt_app):
         """Verify different icons are cached independently"""
-        # Request 3 different icons
-        icon_manager.get_icon('status_completed', 'light')
-        icon_manager.get_icon('status_failed', 'light')
-        icon_manager.get_icon('status_uploading', 'light')
+        # Request 3 different single-file icons
+        icon_manager.get_icon('status_completed')
+        icon_manager.get_icon('status_failed')
+        icon_manager.get_icon('status_paused')
 
         stats = icon_manager.get_cache_stats()
         assert stats['disk_loads'] == 3, "Should load 3 different icons"
         assert stats['cached_icons'] == 3, "Should cache 3 different icons"
 
         # Request them again
-        icon_manager.get_icon('status_completed', 'light')
-        icon_manager.get_icon('status_failed', 'light')
-        icon_manager.get_icon('status_uploading', 'light')
+        icon_manager.get_icon('status_completed')
+        icon_manager.get_icon('status_failed')
+        icon_manager.get_icon('status_paused')
 
         stats = icon_manager.get_cache_stats()
         assert stats['disk_loads'] == 3, "Should not load from disk again"
@@ -102,11 +121,9 @@ class TestThemeCaching:
 
     def test_icon_cache_handles_different_themes(self, icon_manager, qt_app):
         """Verify dark/light themes cached separately"""
-        # Get same icon in light theme
-        icon_light = icon_manager.get_icon('status_completed', 'light')
-
-        # Get same icon in dark theme
-        icon_dark = icon_manager.get_icon('status_completed', 'dark')
+        # Use status_uploading which is a light/dark pair
+        icon_light = icon_manager.get_icon('status_uploading', 'light')
+        icon_dark = icon_manager.get_icon('status_uploading', 'dark')
 
         stats = icon_manager.get_cache_stats()
 
@@ -120,18 +137,18 @@ class TestThemeCaching:
         assert icon_light is not icon_dark, "Light and dark variants should be different"
 
         # Request light again - should be cached
-        icon_light2 = icon_manager.get_icon('status_completed', 'light')
+        icon_light2 = icon_manager.get_icon('status_uploading', 'light')
         stats = icon_manager.get_cache_stats()
         assert stats['disk_loads'] == 2, "Should not load light variant again"
         assert icon_light is icon_light2, "Should return cached light icon"
 
     def test_theme_cache_keys_include_selection_state(self, icon_manager, qt_app):
         """Verify selection state is part of cache key"""
-        # Get icon for normal row
-        icon_normal = icon_manager.get_icon('status_completed', 'light', is_selected=False)
+        # Use an icon with light/dark variants (status_uploading)
+        icon_normal = icon_manager.get_icon('status_uploading', 'light', is_selected=False)
 
         # Get icon for selected row
-        icon_selected = icon_manager.get_icon('status_completed', 'light', is_selected=True)
+        icon_selected = icon_manager.get_icon('status_uploading', 'light', is_selected=True)
 
         stats = icon_manager.get_cache_stats()
 
@@ -145,12 +162,12 @@ class TestCacheStatistics:
 
     def test_icon_cache_statistics(self, icon_manager, qt_app):
         """Verify cache hit/miss tracking works"""
-        # Load 5 unique icons (5 misses, 5 disk loads)
-        icons = ['status_completed', 'status_failed', 'status_uploading',
-                 'action_start', 'status_paused']
+        # Load 5 unique single-file icons (5 misses, 5 disk loads)
+        icons = ['status_completed', 'status_failed', 'status_paused',
+                 'action_start', 'action_stop']
 
         for icon_key in icons:
-            icon_manager.get_icon(icon_key, 'light')
+            icon_manager.get_icon(icon_key)
 
         stats = icon_manager.get_cache_stats()
         assert stats['misses'] == 5, "Should have 5 cache misses for new icons"
@@ -159,8 +176,8 @@ class TestCacheStatistics:
         assert stats['hits'] == 0, "Should have no hits yet"
 
         # Load 2 of them again (2 hits, no new disk loads)
-        icon_manager.get_icon('status_completed', 'light')
-        icon_manager.get_icon('status_failed', 'light')
+        icon_manager.get_icon('status_completed')
+        icon_manager.get_icon('status_failed')
 
         stats = icon_manager.get_cache_stats()
         assert stats['misses'] == 5, "Should still have 5 misses total"
@@ -170,17 +187,17 @@ class TestCacheStatistics:
 
     def test_cache_hit_rate_calculation(self, icon_manager, qt_app):
         """Verify cache hit rate percentage is calculated correctly"""
-        # Make 10 requests: 5 unique icons, then repeat them
-        icons = ['status_completed', 'status_failed', 'status_uploading',
-                 'action_start', 'status_paused']
+        # Make 10 requests: 5 unique single-file icons, then repeat them
+        icons = ['status_completed', 'status_failed', 'status_paused',
+                 'action_start', 'action_stop']
 
         # First pass - all misses
         for icon_key in icons:
-            icon_manager.get_icon(icon_key, 'light')
+            icon_manager.get_icon(icon_key)
 
         # Second pass - all hits
         for icon_key in icons:
-            icon_manager.get_icon(icon_key, 'light')
+            icon_manager.get_icon(icon_key)
 
         stats = icon_manager.get_cache_stats()
 
@@ -203,9 +220,9 @@ class TestCacheRefresh:
 
     def test_refresh_cache_clears_all_data(self, icon_manager, qt_app):
         """Verify refresh_cache clears everything"""
-        # Load some icons
-        icon_manager.get_icon('status_completed', 'light')
-        icon_manager.get_icon('status_failed', 'light')
+        # Load some single-file icons
+        icon_manager.get_icon('status_completed')
+        icon_manager.get_icon('status_failed')
 
         stats_before = icon_manager.get_cache_stats()
         assert stats_before['cached_icons'] == 2, "Should have 2 cached icons"
@@ -223,7 +240,7 @@ class TestCacheRefresh:
     def test_refresh_cache_forces_reload(self, icon_manager, qt_app):
         """Verify refresh_cache causes icons to be reloaded from disk"""
         # Load icon
-        icon_manager.get_icon('status_completed', 'light')
+        icon_manager.get_icon('status_completed')
         stats = icon_manager.get_cache_stats()
         assert stats['disk_loads'] == 1, "Should load once"
 
@@ -231,7 +248,7 @@ class TestCacheRefresh:
         icon_manager.refresh_cache()
 
         # Load same icon again - should reload from disk
-        icon_manager.get_icon('status_completed', 'light')
+        icon_manager.get_icon('status_completed')
         stats = icon_manager.get_cache_stats()
         assert stats['disk_loads'] == 1, "Should reload from disk after cache clear"
         assert stats['misses'] == 1, "Should be a cache miss after clear"
@@ -242,13 +259,13 @@ class TestCacheKeyGeneration:
 
     def test_cache_keys_are_unique_per_variation(self, icon_manager, qt_app):
         """Verify each icon variation gets a unique cache key"""
-        # Request same icon with different parameters
+        # Request status_uploading (light/dark pair) with different parameters
         variations = [
-            ('status_completed', 'light', False, 32),
-            ('status_completed', 'light', True, 32),
-            ('status_completed', 'dark', False, 32),
-            ('status_completed', 'dark', True, 32),
-            ('status_completed', 'light', False, 64),  # Different size
+            ('status_uploading', 'light', False, 32),
+            ('status_uploading', 'light', True, 32),
+            ('status_uploading', 'dark', False, 32),
+            ('status_uploading', 'dark', True, 32),
+            ('status_uploading', 'light', False, 64),  # Different size
         ]
 
         for icon_key, theme, selected, size in variations:
@@ -267,23 +284,22 @@ class TestCachePerformance:
     def test_cache_improves_with_repeated_requests(self, icon_manager, qt_app):
         """Verify cache hit rate improves with more repeated requests"""
         icon_key = 'status_completed'
-        theme = 'light'
 
         # First request - cache miss
-        icon_manager.get_icon(icon_key, theme)
+        icon_manager.get_icon(icon_key)
         stats1 = icon_manager.get_cache_stats()
         assert stats1['hit_rate'] == 0.0, "First request should be 0% hit rate"
 
         # 9 more requests - all cache hits
         for _ in range(9):
-            icon_manager.get_icon(icon_key, theme)
+            icon_manager.get_icon(icon_key)
 
         stats10 = icon_manager.get_cache_stats()
         assert stats10['hit_rate'] == 90.0, "After 10 requests (1 miss, 9 hits) should be 90% hit rate"
 
         # 90 more requests - all cache hits
         for _ in range(90):
-            icon_manager.get_icon(icon_key, theme)
+            icon_manager.get_icon(icon_key)
 
         stats100 = icon_manager.get_cache_stats()
         assert stats100['hit_rate'] == 99.0, "After 100 requests (1 miss, 99 hits) should be 99% hit rate"
@@ -291,11 +307,10 @@ class TestCachePerformance:
     def test_cache_prevents_redundant_disk_io(self, icon_manager, qt_app):
         """Verify cache prevents redundant disk I/O operations"""
         icon_key = 'status_completed'
-        theme = 'light'
 
         # Request same icon 1000 times
         for _ in range(1000):
-            icon_manager.get_icon(icon_key, theme)
+            icon_manager.get_icon(icon_key)
 
         stats = icon_manager.get_cache_stats()
 

@@ -154,12 +154,13 @@ class TestIconCaching:
         """Test that different themes create separate cache entries"""
         manager = IconManager(str(temp_assets_dir))
 
-        icon_light = manager.get_icon('status_completed', theme_mode='light')
-        icon_dark = manager.get_icon('status_completed', theme_mode='dark')
+        # Use status_uploading which has theme-aware config (list of [light, dark])
+        icon_light = manager.get_icon('status_uploading', theme_mode='light')
+        icon_dark = manager.get_icon('status_uploading', theme_mode='dark')
 
         # Should be different cache entries
         cache_keys = list(manager._icon_cache.keys())
-        assert len([k for k in cache_keys if 'status_completed' in k]) >= 2
+        assert len([k for k in cache_keys if 'status_uploading' in k]) >= 2
 
     def test_refresh_cache_clears_cache(self, temp_assets_dir):
         """Test that refresh_cache clears the icon cache"""
