@@ -358,13 +358,28 @@ class SingleInstanceServer(QThread):
         self.running = True
         
     def run(self):
+        import time
+        server_socket = None
         try:
             server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server_socket.bind(('localhost', self.port))
+
+            # Retry bind in case port is in TIME_WAIT
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    server_socket.bind(('localhost', self.port))
+                    break
+                except OSError as e:
+                    if attempt < max_retries - 1:
+                        log(f"Port {self.port} bind failed (attempt {attempt+1}/{max_retries}), retrying in 1s...", level="warning", category="ipc")
+                        time.sleep(1)
+                    else:
+                        raise
+
             server_socket.listen(1)
             server_socket.settimeout(1.0)  # Timeout for checking self.running
-            
+
             while self.running:
                 try:
                     client_socket, _ = server_socket.accept()
@@ -377,10 +392,16 @@ class SingleInstanceServer(QThread):
                 except Exception as e:
                     if self.running:  # Only log if we're supposed to be running
                         log(f"Server error: {e}", level="error", category="ipc")
-                        
-            server_socket.close()
+
+            if server_socket:
+                server_socket.close()
         except Exception as e:
             log(f"Failed to start server: {e}", level="error", category="ipc")
+            if server_socket:
+                try:
+                    server_socket.close()
+                except:
+                    pass
     
     def stop(self):
         self.running = False
@@ -5091,6 +5112,7 @@ def check_single_instance(folder_path=None):
     """Check if another instance is running and send folder if needed"""
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.settimeout(2.0)  # 2 second timeout to detect stale sockets
         client_socket.connect(('localhost', COMMUNICATION_PORT))
 
         # Send folder path or empty string to bring window to front
@@ -5099,8 +5121,8 @@ def check_single_instance(folder_path=None):
 
         client_socket.close()
         return True  # Another instance is running
-    except ConnectionRefusedError:
-        return False  # No other instance running
+    except (ConnectionRefusedError, socket.timeout, OSError):
+        return False  # No other instance running or connection failed
 
 
 # ==============================================================================
