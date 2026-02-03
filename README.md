@@ -2,10 +2,10 @@
 
 Desktop app for uploading image galleries to imx.to and 6 file hosts, generating BBCode, and tracking upload status.
 
-![Version](https://img.shields.io/badge/version-0.8.2-blue.svg)
-![Python](https://img.shields.io/badge/python-3.14+-green.svg)
-![License](https://img.shields.io/badge/license-MIT-orange.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Mac-lightgrey.svg)
+![GitHub Release](https://img.shields.io/github/v/release/twwat/bbdrop)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/twwat/bbdrop/build.yml)
+![GitHub License](https://img.shields.io/github/license/twwat/bbdrop) ![Python](https://img.shields.io/badge/python-3.12+-lightgreen.svg?logo=python&logoColor=white)  [![Qt](https://img.shields.io/badge/PyQt-6.9.1-blue.svg?logo=Qt&logoColor=babyblue)](#)
+[![Windows](https://custom-icon-badges.demolab.com/badge/-blue.svg?logo=windows11&logoColor=white)](#) [![macOS](https://img.shields.io/badge/-444444.svg?logo=apple&logoColor=F0F0F0)](#) [![Linux](https://img.shields.io/badge/-yellow.svg?logo=linux&logoColor=black)](#)
 
 ---
 
