@@ -4,13 +4,18 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.8.2] - 2026-01-31
+## [0.8.2] - 2026-02-03
 
 ### Added
+- **Pure Python split ZIP library**: Custom `splitzip` implementation for creating multi-part ZIP archives without external dependencies (no 7z CLI required)
 - **Multi-format archive support**: ZIP and 7Z archive creation; ZIP, 7Z, RAR, and TAR extraction
 - **Archive settings tab**: Configure archive format, compression method, and split size
 - **Split archive uploads**: Large galleries split into parts with per-part tracking and template placeholders (#partLabel#, #partNumber#, #partCount#)
-- **Tab description labels**: Descriptive headers on General, Tabs, Proxy, Logs, File Hosts, and Image Hosts settings tabs
+- **Image Hosts settings tab**: Configurable image host panel (currently imx.to, extensible for additional hosts)
+- **Peak speed date tracking**: Host metrics now record the date when peak upload speed was achieved
+- **Proxy test button**: Test proxy connectivity from file host config dialog with global lock
+- **Host status icons**: Worker table shows enabled/disabled/auto state icons per file host
+- **Tab description labels**: Descriptive headers on all settings tabs
 - **Tooltips**: Added to all interactive settings widgets
 - **Dimmed proxy styles**: Disabled proxy sections visually dimmed in both themes
 
@@ -18,9 +23,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Tab description font increased from 11px to 12px with background color
 - Log action buttons moved below File Logging section, right-aligned
 - Infinity symbol on IMX storage bar renders with symmetric loops using centered overlay label
+- Worker status icons use pixmap labels instead of delegates for auto-upload status
+- Theme-aware infinity label color with improved vertical centering
 
 ### Fixed
-- Upload workers table column visibility, widths, and order not persisting across restarts (missing QSettings.sync())
+- Upload workers table column visibility, widths, and order not persisting across restarts
+- Gallery count preserved when renaming tabs
+- Help dialog thread crash from concurrent pygments lexer imports
+- Missing User-Agent headers on file host HTTP requests
+
+### Tests
+- Comprehensive xdist parallel execution fixes (20+ test files)
+- New archive manager tests (ZIP, 7Z, split archives, caching)
+- New worker status icon tests (icon loading, host enable/disable, context menu)
+- Test infrastructure: thread shutdown fixtures, logger state isolation
 
 ## [0.8.0] - 2026-01-27
 
