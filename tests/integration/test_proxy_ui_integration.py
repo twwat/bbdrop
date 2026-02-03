@@ -120,7 +120,7 @@ class TestProxyModeIntegration:
 
             # Should load custom mode
             assert widget.custom_proxy_radio.isChecked()
-            assert widget.global_group.isEnabled()
+            assert widget.pools_group.isEnabled()
 
 
 class TestCategoryInheritanceIntegration:
@@ -289,7 +289,7 @@ class TestPoolManagementIntegration:
             widget.custom_proxy_radio.setChecked(True)
             widget._update_ui_state()
 
-            initial_count = widget.global_proxy_control.combo.count()
+            initial_count = widget.pools_list.count()
 
             # Create and save a pool
             from src.proxy.models import ProxyPool, ProxyEntry, ProxyType
@@ -306,9 +306,8 @@ class TestPoolManagementIntegration:
             # Reload pools
             widget.load_pools()
 
-            # All dropdowns should be updated
-            assert widget.global_proxy_control.combo.count() > initial_count
-            assert widget.file_hosts_control.combo.count() > initial_count
+            # Pools list should be updated
+            assert widget.pools_list.count() > initial_count
 
     def test_pool_deletion_clears_assignments(self, qapp, proxy_storage, sample_pools):
         """Test that deleting a pool clears all assignments using it."""
@@ -421,19 +420,14 @@ class TestUIRefreshIntegration:
             assert widget.pools_list.count() == len(sample_pools)
 
     def test_all_controls_refresh_synchronously(self, qapp, proxy_storage, sample_pools):
-        """Test that all InheritableProxyControl widgets refresh together."""
+        """Test that all dropdown widgets refresh together."""
         from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
 
         with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
-            # Get initial counts
-            counts = {
-                'global': widget.global_proxy_control.combo.count(),
-                'file_hosts': widget.file_hosts_control.combo.count(),
-                'forums': widget.forums_control.combo.count(),
-                'api': widget.api_control.combo.count(),
-            }
+            # Get initial list count
+            initial_count = widget.pools_list.count()
 
             # Add pools
             for pool in sample_pools:
@@ -441,17 +435,9 @@ class TestUIRefreshIntegration:
 
             widget.load_pools()
 
-            # All controls should have same increase
-            new_counts = {
-                'global': widget.global_proxy_control.combo.count(),
-                'file_hosts': widget.file_hosts_control.combo.count(),
-                'forums': widget.forums_control.combo.count(),
-                'api': widget.api_control.combo.count(),
-            }
-
-            # All should have increased by the same amount
-            increases = [new_counts[k] - counts[k] for k in counts.keys()]
-            assert len(set(increases)) == 1  # All increases are equal
+            # Pools list should be updated with new pools
+            new_count = widget.pools_list.count()
+            assert new_count == initial_count + len(sample_pools)
 
 
 class TestEdgeCasesIntegration:
