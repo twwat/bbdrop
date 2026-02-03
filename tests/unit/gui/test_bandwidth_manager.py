@@ -747,8 +747,10 @@ class TestBandwidthManagerThreadSafety:
         for t in threads:
             t.start()
         for t in threads:
-            t.join()
+            t.join(timeout=5)
 
+        alive = [t for t in threads if t.is_alive()]
+        assert len(alive) == 0, f"{len(alive)} threads still running"
         assert len(errors) == 0
 
 
