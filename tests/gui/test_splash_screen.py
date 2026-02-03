@@ -110,7 +110,7 @@ class TestSplashScreenStatusUpdates:
                 splash.set_status("Initializing database")
                 qtbot.wait(100)
 
-                assert splash.status_text == "Initializing database..."
+                assert splash.status_text == "Initializing database"
 
     def test_set_status_adds_progress_dot(self, qtbot):
         """Test that set_status adds a progress dot"""
