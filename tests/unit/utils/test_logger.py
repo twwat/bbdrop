@@ -27,6 +27,29 @@ from src.utils.logger import (
 )
 
 
+@pytest.fixture(autouse=True)
+def reset_logger_state():
+    """Reset logger module globals before/after each test for xdist isolation."""
+    from src.utils import logger
+
+    # Save original state
+    original_main = logger._main_window
+    original_viewers = list(logger._log_viewers)  # Copy the list
+    original_app = logger._app_logger
+
+    # Reset to clean state
+    logger._main_window = None
+    logger._log_viewers.clear()  # Clear in-place, don't reassign
+    logger._app_logger = None
+
+    yield
+
+    # Restore (for any tests that rely on persistent state)
+    logger._main_window = original_main
+    logger._log_viewers = original_viewers
+    logger._app_logger = original_app
+
+
 class TestTimestamp:
     """Test timestamp generation"""
 
@@ -100,9 +123,6 @@ class TestLogViewerManagement:
         """Test registering log viewer"""
         from src.utils import logger
 
-        # Clear viewers first
-        logger._log_viewers = []
-
         mock_viewer = Mock()
         register_log_viewer(mock_viewer)
 
@@ -111,7 +131,6 @@ class TestLogViewerManagement:
     def test_register_duplicate_viewer(self):
         """Test registering same viewer twice doesn't duplicate"""
         from src.utils import logger
-        logger._log_viewers = []
 
         mock_viewer = Mock()
         register_log_viewer(mock_viewer)
@@ -122,7 +141,6 @@ class TestLogViewerManagement:
     def test_unregister_log_viewer(self):
         """Test unregistering log viewer"""
         from src.utils import logger
-        logger._log_viewers = []
 
         mock_viewer = Mock()
         register_log_viewer(mock_viewer)
@@ -133,7 +151,6 @@ class TestLogViewerManagement:
     def test_unregister_nonexistent_viewer(self):
         """Test unregistering viewer not in list doesn't error"""
         from src.utils import logger
-        logger._log_viewers = []
 
         mock_viewer = Mock()
         unregister_log_viewer(mock_viewer)  # Should not raise
@@ -397,9 +414,6 @@ class TestGUIIntegration:
         # Should call add_log_message on main window
         mock_window.add_log_message.assert_called_once()
 
-        # Cleanup
-        logger._main_window = None
-
     @patch('src.utils.logger._get_app_logger')
     def test_log_routes_to_viewers(self, mock_get_logger):
         """Test log routes to registered viewers"""
@@ -412,15 +426,11 @@ class TestGUIIntegration:
         mock_viewer = Mock()
         mock_viewer.append_message = Mock()
         logger._log_viewers = [mock_viewer]
-        logger._main_window = None
 
         log("Test message", level="info", category="general")
 
         # Should call append_message on viewer
         mock_viewer.append_message.assert_called_once()
-
-        # Cleanup
-        logger._log_viewers = []
 
 
 class TestDebugMode:
@@ -431,7 +441,6 @@ class TestDebugMode:
     def test_debug_mode_prints_all(self, mock_stdout):
         """Test debug mode prints all messages to console"""
         from src.utils import logger
-        logger._main_window = None
 
         with patch('src.utils.logger._get_app_logger') as mock_get_logger:
             mock_logger = Mock()
@@ -518,6 +527,3 @@ class TestCategorySubtype:
 
         # Should check upload success mode
         mock_logger.should_log_upload_file_success.assert_called_once_with("gui")
-
-        # Cleanup
-        logger._main_window = None
