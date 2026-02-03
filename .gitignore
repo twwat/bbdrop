@@ -137,3 +137,5 @@ ruvector-postgres/
 venv/
 winvenv/
 .venv/
+docs/RELEASE_PROCESS.md
+tests/visual/diffs/
