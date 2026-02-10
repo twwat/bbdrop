@@ -2,14 +2,19 @@
 """Image Hosts Settings Widget - List of hosts with config dialogs"""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QGroupBox, QSizePolicy
+    QFrame, QScrollArea, QGroupBox, QSizePolicy, QCheckBox
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap
 from typing import Dict, Any, Optional
 import os
 
-from src.core.image_host_config import get_image_host_config_manager
+from src.core.image_host_config import (
+    get_image_host_config_manager,
+    get_all_hosts,
+    is_image_host_enabled,
+    save_image_host_enabled
+)
 from bbdrop import get_credential, get_project_root
 
 
@@ -48,9 +53,13 @@ class ImageHostsSettingsWidget(QWidget):
         self.hosts_layout = QVBoxLayout(hosts_container)
         self.hosts_layout.setSpacing(8)
 
-        # Load hosts and create UI
-        manager = get_image_host_config_manager()
-        for host_id, config in manager.get_enabled_hosts().items():
+        # Load hosts and create UI (sorted: enabled first, then alphabetical by name)
+        all_hosts = get_all_hosts()
+        sorted_hosts = sorted(
+            all_hosts.items(),
+            key=lambda item: (not is_image_host_enabled(item[0]), item[1].name.lower())
+        )
+        for host_id, config in sorted_hosts:
             self._create_host_row(host_id, config)
 
         self.hosts_layout.addStretch()
@@ -68,10 +77,19 @@ class ImageHostsSettingsWidget(QWidget):
         # Container frame
         frame = QFrame()
         frame.setFrameShape(QFrame.Shape.StyledPanel)
-        frame.setFrameShadow(QFrame.Shadow.Raised)
         row_layout = QHBoxLayout(frame)
         row_layout.setContentsMargins(8, 4, 8, 4)
         row_layout.setSpacing(8)
+
+        # Enable/Disable checkbox
+        enabled = is_image_host_enabled(host_id)
+        enable_checkbox = QCheckBox()
+        enable_checkbox.setChecked(enabled)
+        enable_checkbox.setToolTip(f"Enable/Disable {config.name}")
+        enable_checkbox.stateChanged.connect(
+            lambda state: self._toggle_host(host_id, state == Qt.CheckState.Checked.value)
+        )
+        row_layout.addWidget(enable_checkbox)
 
         # Logo or name (160px fixed width)
         logo_container = QWidget()
@@ -110,11 +128,15 @@ class ImageHostsSettingsWidget(QWidget):
         self.host_widgets[host_id] = {
             "frame": frame,
             "status": status_label,
-            "logo_label": logo_label
+            "logo_label": logo_label,
+            "enable_checkbox": enable_checkbox,
+            "logo_container": logo_container,
+            "configure_btn": configure_btn
         }
 
-        # Update status
+        # Update status and visual state
         self._update_status(host_id)
+        self._update_visual_state(host_id, enabled)
 
         # Add to layout
         self.hosts_layout.addWidget(frame)
@@ -130,12 +152,11 @@ class ImageHostsSettingsWidget(QWidget):
         Returns:
             QLabel with scaled logo pixmap, or None if logo not found
         """
-        # Try host-specific logo first
-        logo_path = os.path.join(get_project_root(), "assets", "image_hosts", "logo", f"{host_id}.png")
+        # Try config.logo (large image for settings panel)
+        if not config.logo:
+            return None
 
-        # Fallback to config.icon if specified
-        if not os.path.exists(logo_path) and config.icon:
-            logo_path = os.path.join(get_project_root(), "assets", "image_hosts", config.icon)
+        logo_path = os.path.join(get_project_root(), "assets", "image_hosts", config.logo)
 
         if not os.path.exists(logo_path):
             return None
@@ -168,8 +189,21 @@ class ImageHostsSettingsWidget(QWidget):
 
         status_label = widgets["status"]
 
-        # Check if API key is set (using credentials system)
-        api_key = get_credential('api_key')
+        # Check host auth requirements
+        manager = get_image_host_config_manager()
+        config = manager.get_host(host_id)
+
+        if config and not config.requires_auth:
+            # Host doesn't require auth (e.g. TurboImageHost)
+            username = get_credential('username', host_id)
+            if username:
+                status_label.setText(f"<span style='color:green;'>Logged in as {username}</span>")
+            else:
+                status_label.setText("<span style='color:green;'>Ready (no auth required)</span>")
+            return
+
+        # Host requires auth - check host-specific API key
+        api_key = get_credential('api_key', host_id)
 
         if api_key:
             status_label.setText("<span style='color:green;'>API Key: Set</span>")
@@ -186,10 +220,95 @@ class ImageHostsSettingsWidget(QWidget):
         from src.gui.dialogs.image_host_config_dialog import ImageHostConfigDialog
 
         dialog = ImageHostConfigDialog(self, host_id, config)
-        if dialog.exec():
-            # Dialog was accepted, refresh status
-            self._update_status(host_id)
+        # Connect live enable/disable signal so settings widget stays in sync
+        dialog.host_enabled_changed.connect(self._on_dialog_host_enabled_changed)
+        dialog.exec()
+
+        # Always sync state after dialog closes (enable button takes effect immediately)
+        if dialog.enabled_changed():
+            self._refresh_host_selector()
             self.settings_changed.emit()
+
+        self._update_status(host_id)
+
+    def _on_dialog_host_enabled_changed(self, host_id: str, enabled: bool):
+        """Handle live enable/disable changes from the config dialog."""
+        widgets = self.host_widgets.get(host_id)
+        if widgets:
+            widgets["enable_checkbox"].blockSignals(True)
+            widgets["enable_checkbox"].setChecked(enabled)
+            widgets["enable_checkbox"].blockSignals(False)
+            self._update_visual_state(host_id, enabled)
+        # Refresh main window combo and worker status immediately
+        self._refresh_host_selector()
+
+    def _toggle_host(self, host_id: str, enabled: bool):
+        """Toggle host enabled/disabled state.
+
+        Args:
+            host_id: Host identifier
+            enabled: Whether host should be enabled
+        """
+        save_image_host_enabled(host_id, enabled)
+        self._update_visual_state(host_id, enabled)
+        self._refresh_host_selector()
+        self.settings_changed.emit()
+
+    def _get_main_window(self):
+        """Walk up the parent chain to find the main BBDropGUI window."""
+        # Settings dialog stores the main window as parent_window
+        widget = self.parent()
+        while widget is not None:
+            if hasattr(widget, 'parent_window'):
+                return widget.parent_window
+            widget = widget.parent() if hasattr(widget, 'parent') else None
+        return None
+
+    def _refresh_host_selector(self):
+        """Refresh the main window's image host combo and worker status."""
+        try:
+            main_window = self._get_main_window()
+            if not main_window:
+                return
+
+            # Refresh quick settings image host combo
+            if hasattr(main_window, 'refresh_image_host_combo'):
+                main_window.refresh_image_host_combo()
+
+            # Remove disabled image host workers from the worker status table
+            if hasattr(main_window, 'worker_status_widget'):
+                from src.core.image_host_config import get_image_host_config_manager
+                enabled = get_image_host_config_manager().get_enabled_hosts()
+                enabled_worker_ids = {f"upload_worker_{hid}" for hid in enabled}
+                workers_to_remove = [
+                    wid for wid in list(main_window.worker_status_widget._workers.keys())
+                    if wid.startswith('upload_worker_') and wid not in enabled_worker_ids
+                ]
+                for wid in workers_to_remove:
+                    main_window.worker_status_widget.remove_worker(wid)
+        except Exception as e:
+            from src.utils.logger import log
+            log(f"Could not refresh host selector: {e}", level="debug", category="ui")
+
+    def _update_visual_state(self, host_id: str, enabled: bool):
+        """Update visual state of host row based on enabled status.
+
+        Args:
+            host_id: Host identifier
+            enabled: Whether host is enabled
+        """
+        widgets = self.host_widgets.get(host_id)
+        if not widgets:
+            return
+
+        # Update widget states
+        widgets["logo_container"].setEnabled(enabled)
+        widgets["configure_btn"].setEnabled(enabled)
+        widgets["status"].setEnabled(enabled)
+
+        # Update frame appearance for disabled hosts
+        frame = widgets["frame"]
+        # No frame styling change — match file hosts behavior
 
     def save(self):
         """Save settings (compatibility method).

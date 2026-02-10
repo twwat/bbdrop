@@ -9,11 +9,11 @@ Provides UI for credentials, connection settings, thumbnails, and host-specific 
 import os
 import configparser
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QGroupBox,
-    QPushButton, QSlider, QComboBox, QCheckBox, QLineEdit, QDialog,
-    QMessageBox, QStyle
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout, QLabel,
+    QGroupBox, QPushButton, QSlider, QComboBox, QCheckBox, QLineEdit,
+    QDialog, QMessageBox, QStyle
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QThread
 
 from src.core.image_host_config import (
     ImageHostConfig,
@@ -68,37 +68,65 @@ class ImageHostConfigPanel(QWidget):
         thumbnails_group = self._create_thumbnails_group()
         main_layout.addWidget(thumbnails_group)
 
-        # Section 4: Options (only for IMX)
+        # Section 4: Cover Photo Settings
+        cover_group = self._create_cover_group()
+        main_layout.addWidget(cover_group)
+
+        # Section 5: Options (only for IMX)
         if self.host_id == "imx":
             options_group = self._create_options_group()
             main_layout.addWidget(options_group)
 
     def _create_credentials_group(self) -> QGroupBox:
-        """Create the credentials configuration group."""
-        group = QGroupBox("Credentials")
+        """Create the credentials configuration group.
+
+        Shows/hides credential rows based on config.auth_type:
+        - "api_key_or_session" (IMX): API Key, Username, Password, Firefox Cookies
+        - "session_optional" (Turbo): Username, Password only (marked optional)
+        - Other: Username, Password
+        """
+        auth_type = self.config.auth_type or ""
+        needs_api_key = "api_key" in auth_type
+        needs_cookies = auth_type == "api_key_or_session"  # IMX-specific
+        is_optional = not self.config.requires_auth
+
+        if is_optional:
+            group = QGroupBox("Credentials (Optional)")
+        else:
+            group = QGroupBox("Credentials")
         layout = QVBoxLayout(group)
 
-        # API Key row
-        api_key_row = QHBoxLayout()
-        api_key_row.addWidget(QLabel("<b>API Key</b>: "))
-        self.api_key_status_label = QLabel("NOT SET")
-        self.api_key_status_label.setProperty("class", "status-muted")
-        api_key_row.addWidget(self.api_key_status_label)
-        api_key_row.addStretch()
+        # Track which widgets exist for this host
+        self._has_api_key_row = needs_api_key
+        self._has_cookies_row = needs_cookies
 
-        self.api_key_change_btn = QPushButton("Set")
-        if not self.api_key_change_btn.text().startswith(" "):
-            self.api_key_change_btn.setText(" " + self.api_key_change_btn.text())
-        self.api_key_change_btn.clicked.connect(self.change_api_key)
-        api_key_row.addWidget(self.api_key_change_btn)
+        # API Key row (only for hosts that use API keys)
+        if needs_api_key:
+            api_key_row = QHBoxLayout()
+            api_key_row.addWidget(QLabel("<b>API Key</b>: "))
+            self.api_key_status_label = QLabel("NOT SET")
+            self.api_key_status_label.setProperty("class", "status-muted")
+            api_key_row.addWidget(self.api_key_status_label)
+            api_key_row.addStretch()
 
-        self.api_key_remove_btn = QPushButton("Unset")
-        if not self.api_key_remove_btn.text().startswith(" "):
-            self.api_key_remove_btn.setText(" " + self.api_key_remove_btn.text())
-        self.api_key_remove_btn.clicked.connect(self.remove_api_key)
-        api_key_row.addWidget(self.api_key_remove_btn)
+            self.api_key_change_btn = QPushButton("Set")
+            if not self.api_key_change_btn.text().startswith(" "):
+                self.api_key_change_btn.setText(" " + self.api_key_change_btn.text())
+            self.api_key_change_btn.clicked.connect(self.change_api_key)
+            api_key_row.addWidget(self.api_key_change_btn)
 
-        layout.addLayout(api_key_row)
+            self.api_key_remove_btn = QPushButton("Unset")
+            if not self.api_key_remove_btn.text().startswith(" "):
+                self.api_key_remove_btn.setText(" " + self.api_key_remove_btn.text())
+            self.api_key_remove_btn.clicked.connect(self.remove_api_key)
+            api_key_row.addWidget(self.api_key_remove_btn)
+
+            layout.addLayout(api_key_row)
+        else:
+            # Create dummy attributes so load_current_credentials() doesn't crash
+            self.api_key_status_label = None
+            self.api_key_change_btn = None
+            self.api_key_remove_btn = None
 
         # Username row
         username_row = QHBoxLayout()
@@ -144,31 +172,53 @@ class ImageHostConfigPanel(QWidget):
 
         layout.addLayout(password_row)
 
-        # Firefox Cookies row
-        cookies_row = QHBoxLayout()
-        cookies_row.addWidget(QLabel("<b>Firefox Cookies</b>: "))
-        self.cookies_status_label = QLabel("Unknown")
-        self.cookies_status_label.setProperty("class", "status-muted")
-        cookies_row.addWidget(self.cookies_status_label)
-        cookies_row.addStretch()
+        # Firefox Cookies row (only for hosts that use cookie-based sessions)
+        if needs_cookies:
+            cookies_row = QHBoxLayout()
+            cookies_row.addWidget(QLabel("<b>Firefox Cookies</b>: "))
+            self.cookies_status_label = QLabel("Unknown")
+            self.cookies_status_label.setProperty("class", "status-muted")
+            cookies_row.addWidget(self.cookies_status_label)
+            cookies_row.addStretch()
 
-        self.cookies_enable_btn = QPushButton("Enable")
-        if not self.cookies_enable_btn.text().startswith(" "):
-            self.cookies_enable_btn.setText(" " + self.cookies_enable_btn.text())
-        self.cookies_enable_btn.clicked.connect(self.enable_cookies_setting)
-        cookies_row.addWidget(self.cookies_enable_btn)
+            self.cookies_enable_btn = QPushButton("Enable")
+            if not self.cookies_enable_btn.text().startswith(" "):
+                self.cookies_enable_btn.setText(" " + self.cookies_enable_btn.text())
+            self.cookies_enable_btn.clicked.connect(self.enable_cookies_setting)
+            cookies_row.addWidget(self.cookies_enable_btn)
 
-        self.cookies_disable_btn = QPushButton("Disable")
-        if not self.cookies_disable_btn.text().startswith(" "):
-            self.cookies_disable_btn.setText(" " + self.cookies_disable_btn.text())
-        self.cookies_disable_btn.clicked.connect(self.disable_cookies_setting)
-        cookies_row.addWidget(self.cookies_disable_btn)
+            self.cookies_disable_btn = QPushButton("Disable")
+            if not self.cookies_disable_btn.text().startswith(" "):
+                self.cookies_disable_btn.setText(" " + self.cookies_disable_btn.text())
+            self.cookies_disable_btn.clicked.connect(self.disable_cookies_setting)
+            cookies_row.addWidget(self.cookies_disable_btn)
 
-        layout.addLayout(cookies_row)
+            layout.addLayout(cookies_row)
+        else:
+            self.cookies_status_label = None
+            self.cookies_enable_btn = None
+            self.cookies_disable_btn = None
 
-        # Encryption note
+        # Test Credentials button and result
+        test_row = QHBoxLayout()
+        self.test_credentials_btn = QPushButton(" Test Credentials")
+        self.test_credentials_btn.setToolTip("Verify stored credentials work")
+        self.test_credentials_btn.clicked.connect(self._start_credential_test)
+        test_row.addWidget(self.test_credentials_btn)
+
+        self.test_result_label = QLabel("")
+        self.test_result_label.setWordWrap(True)
+        test_row.addWidget(self.test_result_label, 1)
+        test_row.addStretch()
+
+        layout.addLayout(test_row)
+
+        # Keep reference to the test thread so it doesn't get GC'd
+        self._test_thread = None
+
+        # Credential storage note
         encryption_note = QLabel(
-            "<small>API key and password are encrypted via Fernet (AES-128-CBC / PKCS7 padding + HMAC-SHA256) using your system's hostname and stored in the registry.<br><br>This means the encrypted data is protected from other users on this system and won't work on other computers.</small>"
+            "<small>Credentials are encrypted with Fernet (AES-128-CBC + HMAC-SHA256) using a key derived from your hostname, then stored in your OS keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service).<br><br>They are tied to your user account and won't transfer to other computers.</small>"
         )
         encryption_note.setWordWrap(True)
         encryption_note.setProperty("class", "label-credential-note")
@@ -258,25 +308,122 @@ class ImageHostConfigPanel(QWidget):
         group = QGroupBox("Thumbnails")
         layout = QGridLayout(group)
 
-        # Thumbnail Size
-        layout.addWidget(QLabel("<b>Thumbnail Size</b>:"), 0, 0)
-        self.thumbnail_size_combo = QComboBox()
-        for item in self.config.thumbnail_sizes:
-            self.thumbnail_size_combo.addItem(item["label"])
-        current_size = get_image_host_setting(self.host_id, 'thumbnail_size', 'int')
-        self.thumbnail_size_combo.setCurrentIndex(current_size - 1)
-        self.thumbnail_size_combo.currentIndexChanged.connect(self._mark_modified)
-        layout.addWidget(self.thumbnail_size_combo, 0, 1)
+        current_row = 0
 
-        # Thumbnail Format
-        layout.addWidget(QLabel("<b>Thumbnail Format</b>:"), 1, 0)
-        self.thumbnail_format_combo = QComboBox()
-        for item in self.config.thumbnail_formats:
-            self.thumbnail_format_combo.addItem(item["label"])
-        current_format = get_image_host_setting(self.host_id, 'thumbnail_format', 'int')
-        self.thumbnail_format_combo.setCurrentIndex(current_format - 1)
-        self.thumbnail_format_combo.currentIndexChanged.connect(self._mark_modified)
-        layout.addWidget(self.thumbnail_format_combo, 1, 1)
+        # Thumbnail Size - check if host uses variable mode (slider) or fixed mode (dropdown)
+        layout.addWidget(QLabel("<b>Thumbnail Size</b>:"), current_row, 0)
+
+        # Initialize both controls as None so save() can check which exists
+        self.thumbnail_size_combo = None
+        self.thumb_slider = None
+        self.thumb_slider_label = None
+
+        if self.config.thumbnail_mode == "variable" and self.config.thumbnail_range:
+            # Variable mode: create slider for continuous size selection
+            thumb_range = self.config.thumbnail_range
+            self.thumb_slider = QSlider(Qt.Orientation.Horizontal)
+            self.thumb_slider.setRange(
+                thumb_range.get('min', 150),
+                thumb_range.get('max', 600)
+            )
+            # Load saved value or use default
+            saved_size = get_image_host_setting(self.host_id, 'thumbnail_size', 'int')
+            default_size = thumb_range.get('default', 300)
+            # For variable mode, the saved value is the actual pixel size, not an index
+            if saved_size and thumb_range.get('min', 150) <= saved_size <= thumb_range.get('max', 600):
+                self.thumb_slider.setValue(saved_size)
+            else:
+                self.thumb_slider.setValue(default_size)
+            self.thumb_slider.valueChanged.connect(self._mark_modified)
+            layout.addWidget(self.thumb_slider, current_row, 1)
+
+            self.thumb_slider_label = QLabel(f"{self.thumb_slider.value()}px")
+            self.thumb_slider_label.setMinimumWidth(50)
+            self.thumb_slider.valueChanged.connect(
+                lambda v: self.thumb_slider_label.setText(f"{v}px")
+            )
+            layout.addWidget(self.thumb_slider_label, current_row, 2)
+        else:
+            # Fixed mode: use dropdown for predefined sizes
+            self.thumbnail_size_combo = QComboBox()
+            for item in self.config.thumbnail_sizes:
+                self.thumbnail_size_combo.addItem(item["label"])
+            current_size = get_image_host_setting(self.host_id, 'thumbnail_size', 'int')
+            if current_size and 1 <= current_size <= len(self.config.thumbnail_sizes):
+                self.thumbnail_size_combo.setCurrentIndex(current_size - 1)
+            self.thumbnail_size_combo.currentIndexChanged.connect(self._mark_modified)
+            layout.addWidget(self.thumbnail_size_combo, current_row, 1)
+
+        current_row += 1
+
+        # Thumbnail Format (only if formats are defined)
+        self.thumbnail_format_combo = None
+        if self.config.thumbnail_formats:
+            layout.addWidget(QLabel("<b>Thumbnail Format</b>:"), current_row, 0)
+            self.thumbnail_format_combo = QComboBox()
+            for item in self.config.thumbnail_formats:
+                self.thumbnail_format_combo.addItem(item["label"])
+            current_format = get_image_host_setting(self.host_id, 'thumbnail_format', 'int')
+            if current_format and 1 <= current_format <= len(self.config.thumbnail_formats):
+                self.thumbnail_format_combo.setCurrentIndex(current_format - 1)
+            self.thumbnail_format_combo.currentIndexChanged.connect(self._mark_modified)
+            layout.addWidget(self.thumbnail_format_combo, current_row, 1)
+            current_row += 1
+
+        # Content Type dropdown (if host supports content type filtering)
+        self.content_type_combo = None
+        if self.config.content_types:
+            layout.addWidget(QLabel("<b>Content Type</b>:"), current_row, 0)
+            self.content_type_combo = QComboBox()
+            for ct in self.config.content_types:
+                self.content_type_combo.addItem(ct['label'], ct['id'])
+            # Load saved content type
+            saved_content_type = get_image_host_setting(self.host_id, 'content_type', 'str')
+            if saved_content_type:
+                index = self.content_type_combo.findData(saved_content_type)
+                if index >= 0:
+                    self.content_type_combo.setCurrentIndex(index)
+            self.content_type_combo.currentIndexChanged.connect(self._mark_modified)
+            layout.addWidget(self.content_type_combo, current_row, 1)
+            current_row += 1
+
+        return group
+
+    def _create_cover_group(self) -> QGroupBox:
+        """Create the cover photo settings group."""
+        group = QGroupBox("Cover Photo Settings")
+        layout = QFormLayout(group)
+
+        # Cover Thumbnail Format
+        self.cover_thumbnail_format_combo = QComboBox()
+        self.cover_thumbnail_format_combo.addItems(
+            ["Fixed Width", "Proportional", "Square", "Fixed Height"]
+        )
+        current_cover_format = get_image_host_setting(
+            self.host_id, 'cover_thumbnail_format', 'int'
+        )
+        if current_cover_format and 1 <= current_cover_format <= 4:
+            self.cover_thumbnail_format_combo.setCurrentIndex(current_cover_format - 1)
+        else:
+            # Default to Proportional (value 2, index 1)
+            self.cover_thumbnail_format_combo.setCurrentIndex(1)
+        self.cover_thumbnail_format_combo.currentIndexChanged.connect(self._mark_modified)
+        layout.addRow("Cover thumbnail format:", self.cover_thumbnail_format_combo)
+
+        # Cover Gallery ID
+        self.cover_gallery_edit = QLineEdit()
+        self.cover_gallery_edit.setPlaceholderText("Optional gallery ID for orphan covers")
+        self.cover_gallery_edit.setToolTip(
+            "Gallery ID where covers not associated with a gallery on this host are collected.\n"
+            "Leave empty to upload to account root."
+        )
+        current_cover_gallery = get_image_host_setting(
+            self.host_id, 'cover_gallery', 'str'
+        )
+        if current_cover_gallery:
+            self.cover_gallery_edit.setText(current_cover_gallery)
+        self.cover_gallery_edit.textChanged.connect(self._mark_modified)
+        layout.addRow("Cover gallery:", self.cover_gallery_edit)
 
         return group
 
@@ -316,8 +463,32 @@ class ImageHostConfigPanel(QWidget):
         save_image_host_setting(self.host_id, 'parallel_batch_size', self.batch_size_slider.value())
         save_image_host_setting(self.host_id, 'upload_connect_timeout', self.connect_timeout_slider.value())
         save_image_host_setting(self.host_id, 'upload_read_timeout', self.read_timeout_slider.value())
-        save_image_host_setting(self.host_id, 'thumbnail_size', self.thumbnail_size_combo.currentIndex() + 1)
-        save_image_host_setting(self.host_id, 'thumbnail_format', self.thumbnail_format_combo.currentIndex() + 1)
+
+        # Save thumbnail size - either slider value (variable) or combo index (fixed)
+        if self.thumb_slider is not None:
+            # Variable mode: save actual pixel value
+            save_image_host_setting(self.host_id, 'thumbnail_size', self.thumb_slider.value())
+        elif self.thumbnail_size_combo is not None:
+            # Fixed mode: save 1-based index
+            save_image_host_setting(self.host_id, 'thumbnail_size', self.thumbnail_size_combo.currentIndex() + 1)
+
+        # Save thumbnail format (if available)
+        if self.thumbnail_format_combo is not None:
+            save_image_host_setting(self.host_id, 'thumbnail_format', self.thumbnail_format_combo.currentIndex() + 1)
+
+        # Save content type (if available)
+        if self.content_type_combo is not None:
+            save_image_host_setting(self.host_id, 'content_type', self.content_type_combo.currentData())
+
+        # Save cover photo settings
+        save_image_host_setting(
+            self.host_id, 'cover_thumbnail_format',
+            self.cover_thumbnail_format_combo.currentIndex() + 1
+        )
+        save_image_host_setting(
+            self.host_id, 'cover_gallery',
+            self.cover_gallery_edit.text().strip()
+        )
 
         if self.host_id == "imx":
             save_image_host_setting(self.host_id, 'auto_rename', self.auto_rename_check.isChecked())
@@ -330,7 +501,7 @@ class ImageHostConfigPanel(QWidget):
     def load_current_credentials(self):
         """Load and display current credentials."""
         # Username
-        username = get_credential('username')
+        username = get_credential('username', self.host_id)
         if username:
             self.username_status_label.setText(username)
             self.username_status_label.setProperty("class", "status-success")
@@ -349,7 +520,7 @@ class ImageHostConfigPanel(QWidget):
             self.username_remove_btn.setEnabled(False)
 
         # Password
-        password = get_credential('password')
+        password = get_credential('password', self.host_id)
         if password:
             self.password_status_label.setText("********************************")
             self.password_status_label.setProperty("class", "status-success")
@@ -367,40 +538,44 @@ class ImageHostConfigPanel(QWidget):
             self.password_change_btn.setText(" Set")
             self.password_remove_btn.setEnabled(False)
 
-        # API Key
-        encrypted_api_key = get_credential('api_key')
-        if encrypted_api_key:
-            try:
-                api_key = decrypt_password(encrypted_api_key)
-                if api_key and len(api_key) > 8:
-                    masked_key = api_key[:4] + "*" * 24 + api_key[-4:]
-                    self.api_key_status_label.setText(masked_key)
-                else:
+        # API Key (only if row exists for this host)
+        if self.api_key_status_label is not None:
+            encrypted_api_key = get_credential('api_key', self.host_id)
+            if encrypted_api_key:
+                try:
+                    api_key = decrypt_password(encrypted_api_key)
+                    if api_key and len(api_key) > 8:
+                        masked_key = api_key[:4] + "*" * 24 + api_key[-4:]
+                        self.api_key_status_label.setText(masked_key)
+                    else:
+                        self.api_key_status_label.setText("SET")
+                    self.api_key_status_label.setProperty("class", "status-success")
+                    style = self.api_key_status_label.style()
+                    if style:
+                        style.polish(self.api_key_status_label)
+                    self.api_key_change_btn.setText(" Change")
+                    self.api_key_remove_btn.setEnabled(True)
+                except (AttributeError, RuntimeError):
                     self.api_key_status_label.setText("SET")
-                self.api_key_status_label.setProperty("class", "status-success")
+                    self.api_key_status_label.setProperty("class", "status-success")
+                    style = self.api_key_status_label.style()
+                    if style:
+                        style.polish(self.api_key_status_label)
+                    self.api_key_change_btn.setText(" Change")
+                    self.api_key_remove_btn.setEnabled(True)
+            else:
+                self.api_key_status_label.setText("NOT SET")
+                self.api_key_status_label.setProperty("class", "status-muted")
                 style = self.api_key_status_label.style()
                 if style:
                     style.polish(self.api_key_status_label)
-                self.api_key_change_btn.setText(" Change")
-                self.api_key_remove_btn.setEnabled(True)
-            except (AttributeError, RuntimeError):
-                self.api_key_status_label.setText("SET")
-                self.api_key_status_label.setProperty("class", "status-success")
-                style = self.api_key_status_label.style()
-                if style:
-                    style.polish(self.api_key_status_label)
-                self.api_key_change_btn.setText(" Change")
-                self.api_key_remove_btn.setEnabled(True)
-        else:
-            self.api_key_status_label.setText("NOT SET")
-            self.api_key_status_label.setProperty("class", "status-muted")
-            style = self.api_key_status_label.style()
-            if style:
-                style.polish(self.api_key_status_label)
-            self.api_key_change_btn.setText(" Set")
-            self.api_key_remove_btn.setEnabled(False)
+                self.api_key_change_btn.setText(" Set")
+                self.api_key_remove_btn.setEnabled(False)
 
-        # Firefox Cookies
+        # Firefox Cookies (only if row exists for this host)
+        if self.cookies_status_label is None:
+            return
+
         config = configparser.ConfigParser()
         config_file = get_config_path()
         cookies_enabled = True  # Default
@@ -478,7 +653,7 @@ class ImageHostConfigPanel(QWidget):
         if result == QDialog.DialogCode.Accepted:
             if api_key:
                 try:
-                    set_credential('api_key', encrypt_password(api_key))
+                    set_credential('api_key', encrypt_password(api_key), self.host_id)
                     self.load_current_credentials()
                     QMessageBox.information(self, "Success", "API key saved successfully!")
                 except Exception as e:
@@ -539,7 +714,7 @@ class ImageHostConfigPanel(QWidget):
         if result == QDialog.DialogCode.Accepted:
             if username:
                 try:
-                    set_credential('username', username)
+                    set_credential('username', username, self.host_id)
                     self.load_current_credentials()
                     QMessageBox.information(self, "Success", "Username saved successfully!")
                 except Exception as e:
@@ -601,7 +776,7 @@ class ImageHostConfigPanel(QWidget):
         if result == QDialog.DialogCode.Accepted:
             if password:
                 try:
-                    set_credential('password', encrypt_password(password))
+                    set_credential('password', encrypt_password(password), self.host_id)
                     self.load_current_credentials()
                     QMessageBox.information(self, "Success", "Password saved successfully!")
                 except Exception as e:
@@ -624,7 +799,7 @@ class ImageHostConfigPanel(QWidget):
         if result != QMessageBox.StandardButton.Yes:
             return
         try:
-            remove_credential('api_key')
+            remove_credential('api_key', self.host_id)
             self.load_current_credentials()
             QMessageBox.information(self, "Removed", "API key removed.")
         except Exception as e:
@@ -645,7 +820,7 @@ class ImageHostConfigPanel(QWidget):
         if result != QMessageBox.StandardButton.Yes:
             return
         try:
-            remove_credential('username')
+            remove_credential('username', self.host_id)
             self.load_current_credentials()
             QMessageBox.information(self, "Removed", "Username removed.")
         except Exception as e:
@@ -666,7 +841,7 @@ class ImageHostConfigPanel(QWidget):
         if result != QMessageBox.StandardButton.Yes:
             return
         try:
-            remove_credential('password')
+            remove_credential('password', self.host_id)
             self.load_current_credentials()
             QMessageBox.information(self, "Removed", "Password removed.")
         except Exception as e:
@@ -703,3 +878,162 @@ class ImageHostConfigPanel(QWidget):
             self.load_current_credentials()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to disable cookies: {str(e)}")
+
+    # ========== CREDENTIAL TESTING ==========
+
+    def _start_credential_test(self):
+        """Start a background credential test."""
+        # Gather credentials for the current host
+        credentials = {}
+
+        if self._has_api_key_row:
+            encrypted_key = get_credential('api_key', self.host_id)
+            if encrypted_key:
+                try:
+                    credentials['api_key'] = decrypt_password(encrypted_key)
+                except Exception:
+                    pass
+
+        username = get_credential('username', self.host_id)
+        if username:
+            credentials['username'] = username
+
+        encrypted_pw = get_credential('password', self.host_id)
+        if encrypted_pw:
+            try:
+                credentials['password'] = decrypt_password(encrypted_pw)
+            except Exception:
+                pass
+
+        if not credentials:
+            self.test_result_label.setText(
+                "<span style='color:orange;'>No credentials set to test</span>"
+            )
+            return
+
+        # Disable button, show testing state
+        self.test_credentials_btn.setEnabled(False)
+        self.test_result_label.setText("Testing...")
+
+        self._test_thread = _CredentialTestThread(self.host_id, credentials, self)
+        self._test_thread.result.connect(self._on_test_result)
+        self._test_thread.start()
+
+    def _on_test_result(self, success: bool, message: str):
+        """Handle credential test result from background thread."""
+        self.test_credentials_btn.setEnabled(True)
+        if success:
+            self.test_result_label.setText(
+                f"<span style='color:green;'>{message}</span>"
+            )
+        else:
+            self.test_result_label.setText(
+                f"<span style='color:red;'>{message}</span>"
+            )
+
+
+class _CredentialTestThread(QThread):
+    """Background thread for testing image host credentials."""
+
+    result = pyqtSignal(bool, str)
+
+    def __init__(self, host_id: str, credentials: dict, parent=None):
+        super().__init__(parent)
+        self.host_id = host_id
+        self.credentials = credentials
+
+    def run(self):
+        """Run the credential test (called in background thread)."""
+        try:
+            if self.host_id == "imx":
+                success, msg = self._test_imx()
+            elif self.host_id == "turbo":
+                success, msg = self._test_turbo()
+            else:
+                success, msg = False, f"No test available for '{self.host_id}'"
+            self.result.emit(success, msg)
+        except Exception as e:
+            self.result.emit(False, f"Test failed: {e}")
+
+    def _test_imx(self) -> tuple:
+        """Test IMX API key by sending a POST without a file.
+
+        A valid key returns a "no file" error; an invalid key returns an auth error.
+        """
+        import requests
+
+        api_key = self.credentials.get('api_key')
+        if not api_key:
+            return False, "No API key set"
+
+        try:
+            response = requests.post(
+                "https://api.imx.to/v1/upload.php",
+                headers={
+                    "X-API-Key": api_key,
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/141.0",
+                },
+                timeout=15,
+            )
+
+            # If the key is valid, we get a response about missing file (not an auth error)
+            text = response.text.lower()
+
+            if response.status_code == 401 or "unauthorized" in text or "invalid" in text:
+                return False, "Invalid API key"
+
+            if response.status_code == 403 or "forbidden" in text:
+                return False, "API key rejected (forbidden)"
+
+            # Any other response means the key was accepted (even errors about missing file)
+            return True, "API key is valid"
+
+        except requests.Timeout:
+            return False, "Connection timed out"
+        except requests.ConnectionError:
+            return False, "Could not connect to imx.to"
+
+    def _test_turbo(self) -> tuple:
+        """Test Turbo credentials by attempting a login."""
+        import requests
+
+        username = self.credentials.get('username')
+        password = self.credentials.get('password')
+
+        if not username or not password:
+            return False, "Username and password required"
+
+        try:
+            session = requests.Session()
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            })
+
+            base_url = "https://www.turboimagehost.com"
+            login_url = f"{base_url}/login.tu"
+
+            # Get login page (for cookies/CSRF)
+            session.get(login_url, timeout=15)
+
+            # Submit login form
+            response = session.post(
+                login_url,
+                data={
+                    'username': username,
+                    'password': password,
+                    'submit': 'Login',
+                },
+                timeout=15,
+                allow_redirects=True,
+            )
+
+            if 'logout' in response.text.lower() or username.lower() in response.text.lower():
+                return True, f"Login successful as {username}"
+            else:
+                return False, "Login failed - check username/password"
+
+        except requests.Timeout:
+            return False, "Connection timed out"
+        except requests.ConnectionError:
+            return False, "Could not connect to turboimagehost.com"
