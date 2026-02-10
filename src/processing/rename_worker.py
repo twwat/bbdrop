@@ -81,7 +81,7 @@ def load_session_cookies_from_keyring():
                     clear_session_cookies_from_keyring()
                     return {}
 
-                log(f"Loaded {len(valid_cookies)} valid session cookies from keyring", level="debug", category="auth")
+                log(f"IMX rename: loaded {len(valid_cookies)} session cookies from keyring", level="debug", category="auth")
                 return valid_cookies
             except json.JSONDecodeError as e:
                 log(f"Corrupted keyring cookie data (JSON error: {e}), clearing", level="debug", category="auth")
@@ -147,9 +147,7 @@ class RenameWorker(QObject):
         self._remove_unnamed_gallery = remove_unnamed_gallery
         self._sanitize_gallery_name = sanitize_gallery_name
 
-        # Instance tracking for diagnostics
         self._instance_id = id(self)
-        log(f"RenameWorker instance created (ID: {self._instance_id})", level="debug", category="renaming")
 
         # Queue for rename requests
         self.queue = queue.Queue()
@@ -192,7 +190,6 @@ class RenameWorker(QObject):
 
         self.session = requests.Session()
         self._session_id = id(self.session)
-        log(f"RenameWorker (ID {self._instance_id}) created session #{self._session_id}", level="debug", category="renaming")
 
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
