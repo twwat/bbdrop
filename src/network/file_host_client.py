@@ -407,7 +407,7 @@ class FileHostClient:
             if not self.cookie_jar:
                 raise ValueError("Login failed: No session cookies received")
 
-            if self._log_callback: self._log_callback(f"Client successfully logged in.", "info")
+            if self._log_callback: self._log_callback("Logged in", "debug")
 
         finally:
             post_curl.close()

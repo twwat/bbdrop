@@ -72,8 +72,6 @@ class UpdateChecker(QThread):
         Emits appropriate signals based on the result.
         """
         url = self.GITHUB_API_URL.format(owner=self._owner, repo=self._repo)
-        log(f"Checking for updates at: {url}", level="debug", category="network")
-
         try:
             headers = {
                 "User-Agent": USER_AGENT,
@@ -111,14 +109,11 @@ class UpdateChecker(QThread):
             # Strip 'v' prefix if present for version comparison
             latest_version = tag_name.lstrip("v")
 
-            log(f"Latest release: {latest_version} (current: {self._current_version})", level="debug", category="network")
-
             # Compare versions
             comparison = self._compare_versions(self._current_version, latest_version)
 
             if comparison > 0:
-                # Newer version available
-                log(f"Update available: {latest_version}", level="info", category="network")
+                log(f"Update available: {latest_version} (current: {self._current_version})", level="info", category="network")
                 self.update_available.emit(
                     latest_version,
                     html_url,
@@ -126,8 +121,7 @@ class UpdateChecker(QThread):
                     published_at,
                 )
             else:
-                # Current version is up to date
-                log("Application is up to date", level="debug", category="network")
+                log(f"Up to date (v{self._current_version})", level="debug", category="network")
                 self.no_update.emit()
 
         except requests.Timeout:
