@@ -532,17 +532,32 @@ def decrypt_password(encrypted_password):
             "Please reconfigure via Settings > Credentials."
         ) from e
 
-def get_credential(key):
+def get_credential(key, host_id=None):
     """Get credential using OS-native secure storage (keyring).
 
     Falls back to QSettings/Registry for backward compatibility.
+
+    Args:
+        key: Credential key (username, password, api_key)
+        host_id: Optional host identifier. If provided, looks up host-specific credential first.
+
+    Returns:
+        The credential value, or empty string if not found.
     """
+    # Determine the effective key (host-specific or global)
+    effective_key = f"{host_id}_{key}" if host_id else key
+
     try:
         # Try keyring first (secure OS-native storage)
         import keyring
-        value = keyring.get_password("bbdrop", key)
+        value = keyring.get_password("bbdrop", effective_key)
         if value:
             return value
+        # Only fall back to global key for legacy IMX compat (not other hosts)
+        if host_id and host_id == "imx":
+            value = keyring.get_password("bbdrop", key)
+            if value:
+                return value
     except ImportError:
         pass  # Fall through to legacy storage
     except Exception:
@@ -552,20 +567,31 @@ def get_credential(key):
     from PyQt6.QtCore import QSettings
     settings = QSettings("bbdrop", "bbdrop")
     settings.beginGroup("Credentials")
-    value = settings.value(key, "")
+    value = settings.value(effective_key, "")
+    # Only fall back to global key for legacy IMX compat (not other hosts)
+    if not value and host_id and host_id == "imx":
+        value = settings.value(key, "")
     settings.endGroup()
     return value
 
-def set_credential(key, value):
+def set_credential(key, value, host_id=None):
     """Set credential using OS-native secure storage (keyring).
 
     Also stores in QSettings/Registry for backward compatibility.
+
+    Args:
+        key: Credential key (username, password, api_key)
+        value: Credential value to store
+        host_id: Optional host identifier for host-specific storage.
     """
+    # Determine the effective key (host-specific or global)
+    effective_key = f"{host_id}_{key}" if host_id else key
+
     try:
         # Try to use keyring (secure OS-native storage)
         import keyring
-        keyring.set_password("bbdrop", key, value)
-        log(f"Credential '{key}' stored securely in OS keyring", level="debug", category="auth")
+        keyring.set_password("bbdrop", effective_key, value)
+        log(f"Credential '{effective_key}' stored securely in OS keyring", level="debug", category="auth")
     except ImportError:
         log("keyring not available, using QSettings only", level="warning", category="auth")
     except Exception as e:
@@ -575,16 +601,33 @@ def set_credential(key, value):
     from PyQt6.QtCore import QSettings
     settings = QSettings("bbdrop", "bbdrop")
     settings.beginGroup("Credentials")
-    settings.setValue(key, value)
+    settings.setValue(effective_key, value)
     settings.endGroup()
     settings.sync()
 
-def remove_credential(key):
-    """Remove credential from QSettings"""
+def remove_credential(key, host_id=None):
+    """Remove credential from QSettings and keyring.
+
+    Args:
+        key: Credential key (username, password, api_key)
+        host_id: Optional host identifier for host-specific removal.
+    """
+    # Determine the effective key (host-specific or global)
+    effective_key = f"{host_id}_{key}" if host_id else key
+
+    try:
+        # Try to remove from keyring
+        import keyring
+        keyring.delete_password("bbdrop", effective_key)
+    except ImportError:
+        pass  # keyring not available
+    except Exception:
+        pass  # Key may not exist in keyring
+
     from PyQt6.QtCore import QSettings
     settings = QSettings("bbdrop", "bbdrop")
     settings.beginGroup("Credentials")
-    settings.remove(key)
+    settings.remove(effective_key)
     settings.endGroup()
     settings.sync()
 
