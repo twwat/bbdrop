@@ -59,6 +59,9 @@ _app_logger = None
 # Set via --debug command line flag
 _debug_mode = '--debug' in sys.argv
 
+# Console dedup: suppress identical consecutive messages (timestamp-stripped)
+_last_console_msg: Optional[str] = None
+
 # Custom TRACE level (below DEBUG, never logged to file)
 TRACE = 5
 logging.addLevelName(TRACE, "TRACE")
@@ -318,18 +321,28 @@ def log(message: str,
                 pass
 
         # 2. Route to appropriate display
+        # Dedup helper: suppress identical consecutive console messages
+        def _console_print(msg, **kwargs):
+            global _last_console_msg
+            # Strip timestamp (HH:MM:SS ) for comparison
+            body = msg.split(" ", 1)[1] if len(msg) > 9 and msg[2] == ":" and msg[5] == ":" else msg
+            if body == _last_console_msg:
+                return  # Suppress duplicate
+            _last_console_msg = body
+            print(msg, **kwargs)
+
         # Debug mode: print everything to console
         if _debug_mode:
-            print(formatted_message, file=sys.stderr if log_level >= logging.WARNING else sys.stdout, flush=True)
+            _console_print(formatted_message, file=sys.stderr if log_level >= logging.WARNING else sys.stdout, flush=True)
 
         # CRITICAL: Always print ERROR and CRITICAL to console, even in GUI mode
         # This ensures crash messages are always visible
         elif log_level >= logging.ERROR:
-            print(formatted_message, file=sys.stderr, flush=True)
+            _console_print(formatted_message, file=sys.stderr, flush=True)
 
         # Also print WARNING to console so issues are visible
         elif log_level == logging.WARNING and not _main_window:
-            print(formatted_message, file=sys.stderr, flush=True)
+            _console_print(formatted_message, file=sys.stderr, flush=True)
 
         if _main_window:
             # GUI is available: Send to main window's simple log display
@@ -366,7 +379,7 @@ def log(message: str,
         # Only print to console if there's NO GUI at all (CLI mode)
         if not _main_window and not _debug_mode and log_level < logging.WARNING:
             # CLI mode - print info/debug to console
-            print(formatted_message, flush=True)
+            _console_print(formatted_message, flush=True)
 
 
 # Convenience functions for specific log levels

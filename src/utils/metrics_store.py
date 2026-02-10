@@ -29,6 +29,42 @@ from bbdrop import get_central_store_base_path
 logger = logging.getLogger(__name__)
 
 
+class PeakSpeedValidator:
+    """Validates peak speed measurements to filter outliers."""
+
+    # 12.5 Gbps in KB/s (~12,800,000 KB/s = ~12,207 MiB/s)
+    MAX_REALISTIC_KBPS = 12.5 * 1024 * 1024
+
+    # Smoothing parameters (match BandwidthManager)
+    WINDOW_SIZE = 10
+    ALPHA_UP = 0.5
+    ALPHA_DOWN = 0.3
+
+    def __init__(self):
+        from collections import deque
+        self._samples: deque = deque(maxlen=self.WINDOW_SIZE)
+        self._smoothed: float = 0.0
+
+    def validate(self, peak_kbps: float) -> Optional[float]:
+        """Validate and smooth a peak measurement.
+
+        Returns:
+            Smoothed peak if valid, None if rejected
+        """
+        # Reject obviously unrealistic values
+        if peak_kbps <= 0 or peak_kbps > self.MAX_REALISTIC_KBPS:
+            return None
+
+        # Apply smoothing
+        self._samples.append(peak_kbps)
+        rolling_avg = sum(self._samples) / len(self._samples)
+
+        alpha = self.ALPHA_UP if rolling_avg > self._smoothed else self.ALPHA_DOWN
+        self._smoothed = alpha * rolling_avg + (1 - alpha) * self._smoothed
+
+        return self._smoothed
+
+
 class MetricsSignals(QObject):
     """Signals for metrics updates to UI components."""
 
@@ -114,6 +150,9 @@ class MetricsStore:
             # PyQt signals
             self.signals = MetricsSignals()
 
+            # Peak speed validators per host (for smoothing/outlier rejection)
+            self._peak_validators: Dict[str, PeakSpeedValidator] = {}
+
             # Initialize database schema BEFORE starting worker thread
             # This prevents race condition where worker tries to acquire
             # _db_lock while schema creation is in progress
@@ -131,7 +170,40 @@ class MetricsStore:
             # Register cleanup on application exit
             atexit.register(self.close)
 
+            # Cap any existing unrealistic peak values from corrupted data
+            self._cap_unrealistic_peaks()
+
             logger.debug(f"MetricsStore initialized with database at {self._db_path}")
+
+    def _get_peak_validator(self, host_name: str) -> PeakSpeedValidator:
+        """Get or create peak speed validator for a host."""
+        if host_name not in self._peak_validators:
+            self._peak_validators[host_name] = PeakSpeedValidator()
+        return self._peak_validators[host_name]
+
+    def _cap_unrealistic_peaks(self) -> None:
+        """Cap existing corrupted peak_speed values that exceed realistic limits.
+
+        This migration runs on startup to fix any historical data corruption
+        where peak_speed was calculated incorrectly (e.g., bytes/s stored as KB/s).
+        """
+        # 12.5 Gbps in bytes/s (matching PeakSpeedValidator but in bytes/s for DB)
+        max_realistic_bytes_per_sec = PeakSpeedValidator.MAX_REALISTIC_KBPS * 1024
+
+        with self._db_lock:
+            conn = self._connect()
+            try:
+                cursor = conn.execute("""
+                    UPDATE host_metrics
+                    SET peak_speed = ?
+                    WHERE peak_speed > ?
+                """, (max_realistic_bytes_per_sec, max_realistic_bytes_per_sec))
+                if cursor.rowcount > 0:
+                    logger.info(f"Capped {cursor.rowcount} unrealistic peak_speed values to {max_realistic_bytes_per_sec:.0f} B/s")
+            except Exception as e:
+                logger.warning(f"Failed to cap unrealistic peak speeds: {e}")
+            finally:
+                conn.close()
 
     def __del__(self):
         """
@@ -209,7 +281,8 @@ class MetricsStore:
                 conn.close()
 
     def record_transfer(self, host_name: str, bytes_uploaded: int,
-                       transfer_time: float, success: bool) -> None:
+                       transfer_time: float, success: bool,
+                       observed_peak_kbps: Optional[float] = None) -> None:
         """
         Record a completed transfer.
 
@@ -221,12 +294,28 @@ class MetricsStore:
             bytes_uploaded: Number of bytes transferred
             transfer_time: Time taken for transfer in seconds
             success: Whether the transfer completed successfully
+            observed_peak_kbps: Optional observed peak speed in KB/s from bandwidth tracking.
+                               If provided, this is validated and used instead of calculating
+                               average speed from bytes/time.
         """
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
 
-        # Calculate speed in bytes/second
-        speed = bytes_uploaded / transfer_time if transfer_time > 0 else 0
+        # Calculate average speed in bytes/second (for rolling average tracking)
+        avg_speed = bytes_uploaded / transfer_time if transfer_time > 0 else 0
+
+        # Determine peak speed to use for this transfer
+        # If observed_peak_kbps is provided, validate and convert to bytes/s
+        validated_peak_bytes_per_sec: Optional[float] = None
+        if observed_peak_kbps is not None:
+            validator = self._get_peak_validator(host_name)
+            validated_peak_kbps = validator.validate(observed_peak_kbps)
+            if validated_peak_kbps is not None:
+                # Convert KB/s to bytes/s for storage
+                validated_peak_bytes_per_sec = validated_peak_kbps * 1024
+
+        # Use validated observed peak if available, otherwise fall back to average
+        speed = validated_peak_bytes_per_sec if validated_peak_bytes_per_sec is not None else avg_speed
 
         # Update session cache
         with self._cache_lock:
@@ -250,18 +339,19 @@ class MetricsStore:
             else:
                 cache['files_failed'] += 1
 
-            # Track peak speed
+            # Track peak speed (using validated observed peak or calculated average)
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             if speed > cache['peak_speed']:
                 cache['peak_speed'] = speed
                 cache['peak_speed_date'] = now_str
 
-            # Keep rolling window of speeds for average (last 10)
-            cache['speeds'].append(speed)
+            # Keep rolling window of average speeds for avg calculation (last 10)
+            # Note: Use avg_speed (bytes/time) for rolling average, not peak speed
+            cache['speeds'].append(avg_speed)
             if len(cache['speeds']) > 10:
                 cache['speeds'] = cache['speeds'][-10:]
 
-            # Calculate average speed
+            # Calculate average speed from rolling window
             if cache['speeds']:
                 cache['avg_speed'] = sum(cache['speeds']) / len(cache['speeds'])
             else:
@@ -305,7 +395,8 @@ class MetricsStore:
             if speed > today_cache['peak_speed']:
                 today_cache['peak_speed'] = speed
                 today_cache['peak_speed_date'] = now_str
-            today_cache['speeds'].append(speed)
+            # Use avg_speed for rolling average, not peak
+            today_cache['speeds'].append(avg_speed)
             if len(today_cache['speeds']) > 10:
                 today_cache['speeds'] = today_cache['speeds'][-10:]
             if today_cache['speeds']:
@@ -350,7 +441,8 @@ class MetricsStore:
             if speed > all_time_cache['peak_speed']:
                 all_time_cache['peak_speed'] = speed
                 all_time_cache['peak_speed_date'] = now_str
-            all_time_cache['speeds'].append(speed)
+            # Use avg_speed for rolling average, not peak
+            all_time_cache['speeds'].append(avg_speed)
             if len(all_time_cache['speeds']) > 10:
                 all_time_cache['speeds'] = all_time_cache['speeds'][-10:]
             if all_time_cache['speeds']:
