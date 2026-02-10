@@ -2478,7 +2478,7 @@ def main():
                     window._file_host_startup_complete = True
                     log("No file host workers enabled, skipping startup tracking", level="debug", category="startup")
                 else:
-                    log(f"Expecting {window._file_host_startup_expected} file host workers to complete spinup",
+                    log(f"Waiting for {window._file_host_startup_expected} file host worker{'s' if window._file_host_startup_expected != 1 else ''}",
                         level="debug", category="startup")
 
                 # Now start the workers
