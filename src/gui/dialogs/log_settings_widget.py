@@ -186,9 +186,11 @@ class LogSettingsWidget(QWidget):
         """Load current log settings"""
         try:
             from src.utils.logging import get_logger
+            from src.utils.logger import log
             self._logger = get_logger()
             settings = self._logger.get_settings()
-        except Exception:
+        except Exception as e:
+            log(f"Failed to load logger settings: {e}", level="warning", category="general")
             settings = {
                 'enabled': True,
                 'rotation': 'daily',

@@ -231,11 +231,8 @@ class LogViewerDialog(QDialog):
                 return ""
 
         def _decode_unicode(text: str) -> str:
-            """Decode Unicode escape sequences like \u2713 to actual characters like ✓"""
-            try:
-                return text.encode('utf-8').decode('unicode_escape')
-            except Exception:
-                return text
+            """Pass through — log messages are already proper Unicode."""
+            return text
 
         def _parse_log_line(line: str) -> tuple:
             """Parse a log line into (timestamp, level, category, message)

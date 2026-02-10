@@ -158,9 +158,9 @@ class CredentialSetupDialog(QDialog):
         # Add login group to main layout
         layout.addWidget(login_group)
 
-        # Encryption note at bottom
+        # Credential storage note
         encryption_note = QLabel(
-            "<small>API key and password are encrypted via Fernet (AES-128-CBC / PKCS7 padding + HMAC-SHA256) using your system's hostname and stored in the registry.<br><br>This means the encrypted data is protected from other users on this system and won't work on other computers.</small>"
+            "<small>Credentials are encrypted with Fernet (AES-128-CBC + HMAC-SHA256) using a key derived from your hostname, then stored in your OS keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service).<br><br>They are tied to your user account and won't transfer to other computers.</small>"
         )
         encryption_note.setWordWrap(True)
         encryption_note.setProperty("class", "label-credential-note")

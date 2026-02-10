@@ -100,9 +100,16 @@ class DocumentLoaderThread(QThread):
 
                         # Parse markdown in background thread (the expensive operation)
                         if MARKDOWN_AVAILABLE:
+                            # Strip leading H1 from markdown to avoid duplicate
+                            # title (the dialog wrapper adds its own <h1>)
+                            import re as _re
+                            stripped = _re.sub(r'^#\s+[^\n]*\n+', '', content, count=1)
+
                             html_content = render_markdown(
-                                content,
-                                extensions=['extra', 'codehilite', 'toc']
+                                stripped,
+                                extensions=['extra', 'codehilite', 'toc',
+                                            'admonition', 'def_list',
+                                            'attr_list']
                             )
                             html_content = self._wrap_emojis(html_content)
                             html = self._build_html(title, html_content)
@@ -272,26 +279,27 @@ class HelpDialog(QDialog):
     # Paths are relative to docs/user/
     DOC_STRUCTURE = {
         "Getting Started": [
-            ("Overview", "reference/HELP_CONTENT.md"),
-            ("Quick Start", "getting-started/quick-start.md"),
-            ("Setup", "getting-started/setup.md"),
-            ("Keyboard Shortcuts", "getting-started/keyboard-shortcuts.md"),
+            ("Installation", "getting-started/installation.md"),
+            ("Your First Upload", "getting-started/first-upload.md"),
+            ("Key Concepts", "getting-started/concepts.md"),
         ],
         "Guides": [
-            ("GUI Guide", "guides/gui-guide.md"),
-            ("Multi-Host Upload", "guides/multi-host-upload.md"),
-            ("BBCode Templates", "guides/bbcode-templates.md"),
-            ("Archive Management", "guides/archive-management.md"),
-            ("Hooks System", "guides/hooks-system.md"),
+            ("Image Hosts", "guides/image-hosts.md"),
+            ("File Hosts", "guides/file-hosts.md"),
+            ("BBCode Templates", "guides/templates.md"),
+            ("Queue Management", "guides/queue-management.md"),
+            ("Image Scanning", "guides/scanning.md"),
+            ("Hooks & Automation", "guides/hooks.md"),
+            ("Proxies", "guides/proxies.md"),
         ],
         "Reference": [
-            ("Features", "reference/FEATURES.md"),
-            ("Quick Reference", "reference/quick-reference.md"),
-            ("External Apps", "reference/external-apps-parameters.md"),
+            ("Keyboard Shortcuts", "reference/keyboard-shortcuts.md"),
+            ("Template Placeholders", "reference/template-placeholders.md"),
+            ("Settings Reference", "reference/settings-reference.md"),
         ],
         "Troubleshooting": [
             ("FAQ", "troubleshooting/faq.md"),
-            ("Troubleshooting Guide", "troubleshooting/troubleshooting.md"),
+            ("Common Issues", "troubleshooting/common-issues.md"),
         ],
     }
 
@@ -600,72 +608,132 @@ class HelpDialog(QDialog):
         common = """
             body {
                 font-family: 'Segoe UI Emoji', 'Segoe UI', 'Noto Color Emoji', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
-                line-height: 1.6;
-                padding: 20px;
+                line-height: 1.7;
+                padding: 24px 28px;
                 max-width: 900px;
             }
             code {
                 padding: 2px 6px;
                 border-radius: 3px;
-                font-family: 'Courier New', monospace;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 0.9em;
             }
             pre {
-                padding: 15px;
-                border-radius: 5px;
+                padding: 14px 16px;
+                border-radius: 6px;
                 overflow-x: auto;
+                line-height: 1.5;
+                font-size: 0.9em;
             }
             pre code {
                 background-color: transparent;
                 padding: 0;
             }
             ul, ol { margin-left: 20px; }
-            li { margin-bottom: 5px; }
+            li { margin-bottom: 6px; }
             table {
                 border-collapse: collapse;
                 width: 100%;
-                margin: 15px 0;
+                margin: 16px 0;
+                font-size: 0.95em;
             }
             th, td {
-                padding: 8px;
+                padding: 9px 12px;
                 text-align: left;
             }
-            th { font-weight: bold; }
+            th { font-weight: 600; }
             h1, h2, h3, h4, h5, h6 {
                 font-family: 'Segoe UI Emoji', 'Segoe UI', 'Noto Color Emoji', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
             }
+            h1 { font-size: 1.6em; margin-bottom: 16px; }
+            h2 { font-size: 1.3em; margin-top: 32px; margin-bottom: 12px; }
+            h3 { font-size: 1.1em; margin-top: 24px; margin-bottom: 8px; }
+            p { margin: 10px 0; }
             blockquote {
                 margin: 15px 0;
-                padding-left: 15px;
+                padding: 8px 15px;
             }
             a { text-decoration: none; }
             a:hover { text-decoration: underline; }
+            hr {
+                border: none;
+                margin: 24px 0;
+            }
+            /* Admonition boxes (from python-markdown admonition extension) */
+            .admonition {
+                padding: 12px 16px;
+                margin: 16px 0;
+                border-radius: 6px;
+                border-left: 4px solid;
+            }
+            .admonition-title {
+                font-weight: 700;
+                margin: 0 0 6px 0;
+                font-size: 0.95em;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+            }
+            .admonition p:last-child { margin-bottom: 0; }
+            /* Definition lists */
+            dt { font-weight: 600; margin-top: 12px; }
+            dd { margin-left: 20px; margin-bottom: 8px; }
         """
 
         if is_dark:
             theme_colors = """
-                body { color: #e0e0e0; background-color: #1e1e1e; }
+                body { color: #d4d4d4; background-color: #1e1e1e; }
                 h1, h2, h3 { color: #7fbfff; }
                 h1 { border-bottom: 2px solid #3498db; padding-bottom: 10px; }
-                h2 { border-bottom: 1px solid #555; padding-bottom: 5px; margin-top: 30px; }
-                code { background-color: #2a2a2a; color: #e0e0e0; }
-                pre { background-color: #2a2a2a; }
-                th, td { border: 1px solid #555; }
-                th { background-color: #333; }
-                blockquote { border-left: 4px solid #3498db; color: #aaa; }
+                h2 { border-bottom: 1px solid #444; padding-bottom: 6px; }
+                h3 { color: #9cd4ff; }
+                code { background-color: #2d2d2d; color: #d4d4d4; border: 1px solid #3a3a3a; }
+                pre { background-color: #252526; border: 1px solid #3a3a3a; }
+                th, td { border: 1px solid #444; }
+                th { background-color: #2a2a2a; color: #7fbfff; }
+                tr:nth-child(even) td { background-color: #252526; }
+                blockquote { border-left: 4px solid #3498db; color: #999; background-color: #252526; }
+                hr { border-top: 1px solid #444; }
                 a { color: #5dade2; }
+                /* Admonition colors - dark */
+                .admonition { background-color: #252526; }
+                .admonition.tip, .admonition.hint { border-color: #2ecc71; }
+                .admonition.tip .admonition-title, .admonition.hint .admonition-title { color: #2ecc71; }
+                .admonition.note { border-color: #3498db; }
+                .admonition.note .admonition-title { color: #3498db; }
+                .admonition.warning, .admonition.caution { border-color: #f39c12; }
+                .admonition.warning .admonition-title, .admonition.caution .admonition-title { color: #f39c12; }
+                .admonition.danger, .admonition.error { border-color: #e74c3c; }
+                .admonition.danger .admonition-title, .admonition.error .admonition-title { color: #e74c3c; }
+                .admonition.important { border-color: #9b59b6; }
+                .admonition.important .admonition-title { color: #9b59b6; }
             """
         else:
             theme_colors = """
                 body { color: #333; background-color: #ffffff; }
                 h1, h2, h3 { color: #2c3e50; }
                 h1 { border-bottom: 2px solid #3498db; padding-bottom: 10px; }
-                h2 { border-bottom: 1px solid #bdc3c7; padding-bottom: 5px; margin-top: 30px; }
-                code { background-color: #f4f4f4; color: #333; }
-                pre { background-color: #f4f4f4; }
+                h2 { border-bottom: 1px solid #dde; padding-bottom: 6px; }
+                h3 { color: #34495e; }
+                code { background-color: #f0f3f5; color: #333; border: 1px solid #dde; }
+                pre { background-color: #f6f8fa; border: 1px solid #dde; }
                 th, td { border: 1px solid #ddd; }
-                th { background-color: #f2f2f2; }
-                blockquote { border-left: 4px solid #3498db; color: #555; }
+                th { background-color: #f2f6fa; color: #2c3e50; }
+                tr:nth-child(even) td { background-color: #f8fafb; }
+                blockquote { border-left: 4px solid #3498db; color: #555; background-color: #f8fafb; }
+                hr { border-top: 1px solid #dde; }
                 a { color: #3498db; }
+                /* Admonition colors - light */
+                .admonition { background-color: #f8fafb; }
+                .admonition.tip, .admonition.hint { border-color: #27ae60; background-color: #eafaf1; }
+                .admonition.tip .admonition-title, .admonition.hint .admonition-title { color: #27ae60; }
+                .admonition.note { border-color: #3498db; background-color: #eaf2f8; }
+                .admonition.note .admonition-title { color: #3498db; }
+                .admonition.warning, .admonition.caution { border-color: #e67e22; background-color: #fef5e7; }
+                .admonition.warning .admonition-title, .admonition.caution .admonition-title { color: #e67e22; }
+                .admonition.danger, .admonition.error { border-color: #e74c3c; background-color: #fdedec; }
+                .admonition.danger .admonition-title, .admonition.error .admonition-title { color: #e74c3c; }
+                .admonition.important { border-color: #8e44ad; background-color: #f4ecf7; }
+                .admonition.important .admonition-title { color: #8e44ad; }
             """
 
         return common + theme_colors

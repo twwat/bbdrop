@@ -275,9 +275,7 @@ class ThemeManager(QObject):
             os.path.exists(base_qss) and os.path.exists(dark_theme)
         )
 
-        if self._modular_qss_available:
-            log("Modular QSS structure detected", level="debug", category="ui")
-        else:
+        if not self._modular_qss_available:
             log("Modular QSS not found, using legacy styles.qss",
                 level="debug", category="ui")
 
@@ -351,8 +349,7 @@ class ThemeManager(QObject):
         with open(base_qss_path, 'r', encoding='utf-8') as f:
             base_content = f.read()
             qss_parts.append(f"/* === BASE STYLES === */\n{base_content}")
-            log(f"Loaded base.qss ({len(base_content)} chars)",
-                level="debug", category="ui")
+            # Individual file sizes logged at end via total
 
         # 2. Load component files (base styles only, no theme-specific parts)
         components_dir = os.path.join(styles_dir, "components")
@@ -408,8 +405,8 @@ class ThemeManager(QObject):
         else:
             self._cached_modular_light_qss = final_qss
 
-        log(f"Modular QSS loaded for {theme} theme ({len(final_qss)} total chars)",
-            level="info", category="ui")
+        log(f"Loaded {theme} theme ({len(final_qss)} chars)",
+            level="debug", category="ui")
 
         return final_qss
 
