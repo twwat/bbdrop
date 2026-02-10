@@ -1227,7 +1227,20 @@ def save_gallery_artifacts(
         pass
 
     # All-images bbcode (space-separated)
-    all_images_bbcode = "".join([(img.get('bbcode') or '') + "  " for img in results.get('images', [])]).strip()
+    # Generate per-image BBCode from image_url + thumb_url if not already present
+    bbcode_parts = []
+    for img in results.get('images', []):
+        bb = img.get('bbcode')
+        if not bb:
+            iu = img.get('image_url', '')
+            tu = img.get('thumb_url', '')
+            if iu and tu:
+                bb = f"[url={iu}][img]{tu}[/img][/url]"
+            elif iu:
+                bb = f"[url={iu}]{iu}[/url]"
+        if bb:
+            bbcode_parts.append(bb)
+    all_images_bbcode = "  ".join(bbcode_parts)
 
     # Get file host download links (if available)
     host_links = ''
@@ -1265,7 +1278,7 @@ def save_gallery_artifacts(
         'meta': {
             'gallery_name': gallery_name,
             'gallery_id': gallery_id,
-            'gallery_url': f"https://imx.to/g/{gallery_id}",
+            'gallery_url': results.get('gallery_url', ''),
             'status': 'completed',
             'started_at': results.get('started_at') or None,
             'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
