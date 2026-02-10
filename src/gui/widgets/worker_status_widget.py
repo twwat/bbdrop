@@ -10,11 +10,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from enum import Enum
+import os
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QLabel, QComboBox, QPushButton, QFrame, QSizePolicy,
-    QMenu, QStyle, QStyleOptionHeader, QProgressBar, QAbstractItemView, QToolTip
+    QMenu, QStyle, QStyleOptionHeader, QProgressBar, QAbstractItemView, QToolTip,
+    QToolButton
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QSettings, QTimer, pyqtProperty, QSize, QRect, QEvent, QMutex, QMutexLocker, QObject
 from PyQt6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor, QFontMetrics
@@ -23,6 +25,7 @@ from src.utils.format_utils import format_binary_rate
 from src.utils.logger import log
 from src.gui.icon_manager import get_icon_manager
 from src.core.file_host_config import get_config_manager, get_file_host_setting, save_file_host_setting
+from src.core.image_host_config import get_image_host_config_manager, is_image_host_enabled, save_image_host_enabled, get_all_hosts
 from src.gui.widgets.custom_widgets import StorageProgressBar
 from src.core.constants import (
     METRIC_FONT_SIZE_SMALL,
@@ -240,7 +243,7 @@ class MultiLineHeaderView(QHeaderView):
 class WorkerStatus:
     """Data structure for worker status information."""
     worker_id: str
-    worker_type: str  # 'imx' or 'filehost'
+    worker_type: str  # 'imagehost' or 'filehost'
     hostname: str
     display_name: str
     speed_bps: float = 0.0
@@ -436,7 +439,7 @@ class WorkerStatusWidget(QWidget):
 
         # UI references
         self.status_table: Optional[QTableWidget] = None
-        self.filter_combo: Optional[QComboBox] = None
+        # filter_combo removed — filter is now menu-driven via _filter_index
 
         # Selection tracking for refresh persistence
         self._selected_worker_id: Optional[str] = None
@@ -464,30 +467,9 @@ class WorkerStatusWidget(QWidget):
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(5)
 
-        # Top control bar
-        control_layout = QHBoxLayout()
-        control_layout.setSpacing(8)
-
-        control_layout.addStretch()
-
-        # Filter combo
-        filter_label = QLabel("Filter:")
-        control_layout.addWidget(filter_label)
-
-        self.filter_combo = QComboBox()
-        self.filter_combo.addItems(["All Hosts", "Used This Session", "Enabled", "Active Only", "Errors Only"])
-        self.filter_combo.currentIndexChanged.connect(self._on_filter_changed)
-        self.filter_combo.setMinimumWidth(120)
-        control_layout.addWidget(self.filter_combo)
-
-        main_layout.addLayout(control_layout)
-
-        # Separator line
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Sunken)
-        separator.setProperty("class", "worker-separator")
-        main_layout.addWidget(separator)
+        # Filter state (menu-driven, no combo box)
+        self._filter_index = 0
+        self._filter_labels = ["All Hosts", "Image Hosts", "File Hosts", "Enabled", "Active Only", "Errors Only"]
 
         # Status table
         self.status_table = NoAutoScrollTable()
@@ -540,6 +522,72 @@ class WorkerStatusWidget(QWidget):
         self.status_table.customContextMenuRequested.connect(self._show_row_context_menu)
 
         main_layout.addWidget(self.status_table)
+
+        # Filter button — small icon overlaid on top-right corner of header
+        self._filter_btn = QToolButton(self.status_table)
+        self._filter_btn.setText("\u2261")  # ≡ hamburger/filter symbol
+        self._filter_btn.setFixedSize(20, 20)
+        self._filter_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._filter_btn.setToolTip("Filter hosts")
+        self._filter_btn.setStyleSheet(
+            "QToolButton { border: none; font-size: 14px; padding: 0; }"
+            "QToolButton:hover { background: rgba(255,255,255,30); border-radius: 3px; }"
+        )
+        self._filter_btn.clicked.connect(self._show_filter_menu_from_button)
+        self._position_filter_button()
+
+    def _position_filter_button(self):
+        """Position filter button at the top-right corner of the table header."""
+        header = self.status_table.horizontalHeader()
+        header_height = header.height()
+        table_width = self.status_table.viewport().width() + self.status_table.verticalHeader().width()
+        # Account for vertical scrollbar if visible
+        vbar = self.status_table.verticalScrollBar()
+        if vbar and vbar.isVisible():
+            table_width += vbar.width()
+        btn_x = self.status_table.width() - self._filter_btn.width() - 2
+        btn_y = max(0, (header_height - self._filter_btn.height()) // 2)
+        self._filter_btn.move(btn_x, btn_y)
+        self._filter_btn.raise_()
+
+    def resizeEvent(self, event):
+        """Reposition filter button on resize."""
+        super().resizeEvent(event)
+        if hasattr(self, '_filter_btn'):
+            self._position_filter_button()
+
+    def _build_filter_menu(self) -> QMenu:
+        """Build the filter selection menu."""
+        menu = QMenu(self)
+        for i, label in enumerate(self._filter_labels):
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(i == self._filter_index)
+            action.setData(i)
+            action.triggered.connect(lambda checked, idx=i: self._set_filter(idx))
+        return menu
+
+    def _show_filter_menu_from_button(self):
+        """Show filter menu below the filter button."""
+        menu = self._build_filter_menu()
+        menu.exec(self._filter_btn.mapToGlobal(self._filter_btn.rect().bottomLeft()))
+
+    def _set_filter(self, index: int):
+        """Set the active filter and refresh."""
+        self._filter_index = index
+        self._update_filter_button()
+        self._on_filter_changed(index)
+
+    def _update_filter_button(self):
+        """Update filter button appearance based on active filter."""
+        if not hasattr(self, '_filter_btn'):
+            return
+        if self._filter_index == 0:
+            self._filter_btn.setText("\u2261")  # ≡ default
+            self._filter_btn.setToolTip("Filter hosts")
+        else:
+            self._filter_btn.setText("\u2261")
+            self._filter_btn.setToolTip(f"Filter: {self._filter_labels[self._filter_index]}")
 
     def _load_icons(self):
         """Load and cache worker status icons."""
@@ -622,8 +670,25 @@ class WorkerStatusWidget(QWidget):
         if not icon_mgr:
             return QIcon()
 
-        if worker_type == 'imx':
-            icon = icon_mgr.get_file_host_icon('imx.to', dimmed=False)
+        if worker_type == 'imagehost':
+            # Look up image host config to get icon filename
+            # hostname is the host_id for image hosts (e.g., 'imx', 'turboimagehost')
+            all_hosts = get_all_hosts()
+            host_config = all_hosts.get(hostname)
+
+            if host_config and host_config.icon:
+                # Construct path to image host icon
+                icon_filename = host_config.icon
+                icon_path = os.path.join(icon_mgr.assets_dir, 'image_hosts', icon_filename)
+
+                if os.path.exists(icon_path):
+                    icon = QIcon(icon_path)
+                    if not icon.isNull():
+                        self._icon_cache[cache_key] = icon
+                        return icon
+
+            # No icon found — return empty so the display name text shows instead
+            return QIcon()
         else:
             # Use icon manager's file host icon loading (with fallback chain)
             icon = icon_mgr.get_file_host_icon(hostname.lower(), dimmed=False)
@@ -641,29 +706,36 @@ class WorkerStatusWidget(QWidget):
         settings = QSettings("BBDropUploader", "BBDropGUI")
         return settings.value('ui/show_worker_logos', True, type=bool)
 
-    def _load_host_logo(self, host_id: str, height: int = 20) -> Optional[QLabel]:
-        """Load file host logo as a QLabel.
-
-        Uses IconManager to get the logo path, ensuring consistent naming
-        conventions and security validation across the application.
+    def _load_host_logo(self, host_id: str, height: int = 20, worker_type: str = 'filehost') -> Optional[QLabel]:
+        """Load host logo as a QLabel.
 
         Args:
-            host_id: Host identifier (e.g., 'rapidgator', 'fileboom', 'imx')
-            height: Logo height in pixels (default 20, slightly smaller than settings tab's 22)
+            host_id: Host identifier (e.g., 'rapidgator', 'imx', 'turbo')
+            height: Logo height in pixels (default 20)
+            worker_type: 'filehost' or 'imagehost'
 
         Returns:
             QLabel with logo pixmap, or None if not found
         """
         from PyQt6.QtGui import QPixmap
 
-        # Use IconManager for consistent path resolution and security validation
         icon_mgr = get_icon_manager()
         if not icon_mgr:
             return None
 
-        logo_path = icon_mgr.get_file_host_logo_path(host_id)
-        if not logo_path:
-            return None
+        if worker_type == 'imagehost':
+            # Image host logos come from config.logo in assets/image_hosts/
+            all_hosts = get_all_hosts()
+            host_config = all_hosts.get(host_id)
+            if not host_config or not host_config.logo:
+                return None
+            logo_path = os.path.join(icon_mgr.assets_dir, 'image_hosts', host_config.logo)
+            if not os.path.exists(logo_path):
+                return None
+        else:
+            logo_path = icon_mgr.get_file_host_logo_path(host_id)
+            if not logo_path:
+                return None
 
         try:
             pixmap = QPixmap(logo_path)
@@ -986,24 +1058,25 @@ class WorkerStatusWidget(QWidget):
             used_bytes = total_bytes - left_bytes
             self._update_storage_progress(worker_id, used_bytes, total_bytes)
 
-    @pyqtSlot(int, int)
-    def update_queue_columns(self, files_remaining: int, bytes_remaining: int):
-        """Update queue-based columns (Files Left, Remaining) for IMX worker.
+    @pyqtSlot(str, int, int)
+    def update_queue_columns(self, host_id: str, files_remaining: int, bytes_remaining: int):
+        """Update queue-based columns for image host worker.
 
         Thread-safe via QMutexLocker on _workers dictionary.
 
         Args:
+            host_id: Image host identifier (e.g., 'imx', 'turbo')
             files_remaining: Total images remaining across all galleries
             bytes_remaining: Total bytes remaining across all galleries
         """
         with QMutexLocker(self._workers_mutex):
             for worker_id, worker in self._workers.items():
-                if worker.worker_type == 'imx':
+                if worker.worker_type == 'imagehost' and worker.hostname == host_id:
                     worker.files_remaining = files_remaining
                     worker.bytes_remaining = bytes_remaining
                     self._update_files_remaining(worker_id, files_remaining)
                     self._update_bytes_remaining(worker_id, bytes_remaining)
-                    break  # Only one IMX worker
+                    break  # Only one worker per image host
 
     @pyqtSlot(str, int, int)
     def update_filehost_queue_columns(self, host_name: str, files_remaining: int, bytes_remaining: int):
@@ -1200,6 +1273,15 @@ class WorkerStatusWidget(QWidget):
                     else:
                         status_icon = self._icon_cache.get('host_disabled', QIcon())
                         tooltip_text = "Disabled"
+                elif worker and worker.worker_type == 'imagehost':
+                    host_id = worker.hostname
+                    enabled = is_image_host_enabled(host_id)
+                    if enabled:
+                        status_icon = self._icon_cache.get('host_enabled', QIcon())
+                        tooltip_text = "Enabled"
+                    else:
+                        status_icon = self._icon_cache.get('host_disabled', QIcon())
+                        tooltip_text = "Disabled"
                 else:
                     status_icon = self._icon_cache.get('host_enabled', QIcon())
                     tooltip_text = "Enabled"
@@ -1330,7 +1412,7 @@ class WorkerStatusWidget(QWidget):
             filtered_workers = sorted(
                 filtered_workers,
                 key=lambda w: (
-                    w.worker_type,  # imx first, then filehost
+                    0 if w.worker_type == 'imagehost' else 1,  # imagehost first, then filehost
                     0 if w.status == 'uploading' else (1 if w.status != 'disabled' else 2),
                     w.hostname.lower()
                 )
@@ -1352,7 +1434,11 @@ class WorkerStatusWidget(QWidget):
         reverse = (self._sort_order == Qt.SortOrder.DescendingOrder)
 
         if col_config.id == 'hostname':
-            return sorted(workers, key=lambda w: w.hostname.lower(), reverse=reverse)
+            # Sort by worker_type first (imagehost=0, filehost=1), then by hostname
+            def sort_key(w):
+                type_priority = 0 if w.worker_type == 'imagehost' else 1
+                return (type_priority, w.hostname.lower())
+            return sorted(workers, key=sort_key, reverse=reverse)
         elif col_config.id == 'speed':
             return sorted(workers, key=lambda w: w.speed_bps, reverse=reverse)
         elif col_config.id == 'status':
@@ -1440,8 +1526,8 @@ class WorkerStatusWidget(QWidget):
                     logo_label = None
                     if show_logos:
                         # Try to load host logo
-                        host_id = 'imx' if worker.worker_type == 'imx' else worker.hostname.lower()
-                        logo_label = self._load_host_logo(host_id, height=22)
+                        host_id = worker.hostname if worker.worker_type == 'imagehost' else worker.hostname.lower()
+                        logo_label = self._load_host_logo(host_id, height=22, worker_type=worker.worker_type)
 
                     # Decide whether to use widget (logo) or plain text
                     use_widget = (show_logos and logo_label is not None)
@@ -1537,8 +1623,16 @@ class WorkerStatusWidget(QWidget):
                         else:
                             icon = self._icon_cache.get('host_disabled', QIcon())
                             tooltip = "Disabled"
+                    elif worker.worker_type == 'imagehost':
+                        host_id = worker.hostname
+                        enabled = is_image_host_enabled(host_id)
+                        if enabled:
+                            icon = self._icon_cache.get('host_enabled', QIcon())
+                            tooltip = "Enabled"
+                        else:
+                            icon = self._icon_cache.get('host_disabled', QIcon())
+                            tooltip = "Disabled"
                     else:
-                        # IMX is always enabled
                         icon = self._icon_cache.get('host_enabled', QIcon())
                         tooltip = "Enabled"
 
@@ -1611,8 +1705,8 @@ class WorkerStatusWidget(QWidget):
 
                 elif col_config.id == 'storage':
                     # Storage progress bar column
-                    # IMX.to has unlimited storage - show green bar with infinity symbol
-                    if worker.worker_type == 'imx':
+                    # Image hosts have unlimited storage - show green bar with infinity symbol
+                    if worker.worker_type == 'imagehost':
                         storage_widget = StorageProgressBar()
                         storage_widget.set_unlimited()
                         storage_widget.setProperty("worker_id", worker.worker_id)
@@ -1723,12 +1817,11 @@ class WorkerStatusWidget(QWidget):
 
         Args:
             worker_id: Worker identifier
-            worker_type: 'imx' or 'filehost'
+            worker_type: 'imagehost' or 'filehost'
             hostname: Host name (e.g., 'rapidgator', 'imx.to')
         """
-        if worker_type == 'imx':
-            # Open settings dialog to credentials tab (index 1)
-            self.open_settings_tab_requested.emit(1)
+        if worker_type == 'imagehost':
+            self._open_image_host_config(hostname)
         else:
             # Open file host config dialog for this host
             # Normalize hostname to lowercase for config manager lookup
@@ -1737,134 +1830,116 @@ class WorkerStatusWidget(QWidget):
     def _apply_filter(self) -> list[WorkerStatus]:
         """Apply current filter to worker list.
 
+        Filter indices: 0=All Hosts, 1=Image Hosts, 2=File Hosts,
+                        3=Enabled, 4=Active Only, 5=Errors Only
+
         Returns:
             Filtered list of workers
         """
-        if self.filter_combo is None:
-            return list(self._workers.values())
-
-        filter_idx = self.filter_combo.currentIndex()
+        filter_idx = self._filter_index
         all_workers = list(self._workers.values())
 
-        if filter_idx == 0:  # All Hosts
-            # Get all hosts from config manager
+        if filter_idx == 1:  # Image Hosts
+            result = [w for w in all_workers if w.worker_type == 'imagehost']
+            # Add placeholders for image hosts without workers
+            image_host_config_mgr = get_image_host_config_manager()
+            if image_host_config_mgr:
+                for host_id, host_config in get_all_hosts().items():
+                    if not any(w.worker_type == 'imagehost' and w.hostname == host_id for w in self._workers.values()):
+                        result.append(WorkerStatus(
+                            worker_id=f"placeholder_{host_id}",
+                            worker_type="imagehost",
+                            hostname=host_id,
+                            display_name=host_config.name,
+                            status="idle" if is_image_host_enabled(host_id) else "disabled"
+                        ))
+            return result
+
+        elif filter_idx == 2:  # File Hosts
+            result = [w for w in all_workers if w.worker_type == 'filehost']
             config_manager = get_config_manager()
             if config_manager and hasattr(config_manager, 'hosts') and config_manager.hosts:
-                # Create placeholder workers for all hosts not in _workers
-                result = list(all_workers)
-                existing_hosts = {w.hostname.lower() for w in all_workers}
-
-                # Add imx.to placeholder if not already present
-                imx_exists = any(w.worker_type == "imx" for w in self._workers.values())
-                if not imx_exists:
-                    imx_placeholder = WorkerStatus(
-                        worker_id="placeholder_imx",
-                        worker_type="imx",
-                        hostname="imx.to",
-                        display_name="IMX.to",
-                        status="idle"
-                    )
-                    result.append(imx_placeholder)
-
-                enabled_hosts = []
-                disabled_hosts = []
-
+                existing_hosts = {w.hostname.lower() for w in result}
                 for host_id, host_config in config_manager.hosts.items():
                     if host_id.lower() not in existing_hosts:
-                        # Check if worker already exists before creating placeholder
                         worker_id = f"filehost_{host_id}"
                         if worker_id not in self._workers:
-                            is_enabled = get_file_host_setting(host_id, "enabled", "bool")
-                            # Load cached storage data from QSettings for filehost placeholders
-                            settings = QSettings("BBDropUploader", "BBDropGUI")
-                            total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
-                            left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
-                            try:
-                                storage_total = int(total_str) if total_str else 0
-                                storage_left = int(left_str) if left_str else 0
-                                storage_used = storage_total - storage_left
-                            except (ValueError, TypeError):
-                                storage_used = 0
-                                storage_total = 0
-                            placeholder = WorkerStatus(
-                                worker_id=f"placeholder_{host_id}",
-                                worker_type="filehost",
-                                hostname=host_id,
-                                display_name=host_config.name,
-                                status="disabled",
-                                storage_used_bytes=storage_used,
-                                storage_total_bytes=storage_total
-                            )
-                            if is_enabled:
-                                enabled_hosts.append(placeholder)
-                            else:
-                                disabled_hosts.append(placeholder)
+                            result.append(self._create_filehost_placeholder(host_id, host_config))
+            return result
 
-                # Sort: active workers first, then enabled idle, then disabled alphabetically
-                result.extend(enabled_hosts)
-                disabled_hosts.sort(key=lambda w: w.display_name.lower())
-                result.extend(disabled_hosts)
-                return result
-            return all_workers
-
-        elif filter_idx == 1:  # Used This Session
-            return all_workers  # Only workers that have been active
-
-        elif filter_idx == 2:  # Enabled
-            config_manager = get_config_manager()
-            if config_manager and hasattr(config_manager, 'hosts') and config_manager.hosts:
-                result = list(all_workers)
-                existing_hosts = {w.hostname.lower() for w in all_workers}
-
-                # Add imx.to placeholder if not already present (imx.to is always enabled)
-                imx_exists = any(w.worker_type == "imx" for w in self._workers.values())
-                if not imx_exists:
-                    imx_placeholder = WorkerStatus(
-                        worker_id="placeholder_imx",
-                        worker_type="imx",
-                        hostname="imx.to",
-                        display_name="IMX.to",
-                        status="idle"
-                    )
-                    result.append(imx_placeholder)
-
-                for host_id, host_config in config_manager.hosts.items():
-                    if host_id.lower() not in existing_hosts:
-                        if get_file_host_setting(host_id, "enabled", "bool"):
-                            # Check if worker already exists before creating placeholder
-                            worker_id = f"filehost_{host_id}"
-                            if worker_id not in self._workers:
-                                # Load cached storage data from QSettings for enabled filehost placeholders
-                                settings = QSettings("BBDropUploader", "BBDropGUI")
-                                total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
-                                left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
-                                try:
-                                    storage_total = int(total_str) if total_str else 0
-                                    storage_left = int(left_str) if left_str else 0
-                                    storage_used = storage_total - storage_left
-                                except (ValueError, TypeError):
-                                    storage_used = 0
-                                    storage_total = 0
-                                placeholder = WorkerStatus(
-                                    worker_id=f"placeholder_{host_id}",
-                                    worker_type="filehost",
-                                    hostname=host_id,
-                                    display_name=host_config.name,
-                                    status="disabled",
-                                    storage_used_bytes=storage_used,
-                                    storage_total_bytes=storage_total
-                                )
-                                result.append(placeholder)
-                return result
-            return all_workers
-
-        elif filter_idx == 3:  # Active Only
+        elif filter_idx == 4:  # Active Only
             return [w for w in all_workers if w.status == 'uploading']
 
-        elif filter_idx == 4:  # Errors Only
+        elif filter_idx == 5:  # Errors Only
             return [w for w in all_workers if w.status == 'error']
 
-        return all_workers
+        # filter_idx 0 (All Hosts) and 3 (Enabled) both show both types with placeholders
+        config_manager = get_config_manager()
+        enabled_only = (filter_idx == 3)
+
+        result = list(all_workers)
+        existing_hosts = {w.hostname.lower() for w in all_workers}
+
+        # Add image host placeholders
+        image_host_config_mgr = get_image_host_config_manager()
+        if image_host_config_mgr:
+            for host_id, host_config in get_all_hosts().items():
+                if not any(w.worker_type == 'imagehost' and w.hostname == host_id for w in self._workers.values()):
+                    host_enabled = is_image_host_enabled(host_id)
+                    if enabled_only and not host_enabled:
+                        continue
+                    result.append(WorkerStatus(
+                        worker_id=f"placeholder_{host_id}",
+                        worker_type="imagehost",
+                        hostname=host_id,
+                        display_name=host_config.name,
+                        status="idle" if host_enabled else "disabled"
+                    ))
+
+        # Add file host placeholders
+        if config_manager and hasattr(config_manager, 'hosts') and config_manager.hosts:
+            enabled_hosts = []
+            disabled_hosts = []
+            for host_id, host_config in config_manager.hosts.items():
+                if host_id.lower() not in existing_hosts:
+                    worker_id = f"filehost_{host_id}"
+                    if worker_id not in self._workers:
+                        is_enabled = get_file_host_setting(host_id, "enabled", "bool")
+                        if enabled_only and not is_enabled:
+                            continue
+                        placeholder = self._create_filehost_placeholder(host_id, host_config)
+                        if is_enabled:
+                            enabled_hosts.append(placeholder)
+                        else:
+                            disabled_hosts.append(placeholder)
+            result.extend(enabled_hosts)
+            disabled_hosts.sort(key=lambda w: w.display_name.lower())
+            result.extend(disabled_hosts)
+
+        return result
+
+    def _create_filehost_placeholder(self, host_id: str, host_config) -> 'WorkerStatus':
+        """Create a placeholder WorkerStatus for a file host not yet active."""
+        is_enabled = get_file_host_setting(host_id, "enabled", "bool")
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
+        left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
+        try:
+            storage_total = int(total_str) if total_str else 0
+            storage_left = int(left_str) if left_str else 0
+            storage_used = storage_total - storage_left
+        except (ValueError, TypeError):
+            storage_used = 0
+            storage_total = 0
+        return WorkerStatus(
+            worker_id=f"placeholder_{host_id}",
+            worker_type="filehost",
+            hostname=host_id,
+            display_name=host_config.name,
+            status="disabled",
+            storage_used_bytes=storage_used,
+            storage_total_bytes=storage_total
+        )
 
     def _format_speed(self, speed_bps: float) -> str:
         """Format speed for display.
@@ -1890,13 +1965,19 @@ class WorkerStatusWidget(QWidget):
 
         Args:
             hostname: Raw hostname
-            worker_type: 'imx' or 'filehost'
+            worker_type: 'imagehost' or 'filehost'
 
         Returns:
             Formatted display name
         """
-        if worker_type == 'imx':
-            return "IMX.to"
+        if worker_type == 'imagehost':
+            # Look up display name from ImageHostConfigManager
+            # hostname is actually host_id for image hosts
+            all_hosts = get_all_hosts()
+            if hostname in all_hosts:
+                return all_hosts[hostname].name
+            # Fallback if not found
+            return hostname.capitalize()
         else:
             # Capitalize first letter
             return hostname.capitalize()
@@ -1962,8 +2043,8 @@ class WorkerStatusWidget(QWidget):
                 hostname = obj.property('hostname')
 
                 # Open the appropriate dialog
-                if worker_type == 'imx':
-                    self.open_settings_tab_requested.emit(1)  # Credentials tab
+                if worker_type == 'imagehost':
+                    self._open_image_host_config(hostname)
                 elif hostname:
                     self.open_host_config_requested.emit(hostname.lower())
                 return True  # Event handled
@@ -1998,12 +2079,15 @@ class WorkerStatusWidget(QWidget):
             return
 
         # Handle placeholder workers (not in _workers dict)
-        # Placeholder IDs: "placeholder_imx", "placeholder_{host_id}"
+        # Placeholder IDs: "placeholder_{host_id}"
         if worker_id.startswith("placeholder_"):
             host_part = worker_id[len("placeholder_"):]
-            if host_part == "imx":
-                self.open_settings_tab_requested.emit(1)  # Credentials tab
+            # Check if it's an image host placeholder
+            all_image_hosts = get_all_hosts()
+            if host_part in all_image_hosts:
+                self._open_image_host_config(host_part)
             else:
+                # File host placeholder
                 self.open_host_config_requested.emit(host_part.lower())
             return
 
@@ -2015,8 +2099,8 @@ class WorkerStatusWidget(QWidget):
             worker = self._workers[worker_id]
 
         # Open the appropriate dialog based on worker type
-        if worker.worker_type == 'imx':
-            self.open_settings_tab_requested.emit(1)  # Credentials tab
+        if worker.worker_type == 'imagehost':
+            self._open_image_host_config(worker.hostname)
         else:
             self.open_host_config_requested.emit(worker.hostname.lower())
 
@@ -2081,59 +2165,107 @@ class WorkerStatusWidget(QWidget):
             return
 
         # Handle placeholder workers (not in _workers dict)
+        is_image_host = False
         if worker_id.startswith("placeholder_"):
             host_part = worker_id[len("placeholder_"):]
-            if host_part == "imx":
-                return  # IMX doesn't have enable/disable/trigger
-            host_id = host_part.lower()
+            # Check if it's an image host
+            all_image_hosts = get_all_hosts()
+            if host_part in all_image_hosts:
+                is_image_host = True
+                host_id = host_part
+            else:
+                host_id = host_part.lower()
         elif worker_id in self._workers:
             worker = self._workers[worker_id]
-            if worker.worker_type != 'filehost':
+            if worker.worker_type == 'imagehost':
+                is_image_host = True
+                # For image hosts, hostname IS the host_id
+                host_id = worker.hostname
+                # Verify it exists
+                all_image_hosts = get_all_hosts()
+                if host_id not in all_image_hosts:
+                    return
+            elif worker.worker_type == 'filehost':
+                host_id = worker.hostname.lower()
+            else:
                 return
-            host_id = worker.hostname.lower()
         else:
             return
-        enabled = get_file_host_setting(host_id, "enabled", "bool")
-        trigger = get_file_host_setting(host_id, "trigger", "str")
+
+        # Get settings based on host type
+        if is_image_host:
+            enabled = is_image_host_enabled(host_id)
+            trigger = "disabled"  # Image hosts don't use triggers yet
+        else:
+            enabled = get_file_host_setting(host_id, "enabled", "bool")
+            trigger = get_file_host_setting(host_id, "trigger", "str")
 
         menu = QMenu(self)
 
         # Enable/Disable actions - only show the available option
         if not enabled:
             enable_action = menu.addAction("Enable Host")
-            enable_action.triggered.connect(lambda: self._set_host_enabled(host_id, True))
+            if is_image_host:
+                enable_action.triggered.connect(lambda: self._set_image_host_enabled(host_id, True))
+            else:
+                enable_action.triggered.connect(lambda: self._set_host_enabled(host_id, True))
         else:
             disable_action = menu.addAction("Disable Host")
-            disable_action.triggered.connect(lambda: self._set_host_enabled(host_id, False))
+            if is_image_host:
+                disable_action.triggered.connect(lambda: self._set_image_host_enabled(host_id, False))
+            else:
+                disable_action.triggered.connect(lambda: self._set_host_enabled(host_id, False))
 
-        menu.addSeparator()
-
-        # Auto-upload trigger submenu
-        trigger_menu = menu.addMenu("Set Auto-Upload Trigger")
-        trigger_options = [
-            ("On Added", "on_added"),
-            ("On Started", "on_started"),
-            ("On Completed", "on_completed"),
-            ("Disabled", "disabled"),
-        ]
-        for label, value in trigger_options:
-            action = trigger_menu.addAction(label)
-            action.setCheckable(True)
-            action.setChecked(trigger == value)
-            action.triggered.connect(lambda checked, v=value: self._set_host_trigger(host_id, v))
+        # Auto-upload trigger submenu (only for file hosts)
+        if not is_image_host:
+            menu.addSeparator()
+            trigger_menu = menu.addMenu("Set Auto-Upload Trigger")
+            trigger_options = [
+                ("On Added", "on_added"),
+                ("On Started", "on_started"),
+                ("On Completed", "on_completed"),
+                ("Disabled", "disabled"),
+            ]
+            for label, value in trigger_options:
+                action = trigger_menu.addAction(label)
+                action.setCheckable(True)
+                action.setChecked(trigger == value)
+                action.triggered.connect(lambda checked, v=value: self._set_host_trigger(host_id, v))
 
         menu.addSeparator()
 
         # Configure host
         configure_action = menu.addAction("Configure Host...")
-        configure_action.triggered.connect(lambda: self.open_host_config_requested.emit(host_id))
+        if is_image_host:
+            configure_action.triggered.connect(lambda: self._open_image_host_config(host_id))
+        else:
+            configure_action.triggered.connect(lambda: self.open_host_config_requested.emit(host_id))
 
         menu.exec(self.status_table.viewport().mapToGlobal(position))
 
     def _set_host_enabled(self, host_id: str, enabled: bool):
-        """Enable or disable a host and refresh the display."""
+        """Enable or disable a file host and refresh the display."""
         save_file_host_setting(host_id, "enabled", enabled)
         self._refresh_display()
+
+    def _set_image_host_enabled(self, host_id: str, enabled: bool):
+        """Enable or disable an image host and refresh the display."""
+        save_image_host_enabled(host_id, enabled)
+        self._refresh_display()
+
+    def _open_image_host_config(self, host_id: str):
+        """Open image host config dialog and refresh on close."""
+        from src.gui.dialogs.image_host_config_dialog import ImageHostConfigDialog
+
+        config = get_image_host_config_manager().get_host(host_id)
+        if not config:
+            return
+
+        dialog = ImageHostConfigDialog(self, host_id, config)
+        dialog.exec()
+
+        # Refresh on close regardless of OK/Cancel — same as file hosts
+        self.refresh_icons()
 
     def _set_host_trigger(self, host_id: str, trigger: str):
         """Set auto-upload trigger for a host and refresh the display."""
@@ -2143,6 +2275,17 @@ class WorkerStatusWidget(QWidget):
     def _show_column_context_menu(self, position):
         """Show context menu for column visibility and settings."""
         menu = QMenu(self)
+
+        # Filter submenu
+        filter_menu = menu.addMenu("Filter")
+        for i, label in enumerate(self._filter_labels):
+            action = filter_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(i == self._filter_index)
+            action.setData(i)
+            action.triggered.connect(lambda checked, idx=i: self._set_filter(idx))
+
+        menu.addSeparator()
 
         # Core columns section
         core_menu = menu.addMenu("Core Columns")
@@ -2453,8 +2596,7 @@ class WorkerStatusWidget(QWidget):
             settings.setValue("worker_status/sort_order", sort_order.value)
 
         # Save filter selection
-        if self.filter_combo:
-            settings.setValue("worker_status/filter_index", self.filter_combo.currentIndex())
+        settings.setValue("worker_status/filter_index", self._filter_index)
 
         settings.sync()
 
@@ -2551,11 +2693,10 @@ class WorkerStatusWidget(QWidget):
             header.setSortIndicator(self._sort_column, self._sort_order)
 
         # Restore filter selection
-        if self.filter_combo:
-            filter_index = settings.value("worker_status/filter_index", 0, type=int)
-            # Validate index is within range
-            if 0 <= filter_index < self.filter_combo.count():
-                self.filter_combo.setCurrentIndex(filter_index)
+        filter_index = settings.value("worker_status/filter_index", 0, type=int)
+        if 0 <= filter_index < len(self._filter_labels):
+            self._filter_index = filter_index
+            self._update_filter_button()
 
     def _apply_disabled_style(self, element: Any) -> None:
         """Apply disabled/grayed-out styling to widget or table item.
