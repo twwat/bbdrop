@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Dict, Any, Optional, Set, Tuple
 
 from PyQt6.QtCore import QObject, QTimer, Qt
-from PyQt6.QtGui import QColor, QIcon
+from PyQt6.QtGui import QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import QTableWidgetItem, QApplication
 
 from src.utils.logger import log
@@ -52,18 +52,19 @@ class _Col:
     TRANSFER = 10
     RENAMED = 11
     TEMPLATE = 12
-    GALLERY_ID = 13
-    CUSTOM1 = 14
-    CUSTOM2 = 15
-    CUSTOM3 = 16
-    CUSTOM4 = 17
-    EXT1 = 18
-    EXT2 = 19
-    EXT3 = 20
-    EXT4 = 21
-    HOSTS_STATUS = 22
-    HOSTS_ACTION = 23
-    ONLINE_IMX = 24
+    IMAGE_HOST = 13
+    GALLERY_ID = 14
+    CUSTOM1 = 15
+    CUSTOM2 = 16
+    CUSTOM3 = 17
+    CUSTOM4 = 18
+    EXT1 = 19
+    EXT2 = 20
+    EXT3 = 21
+    EXT4 = 22
+    HOSTS_STATUS = 23
+    HOSTS_ACTION = 24
+    ONLINE_IMX = 25
 
 
 def format_timestamp_for_display(timestamp_value, include_seconds=False):
@@ -294,7 +295,8 @@ class TableRowManager(QObject):
                     transfer_text = format_binary_rate(current_rate_kib, precision=2)
                 elif final_rate_kib > 0:
                     transfer_text = format_binary_rate(final_rate_kib, precision=2)
-            except Exception:
+            except Exception as e:
+                log(f"Transfer rate formatting failed: {e}", level="warning", category="ui")
                 rate = current_rate_kib if item.status == "uploading" else final_rate_kib
                 transfer_text = mw._format_rate_consistent(rate) if rate > 0 else ""
 
@@ -314,9 +316,27 @@ class TableRowManager(QObject):
         tmpl_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         mw.gallery_table.setItem(row, _Col.TEMPLATE, tmpl_item)
 
-        # Renamed status: Set icon based on whether gallery has been renamed
-        is_renamed = check_gallery_renamed(item.gallery_id) if item.gallery_id else None
-        self._set_renamed_cell_icon(row, is_renamed)
+        # Image host column
+        host_id = getattr(item, 'image_host_id', 'imx') or 'imx'
+        host_display = host_id
+        try:
+            from src.core.image_host_config import get_image_host_config_manager
+            host_cfg = get_image_host_config_manager().get_host_config(host_id)
+            if host_cfg:
+                host_display = host_cfg.name
+        except Exception:
+            pass
+        host_item = QTableWidgetItem(host_display)
+        host_item.setFlags(host_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        host_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        mw.gallery_table.setItem(row, _Col.IMAGE_HOST, host_item)
+
+        # Renamed status: only applies to hosts that support gallery rename (IMX)
+        if host_id == 'imx':
+            is_renamed = check_gallery_renamed(item.gallery_id) if item.gallery_id else None
+            self._set_renamed_cell_icon(row, is_renamed)
+        else:
+            self._set_renamed_cell_na(row)
 
         # Custom columns and Gallery ID: Load from database
         actual_table = getattr(mw.gallery_table, 'table', mw.gallery_table)
@@ -400,7 +420,8 @@ class TableRowManager(QObject):
                 formatted_data['added_text'], formatted_data['added_tooltip'] = format_timestamp_for_display(item.added_time)
                 formatted_data['finished_text'], formatted_data['finished_tooltip'] = format_timestamp_for_display(item.finished_time)
                 return formatted_data
-            except Exception:
+            except Exception as e:
+                log(f"format_row_data failed for row {row}: {e}", level="error", category="ui")
                 return None
 
         def apply_formatted_data(formatted_data):
@@ -514,13 +535,15 @@ class TableRowManager(QObject):
                 mw._format_binary_size = format_binary_size
                 mw._format_binary_rate = format_binary_rate
                 mw._format_functions_cached = True
-            except Exception:
+            except Exception as e:
+                log(f"Failed to cache format functions: {e}", level="warning", category="ui")
                 mw._format_binary_size = lambda x, **kwargs: f"{x} B"
                 mw._format_binary_rate = lambda x, **kwargs: mw._format_rate_consistent(x, 2)
 
         try:
             size_text = mw._format_binary_size(size_bytes, precision=2)
-        except Exception:
+        except Exception as e:
+            log(f"Size formatting failed for {size_bytes}: {e}", level="warning", category="ui")
             size_text = f"{size_bytes} B" if size_bytes else ""
         size_item = QTableWidgetItem(size_text)
         size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -531,12 +554,14 @@ class TableRowManager(QObject):
         if item.status == "uploading" and hasattr(item, 'current_kibps') and item.current_kibps:
             try:
                 transfer_text = mw._format_binary_rate(float(item.current_kibps), precision=1)
-            except Exception:
+            except Exception as e:
+                log(f"Transfer rate formatting failed: {e}", level="warning", category="ui")
                 transfer_text = f"{item.current_kibps:.1f} KiB/s" if item.current_kibps else ""
         elif hasattr(item, 'final_kibps') and item.final_kibps:
             try:
                 transfer_text = mw._format_binary_rate(float(item.final_kibps), precision=1)
-            except Exception:
+            except Exception as e:
+                log(f"Final rate formatting failed: {e}", level="warning", category="ui")
                 transfer_text = f"{item.final_kibps:.1f} KiB/s"
         else:
             transfer_text = ""
@@ -697,14 +722,9 @@ class TableRowManager(QObject):
             log("No rows to create widgets for", level="debug", category="ui")
             return
 
-        log(f"Creating deferred widgets for {actual_rows} items...", level="debug", category="ui")
-
         # Get visible rows first for prioritized creation
         first_visible, last_visible = self._get_visible_row_range()
         visible_rows = set(range(first_visible, min(last_visible + 1, actual_rows)))
-
-        log(f"Visible row range: {first_visible}-{last_visible} ({len(visible_rows)} rows)",
-            level="debug", category="ui")
 
         # PERFORMANCE: Pause update timer during batch operation
         # This prevents _update_scanned_rows from iterating all items during widget creation
@@ -730,8 +750,7 @@ class TableRowManager(QObject):
             # Re-enable updates and show visible widgets immediately
             mw.gallery_table.setUpdatesEnabled(True)
             QApplication.processEvents()
-            log(f"Phase 1 complete: {visible_created} visible widgets (rows {first_visible}-{last_visible})",
-                level="debug", category="ui")
+            pass  # Phase 1 visible widgets created
 
             # Disable updates again for Phase 2
             mw.gallery_table.setUpdatesEnabled(False)
@@ -749,8 +768,6 @@ class TableRowManager(QObject):
                         mw.gallery_table.setUpdatesEnabled(True)
                         QApplication.processEvents()
                         mw.gallery_table.setUpdatesEnabled(False)
-                        log(f"Phase 2 progress: {remaining_created} remaining widgets created...",
-                            level="debug", category="ui")
 
         finally:
             # CRITICAL: Always restore table updates and timer
@@ -764,8 +781,7 @@ class TableRowManager(QObject):
                     mw.update_timer.start(timer_interval)
                     log("Restored update_timer after widget creation", level="debug", category="performance")
 
-        log(f"Finished creating {actual_rows} deferred widgets "
-            f"({visible_created} visible + {remaining_created} background)",
+        log(f"Created {actual_rows} deferred widgets ({visible_created} visible + {remaining_created} background)",
             level="debug", category="ui")
 
     def _create_progress_widget_for_row(self, row: int):
@@ -897,7 +913,7 @@ class TableRowManager(QObject):
         finally:
             mw.gallery_table.setSortingEnabled(True)
             mw.gallery_table.setUpdatesEnabled(True)
-            log("Table updates re-enabled - Phase 1 complete", level="info", category="performance")
+            log("Table updates re-enabled", level="debug", category="performance")
 
         mw._initializing = False
         QTimer.singleShot(50, self._load_galleries_phase2)
@@ -994,9 +1010,6 @@ class TableRowManager(QObject):
             visible_rows = (viewport_height // row_height) + 1
             last_visible = min(table.rowCount() - 1, first_visible + visible_rows + buffer)
 
-            log(f"Viewport: rows {first_visible}-{last_visible} (total: {table.rowCount()})",
-                level="debug", category="performance")
-
             return (first_visible, last_visible)
         except Exception as e:
             log(f"Error calculating visible row range: {e}", level="error", category="performance")
@@ -1058,7 +1071,8 @@ class TableRowManager(QObject):
                 paths_to_remove.append(path)
                 updates_processed += 1
 
-            except Exception:
+            except Exception as e:
+                log(f"Background tab update failed for {path}: {e}", level="error", category="ui")
                 paths_to_remove.append(path)
 
         for path in paths_to_remove:
@@ -1162,6 +1176,32 @@ class TableRowManager(QObject):
         except Exception as e:
             log(f"Warning: Failed to set status text for {status}: {e}", level="debug")
 
+    def _set_renamed_cell_na(self, row: int):
+        """Set the Renamed column to a dimmed N/A for non-IMX hosts."""
+        mw = self._main_window
+        try:
+            col = _Col.RENAMED
+            item = QTableWidgetItem("")
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setToolTip("Not applicable for this host")
+            item.setForeground(QColor(255, 255, 255, 60))
+            icon = get_icon('renamed_true')
+            if icon is not None and not icon.isNull():
+                # Create a semi-transparent pixmap
+                pixmap = icon.pixmap(16, 16)
+                from PyQt6.QtGui import QPainter
+                faded = QPixmap(pixmap.size())
+                faded.fill(QColor(0, 0, 0, 0))
+                painter = QPainter(faded)
+                painter.setOpacity(0.25)
+                painter.drawPixmap(0, 0, pixmap)
+                painter.end()
+                item.setIcon(QIcon(faded))
+            mw.gallery_table.setItem(row, col, item)
+        except Exception as e:
+            log(f"Failed to set renamed N/A: {e}", level="debug", category="ui")
+
     def _set_renamed_cell_icon(self, row: int, is_renamed: bool | None):
         """Set the Renamed column cell to an icon (check/pending) if available.
 
@@ -1171,7 +1211,7 @@ class TableRowManager(QObject):
         """
         mw = self._main_window
         try:
-            col = 11
+            col = _Col.RENAMED
 
             item = QTableWidgetItem()
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -1306,9 +1346,9 @@ class TableRowManager(QObject):
                         mw.manage_templates_btn.setIcon(templates_icon)
 
                 if hasattr(mw, 'manage_credentials_btn'):
-                    credentials_icon = icon_mgr.get_icon('credentials')
-                    if not credentials_icon.isNull():
-                        mw.manage_credentials_btn.setIcon(credentials_icon)
+                    imagehosts_icon = icon_mgr.get_icon('imagehosts')
+                    if not imagehosts_icon.isNull():
+                        mw.manage_credentials_btn.setIcon(imagehosts_icon)
 
                 if hasattr(mw, 'log_viewer_btn'):
                     log_viewer_icon = icon_mgr.get_icon('log_viewer')
@@ -1351,5 +1391,5 @@ class TableRowManager(QObject):
                         item = mw.queue_manager.items[path]
                         if item.status == "uploading":
                             self._set_status_cell_icon(row, item.status)
-        except Exception:
-            pass  # Silently ignore errors (table might be updating)
+        except Exception as e:
+            log(f"Upload animation update failed: {e}", level="warning", category="ui")

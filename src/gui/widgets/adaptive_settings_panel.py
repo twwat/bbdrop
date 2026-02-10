@@ -28,7 +28,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
     HEIGHT_2_ROW = 100        # px - below this, use 2 row layout
     HEIGHT_3_ROW = 140        # px - below this, use 3 rows
     HEIGHT_4_ROW = 180        # px - at or above this, use 4 rows
-    MIN_HEIGHT = 110          # px - minimum height (2-row layout with safety margin)
+    MIN_HEIGHT = 0            # px - no minimum so groupbox total stays low for splitter
 
     # Per-button text threshold - each button checks its own width
     BUTTON_TEXT_WIDTH = 92    # px - above this width, button shows text; below = icon only
@@ -77,6 +77,10 @@ class AdaptiveQuickSettingsPanel(QWidget):
             return 4
         return 4
 
+    def sizeHint(self):
+        """Return valid preferred size so QVBoxLayout's deficit distribution works correctly."""
+        return QSize(200, self.HEIGHT_4_ROW)
+
     def minimumSizeHint(self):
         """
         Return minimum size needed for smallest layout (2-row mode).
@@ -118,15 +122,15 @@ class AdaptiveQuickSettingsPanel(QWidget):
         # Store original button text for restoration
         self._button_labels = {
             'settings': ' Settings',
-            'credentials': ' Credentials',
-            'templates': ' BBCode Templates',
+            'credentials': ' Image Hosts',
+            'templates': ' Templates',
             'file_hosts': '  File Hosts',
             'hooks': '  App Hooks',
-            'log_viewer': ' Log Viewer',
-            'help': ' Documentation',
+            'log_viewer': ' Logs',
+            'help': ' Docs',
             'theme': '',  # Theme button never shows text in 2-row/3-row/4-row modes
-            'statistics': ' Statistics',
-            'link_scanner': ' Link Scanner'
+            'statistics': ' Stats',
+            'link_scanner': ' Link Scan'
         }
 
         # Initialize state based on current height
@@ -182,9 +186,9 @@ class AdaptiveQuickSettingsPanel(QWidget):
         else:  # 4 rows
             self._build_4_row()
 
-        # Notify Qt that our size constraints have changed
-        # This forces QSplitter to re-query minimumSizeHint()
-        self.updateGeometry()
+        # Do NOT call self.updateGeometry() here — it causes the parent
+        # QSplitter to switch from KeepSize to FollowSizeHint mode,
+        # stomping any restored splitter positions.
 
     def _clear_layout(self):
         """Remove all widgets and spacers from the main layout"""

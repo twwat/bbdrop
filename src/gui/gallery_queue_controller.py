@@ -205,8 +205,11 @@ class GalleryQueueController(QObject):
         )
         actual_tab = "Main" if current_tab == "All Tabs" else current_tab
 
+        # Get selected image host
+        selected_host = mw._get_default_host()
+
         result = mw.queue_manager.add_item(
-            path, template_name=template_name, tab_name=actual_tab
+            path, template_name=template_name, tab_name=actual_tab, image_host_id=selected_host
         )
 
         if result:
@@ -250,11 +253,13 @@ class GalleryQueueController(QObject):
             gallery_name = folder_name
 
         actual_tab = "Main" if current_tab == "All Tabs" else current_tab
+        selected_host = mw._get_default_host()
         result = mw.queue_manager.add_item(
             folder_path,
             name=gallery_name,
             template_name=template_name,
-            tab_name=actual_tab
+            tab_name=actual_tab,
+            image_host_id=selected_host
         )
 
         if result:
@@ -297,14 +302,17 @@ class GalleryQueueController(QObject):
             )
             actual_tab = "Main" if current_tab == "All Tabs" else current_tab
 
-            if actual_tab != "Main" and results['added_paths']:
-                tab_info = mw.tab_manager.get_tab_by_name(actual_tab)
-                if tab_info:
-                    for path in results['added_paths']:
-                        item = mw.queue_manager.get_item(path)
-                        if item:
+            selected_host = mw._get_default_host()
+
+            if results['added_paths']:
+                tab_info = mw.tab_manager.get_tab_by_name(actual_tab) if actual_tab != "Main" else None
+                for path in results['added_paths']:
+                    item = mw.queue_manager.get_item(path)
+                    if item:
+                        if actual_tab != "Main" and tab_info:
                             item.tab_name = actual_tab
-                            mw.queue_manager._save_single_item(item)
+                        item.image_host_id = selected_host
+                        mw.queue_manager._save_single_item(item)
 
             progress.setValue(len(folder_paths))
 
@@ -362,6 +370,9 @@ class GalleryQueueController(QObject):
             )
             actual_tab = "Main" if current_tab == "All Tabs" else current_tab
 
+            # Get selected image host
+            selected_host = mw._get_default_host()
+
             # Process folders that passed duplicate checks
             if folders_to_add_normally:
                 template_name = mw.template_combo.currentText()
@@ -373,7 +384,8 @@ class GalleryQueueController(QObject):
                         result = mw.queue_manager.add_item(
                             folder_path,
                             template_name=template_name,
-                            tab_name=actual_tab
+                            tab_name=actual_tab,
+                            image_host_id=selected_host
                         )
                         if result:
                             item = mw.queue_manager.get_item(folder_path)
@@ -399,11 +411,12 @@ class GalleryQueueController(QObject):
                         mw.queue_manager.remove_item(folder_path)
                         mw._remove_gallery_from_table(folder_path)
 
-                        # Add new item with correct tab
+                        # Add new item with correct tab and image host
                         result = mw.queue_manager.add_item(
                             folder_path,
                             template_name=template_name,
-                            tab_name=actual_tab
+                            tab_name=actual_tab,
+                            image_host_id=selected_host
                         )
                         if result:
                             item = mw.queue_manager.get_item(folder_path)

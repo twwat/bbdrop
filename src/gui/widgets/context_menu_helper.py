@@ -13,6 +13,7 @@ class GalleryContextMenuHelper(QObject):
     
     # Signals for communicating with main window
     template_change_requested = pyqtSignal(list, str)  # paths, template_name
+    image_host_change_requested = pyqtSignal(list, str)  # paths, host_id
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -32,6 +33,7 @@ class GalleryContextMenuHelper(QObject):
             self._add_file_operations(menu, selected_paths)
             self._add_status_operations(menu, selected_paths)
             self._add_template_submenu(menu, selected_paths)
+            self._add_image_host_submenu(menu, selected_paths)
             self._add_move_to_submenu(menu, selected_paths)
         else:
             # No selection: offer Add Folders
@@ -318,6 +320,25 @@ class GalleryContextMenuHelper(QObject):
     def _handle_template_selection(self, gallery_paths: list, template_name: str):
         """Handle template selection for multiple galleries"""
         self.template_change_requested.emit(gallery_paths, template_name)
+
+    def _add_image_host_submenu(self, menu: QMenu, selected_paths: list):
+        """Add 'Set image host to...' submenu to the context menu"""
+        if not selected_paths:
+            return
+        try:
+            from src.core.image_host_config import get_image_host_config_manager
+            enabled = get_image_host_config_manager().get_enabled_hosts()
+            if len(enabled) > 1:
+                host_menu = menu.addMenu("Set image host to...")
+                if host_menu:
+                    for host_id, config in enabled.items():
+                        action = host_menu.addAction(config.name)
+                        action.triggered.connect(
+                            lambda checked, hid=host_id:
+                            self.image_host_change_requested.emit(selected_paths, hid)
+                        )
+        except Exception as e:
+            log(f"Error loading hosts for context menu: {e}", level="error", category="ui")
     
     def set_template_for_galleries(self, gallery_paths: list, template_name: str):
         """Update template for multiple galleries - called by main window"""
@@ -395,13 +416,14 @@ class GalleryContextMenuHelper(QObject):
                 return
                 
             # Update visible rows where gallery path matches
+            COL_NAME = 1
+            COL_TEMPLATE = 12
             for row in range(table.rowCount()):
-                name_item = table.item(row, 1)  # Gallery name column
+                name_item = table.item(row, COL_NAME)
                 if name_item:
                     gallery_path = name_item.data(table.UserRole)
                     if gallery_path in gallery_paths:
-                        # Update template column (column 10)
-                        template_item = table.item(row, 10)
+                        template_item = table.item(row, COL_TEMPLATE)
                         if template_item:
                             template_item.setText(template_name)
                             
