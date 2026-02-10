@@ -1514,7 +1514,7 @@ class ImxToUploader(ImageHostClient):
         # Load timeout settings via image host config system (3-tier fallback)
         self.upload_connect_timeout = get_image_host_setting('imx', 'upload_connect_timeout', 'int')
         self.upload_read_timeout = get_image_host_setting('imx', 'upload_read_timeout', 'int')
-        log(f"Timeout settings loaded: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s", level="debug", category="network")
+        log(f"IMX timeouts: connect={self.upload_connect_timeout}s, read={self.upload_read_timeout}s", level="debug", category="network")
 
         self.base_url = "https://api.imx.to/v1"
         self._web_url = "https://imx.to"
@@ -1591,7 +1591,24 @@ class ImxToUploader(ImageHostClient):
         """Base web URL for IMX.to (implements ImageHostClient ABC)."""
         return self._web_url
 
-    def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None, progress_callback=None):
+    def get_default_headers(self) -> dict:
+        """Return default HTTP headers for IMX.to uploads."""
+        return self.headers
+
+    def supports_gallery_rename(self) -> bool:
+        """IMX.to supports renaming galleries after creation."""
+        return True
+
+    def sanitize_gallery_name(self, name: str) -> str:
+        """IMX.to gallery name rules: alphanumeric, spaces, hyphens, dots, underscores, parens."""
+        import re
+        if not name:
+            return 'untitled'
+        sanitized = re.sub(r'[^a-zA-Z0-9,\.\s\-_\(\)]', '', name)
+        sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+        return sanitized or 'untitled'
+
+    def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None, progress_callback=None, content_type="all", gallery_name=None):
         """
         Upload a single image to imx.to
 
@@ -1703,7 +1720,16 @@ class ImxToUploader(ImageHostClient):
 
             if status_code == 200:
                 json_response = json.loads(response_buffer.getvalue())
-                return json_response
+                # IMX API natively returns {status, data: {image_url, thumb_url, gallery_id}}
+                # Wrap through normalize_response() for standard contract compliance
+                data = json_response.get('data', {}) if isinstance(json_response.get('data'), dict) else {}
+                return self.normalize_response(
+                    status=json_response.get('status', 'error'),
+                    image_url=data.get('image_url', ''),
+                    thumb_url=data.get('thumb_url', ''),
+                    gallery_id=data.get('gallery_id'),
+                    original_filename=data.get('original_filename', os.path.basename(image_path)),
+                )
             else:
                 response_text = response_buffer.getvalue().decode('utf-8', errors='replace')
                 raise Exception(f"Upload failed with status code {status_code}: {response_text}")
