@@ -79,7 +79,8 @@ class GUIImxToUploader(ImxToUploader):
                     _cmp.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
                     _cmp.restype = ctypes.c_int
                     return sorted(names, key=cmp_to_key(lambda a, b: _cmp(a, b)))
-                except Exception:
+                except Exception as e:
+                    log(f"Explorer sort failed, using natural: {e}", level="debug", category="uploads")
                     return sorted(names, key=_natural_key)
 
             names = [
@@ -87,8 +88,8 @@ class GUIImxToUploader(ImxToUploader):
                 if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
             ]
             original_total = len(_explorer_sort(names))
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Failed to count images in folder: {e}", level="warning", category="uploads")
 
         # Sanitize name like CLI
         if not gallery_name:
@@ -128,8 +129,8 @@ class GUIImxToUploader(ImxToUploader):
             # Trigger bandwidth update (main loop blocked during uploads)
             try:
                 self.worker_thread._emit_current_bandwidth()
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Bandwidth emit failed: {e}", level="debug", category="uploads")
 
         def should_soft_stop() -> bool:
             if self.worker_thread and self.worker_thread.current_item:
@@ -144,8 +145,8 @@ class GUIImxToUploader(ImxToUploader):
                         self.worker_thread.current_item.uploaded_files.add(fname)
                         self.worker_thread.current_item.uploaded_images_data.append((fname, data))
                         self.worker_thread.current_item.uploaded_bytes += int(size_bytes or 0)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log(f"Failed to track uploaded image {fname}: {e}", level="error", category="uploads")
 
         # Get existing gallery_id for resume/append operations
         existing_gallery_id = None
@@ -192,7 +193,8 @@ class GUIImxToUploader(ImxToUploader):
                             _cmp.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
                             _cmp.restype = ctypes.c_int
                             return sorted(names, key=cmp_to_key(lambda a, b: _cmp(a, b)))
-                        except Exception:
+                        except Exception as e:
+                            log(f"Explorer sort failed: {e}", level="debug", category="uploads")
                             return sorted(names, key=_natural_key)
 
                     all_image_files = _explorer_sort([
@@ -207,7 +209,8 @@ class GUIImxToUploader(ImxToUploader):
                         try:
                             base, ext = os.path.splitext(fname)
                             fname_norm = base + ext.lower()
-                        except Exception:
+                        except Exception as e:
+                            log(f"Error normalizing filename: {e}", level="debug", category="uploads")
                             fname_norm = fname
                         enriched = dict(data)
                         # Ensure required fields present
