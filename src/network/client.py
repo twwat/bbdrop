@@ -30,6 +30,12 @@ class GUIImxToUploader(ImxToUploader):
         self.gui_mode = True
         self.worker_thread = worker_thread
 
+    def get_default_headers(self) -> dict:
+        return self.headers
+
+    def supports_gallery_rename(self) -> bool:
+        return True
+
     def upload_folder(self, folder_path, gallery_name=None, thumbnail_size=3,
                      thumbnail_format=2, max_retries=3,
                      parallel_batch_size=4, template_name="default",
