@@ -16,6 +16,7 @@ from src.core.constants import (
     PROGRESS_UPDATE_BATCH_INTERVAL, TABLE_UPDATE_INTERVAL,
     QUEUE_STATE_UPLOADING
 )
+from src.utils.logger import log
 
 
 class BackgroundTaskSignals(QObject):
@@ -113,7 +114,8 @@ class IconCache:
                 try:
                     result = load_func()
                     self._cache[status] = result
-                except Exception:
+                except Exception as e:
+                    log(f"IconCache: Failed to load icon for {status}: {e}", level="warning", category="ui")
                     self._cache[status] = None
             return self._cache[status]
     
@@ -135,8 +137,9 @@ class TableRowUpdateTask:
 
 class TableUpdateQueue:
     """Manages table update operations in a non-blocking way"""
-    
-    def __init__(self, table_widget: Any, path_to_row_map: Dict[str, int]):
+
+    def __init__(self, table_widget: Any, path_to_row_map: Dict[str, int],
+                 row_update_callback: Optional[Callable[[int, Any], None]] = None):
         # Handle both GalleryTableWidget and TabbedGalleryWidget
         if hasattr(table_widget, 'gallery_table'):
             self._table: ReferenceType[Any] = weakref.ref(table_widget.gallery_table)
@@ -151,7 +154,10 @@ class TableUpdateQueue:
         self._timer = QTimer()
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._process_updates)
-        
+
+        # Direct callback for row updates - no parent chain walking needed
+        self._row_update_callback = row_update_callback
+
         # Performance optimizations
         self._visibility_cache: Dict[int, bool] = {}
         self._cache_invalidation_counter: int = 0
@@ -280,30 +286,26 @@ class TableUpdateQueue:
             # Update transfer speed for uploading items
             if task.item.status == QUEUE_STATE_UPLOADING:
                 self._update_transfer_speed(table, task.row, task.item)
-                
-        except Exception:
-            pass
+
+        except Exception as e:
+            log(f"_update_progress_only: Failed to update row {task.row}: {e}", level="error", category="ui")
     
     def _update_full_row(self, table, task):
         """Update full row with all details"""
         if task.row >= table.rowCount():
             return
-        
+
         try:
-            # Find main GUI for detailed update
-            main_gui = None
-            parent = table.parent()
-            while parent:
-                if hasattr(parent, '_populate_table_row'):
-                    main_gui = parent
-                    break
-                parent = parent.parent()
-            
-            if main_gui:
-                main_gui._populate_table_row(task.row, task.item)
-                
-        except Exception:
-            pass
+            if self._row_update_callback:
+                # Use direct callback - no parent chain walking
+                self._row_update_callback(task.row, task.item)
+            else:
+                # Fallback to progress-only update if no callback provided
+                log(f"_update_full_row: No row_update_callback for row {task.row}", level="error", category="ui")
+                self._update_progress_only(table, task)
+
+        except Exception as e:
+            log(f"_update_full_row: Exception updating row {task.row}: {e}", level="error", category="ui")
     
     def _update_transfer_speed(self, table, row: int, item: Any):
         """Update transfer speed display"""
@@ -323,9 +325,9 @@ class TableUpdateQueue:
                 new_item.setFlags(new_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 new_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
                 table.setItem(row, 9, new_item)
-                
-        except Exception:
-            pass
+
+        except Exception as e:
+            log(f"_update_transfer_speed: Failed to update row {row}: {e}", level="error", category="ui")
     
     def _format_rate(self, kibps: float) -> str:
         """Format transfer rate"""
@@ -348,7 +350,8 @@ def check_stored_credentials() -> bool:
 
         # Have username+password OR api_key
         return bool((username and password) or api_key)
-    except Exception:
+    except Exception as e:
+        log(f"credentials_are_set: Failed to check credentials: {e}", level="error", category="auth")
         return False
 
 
@@ -358,5 +361,6 @@ def api_key_is_set() -> bool:
         from bbdrop import get_credential
         encrypted_api_key = get_credential('api_key')
         return bool(encrypted_api_key)
-    except Exception:
+    except Exception as e:
+        log(f"api_key_is_set: Failed to check API key: {e}", level="error", category="auth")
         return False
