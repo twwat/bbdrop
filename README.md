@@ -150,7 +150,7 @@ File host credentials are configured in Settings > File Hosts. Use **Test Connec
 
 | Feature | Implementation |
 |---------|---------------|
-| Credential Storage | OS Keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service) with Fernet AES-128-CBC fallback |
+| Credential Storage | Fernet (AES-128-CBC + HMAC-SHA256) encryption with hostname-derived key, stored in OS Keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service) |
 | Password Hashing | PBKDF2-HMAC-SHA256 (100,000 iterations) with cryptographic salt |
 | Transport Security | TLS 1.2+ with SSL certificate verification via certifi CA bundle |
 | Token Management | Encrypted token caching with configurable TTL and automatic refresh |

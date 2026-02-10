@@ -1,6 +1,6 @@
 # Getting Started
 
-Welcome to IMXuploader! This section will guide you through installation, basic usage, and mastering the interface.
+Welcome to BBDrop! This section will guide you through installation, basic usage, and mastering the interface.
 
 ## In This Section
 
