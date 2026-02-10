@@ -21,7 +21,6 @@ Main Classes:
     BBDropGUI: Primary application window and controller
     CompletionWorker: Background thread for post-upload processing
     SingleInstanceServer: TCP server for single-instance communication
-    AdaptiveGroupBox: Custom QGroupBox with proper size hint propagation
     LogTextEdit: QTextEdit subclass with double-click signal support
     NumericTableWidgetItem: QTableWidgetItem with numeric sorting
 
@@ -115,6 +114,7 @@ from src.gui.widgets.gallery_table import GalleryTableWidget, NumericColumnDeleg
 from src.gui.widgets.tabbed_gallery import TabbedGalleryWidget, DropEnabledTabBar
 from src.gui.widgets.adaptive_settings_panel import AdaptiveQuickSettingsPanel
 from src.gui.widgets.worker_status_widget import WorkerStatusWidget
+from src.core.image_host_config import get_image_host_config_manager
 from src.gui.progress_tracker import ProgressTracker
 from src.gui.worker_signal_handler import WorkerSignalHandler
 from src.gui.gallery_queue_controller import GalleryQueueController
@@ -122,38 +122,6 @@ from src.gui.table_row_manager import TableRowManager
 from src.gui.settings_manager import SettingsManager
 from src.gui.theme_manager import ThemeManager
 from src.gui.menu_manager import MenuManager
-
-
-class AdaptiveGroupBox(QGroupBox):
-    """
-    Custom QGroupBox that properly propagates child widget minimum size hints to QSplitter.
-
-    QSplitter queries the direct child widget's minimumSizeHint() to determine resize limits.
-    This custom GroupBox overrides minimumSizeHint() to query its layout's minimum size,
-    which includes all child widgets and their constraints.
-
-    This ensures that when the splitter is dragged, it respects the minimum height needed
-    by nested widgets (like AdaptiveQuickSettingsPanel) and prevents button overlap.
-    """
-
-    FRAME_MARGIN = 40  # Margin for GroupBox frame, title, and safety buffer
-
-    def minimumSizeHint(self):
-        """
-        Override to return the layout's minimum size hint.
-
-        This propagates minimum size constraints from child widgets up to QSplitter.
-        Without this, QSplitter only sees the hardcoded setMinimumHeight() value
-        and doesn't know about dynamic child widget requirements.
-        """
-        # Get the layout's minimum size hint, which aggregates all child constraints
-        layout = self.layout()
-        if layout:
-            layout_hint = layout.minimumSize()
-            return QSize(layout_hint.width(), layout_hint.height() + self.FRAME_MARGIN)
-
-        # Fallback to default behavior if no layout
-        return super().minimumSizeHint()
 
 
 # Import queue manager classes - adding one at a time
@@ -210,7 +178,7 @@ def format_timestamp_for_display(timestamp_value, include_seconds=False):
         return "", ""
 
 # Import network classes
-from src.network.client import GUIImxToUploader
+from src.network.client import SingleInstanceServer
 
 # Single instance communication port
 COMMUNICATION_PORT = 27849
@@ -316,7 +284,8 @@ class NumericTableWidgetItem(QTableWidgetItem):
         super().__init__(str(value))
         try:
             self._numeric_value = int(value)
-        except Exception:
+        except Exception as e:
+            log(f"NumericTableWidgetItem: Failed to parse value {value}: {e}", level="warning", category="ui")
             self._numeric_value = 0
 
     def __lt__(self, other: "QTableWidgetItem") -> bool:  # type: ignore[override]
@@ -324,7 +293,8 @@ class NumericTableWidgetItem(QTableWidgetItem):
             return self._numeric_value < other._numeric_value
         try:
             return self._numeric_value < int(other.text())
-        except Exception:
+        except Exception as e:
+            log(f"NumericTableWidgetItem comparison failed: {e}", level="warning", category="ui")
             return super().__lt__(other)
 
 class SingleInstanceServer(QThread):
@@ -368,7 +338,7 @@ class SingleInstanceServer(QThread):
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    server_socket.bind(('localhost', self.port))
+                    server_socket.bind(('127.0.0.1', self.port))
                     break
                 except OSError as e:
                     if attempt < max_retries - 1:
@@ -619,6 +589,7 @@ class BBDropGUI(QMainWindow):
 
         # Now connect queue status changes (after worker_signal_handler is ready)
         self.queue_manager.status_changed.connect(self.worker_signal_handler.on_queue_item_status_changed)
+        self.queue_manager.scan_status_changed.connect(self._on_scan_status_changed)
 
         # Initialize file host worker manager for background file host uploads
         if self.splash:
@@ -726,6 +697,9 @@ class BBDropGUI(QMainWindow):
         self.context_menu_helper.template_change_requested.connect(
             self.context_menu_helper.set_template_for_galleries
         )
+        self.context_menu_helper.image_host_change_requested.connect(
+            self.set_image_host_for_galleries
+        )
         
         # Connect context menu helper to the actual table widget used by the tabbed interface
         try:
@@ -760,7 +734,10 @@ class BBDropGUI(QMainWindow):
             QApplication.processEvents()
         
         # Initialize table update queue after table creation
-        self._table_update_queue = TableUpdateQueue(self.gallery_table, self.path_to_row)
+        self._table_update_queue = TableUpdateQueue(
+            self.gallery_table, self.path_to_row,
+            row_update_callback=self._populate_table_row
+        )
         
         # Initialize background tab update system
         self._background_tab_updates = {}  # Track updates for non-visible tabs
@@ -873,13 +850,6 @@ class BBDropGUI(QMainWindow):
                 
                 # Progress display will update via tab_changed signal and status change events
 
-                # Scan status
-                try:
-                    self._update_scan_status()
-                except Exception as e:
-                    log(f"Exception in main_window: {e}", level="error", category="ui")
-                    raise
-                
             except Exception as e:
                 log(f"Timer error: {e}", level="error", category="ui")
 
@@ -897,7 +867,6 @@ class BBDropGUI(QMainWindow):
 
         # Mark initialization complete
         self._init_complete = True
-        log(f"BBDropGUI.__init__ Completed", level="debug")
 
     def _load_galleries_phase1(self):
         """Phase 1 - Load critical gallery data in single pass.
@@ -978,8 +947,8 @@ class BBDropGUI(QMainWindow):
             # get_settings() already normalizes these to Python bool
             self._log_show_level = settings.get("show_log_level_gui", False)
             self._log_show_category = settings.get("show_category_gui", False)
-        except Exception:
-            # Fallback to defaults if settings unavailable
+        except Exception as e:
+            log(f"Failed to load log display settings: {e}", level="warning", category="ui")
             self._log_show_level = False
             self._log_show_category = False
     
@@ -1002,9 +971,9 @@ class BBDropGUI(QMainWindow):
             # re-parse them accurately. This limitation means existing messages
             # won't update when settings change. New messages will use new settings.
             # Future enhancement: Store raw messages separately for re-rendering.
-            
-        except Exception:
-            pass  # Silently fail to avoid disrupting user experience
+
+        except Exception as e:
+            log(f"Failed to refresh log display: {e}", level="error", category="ui")
     def refresh_filter(self):
         """Refresh current tab filter on the embedded tabbed gallery widget."""
         try:
@@ -1108,20 +1077,12 @@ class BBDropGUI(QMainWindow):
         # Theme cache
         self._current_theme_mode = str(self.settings.value('ui/theme', 'dark'))
     
-    def _update_scan_status(self):
-        """Update the scanning status indicator in the status bar."""
-        try:
-            scan_status = self.queue_manager.get_scan_queue_status()
-            queue_size = scan_status['queue_size']
-            items_pending = scan_status['items_pending_scan']
-
-            if queue_size > 0 or items_pending > 0:
-                self.scan_status_label.setText(f"Scanning: {items_pending} pending, {queue_size} in queue")
-                self.scan_status_label.setVisible(True)
-            else:
-                self.scan_status_label.setVisible(False)
-        except Exception:
-            # Hide on error
+    def _on_scan_status_changed(self, queue_size: int, items_pending: int):
+        """Handle scan status update from QueueManager signal."""
+        if queue_size > 0 or items_pending > 0:
+            self.scan_status_label.setText(f"Scanning: {items_pending} pending, {queue_size} in queue")
+            self.scan_status_label.setVisible(True)
+        else:
             self.scan_status_label.setVisible(False)
 
     def _update_memory_status(self):
@@ -1377,6 +1338,23 @@ class BBDropGUI(QMainWindow):
         # Deferred to avoid blocking GUI startup with large gallery counts
         QTimer.singleShot(0, self._refresh_button_icons)
 
+        # Restore vertical splitter sizes AFTER layout fully settles.
+        # Uses setSizes() with plain integers instead of restoreState() byte arrays,
+        # which are structure-dependent and break when child widget layouts change.
+        # 300ms gives deferred widgets time to finish and layout to stabilize.
+        if hasattr(self, '_pending_vertical_sizes'):
+            import json
+            sizes_raw = self._pending_vertical_sizes
+            del self._pending_vertical_sizes
+            def _do_restore_vertical():
+                try:
+                    sizes = json.loads(sizes_raw)
+                    if isinstance(sizes, list) and len(sizes) == len(self.right_vertical_splitter.sizes()):
+                        self.right_vertical_splitter.setSizes(sizes)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            QTimer.singleShot(300, _do_restore_vertical)
+
         # Schedule startup update check (3 second delay to not block UI)
         if self._should_check_for_updates():
             QTimer.singleShot(3000, self._check_for_updates_silently)
@@ -1389,7 +1367,7 @@ class BBDropGUI(QMainWindow):
                 check_if_gallery_exists, timestamp, get_central_storage_path,
                 build_gallery_filenames, save_gallery_artifacts, generate_bbcode_from_template,
                 load_templates, get_template_path, __version__,
-                get_central_store_base_path, set_central_store_base_path
+                get_central_store_base_path
             )
             self._format_binary_rate = format_binary_rate
             self._format_binary_size = format_binary_size
@@ -1404,9 +1382,8 @@ class BBDropGUI(QMainWindow):
             self._get_template_path = get_template_path
             self._version = __version__
             self._get_central_store_base_path = get_central_store_base_path
-            self._set_central_store_base_path = set_central_store_base_path
-        except Exception:
-            # Fallback functions if import fails
+        except Exception as e:
+            log(f"Failed to import bbdrop utilities: {e}", level="error", category="startup")
             self._format_binary_rate = lambda rate, precision=2: self._format_rate_consistent(rate, precision)
             self._format_binary_size = lambda size, precision=2: f"{size} B" if size else ""
             self._get_unnamed_galleries = lambda: {}
@@ -1420,13 +1397,13 @@ class BBDropGUI(QMainWindow):
             self._get_template_path = lambda: os.path.expanduser("~/.bbdrop/templates")
             self._version = "unknown"
             self._get_central_store_base_path = lambda: os.path.expanduser("~/.bbdrop")
-            self._set_central_store_base_path = lambda path: None
         
     def setup_ui(self):
         try:
             from bbdrop import __version__
             self.setWindowTitle(f"BBDrop {__version__}")
-        except Exception:
+        except Exception as e:
+            log(f"Failed to get version: {e}", level="warning", category="startup")
             self.setWindowTitle("BBDrop")
         self.setMinimumSize(800, 650)  # Allow log to shrink to accommodate Settings
         
@@ -1545,9 +1522,7 @@ class BBDropGUI(QMainWindow):
         self.browse_btn.clicked.connect(self.browse_for_folders)
         self.browse_btn.setProperty("class", "main-action-btn")
         controls_layout.addWidget(self.browse_btn)
-        
 
-        
         queue_layout.addLayout(controls_layout)
         left_layout.addWidget(queue_group)
         
@@ -1577,101 +1552,69 @@ class BBDropGUI(QMainWindow):
             raise
         
         
-        # Settings section - using AdaptiveGroupBox to propagate child minimum size hints
-        self.settings_group = AdaptiveGroupBox("Quick Settings")
+        # Settings section — plain QGroupBox so the splitter isn't locked
+        # by an inflated minimumSizeHint. The adaptive panel inside handles
+        # compression gracefully (icon-only mode, row collapsing).
+        self.settings_group = QGroupBox("Quick Settings")
         self.settings_group.setProperty("class", "settings-group")
 
-        # Set size policy - let AdaptiveGroupBox.minimumSizeHint() determine the actual minimum
-        # based on layout content. Don't use hardcoded setMinimumHeight() as it prevents
-        # the splitter from restoring saved positions smaller than that value.
-        size_policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        size_policy.setVerticalStretch(0)
-        self.settings_group.setSizePolicy(size_policy)
+        settings_layout = QVBoxLayout(self.settings_group)
+        settings_layout.setContentsMargins(5, 8, 5, 5)
+        settings_layout.setSpacing(3)
 
-        settings_layout = QGridLayout(self.settings_group)
-        try:
-            settings_layout.setContentsMargins(5, 8, 5, 5)  # Reduced left/right/bottom by 3px
-            settings_layout.setHorizontalSpacing(12)
-            settings_layout.setVerticalSpacing(8)
-        except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise
-        
-        settings_layout.setVerticalSpacing(5)
-        settings_layout.setHorizontalSpacing(5)
-        
-        # Set fixed row heights to prevent shifting when save button appears
-        settings_layout.setRowMinimumHeight(0, 28)  # Thumbnail Size row
-        settings_layout.setRowMinimumHeight(1, 28)  # Thumbnail Format row  
-        #settings_layout.setRowMinimumHeight(2, 28)  # Max Retries row
-        #settings_layout.setRowMinimumHeight(3, 28)  # Concurrent Uploads row
-        settings_layout.setRowMinimumHeight(2, 28)  # BBCode Template row
-        settings_layout.setRowMinimumHeight(3, 28)  # Checkboxes row
-        settings_layout.setRowMinimumHeight(4, 3)   # Small spacer before save button
-        # Row 5 is the Save Settings button - let it appear/disappear freely
-        # Row 6 is Comprehensive Settings
-        # Row 7 is Templates/Credentials
-
-        # Row 10 no longer gets stretch - all vertical space goes to row 6 (adaptive panel)
-        # This makes the adaptive panel's height match the total available vertical space
-        settings_layout.setRowStretch(10, 0)
-        
         # Load defaults
         defaults = load_user_defaults()
-        
-        # Thumbnail size
-        settings_layout.addWidget(QLabel("<span style=\"font-weight: 600\">Thumbnail Size</span>:"), 0, 0)
+
+        # Static 4-row grid: label | control
+        qs_grid = QGridLayout()
+        qs_grid.setContentsMargins(0, 0, 0, 0)
+        qs_grid.setHorizontalSpacing(4)
+        qs_grid.setVerticalSpacing(2)
+        qs_grid.setColumnStretch(1, 1)
+
+        # Row 0: Thumb Size — combo for fixed-size hosts (IMX), spinbox for variable (Turbo)
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Thumb Size</span>:"), 0, 0)
         self.thumbnail_size_combo = QComboBox()
-        self.thumbnail_size_combo.addItems([
-            "100x100", "180x180", "250x250", "300x300", "150x150"
-        ])
+        self.thumbnail_size_combo.addItems(["100x100", "180x180", "250x250", "300x300", "150x150"])
         self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
         self.thumbnail_size_combo.currentIndexChanged.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.thumbnail_size_combo, 0, 1)
-        
-        # Thumbnail format
-        settings_layout.addWidget(QLabel("<span style=\"font-weight: 600\">Thumbnail Format</span>:"), 1, 0)
+        from PyQt6.QtWidgets import QSpinBox, QHBoxLayout as _HBox
+        self._thumb_size_spinbox = QSpinBox()
+        self._thumb_size_spinbox.setSuffix("px")
+        self._thumb_size_spinbox.setRange(150, 600)
+        self._thumb_size_spinbox.setValue(300)
+        self._thumb_size_spinbox.setVisible(False)
+        self._thumb_size_spinbox.valueChanged.connect(self._on_thumb_spinbox_changed)
+        _thumb_container = QWidget()
+        _thumb_lay = _HBox(_thumb_container)
+        _thumb_lay.setContentsMargins(0, 0, 0, 0)
+        _thumb_lay.setSpacing(0)
+        _thumb_lay.addWidget(self.thumbnail_size_combo)
+        _thumb_lay.addWidget(self._thumb_size_spinbox)
+        qs_grid.addWidget(_thumb_container, 0, 1)
+
+        # Row 1: Thumb Format
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Thumb Format</span>:"), 1, 0)
         self.thumbnail_format_combo = QComboBox()
-        self.thumbnail_format_combo.addItems([
-            "Fixed width", "Proportional", "Square", "Fixed height"
-        ])
+        self.thumbnail_format_combo.addItems(["Fixed width", "Proportional", "Square", "Fixed height"])
         self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
         self.thumbnail_format_combo.currentIndexChanged.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.thumbnail_format_combo, 1, 1)
-        
-        # Max retries
-        #settings_layout.addWidget(QLabel("<b>Max Retries</b>:"), 2, 0)
-        #self.max_retries_spin = QSpinBox()
-        #self.max_retries_spin.setRange(1, 10)
-        #self.max_retries_spin.setValue(defaults.get('max_retries', 3))
-        #self.max_retries_spin.valueChanged.connect(self.on_setting_changed)
-        #settings_layout.addWidget(self.max_retries_spin, 2, 1)
-        
-        # Parallel upload batch size
-        #settings_layout.addWidget(QLabel("<b>Concurrent Uploads</b>:"), 3, 0)
-        #self.batch_size_spin = QSpinBox()
-        #self.batch_size_spin.setRange(1, 50)
-        #self.batch_size_spin.setValue(defaults.get('parallel_batch_size', 4))
-        #self.batch_size_spin.setToolTip("Number of images to upload simultaneously. Higher values = faster uploads but more server load.")
-        #self.batch_size_spin.valueChanged.connect(self.on_setting_changed)
-        #settings_layout.addWidget(self.batch_size_spin, 3, 1)
-        
-        # Template selection
-        settings_layout.addWidget(QLabel("<span style=\"font-weight: 600\">Template</span>:"), 2, 0)
+        qs_grid.addWidget(self.thumbnail_format_combo, 1, 1)
+
+        # Row 2: Template
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Template</span>:"), 2, 0)
         self.template_combo = QComboBox()
         self.template_combo.setToolTip("Template to use for generating bbcode files")
-        # Load available templates
         from bbdrop import load_templates
         templates = load_templates()
         for template_name in templates.keys():
             self.template_combo.addItem(template_name)
-        # Set the saved template
         saved_template = defaults.get('template_name', 'default')
         template_index = self.template_combo.findText(saved_template)
         if template_index >= 0:
             self.template_combo.setCurrentIndex(template_index)
         self.template_combo.currentIndexChanged.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.template_combo, 2, 1)
+        qs_grid.addWidget(self.template_combo, 2, 1)
 
         # Watch template directory for changes and refresh dropdown automatically
         try:
@@ -1679,17 +1622,31 @@ class BBDropGUI(QMainWindow):
             from bbdrop import get_template_path
             self._template_watcher = QFileSystemWatcher([get_template_path()])
             self._template_watcher.directoryChanged.connect(self._on_templates_directory_changed)
-        except Exception:
-            self._template_watcher = None # If watcher isn't available, we simply won't auto-refresh
-        
-        # Public gallery setting moved to comprehensive settings only
+        except Exception as e:
+            log(f"Template watcher init failed: {e}", level="warning", category="startup")
+            self._template_watcher = None
 
-        # Auto-start uploads checkbox
+        # Row 3: Image Host
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Image Host</span>:"), 3, 0)
+        self.image_host_combo = QComboBox()
+        self.image_host_combo.setToolTip("Default image host for new galleries")
+        self._populate_image_host_combo()
+        self.image_host_combo.currentIndexChanged.connect(self.on_setting_changed)
+        self.image_host_combo.currentIndexChanged.connect(self._on_image_host_changed)
+        qs_grid.addWidget(self.image_host_combo, 3, 1)
+
+        # Apply initial thumb control state based on default host
+        self._on_image_host_changed()
+
+        settings_layout.addLayout(qs_grid)
+
+        # Checkbox — hard minimum height so layout can never compress it
         self.auto_start_upload_check = QCheckBox("Start uploads automatically")
         self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
         self.auto_start_upload_check.setToolTip("Automatically start uploads when scanning completes instead of waiting for manual start")
+        self.auto_start_upload_check.setMinimumHeight(self.auto_start_upload_check.sizeHint().height())
         self.auto_start_upload_check.toggled.connect(self.on_setting_changed)
-        settings_layout.addWidget(self.auto_start_upload_check, 3, 0, 1, 2)  # Span 2 columns
+        settings_layout.addWidget(self.auto_start_upload_check)
 
         # Artifact storage location options (moved to dialog; keep hidden for persistence wiring)
         self.store_in_uploaded_check = QCheckBox("Save artifacts in .uploaded folder")
@@ -1718,8 +1675,8 @@ class BBDropGUI(QMainWindow):
         # Manage templates and credentials buttons
         self.manage_templates_btn = QPushButton("") # previously  QPushButton(" Templates")
         self.manage_templates_btn.setToolTip("Manage BBCode templates for gallery output")
-        self.manage_credentials_btn = QPushButton("") # previously  QPushButton(" Credentials")
-        self.manage_credentials_btn.setToolTip("Configure imx.to API key and login credentials")
+        self.manage_credentials_btn = QPushButton("")
+        self.manage_credentials_btn.setToolTip("Configure image host settings and credentials")
 
         # Add icons if available
     
@@ -1731,9 +1688,9 @@ class BBDropGUI(QMainWindow):
                     self.manage_templates_btn.setIcon(templates_icon)
                     self.manage_templates_btn.setIconSize(QSize(22, 22))
 
-                credentials_icon = icon_mgr.get_icon('credentials')
-                if not credentials_icon.isNull():
-                    self.manage_credentials_btn.setIcon(credentials_icon)
+                imagehosts_icon = icon_mgr.get_icon('imagehosts')
+                if not imagehosts_icon.isNull():
+                    self.manage_credentials_btn.setIcon(imagehosts_icon)
                     self.manage_credentials_btn.setIconSize(QSize(22, 22))
 
                 settings_icon = icon_mgr.get_icon('settings')
@@ -1888,15 +1845,9 @@ class BBDropGUI(QMainWindow):
         icons_only = self.settings.value('ui/quick_settings_icons_only', False, type=bool)
         self.adaptive_settings_panel.set_icons_only_mode(icons_only)
 
-        settings_layout.addWidget(self.adaptive_settings_panel, 6, 0, 1, 2)  # Row 6, spanning 2 columns
+        settings_layout.addWidget(self.adaptive_settings_panel, 1)  # stretch=1, absorbs all shrink/grow
 
-        # AdaptiveGroupBox automatically propagates adaptive panel's minimum size to QSplitter
-        # No need for hardcoded setMinimumHeight - the custom minimumSizeHint() handles it dynamically
-        # This ensures buttons remain accessible when splitter is dragged to minimum position
-
-        # Give row 6 a stretch factor so the adaptive panel can expand vertically
-        # This allows it to detect when vertical space is available and switch layouts
-        settings_layout.setRowStretch(6, 1)
+        # Stretch handled by addWidget(..., 1) above — adaptive panel absorbs all grow/shrink
 
         # Worker Status section (add between settings and log)
         # Note: worker_status_widget was created early in __init__ before FileHostWorkerManager
@@ -1980,7 +1931,7 @@ class BBDropGUI(QMainWindow):
 
         # Set initial vertical splitter sizes [settings, worker_status, log]
         # Settings group no longer has hardcoded minimum, so use a reasonable default
-        self.right_vertical_splitter.setSizes([200, 180, 270])
+        self.right_vertical_splitter.setSizes([300, 150, 200])
 
         # Set minimum width for right panel (Settings + Log) - reduced for better resizing
         self.right_panel.setMinimumWidth(270)
@@ -1992,7 +1943,7 @@ class BBDropGUI(QMainWindow):
 
         # Set initial horizontal splitter sizes (roughly 60/40 split)
         self.top_splitter.setSizes([600, 400])
-        
+
         main_layout.addWidget(self.top_splitter)
         
         # Bottom section - Overall progress (left) and Help (right)
@@ -2191,7 +2142,7 @@ class BBDropGUI(QMainWindow):
             from src.gui.settings_dialog import TabIndex
             self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
         else:
-            log(f"API key found", category="auth", level="info")
+            log("IMX API key found", category="auth", level="debug")
         
     def retry_login(self, credentials_only: bool = False):
         """Invalidate RenameWorker session to force re-login on next rename."""
@@ -2286,7 +2237,7 @@ class BBDropGUI(QMainWindow):
         if not silent:
             QMessageBox.information(self, "Update Check",
                                    "You're running the latest version!")
-        log("No update available", level="debug", category="updates")
+        # Update status already logged by UpdateChecker
 
     def _on_check_failed(self, error: str, silent: bool):
         """Handle update check failure signal.
@@ -2405,6 +2356,7 @@ class BBDropGUI(QMainWindow):
         # to update auto-upload icon if trigger settings changed
         if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
             self.worker_status_widget.refresh_icons()
+
 
     def show_help_shortcuts_tab(self):
         """Open help dialog and switch to keyboard shortcuts tab"""
@@ -2846,14 +2798,98 @@ class BBDropGUI(QMainWindow):
         else:
             log(f"Skipped: {os.path.basename(path)} (user cancelled)", category="queue", level="debug")
     
+    def _get_default_host(self) -> str:
+        """Return the selected image host from quick settings combo."""
+        if hasattr(self, 'image_host_combo'):
+            host_id = self.image_host_combo.currentData()
+            if host_id:
+                return host_id
+        enabled = get_image_host_config_manager().get_enabled_hosts()
+        if enabled:
+            return next(iter(enabled))
+        return "imx"
+
+    def _populate_image_host_combo(self):
+        """Populate image host combo with enabled hosts."""
+        self.image_host_combo.blockSignals(True)
+        self.image_host_combo.clear()
+        enabled = get_image_host_config_manager().get_enabled_hosts()
+        for host_id, config in enabled.items():
+            self.image_host_combo.addItem(config.name, host_id)
+        self.image_host_combo.blockSignals(False)
+
+    def refresh_image_host_combo(self):
+        """Refresh image host combo after config changes."""
+        current = self.image_host_combo.currentData()
+        self._populate_image_host_combo()
+        for i in range(self.image_host_combo.count()):
+            if self.image_host_combo.itemData(i) == current:
+                self.image_host_combo.setCurrentIndex(i)
+                return
+        self._on_image_host_changed()
+
+    def _on_image_host_changed(self):
+        """Update thumb size/format controls based on selected image host capabilities."""
+        from src.core.image_host_config import get_image_host_setting, save_image_host_setting
+
+        host_id = self.image_host_combo.currentData() if self.image_host_combo.count() else None
+        try:
+            host_cfg = get_image_host_config_manager().get_host(host_id) if host_id else None
+        except Exception:
+            host_cfg = None
+
+        # --- Thumb Size: combo (fixed sizes) vs spinbox (variable range) ---
+        if host_cfg and hasattr(host_cfg, 'thumbnail_range') and host_cfg.thumbnail_range:
+            # Variable mode (Turbo): show spinbox
+            tr = host_cfg.thumbnail_range
+            self._thumb_size_spinbox.blockSignals(True)
+            self._thumb_size_spinbox.setRange(tr.get('min', 150), tr.get('max', 600))
+            saved = get_image_host_setting(host_id, 'thumbnail_size', 'int')
+            self._thumb_size_spinbox.setValue(saved if saved else tr.get('default', 300))
+            self._thumb_size_spinbox.blockSignals(False)
+            self.thumbnail_size_combo.setVisible(False)
+            self._thumb_size_spinbox.setVisible(True)
+        else:
+            # Fixed mode (IMX): show combo
+            if host_cfg and hasattr(host_cfg, 'thumbnail_sizes') and host_cfg.thumbnail_sizes:
+                saved = get_image_host_setting(host_id, 'thumbnail_size', 'int')
+                idx = (saved - 1) if saved and 1 <= saved <= self.thumbnail_size_combo.count() else 2
+                self.thumbnail_size_combo.blockSignals(True)
+                self.thumbnail_size_combo.setCurrentIndex(idx)
+                self.thumbnail_size_combo.blockSignals(False)
+            self.thumbnail_size_combo.setVisible(True)
+            self._thumb_size_spinbox.setVisible(False)
+
+        # --- Thumb Format: enable only for hosts that have format choices ---
+        has_formats = host_cfg and hasattr(host_cfg, 'thumbnail_formats') and host_cfg.thumbnail_formats
+        if has_formats:
+            self.thumbnail_format_combo.setEnabled(True)
+        else:
+            self.thumbnail_format_combo.blockSignals(True)
+            idx = self.thumbnail_format_combo.findText("Proportional")
+            if idx >= 0:
+                self.thumbnail_format_combo.setCurrentIndex(idx)
+            self.thumbnail_format_combo.setEnabled(False)
+            self.thumbnail_format_combo.blockSignals(False)
+
+    def _on_thumb_spinbox_changed(self, value: int):
+        """Persist variable thumb size when spinbox changes."""
+        from src.core.image_host_config import save_image_host_setting
+        host_id = self.image_host_combo.currentData() if self.image_host_combo.count() else None
+        if host_id:
+            save_image_host_setting(host_id, 'thumbnail_size', value)
+
     def _force_add_gallery(self, path: str, gallery_name: str, template_name: str):
         """Force add gallery to queue and update display"""
         # Get current tab ("All Tabs" is virtual, default to Main)
         current_tab = self.gallery_table.current_tab if hasattr(self.gallery_table, 'current_tab') else "Main"
         actual_tab = "Main" if current_tab == "All Tabs" else current_tab
 
-        # Add to queue with correct tab
-        self.queue_manager.add_item(path, name=gallery_name, template_name=template_name, tab_name=actual_tab)
+        # Get selected image host
+        selected_host = self._get_default_host()
+
+        # Add to queue with correct tab and image host
+        self.queue_manager.add_item(path, name=gallery_name, template_name=template_name, tab_name=actual_tab, image_host_id=selected_host)
 
         # Get the item for display
         item = self.queue_manager.get_item(path)
@@ -3077,7 +3113,7 @@ class BBDropGUI(QMainWindow):
             # Map of button attributes to their icon keys
             button_icon_map = [
                 ('manage_templates_btn', 'templates'),
-                ('manage_credentials_btn', 'credentials'),
+                ('manage_credentials_btn', 'imagehosts'),
                 ('hooks_btn', 'hooks'),
                 ('log_viewer_btn', 'log_viewer'),
                 ('theme_toggle_btn', 'toggle_theme'),
@@ -3131,6 +3167,9 @@ class BBDropGUI(QMainWindow):
 
                 item = table.item(row, GalleryTableWidget.COL_RENAMED)
                 if item and not item.icon().isNull():
+                    # Skip non-rename hosts (Turbo etc.) — their N/A state is permanent
+                    if item.toolTip() == "Not applicable for this host":
+                        continue
                     is_renamed = item.toolTip() == "Renamed"
                     self._set_renamed_cell_icon(row, is_renamed)
                     row_count += 1
@@ -3205,7 +3244,8 @@ class BBDropGUI(QMainWindow):
                 tab_paths = {g.get('path') for g in tab_galleries if g.get('path')}
                 all_items = self.queue_manager.get_all_items()
                 return [item for item in all_items if item.path in tab_paths]
-            except Exception:
+            except Exception as e:
+                log(f"Failed to get tab items: {e}", level="error", category="ui")
                 return []
 
     def on_gallery_started(self, path: str, total_images: int):
@@ -3328,7 +3368,8 @@ class BBDropGUI(QMainWindow):
                     else:
                         # Show visual indicator even when speed is 0
                         transfer_text = "Uploading..."
-                except Exception:
+                except Exception as e:
+                    log(f"Rate formatting failed: {e}", level="warning", category="ui")
                     if current_rate_kib > 0:
                         transfer_text = self._format_rate_consistent(current_rate_kib)
                     else:
@@ -3389,7 +3430,8 @@ class BBDropGUI(QMainWindow):
                         final_text = self._format_binary_rate(item.final_kibps, precision=1) if item.final_kibps > 0 else ""
                     else:
                         final_text = f"{item.final_kibps:.1f} KiB/s" if item.final_kibps > 0 else ""
-                except Exception:
+                except Exception as e:
+                    log(f"Final rate formatting failed: {e}", level="warning", category="ui")
                     final_text = ""
                 xfer_item = QTableWidgetItem(final_text)
                 xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -3536,7 +3578,8 @@ class BBDropGUI(QMainWindow):
             base_total_str = settings.value("total_size_bytes_v2", "0")
             try:
                 base_total = int(str(base_total_str))
-            except Exception:
+            except Exception as e:
+                log(f"Failed to parse total_size_bytes_v2: {e}", level="warning", category="stats")
                 base_total = settings.value("total_size_bytes", 0, type=int)
             total_size_acc = base_total + int(results.get('uploaded_size', 0) or 0)
             transfer_speed = float(results.get('transfer_speed', 0) or 0)
@@ -3674,8 +3717,11 @@ class BBDropGUI(QMainWindow):
                     found_row = row
                     break
             
-            if found_row is not None:
-                self._set_renamed_cell_icon(found_row, True)
+            if found_row is not None and item is not None:
+                # Guard: only mark renamed for hosts that support gallery rename
+                host_id = getattr(item, 'image_host_id', 'imx') or 'imx'
+                if host_id == 'imx':
+                    self._set_renamed_cell_icon(found_row, True)
         except Exception as e:
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
@@ -4553,7 +4599,8 @@ class BBDropGUI(QMainWindow):
                         transfer_text = format_binary_rate(current_rate_kib, precision=2)
                     elif final_rate_kib > 0:
                         transfer_text = format_binary_rate(final_rate_kib, precision=2)
-                except Exception:
+                except Exception as e:
+                    log(f"Rate formatting failed: {e}", level="warning", category="ui")
                     rate = current_rate_kib if item.status == "uploading" else final_rate_kib
                     transfer_text = self._format_rate_consistent(rate) if rate > 0 else ""
 
@@ -4894,8 +4941,8 @@ class BBDropGUI(QMainWindow):
                     table.editItem(item)
             return
 
-        # Only handle clicks on template column for template editing
-        if column != GalleryTableWidget.COL_TEMPLATE:
+        # Handle clicks on template or image host columns
+        if column not in (GalleryTableWidget.COL_TEMPLATE, GalleryTableWidget.COL_IMAGE_HOST):
             return
 
         # Get the table widget
@@ -4909,38 +4956,70 @@ class BBDropGUI(QMainWindow):
         if not name_item:
             log(f"DEBUG: Mouseclick -> No item found at row {row}, column {GalleryTableWidget.COL_NAME}", category="ui", level="debug")
             return
-        
+
         gallery_path = name_item.data(Qt.ItemDataRole.UserRole)
         if not gallery_path:
             log(f"DEBUG: No UserRole data in gallery name column", category="ui", level="debug")
             return
 
-        # Get current template
-        template_item = table.item(row, GalleryTableWidget.COL_TEMPLATE)
-        current_template = template_item.text() if template_item else "default"
-        
-        # Show simple dialog instead of inline combo
         from PyQt6.QtWidgets import QInputDialog
-        from bbdrop import load_templates
-        
-        try:
-            templates = load_templates()
-            template_list = list(templates.keys())
-            
-            new_template, ok = QInputDialog.getItem(
-                self, 
-                "Select Template", 
-                "Choose template for gallery:", 
-                template_list, 
-                template_list.index(current_template) if current_template in template_list else 0,
-                False
-            )
-            
-            if ok and new_template != current_template:
-                self.update_gallery_template(row, gallery_path, new_template, None)
-                
-        except Exception as e:
-            log(f"ERROR: Exception loading templates: {e}", category="ui", level="error")
+
+        if column == GalleryTableWidget.COL_TEMPLATE:
+            # Get current template
+            template_item = table.item(row, GalleryTableWidget.COL_TEMPLATE)
+            current_template = template_item.text() if template_item else "default"
+
+            from bbdrop import load_templates
+
+            try:
+                templates = load_templates()
+                template_list = list(templates.keys())
+
+                new_template, ok = QInputDialog.getItem(
+                    self,
+                    "Select Template",
+                    "Choose template for gallery:",
+                    template_list,
+                    template_list.index(current_template) if current_template in template_list else 0,
+                    False
+                )
+
+                if ok and new_template != current_template:
+                    self.update_gallery_template(row, gallery_path, new_template, None)
+
+            except Exception as e:
+                log(f"ERROR: Exception loading templates: {e}", category="ui", level="error")
+
+        elif column == GalleryTableWidget.COL_IMAGE_HOST:
+            try:
+                from src.core.image_host_config import get_image_host_config_manager
+                enabled = get_image_host_config_manager().get_enabled_hosts()
+                if len(enabled) < 2:
+                    return
+
+                host_names = [config.name for config in enabled.values()]
+                host_ids = list(enabled.keys())
+
+                # Get current host
+                host_item = table.item(row, GalleryTableWidget.COL_IMAGE_HOST)
+                current_name = host_item.text() if host_item else ""
+                current_idx = host_names.index(current_name) if current_name in host_names else 0
+
+                new_name, ok = QInputDialog.getItem(
+                    self,
+                    "Select Image Host",
+                    "Choose image host for gallery:",
+                    host_names,
+                    current_idx,
+                    False
+                )
+
+                if ok and new_name != current_name:
+                    new_host_id = host_ids[host_names.index(new_name)]
+                    self.set_image_host_for_galleries([gallery_path], new_host_id)
+
+            except Exception as e:
+                log(f"ERROR: Exception in image host selection: {e}", category="ui", level="error")
 
     def update_gallery_template(self, row, gallery_path, new_template, combo_widget):
         """Update template for a gallery and regenerate BBCode if needed."""
@@ -5023,6 +5102,49 @@ class BBDropGUI(QMainWindow):
                 table.removeCellWidget(row, GalleryTableWidget.COL_TEMPLATE)
             except (AttributeError, RuntimeError):
                 pass
+
+    def set_image_host_for_galleries(self, gallery_paths: list, host_id: str):
+        """Update image host for multiple galleries (context menu or click-to-change)."""
+        if not gallery_paths or not host_id:
+            return
+
+        from src.core.image_host_config import get_image_host_config_manager
+        enabled = get_image_host_config_manager().get_enabled_hosts()
+        host_config = enabled.get(host_id)
+        host_display = host_config.name if host_config else host_id
+
+        updated_count = 0
+        for gallery_path in gallery_paths:
+            try:
+                # Only change galleries that haven't started uploading
+                gallery_item = self.queue_manager.get_item(gallery_path)
+                if gallery_item and gallery_item.status in ("uploading", "completed"):
+                    continue
+
+                success = self.queue_manager.store.update_item_image_host(gallery_path, host_id)
+                if success:
+                    updated_count += 1
+                    with QMutexLocker(self.queue_manager.mutex):
+                        if gallery_path in self.queue_manager.items:
+                            self.queue_manager.items[gallery_path].image_host_id = host_id
+                            self.queue_manager._inc_version()
+            except Exception as e:
+                log(f"Error updating image host for {gallery_path}: {e}", level="error", category="ui")
+
+        # Update table display
+        if updated_count > 0:
+            table = getattr(self.gallery_table, 'table', self.gallery_table)
+            if table:
+                for row_idx in range(table.rowCount()):
+                    name_item = table.item(row_idx, GalleryTableWidget.COL_NAME)
+                    if name_item and name_item.data(Qt.ItemDataRole.UserRole) in gallery_paths:
+                        host_cell = table.item(row_idx, GalleryTableWidget.COL_IMAGE_HOST)
+                        if host_cell:
+                            host_cell.setText(host_display)
+
+            from bbdrop import timestamp
+            galleries_word = "gallery" if updated_count == 1 else "galleries"
+            self.add_log_message(f"{timestamp()} Image host changed to '{host_display}' for {updated_count} {galleries_word}")
 
     def _on_table_item_changed(self, item):
         """Handle table item changes to persist custom columns"""
@@ -5109,20 +5231,20 @@ class BBDropGUI(QMainWindow):
             traceback.print_exc()
 
 def check_single_instance(folder_path=None):
-    """Check if another instance is running and send folder if needed"""
+    """Check if another instance is running and send folder if needed."""
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.settimeout(2.0)  # 2 second timeout to detect stale sockets
-        client_socket.connect(('localhost', COMMUNICATION_PORT))
+        client_socket.settimeout(1.0)
+        client_socket.connect(('127.0.0.1', COMMUNICATION_PORT))  # Use IP, not 'localhost'
 
         # Send folder path or empty string to bring window to front
         message = folder_path if folder_path else ""
         client_socket.send(message.encode('utf-8'))
-
         client_socket.close()
         return True  # Another instance is running
-    except (ConnectionRefusedError, socket.timeout, OSError):
-        return False  # No other instance running or connection failed
+    except Exception:
+        # Connection failed = no other instance running (expected on first launch)
+        return False
 
 
 # ==============================================================================
