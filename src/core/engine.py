@@ -79,12 +79,9 @@ ImageUploadedCallback = Callable[[str, Dict[str, Any], int], None]
 
 
 class UploadEngine:
-    """Shared engine for uploading a folder as an imx.to gallery.
+    """Shared engine for uploading a folder as a gallery.
 
-    The engine expects an `uploader` object that implements:
-      - upload_image(image_path, create_gallery=False, gallery_id=None, thumbnail_size=..., thumbnail_format=...)
-      - create_gallery_with_name(gallery_name, skip_login=True)
-      - attributes: web_url (for links)
+    The engine expects an `uploader` object implementing the ImageHostClient ABC.
     """
 
     def __init__(self, uploader: ImageHostClient, rename_worker: Any = None,
@@ -125,12 +122,15 @@ class UploadEngine:
         max_retries: int,
         parallel_batch_size: int,
         template_name: str,
+        content_type: str = "all",
         # Resume support from GUI; pass empty for CLI
         already_uploaded: Optional[Set[str]] = None,
         # Existing gallery ID for resume/append operations
         existing_gallery_id: Optional[str] = None,
         # Pre-calculated dimensions from scanning (optional, will calculate if not provided)
         precalculated_dimensions: Optional[Dict[str, float]] = None,
+        # Cover photo exclusion: filename (basename) to skip from gallery upload
+        exclude_cover_file: Optional[str] = None,
         # Callbacks (all optional)
         on_progress: Optional[ProgressCallback] = None,
         should_soft_stop: Optional[SoftStopCallback] = None,
@@ -164,15 +164,38 @@ class UploadEngine:
                 _cmp.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
                 _cmp.restype = ctypes.c_int
                 return sorted(names, key=cmp_to_key(lambda a, b: _cmp(a, b)))
-            except Exception:
+            except Exception as e:
+                log(f"Explorer sort failed, using natural sort: {e}", level="debug", category="engine")
                 return sorted(names, key=_natural_sort_key)
         image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
         all_image_files: List[str] = _explorer_sort([
             f for f in os.listdir(folder_path)
             if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
         ])
+
+        # Exclude cover file from gallery upload (cover-only, not also-upload)
+        if exclude_cover_file:
+            all_image_files = [f for f in all_image_files if f != exclude_cover_file]
+
         if not all_image_files:
             raise ValueError(f"No image files found in {folder_path}")
+
+        # Skip files over host's max file size limit
+        host_config = getattr(self.uploader, 'config', None)
+        max_mb = getattr(host_config, 'max_file_size_mb', None) if host_config else None
+        if max_mb:
+            max_bytes = max_mb * 1024 * 1024
+            oversized = set()
+            for f in all_image_files:
+                try:
+                    if os.path.getsize(os.path.join(folder_path, f)) > max_bytes:
+                        oversized.add(f)
+                        log(f"Skipping {f}: exceeds {max_mb}MB limit",
+                            level="warning", category="uploads")
+                except OSError:
+                    pass
+            if oversized:
+                all_image_files = [f for f in all_image_files if f not in oversized]
 
         # Resume: exclude already-uploaded files
         already_uploaded = already_uploaded or set()
@@ -194,16 +217,12 @@ class UploadEngine:
         # Determine gallery name
         if not gallery_name:
             gallery_name = os.path.basename(folder_path)
-        # Sanitize gallery name using the canonical helper (lazy import to avoid circular deps)
-        try:
-            from bbdrop import sanitize_gallery_name  # type: ignore
-            original_name = gallery_name
-            # No sanitization - only rename worker should sanitize
+        original_name = gallery_name
+        # Sanitize gallery name using the uploader's per-host rules
+        if hasattr(self.uploader, 'sanitize_gallery_name'):
+            gallery_name = self.uploader.sanitize_gallery_name(gallery_name)
             if original_name != gallery_name:
                 log(f"Sanitized gallery name: '{original_name}' -> '{gallery_name}'", level="debug", category="uploads")
-        except Exception:
-            # Best-effort; if unavailable, proceed with provided name
-            pass
 
         # Use existing gallery or create new one
         gallery_id: Optional[str] = existing_gallery_id
@@ -237,6 +256,8 @@ class UploadEngine:
                 thumbnail_size=thumbnail_size,
                 thumbnail_format=thumbnail_format,
                 progress_callback=ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
+                content_type=content_type,
+                gallery_name=gallery_name,
             )
             first_upload_duration = time.time() - first_upload_start
             if first_response.get('status') != 'success':
@@ -247,26 +268,28 @@ class UploadEngine:
             try:
                 first_url = first_response['data'].get('image_url', '')
                 log(f"Uploaded (in {first_upload_duration:.3f}s): {first_image_path}  ({first_url})", category="uploads:file")
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"Failed to log first image URL: {e}", level="warning", category="uploads")
             # First image uploaded - set counters and files_to_upload
             files_to_upload = image_files[1:]  # Remaining files after first
             initial_completed = 1
             try:
                 initial_uploaded_size = os.path.getsize(first_image_path)
-            except Exception:
+            except Exception as e:
+                log(f"Failed to get first image size: {e}", level="warning", category="uploads")
                 initial_uploaded_size = 0
             # Report the first image upload so GUI resume/merge includes it
             if on_image_uploaded:
                 try:
                     on_image_uploaded(first_file, first_response['data'], initial_uploaded_size)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"on_image_uploaded callback failed: {e}", level="error", category="uploads")
         # Queue gallery rename for background processing to avoid blocking uploads
-        if gallery_name and gallery_id and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
+        if self.uploader.supports_gallery_rename() and gallery_name and gallery_id and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
             try:
                 last_method = getattr(self.uploader, 'last_login_method', None)
-            except Exception:
+            except Exception as e:
+                log(f"Failed to get login method: {e}", level="debug", category="uploads")
                 last_method = None
 
             if self.rename_worker:
@@ -296,42 +319,19 @@ class UploadEngine:
             'images': list(preseed_images),
         }
 
-        # Create thread-local sessions for true connection reuse per thread
-        import threading
-        thread_sessions = {}
-        sessions_lock = threading.Lock()
-
-        def get_thread_session():
-            """Get or create a session for the current thread"""
-            thread_id = threading.get_ident()
-            with sessions_lock:
-                if thread_id not in thread_sessions:
-                    # Create new session for this thread with same config as main session
-                    import requests
-                    from requests.adapters import HTTPAdapter
-                    session = requests.Session()
-                    adapter = HTTPAdapter(pool_connections=1, pool_maxsize=1)
-                    session.mount('https://', adapter)
-                    #session.mount('http://', adapter)
-                    session.headers.update(self.uploader.headers)
-                    thread_sessions[thread_id] = session
-                return thread_sessions[thread_id]
-
         def upload_single_image(image_file: str) -> Tuple[str, Optional[Dict[str, Any]], Optional[str], Optional[float], str]:
             image_path = os.path.join(folder_path, image_file)
             try:
                 upload_start = time.time()
-
-                # Get thread-local session for this upload
-                thread_session = get_thread_session()
 
                 response = self.uploader.upload_image(
                     image_path,
                     gallery_id=gallery_id,
                     thumbnail_size=thumbnail_size,
                     thumbnail_format=thumbnail_format,
-                    thread_session=thread_session,
                     progress_callback=ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
+                    content_type=content_type,
+                    gallery_name=gallery_name,
                 )
                 upload_duration = time.time() - upload_start
                 if response.get('status') == 'success':
@@ -381,14 +381,16 @@ class UploadEngine:
                         try:
                             img_url = image_data.get('image_url', '')
                             duration_str = f"{upload_duration:.3f}" if upload_duration is not None else "?.???"
-                            log(f"Uploaded (in {duration_str}s): {image_path}  ({img_url})", category="uploads:file")
-                        except Exception:
-                            pass
+                            url_suffix = f"  ({img_url})" if img_url else ""
+                            log(f"Uploaded (in {duration_str}s): {image_path}{url_suffix}", category="uploads:file")
+                        except Exception as e:
+                            log(f"Failed to log upload URL: {e}", level="warning", category="uploads")
                         # Per-image callback for resume-aware consumers
                         if on_image_uploaded:
                             try:
                                 size_bytes = os.path.getsize(os.path.join(folder_path, image_file))
-                            except Exception:
+                            except Exception as e:
+                                log(f"Failed to get file size for {image_file}: {e}", level="warning", category="uploads")
                                 size_bytes = 0
                             on_image_uploaded(image_file, image_data, size_bytes)
                     else:
@@ -459,6 +461,30 @@ class UploadEngine:
         for _, image_data in uploaded_images:
             results['images'].append(image_data)
 
+        # Batch result fetch: hosts like Turbo upload per-image (JSON success only)
+        # then fetch the result page ONCE at the end for all BBCode/URLs/gallery_id.
+        if hasattr(self.uploader, 'fetch_batch_results'):
+            try:
+                batch = self.uploader.fetch_batch_results()
+                if batch.get('gallery_id') and not gallery_id:
+                    gallery_id = batch['gallery_id']
+                    gallery_url = self.uploader.get_gallery_url(gallery_id, gallery_name=gallery_name)
+                    results['gallery_url'] = gallery_url
+                # Merge per-image BBCode/URLs by filename
+                batch_by_name = {
+                    img['original_filename'].lower(): img
+                    for img in batch.get('images', [])
+                }
+                for image_data in results['images']:
+                    fname = (image_data.get('original_filename') or '').lower()
+                    if fname in batch_by_name:
+                        b = batch_by_name[fname]
+                        image_data['bbcode'] = b.get('bbcode') or image_data.get('bbcode')
+                        image_data['image_url'] = b.get('image_url') or image_data.get('image_url')
+                        image_data['thumb_url'] = b.get('thumb_url') or image_data.get('thumb_url')
+            except Exception as e:
+                log(f"Failed to fetch batch results: {e}", level="error", category="uploads")
+
         # Stats
         end_time = time.time()
         upload_time = end_time - start_time
@@ -492,27 +518,30 @@ class UploadEngine:
         for idx, (fname, data) in enumerate(uploaded_images):
             try:
                 size_bytes = os.path.getsize(os.path.join(folder_path, fname))
-            except Exception:
+            except Exception as e:
+                log(f"Failed to get size for {fname}: {e}", level="debug", category="uploads")
                 size_bytes = 0
             w, h = dims_by_name.get(fname, (0, 0))
             try:
                 base, ext = os.path.splitext(fname)
                 fname_norm = base + ext.lower()
-            except Exception:
+            except Exception as e:
+                log(f"Failed to normalize filename {fname}: {e}", level="debug", category="uploads")
                 fname_norm = fname
-            # Ensure thumb_url if missing
+            # Ensure thumb_url if missing — use uploader's get_thumbnail_url
             t = data.get('thumb_url')
             image_url = data.get('image_url')
             if not t and image_url:
                 try:
-                    parts = image_url.split('/i/')
-                    if len(parts) == 2 and parts[1]:
-                        img_id = parts[1].split('/')[0]
+                    # Extract image ID from URL path (last segment, strip extension)
+                    url_path = image_url.rstrip('/').rsplit('/', 1)[-1]
+                    img_id = os.path.splitext(url_path)[0] if url_path else ''
+                    if img_id:
                         _, ext = os.path.splitext(fname_norm)
                         ext_use = (ext.lower() or '.jpg') if ext else '.jpg'
-                        t = f"https://imx.to/u/t/{img_id}{ext_use}"
-                except Exception:
-                    pass
+                        t = self.uploader.get_thumbnail_url(img_id, ext_use)
+                except Exception as e:
+                    log(f"Failed to generate thumbnail URL: {e}", level="debug", category="uploads")
             data.setdefault('thumb_url', t)
             data.setdefault('original_filename', fname_norm)
             data.setdefault('width', w)
@@ -525,33 +554,35 @@ class UploadEngine:
                 fname = all_image_files[0]
                 try:
                     size_bytes = os.path.getsize(os.path.join(folder_path, fname))
-                except Exception:
+                except Exception as e:
+                    log(f"Failed to get preseed size: {e}", level="debug", category="uploads")
                     size_bytes = 0
                 w, h = dims_by_name.get(fname, (0, 0))
                 try:
                     base, ext = os.path.splitext(fname)
                     fname_norm = base + (ext.lower() if ext else '')
-                except Exception:
+                except Exception as e:
+                    log(f"Failed to normalize preseed filename: {e}", level="debug", category="uploads")
                     fname_norm = fname
                 t = first_data.get('thumb_url')
                 first_image_url = first_data.get('image_url')
                 if not t and first_image_url:
                     try:
-                        parts = first_image_url.split('/i/')
-                        if len(parts) == 2 and parts[1]:
-                            img_id = parts[1].split('/')[0]
+                        url_path = first_image_url.rstrip('/').rsplit('/', 1)[-1]
+                        img_id = os.path.splitext(url_path)[0] if url_path else ''
+                        if img_id:
                             _, ext = os.path.splitext(fname_norm)
                             ext_use = (ext.lower() or '.jpg') if ext else '.jpg'
-                            t = f"https://imx.to/u/t/{img_id}{ext_use}"
-                    except Exception:
-                        pass
+                            t = self.uploader.get_thumbnail_url(img_id, ext_use)
+                    except Exception as e:
+                        log(f"Failed to generate preseed thumbnail URL: {e}", level="debug", category="uploads")
                 first_data.setdefault('thumb_url', t)
                 first_data.setdefault('original_filename', fname_norm)
                 first_data.setdefault('width', w)
                 first_data.setdefault('height', h)
                 first_data.setdefault('size_bytes', size_bytes)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Failed to enrich preseed image: {e}", level="warning", category="uploads")
 
         results.update({
             'gallery_id': gallery_id,
@@ -601,11 +632,11 @@ class UploadEngine:
                 time_per_file = upload_time / results['successful_count'] if results['successful_count'] > 0 else 0
 
                 log(
-                    f"[uploads:gallery] ✓ Gallery '{gallery_id}' uploaded in {upload_time:.3f}s ({results['successful_count']} images, {size_str}) [{rate_str}, {time_per_file:.3f}s/file] - {gname}",
+                    f"[uploads:gallery] ✓ Gallery '{gname}' uploaded in {upload_time:.3f}s ({results['successful_count']} images, {size_str}) [{rate_str}, {time_per_file:.3f}s/file]",
                     level="info",
                     category="uploads:gallery"
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Failed to log upload completion: {e}", level="error", category="uploads")
 
         return results
