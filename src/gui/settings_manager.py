@@ -64,16 +64,21 @@ class SettingsManager(QObject):
         if geometry:
             mw.restoreGeometry(geometry)
 
-        # Restore splitter states for resizable dividers
+        # Restore splitter sizes from JSON integers (structure-independent)
         if hasattr(mw, 'top_splitter'):
-            splitter_state = settings.value("splitter/state")
-            if splitter_state:
-                mw.top_splitter.restoreState(splitter_state)
+            sizes_raw = settings.value("splitter/sizes")
+            if sizes_raw:
+                try:
+                    sizes = json.loads(sizes_raw)
+                    if isinstance(sizes, list) and len(sizes) == len(mw.top_splitter.sizes()):
+                        mw.top_splitter.setSizes(sizes)
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
-        # Store vertical splitter state for later restoration
-        vertical_splitter_state = None
+        # Store vertical splitter sizes for later restoration
+        vertical_sizes_raw = None
         if hasattr(mw, 'right_vertical_splitter'):
-            vertical_splitter_state = settings.value("splitter/vertical_state")
+            vertical_sizes_raw = settings.value("splitter/vertical_sizes")
 
         # Restore right panel collapsed state
         is_collapsed = settings.value("right_panel/collapsed", False, type=bool)
@@ -84,12 +89,11 @@ class SettingsManager(QObject):
             # The saved state would be from when panel was expanded
         elif hasattr(mw, 'action_toggle_right_panel'):
             mw.action_toggle_right_panel.setChecked(True)
-            # Restore vertical splitter state only when panel is NOT collapsed
-            # Delay slightly to allow layout to settle
-            if vertical_splitter_state and hasattr(mw, 'right_vertical_splitter'):
-                def restore_vertical():
-                    mw.right_vertical_splitter.restoreState(vertical_splitter_state)
-                QTimer.singleShot(50, restore_vertical)
+            # Stash vertical splitter sizes for restoration in showEvent,
+            # where the window has its final geometry and the splitter's
+            # total height is correct (restoring earlier causes size mismatch).
+            if vertical_sizes_raw and hasattr(mw, 'right_vertical_splitter'):
+                mw._pending_vertical_sizes = vertical_sizes_raw
 
         # Load settings from .ini file (for reference by other components)
         defaults = load_user_defaults()
@@ -125,18 +129,19 @@ class SettingsManager(QObject):
         # Save window geometry
         settings.setValue("geometry", mw.saveGeometry())
 
-        # Save splitter states for resizable dividers
+        # Save splitter sizes as JSON integers (structure-independent,
+        # unlike saveState() byte arrays which break when child widgets change)
         if hasattr(mw, 'top_splitter'):
-            settings.setValue("splitter/state", mw.top_splitter.saveState())
+            settings.setValue("splitter/sizes", json.dumps(mw.top_splitter.sizes()))
 
-        # Save vertical splitter state (Settings/Log divider)
+        # Save vertical splitter sizes (Settings/Log divider)
         # Only save when the right panel is NOT collapsed, as collapsed state would save
         # invalid/zero sizes that can't be properly restored
         if hasattr(mw, 'right_vertical_splitter') and hasattr(mw, 'top_splitter'):
             right_panel_width = mw.top_splitter.sizes()[1] if len(mw.top_splitter.sizes()) > 1 else 0
             if right_panel_width >= 50:  # Only save if panel is not collapsed
-                settings.setValue("splitter/vertical_state",
-                                mw.right_vertical_splitter.saveState())
+                settings.setValue("splitter/vertical_sizes",
+                                json.dumps(mw.right_vertical_splitter.sizes()))
 
         # Save right panel collapsed state
         if hasattr(mw, 'action_toggle_right_panel'):
@@ -145,6 +150,9 @@ class SettingsManager(QObject):
 
         # Save table column settings
         self.save_table_settings()
+
+        # Flush to disk immediately so settings survive abrupt exit
+        settings.sync()
 
     # =========================================================================
     # Table Column Settings Methods

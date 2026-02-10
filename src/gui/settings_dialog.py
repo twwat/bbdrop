@@ -1225,8 +1225,35 @@ class ComprehensiveSettingsDialog(QDialog):
         strategy_layout.addWidget(perf_info)
         
         layout.addWidget(strategy_group)
+
+        # Cover Photo Detection group
+        cover_group = QGroupBox("Cover Photo Detection")
+        cover_layout = QVBoxLayout(cover_group)
+
+        # Filename patterns
+        pattern_row = QHBoxLayout()
+        pattern_row.addWidget(QLabel("Filename patterns:"))
+        self.cover_patterns_edit = QLineEdit()
+        self.cover_patterns_edit.setPlaceholderText("cover*, poster*, *_cover.* (comma-separated)")
+        self.cover_patterns_edit.setToolTip(
+            "Comma-separated glob patterns. First match wins.\n"
+            "Examples: cover*, poster*, *_cover.*, folder_cover.*"
+        )
+        pattern_row.addWidget(self.cover_patterns_edit)
+        cover_layout.addLayout(pattern_row)
+
+        # Also upload as gallery image checkbox
+        self.cover_also_upload_check = QCheckBox("Also upload cover as gallery image")
+        self.cover_also_upload_check.setToolTip(
+            "When checked, the cover file is uploaded both as a cover photo\n"
+            "AND as a normal gallery image. When unchecked (default),\n"
+            "it only goes through the cover endpoint."
+        )
+        cover_layout.addWidget(self.cover_also_upload_check)
+
+        layout.addWidget(cover_group)
         layout.addStretch()
-        
+
         # Connect change signals to mark tab as dirty
         self.fast_scan_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
 
@@ -1248,7 +1275,11 @@ class ComprehensiveSettingsDialog(QDialog):
         self.stats_exclude_outliers_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
         self.avg_mean_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
         self.avg_median_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        
+
+        # Connect cover photo detection controls
+        self.cover_patterns_edit.textChanged.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
+        self.cover_also_upload_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
+
         self.tab_widget.addTab(scanning_widget, "Image Scan")
 
     def setup_external_apps_tab(self):
@@ -2660,7 +2691,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.sampling_fixed_spin, self.sampling_percent_spin, self.exclude_first_check,
                 self.exclude_last_check, self.exclude_small_check, self.exclude_small_spin,
                 self.exclude_patterns_check, self.exclude_patterns_edit,
-                self.stats_exclude_outliers_check, self.avg_mean_radio, self.avg_median_radio
+                self.stats_exclude_outliers_check, self.avg_mean_radio, self.avg_median_radio,
+                self.cover_patterns_edit, self.cover_also_upload_check
             ]
             for control in controls_to_block:
                 control.blockSignals(True)
@@ -2710,6 +2742,14 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.avg_median_radio.setChecked(True)
             else:
                 self.avg_mean_radio.setChecked(True)
+
+            # Load cover photo detection settings from QSettings
+            self.cover_patterns_edit.setText(
+                self.settings.value('cover/filename_patterns', '', type=str)
+            )
+            self.cover_also_upload_check.setChecked(
+                self.settings.value('cover/also_upload_as_gallery_image', False, type=bool)
+            )
 
             # Unblock signals
             for control in controls_to_block:
@@ -2996,6 +3036,10 @@ class ComprehensiveSettingsDialog(QDialog):
 
             with open(config_file, 'w', encoding='utf-8') as f:
                 config.write(f)
+
+            # Save cover photo detection settings to QSettings
+            self.settings.setValue('cover/filename_patterns', self.cover_patterns_edit.text())
+            self.settings.setValue('cover/also_upload_as_gallery_image', self.cover_also_upload_check.isChecked())
 
         except Exception as e:
             log(f"Failed to save scanning settings: {e}", level="warning", category="settings")
@@ -3299,6 +3343,8 @@ class ComprehensiveSettingsDialog(QDialog):
             # Commit pending template changes, then close
             if hasattr(self, 'template_dialog'):
                 self.template_dialog.commit_all_changes()
+                if self.parent_window and hasattr(self.parent_window, 'refresh_template_combo'):
+                    self.parent_window.refresh_template_combo()
             close_callback()
         elif result == QMessageBox.StandardButton.No:
             # Discard changes and close
@@ -3775,6 +3821,8 @@ class ComprehensiveSettingsDialog(QDialog):
                         except Exception as e:
                             log(f"Failed to refresh connection pool: {e}", level="warning", category="settings")
                         break  # Only need to refresh once
+            if self.parent_window and hasattr(self.parent_window, 'refresh_image_host_combo'):
+                self.parent_window.refresh_image_host_combo()
             return True
         except Exception as e:
             log(f"Error saving Image Hosts tab: {e}", level="warning", category="settings")
@@ -3794,7 +3842,12 @@ class ComprehensiveSettingsDialog(QDialog):
         """Save Templates tab settings only"""
         try:
             if hasattr(self, 'template_dialog'):
-                return self.template_dialog.commit_all_changes()
+                result = self.template_dialog.commit_all_changes()
+                # Refresh main window template dropdown immediately
+                # (QFileSystemWatcher is unreliable on WSL2)
+                if result and self.parent_window and hasattr(self.parent_window, 'refresh_template_combo'):
+                    self.parent_window.refresh_template_combo()
+                return result
             return True
         except Exception as e:
             log(f"Error saving template settings: {e}", level="warning", category="settings")
