@@ -94,12 +94,21 @@ class GalleryQueueItem:
     imx_status: str = ""
     imx_status_checked: Optional[int] = None
 
+    # Multi-host support
+    image_host_id: str = "imx"  # Default to IMX for backward compatibility
+
+    # Cover photo support
+    cover_source_path: Optional[str] = None   # Absolute path to cover image file
+    cover_host_id: Optional[str] = None        # Which host uploads the cover
+    cover_result: Optional[dict] = None        # {bbcode, image_url, thumb_url} after upload
+
 
 class QueueManager(QObject):
     """Manages the gallery upload queue with persistence"""
     
     # Signals
     status_changed = pyqtSignal(str, str, str)  # path, old_status, new_status
+    scan_status_changed = pyqtSignal(int, int)  # queue_size, items_pending
     queue_loaded = pyqtSignal()
     log_message = pyqtSignal(str)
     
@@ -214,8 +223,12 @@ class QueueManager(QObject):
                 # No longer silently failing duplicates here
                 
                 item.total_images = len(files)
+                old_status = item.status
                 item.status = QUEUE_STATE_SCANNING
-            
+                self._update_status_count(old_status, QUEUE_STATE_SCANNING)
+
+            self._emit_scan_status()
+
             # Scan images
             scan_result = self._scan_images(path, files)
             
@@ -240,27 +253,34 @@ class QueueManager(QObject):
                     item.min_width = scan_result['min_width']
                     item.min_height = scan_result['min_height']
                     item.scan_complete = True
-                    
+
+                    # Detect cover photo
+                    cover_config = self._get_cover_detection_config()
+                    if cover_config.get('patterns'):
+                        from src.core.cover_detector import detect_cover
+                        cover_file = detect_cover(files, patterns=cover_config['patterns'])
+                        if cover_file:
+                            item.cover_source_path = os.path.join(path, cover_file)
+                            log(f"Scan Worker: Detected cover photo: {cover_file}", level="debug", category="scan")
+                            if not cover_config.get('also_upload', False):
+                                # Cover-only: exclude from gallery image count
+                                item.total_images = max(0, item.total_images - 1)
+
                     if item.status == QUEUE_STATE_SCANNING:
                         log(f"Scan Worker: Scan complete, updating status to ready for {path}", level="debug", category="scan")
                         #print(f"DEBUG: Item tab_name is still: '{item.tab_name}'")
                         old_status = item.status
                         item.status = QUEUE_STATE_READY
+                        self._update_status_count(old_status, QUEUE_STATE_READY)
                         log(f"Scan Worker: Status changed from {old_status} to {QUEUE_STATE_READY}", level="debug", category="scan")
-                        #print(f"DEBUG: After status change - item tab_name = '{item.tab_name}'")
-                        
-                        # CRITICAL: Save immediately now that status is "ready" (no longer "validating")
-                        # This ensures the gallery is saved to the correct tab in the database
-                        #print(f"DEBUG: SAVING TO DATABASE NOW - status is ready, tab_name='{item.tab_name}'")
-                        
+
                         # Check if auto-start uploads is enabled
-                        # load_user_defaults already imported from bbdrop at top of file
                         defaults = load_user_defaults()
                         if defaults.get('auto_start_upload', False):
                             log(f"Auto-start enabled: queuing {path} for upload", level="debug", category="queue")
-                            
+
                             # Auto-start the upload by changing status to queued and adding to queue
-                            self._update_status_count(old_status, QUEUE_STATE_QUEUED)
+                            self._update_status_count(QUEUE_STATE_READY, QUEUE_STATE_QUEUED)
                             item.status = QUEUE_STATE_QUEUED
                             self.queue.put(item)  # CRITICAL: Add to queue so worker picks it up
                             log(f"Auto-queued {path} for immediate upload", level="debug", category="queue")
@@ -269,7 +289,9 @@ class QueueManager(QObject):
                         #print(f"DEBUG: EMITTING status_changed signal for {path}")
                         self.status_changed.emit(path, old_status, item.status)
                         #print(f"DEBUG: status_changed signal emitted")
-            
+
+            self._emit_scan_status()
+
             # Save to database immediately now that scan is complete and status is "ready"
             from PyQt6.QtCore import QTimer
             #print(f"DEBUG: Scheduling IMMEDIATE save for {path} with tab_name='{item.tab_name}'")
@@ -447,32 +469,38 @@ class QueueManager(QObject):
         with QMutexLocker(self.mutex):
             if path in self.items:
                 item = self.items[path]
+                old_status = item.status
                 item.status = QUEUE_STATE_FAILED
+                self._update_status_count(old_status, QUEUE_STATE_FAILED)
                 item.error_message = error
                 item.scan_complete = True
                 if failed_files:
                     item.failed_files = failed_files
-        
+
         self._schedule_debounced_save([path])
         self._inc_version()
-    
+        self._emit_scan_status()
+
     def mark_scan_failed(self, path: str, error: str):
         """Mark an item as scan failed (folder issues, no images, permissions)"""
         with QMutexLocker(self.mutex):
             if path in self.items:
                 item = self.items[path]
+                old_status = item.status
                 item.status = QUEUE_STATE_SCAN_FAILED
+                self._update_status_count(old_status, QUEUE_STATE_SCAN_FAILED)
                 item.error_message = error
                 item.scan_complete = True
-                
+
                 # Log scan failure
                 from bbdrop import timestamp
                 log(f"Scan failed - {item.name or os.path.basename(path)}: {error}", level="warning", category="scan")
-                
-        
+
+
         self._schedule_debounced_save([path])
         self._inc_version()
-    
+        self._emit_scan_status()
+
     def mark_upload_failed(self, path: str, error: str, failed_files: list | None = None):
         """Mark an item as upload failed (network issues, API problems, server errors)"""
         with QMutexLocker(self.mutex):
@@ -484,11 +512,8 @@ class QueueManager(QObject):
                 if failed_files:
                     item.failed_files = failed_files
                 
-                # Log upload failure with details
-                log_msg = f"{item.name or os.path.basename(path)}: {error}"
-                if failed_files:
-                    log_msg += f" ({len(failed_files)} files failed)"
-                log(log_msg, level="error", category="uploads")
+                # Note: logging is handled by on_gallery_failed in main_window
+                # to avoid duplicate log entries
         
         self._schedule_debounced_save([path])
         self._inc_version()
@@ -705,10 +730,28 @@ class QueueManager(QObject):
             }
         except Exception:
             return {'fast_scan': True, 'pil_sampling': 2}
-    
+
+    def _get_cover_detection_config(self) -> dict:
+        """Get cover photo detection configuration from settings."""
+        try:
+            settings = QSettings("BBDropUploader", "BBDropGUI")
+            return {
+                'patterns': settings.value('cover/filename_patterns', '', type=str),
+                'also_upload': settings.value('cover/also_upload_as_gallery_image', False, type=bool),
+            }
+        except Exception:
+            return {'patterns': '', 'also_upload': False}
+
     def _inc_version(self):
         """Increment version for change tracking"""
         self._version += 1
+
+    def _emit_scan_status(self):
+        """Emit current scan pipeline status for UI display."""
+        queue_size = self._scan_queue.qsize()
+        pending = (self._status_counts.get(QUEUE_STATE_SCANNING, 0) +
+                   self._status_counts.get(QUEUE_STATE_VALIDATING, 0))
+        self.scan_status_changed.emit(queue_size, pending)
     
     def _schedule_debounced_save(self, paths: List[str]):
         """Schedule a debounced save to prevent overlapping database operations"""
@@ -785,8 +828,12 @@ class QueueManager(QObject):
                 'ext2': getattr(item, 'ext2', ''),
                 'ext3': getattr(item, 'ext3', ''),
                 'ext4': getattr(item, 'ext4', ''),
+                'image_host_id': getattr(item, 'image_host_id', 'imx'),
+                'cover_source_path': getattr(item, 'cover_source_path', None),
+                'cover_host_id': getattr(item, 'cover_host_id', None),
+                'cover_result': getattr(item, 'cover_result', None),
             }
-            
+
             self.store.bulk_upsert_async([item_data])
             log(f"_save_single_item saved: {item.path}", level="debug", category="queue")
         except Exception as e:
@@ -871,7 +918,11 @@ class QueueManager(QObject):
             'source_archive_path': item.source_archive_path,
             'is_from_archive': item.is_from_archive,
             'imx_status': item.imx_status,
-            'imx_status_checked': item.imx_status_checked
+            'imx_status_checked': item.imx_status_checked,
+            'image_host_id': item.image_host_id,
+            'cover_source_path': item.cover_source_path,
+            'cover_host_id': item.cover_host_id,
+            'cover_result': item.cover_result,
         }
     
     def load_persistent_queue(self):
@@ -950,7 +1001,8 @@ class QueueManager(QObject):
                      'max_height', 'min_width', 'min_height', 'scan_complete',
                      'uploaded_bytes', 'final_kibps', 'error_message',
                      'source_archive_path', 'is_from_archive',
-                     'imx_status', 'imx_status_checked', 'tab_id']:
+                     'imx_status', 'imx_status_checked', 'tab_id', 'image_host_id',
+                     'cover_source_path', 'cover_host_id', 'cover_result']:
             if field in data:
                 setattr(item, field, data[field])
 
@@ -963,13 +1015,13 @@ class QueueManager(QObject):
         
         return item
     
-    def add_item(self, path: str, name: str | None = None, template_name: str = "default", tab_name: str = "Main") -> bool:
+    def add_item(self, path: str, name: str | None = None, template_name: str = "default", tab_name: str = "Main", image_host_id: str = "imx") -> bool:
         """Add gallery to queue"""
-        log(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}", level="debug", category="queue")
+        log(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}, image_host_id={image_host_id}", level="debug", category="queue")
         with QMutexLocker(self.mutex):
             if path in self.items:
                 return False
-            
+
             gallery_name = name or os.path.basename(path)
             log(f"DEBUG: Creating GalleryQueueItem for {gallery_name} ({path}) with tab_name={tab_name}...", level="debug", category="queue")
             item = GalleryQueueItem(
@@ -980,7 +1032,8 @@ class QueueManager(QObject):
                 db_id=self._next_db_id,  # Pre-assign predicted database ID
                 added_time=time.time(),
                 template_name=template_name,
-                tab_name=tab_name
+                tab_name=tab_name,
+                image_host_id=image_host_id
             )
             log(f"DEBUG: GalleryQueueItem created successfully", level="debug", category="queue")
             self._next_order += 1
@@ -997,6 +1050,7 @@ class QueueManager(QObject):
         
         log(f"DEBUG: Adding to scan queue: {path}", category="scanning", level="debug")
         self._scan_queue.put(path)
+        self._emit_scan_status()
 
         # Execute "added" hook in background
         from src.processing.hooks_executor import execute_gallery_hooks
