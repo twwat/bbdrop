@@ -216,12 +216,12 @@ class GUIImxToUploader(ImxToUploader):
                         image_url = enriched.get('image_url')
                         if not enriched.get('thumb_url') and image_url:
                             try:
-                                parts = image_url.split('/i/')
-                                if len(parts) == 2 and parts[1]:
-                                    img_id = parts[1].split('/')[0]
+                                url_path = image_url.rstrip('/').rsplit('/', 1)[-1]
+                                img_id = os.path.splitext(url_path)[0] if url_path else ''
+                                if img_id:
                                     _, ext2 = os.path.splitext(fname_norm)
                                     ext_use = (ext2.lower() or '.jpg') if ext2 else '.jpg'
-                                    enriched['thumb_url'] = f"https://imx.to/u/t/{img_id}{ext_use}"
+                                    enriched['thumb_url'] = self.get_thumbnail_url(img_id, ext_use)
                             except Exception:
                                 pass
                         # Size bytes
