@@ -112,7 +112,8 @@ class UploadEngine:
             from bbdrop import get_unnamed_galleries  # type: ignore
             unnamed_galleries = get_unnamed_galleries()
             return gallery_id in unnamed_galleries
-        except Exception:
+        except Exception as e:
+            log(f"Failed to check gallery rename status: {e}", level="error", category="engine")
             return False
 
     def run(
@@ -147,7 +148,8 @@ class UploadEngine:
                 if p.isdigit():
                     try:
                         key.append(int(p))
-                    except Exception:
+                    except Exception as e:
+                        log(f"Natural sort key parse failed: {e}", level="debug", category="engine")
                         key.append(p)
                 else:
                     key.append(p.lower())
@@ -277,15 +279,16 @@ class UploadEngine:
                     from bbdrop import save_unnamed_gallery  # type: ignore
                     save_unnamed_gallery(gallery_id, gallery_name)
                     log(f"Queued gallery for auto-rename: '{gallery_name}' (no RenameWorker)", level="debug", category="renaming")
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"Failed to queue gallery for auto-rename: {e}", level="error", category="renaming")
         # Emit an initial progress update
         if on_progress:
             percent_once = int((initial_completed / max(original_total_images, 1)) * 100)
             current_file = (first_file if 'first_file' in locals() else image_files[0] if image_files else "")
             on_progress(initial_completed, original_total_images, percent_once, current_file)
 
-        gallery_url = f"https://imx.to/g/{gallery_id}"
+        # Use dynamic gallery URL from uploader (multi-host support)
+        gallery_url = self.uploader.get_gallery_url(gallery_id, gallery_name=gallery_name)
 
         # Container for results
         results: Dict[str, Any] = {
@@ -423,7 +426,8 @@ class UploadEngine:
                             if on_image_uploaded:
                                 try:
                                     size_bytes = os.path.getsize(os.path.join(folder_path, image_file))
-                                except Exception:
+                                except Exception as e:
+                                    log(f"Failed to get file size for {image_file}: {e}", level="warning", category="uploads")
                                     size_bytes = 0
                                 on_image_uploaded(image_file, image_data, size_bytes)
                             # Per-image success log (retry path)
@@ -431,8 +435,8 @@ class UploadEngine:
                                 img_url = image_data.get('image_url', '')
                                 duration_str = f"{upload_duration:.3f}" if upload_duration is not None else "?.???"
                                 log(f"Uploaded (in {duration_str}s): {image_path}  ({img_url})", category="uploads:file")
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                log(f"Failed to log retry URL: {e}", level="warning", category="uploads")
                             log(f"[uploads] Retry successful: {image_file}", level="info", category="uploads")
                         else:
                             retry_failed.append((image_file, error or "unknown error"))
@@ -462,7 +466,8 @@ class UploadEngine:
             uploaded_size = initial_uploaded_size + sum(
                 os.path.getsize(os.path.join(folder_path, img_file)) for img_file, _ in uploaded_images
             )
-        except Exception:
+        except Exception as e:
+            log(f"Failed to calculate uploaded size: {e}", level="warning", category="uploads")
             uploaded_size = 0
         transfer_speed = uploaded_size / upload_time if upload_time > 0 else 0
 
@@ -584,7 +589,8 @@ class UploadEngine:
                 # Include gallery name and link for clarity
                 try:
                     gname = results.get('gallery_name') or gallery_name
-                except Exception:
+                except Exception as e:
+                    log(f"Failed to get gallery name from results: {e}", level="debug", category="uploads")
                     gname = gallery_name
 
                 # Calculate metrics
