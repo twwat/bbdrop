@@ -1,6 +1,7 @@
 {
     "name": "IMX.to",
-    "icon": "imx.png",
+    "icon": "imx.to_icon.png",
+    "logo": "imx.to.png",
     "requires_auth": true,
     "auth_type": "api_key_or_session",
     "gallery_url_template": "https://imx.to/g/{gallery_id}",
@@ -25,6 +26,8 @@
         "upload_read_timeout": 120,
         "thumbnail_size": 3,
         "thumbnail_format": 2,
+        "cover_thumbnail_format": 2,
+        "cover_gallery": "",
         "auto_rename": true
     }
 }
