@@ -129,6 +129,7 @@ TEMPLATE_PLACEHOLDERS = [
     "#galleryLink#",
     "#allImages#",
     "#hostLinks#",
+    "#cover#",
     "#custom1#",
     "#custom2#",
     "#custom3#",
