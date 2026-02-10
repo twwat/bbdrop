@@ -344,6 +344,49 @@ class UploadWorker(QThread):
             # Clear gallery counter
             self.current_gallery_counter = None
 
+    def _upload_cover(self, item: GalleryQueueItem, gallery_id: str = ""):
+        """Upload cover photo if configured. Returns result dict or None.
+
+        Cover failure never blocks gallery completion.
+        """
+        if not item.cover_source_path:
+            return None
+
+        if not self.rename_worker or not getattr(self.rename_worker, 'login_successful', False):
+            log("Cover upload skipped: no authenticated session", level="debug", category="cover")
+            return None
+
+        try:
+            # Get per-host cover settings
+            cover_host_id = item.cover_host_id or item.image_host_id or "imx"
+            thumbnail_format = get_image_host_setting(cover_host_id, 'cover_thumbnail_format', 'int') or 2
+
+            # Determine the gallery_id to attach the cover to
+            if item.image_host_id == cover_host_id:
+                # Same host: cover goes into the gallery
+                cover_gallery_id = gallery_id
+            else:
+                # Different hosts: use per-host cover_gallery setting, or omit
+                cover_gallery_id = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ""
+
+            result = self.rename_worker.upload_cover(
+                image_path=item.cover_source_path,
+                gallery_id=cover_gallery_id,
+                thumbnail_format=thumbnail_format,
+            )
+
+            if result:
+                item.cover_result = result
+                log(f"Cover photo uploaded for {item.name}", level="info", category="cover")
+            else:
+                log(f"Cover photo upload failed for {item.name}", level="warning", category="cover")
+
+            return result
+
+        except Exception as e:
+            log(f"Cover upload error for {item.name}: {e}", level="error", category="cover")
+            return None
+
     def _process_upload_results(self, item: GalleryQueueItem, results: Optional[Dict[str, Any]]):
         """Process upload results and update item status"""
         if not results:
@@ -387,6 +430,9 @@ class UploadWorker(QThread):
             item.status = "incomplete"
             log(f"Marked incomplete: {item.name}", level="info", category="uploads")
             return
+
+        # Upload cover photo if configured (after gallery exists)
+        cover_result = self._upload_cover(item, gallery_id=results.get('gallery_id', ''))
 
         # Save artifacts
         artifact_paths = self._save_artifacts_for_result(item, results)
@@ -463,6 +509,7 @@ class UploadWorker(QThread):
                 results=results,
                 template_name=item.template_name or "default",
                 custom_fields=custom_fields,
+                cover_bbcode=(item.cover_result or {}).get('bbcode', ''),
             )
             # Artifact save successful, no need to log details here
             return written
