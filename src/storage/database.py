@@ -293,6 +293,11 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         cursor = conn.execute("PRAGMA table_info(galleries)")
         columns = [column[1] for column in cursor.fetchall()]
 
+        if 'image_host_id' not in columns:
+            log("Adding image_host_id column to galleries table...", level="info", category="database")
+            conn.execute("ALTER TABLE galleries ADD COLUMN image_host_id TEXT DEFAULT 'imx'")
+            log("+ Added image_host_id column", level="info", category="database")
+
         if 'imx_status' not in columns:
             log("Adding imx_status column to galleries table...", level="info", category="database")
             conn.execute("ALTER TABLE galleries ADD COLUMN imx_status TEXT")
@@ -302,6 +307,20 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             log("Adding imx_status_checked column to galleries table...", level="info", category="database")
             conn.execute("ALTER TABLE galleries ADD COLUMN imx_status_checked INTEGER")
             log("+ Added imx_status_checked column", level="info", category="database")
+
+        # Migration: Add cover photo columns
+        cursor = conn.execute("PRAGMA table_info(galleries)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        for cover_col, cover_def in [
+            ('cover_source_path', 'TEXT'),
+            ('cover_host_id', 'TEXT'),
+            ('cover_result', 'TEXT'),
+        ]:
+            if cover_col not in columns:
+                log(f"Adding {cover_col} column to galleries table...", level="info", category="database")
+                conn.execute(f"ALTER TABLE galleries ADD COLUMN {cover_col} {cover_def}")
+                log(f"+ Added {cover_col} column", level="info", category="database")
 
         # Migration: Add part_number column to file_host_uploads for split archives
         cursor = conn.execute("PRAGMA table_info(file_host_uploads)")
@@ -591,7 +610,8 @@ class QueueStore:
             'min_width': min_width,
             'min_height': min_height,
             'imx_status': imx_status,
-            'imx_status_checked': imx_status_checked
+            'imx_status_checked': imx_status_checked,
+            'image_host_id': item.get('image_host_id', 'imx'),
         }
 
         for col_name, col_value in optional_fields.items():
@@ -687,7 +707,7 @@ class QueueStore:
                     g.insertion_order, g.failed_files, g.tab_name, g.tab_id,
                     g.custom1, g.custom2, g.custom3, g.custom4,
                     g.ext1, g.ext2, g.ext3, g.ext4,
-                    g.imx_status, g.imx_status_checked
+                    g.imx_status, g.imx_status_checked, g.image_host_id
                 FROM galleries g
                 ORDER BY g.insertion_order ASC, g.added_ts ASC
                 """
@@ -727,6 +747,7 @@ class QueueStore:
                     'ext4': r[26] or '',
                     'imx_status': r[27] or '',
                     'imx_status_checked': int(r[28]) if r[28] else None,
+                    'image_host_id': r[29] or 'imx',
                     'uploaded_files': [],  # Load separately when needed, not in gallery list query
                 }
                 items.append(item)
@@ -894,7 +915,7 @@ class QueueStore:
                             g.uploaded_bytes, g.final_kibps, g.gallery_id, g.gallery_url,
                             g.insertion_order, g.failed_files, g.tab_name,
                             g.custom1, g.custom2, g.custom3, g.custom4,
-                            g.imx_status, g.imx_status_checked
+                            g.imx_status, g.imx_status_checked, g.image_host_id
                         FROM galleries g
                         WHERE IFNULL(g.tab_id, 1) = ?
                         ORDER BY g.insertion_order ASC, g.added_ts ASC
@@ -911,7 +932,7 @@ class QueueStore:
                             g.uploaded_bytes, g.final_kibps, g.gallery_id, g.gallery_url,
                             g.insertion_order, g.failed_files, g.tab_name,
                             g.custom1, g.custom2, g.custom3, g.custom4,
-                            g.imx_status, g.imx_status_checked
+                            g.imx_status, g.imx_status_checked, g.image_host_id
                         FROM galleries g
                         WHERE IFNULL(g.tab_name, 'Main') = ?
                         ORDER BY g.insertion_order ASC, g.added_ts ASC
@@ -981,6 +1002,7 @@ class QueueStore:
                         'custom4': r[21] or '',
                         'imx_status': r[22] or '',
                         'imx_status_checked': int(r[23]) if r[23] else None,
+                        'image_host_id': r[24] or 'imx',
                         'uploaded_files': [],  # Load separately when needed for speed
                     }
                 else:
@@ -1193,6 +1215,16 @@ class QueueStore:
             cursor = conn.execute(
                 "UPDATE galleries SET template = ? WHERE path = ?",
                 (template_name, path)
+            )
+            return cursor.rowcount > 0
+
+    def update_item_image_host(self, path: str, image_host_id: str) -> bool:
+        """Update the image host for a gallery item."""
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            cursor = conn.execute(
+                "UPDATE galleries SET image_host_id = ? WHERE path = ?",
+                (image_host_id, path)
             )
             return cursor.rowcount > 0
 
