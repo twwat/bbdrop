@@ -61,13 +61,13 @@ class WorkerSignalHandler(QObject):
             mw.worker.ext_fields_updated.connect(mw.on_ext_fields_updated)
             mw.worker.log_message.connect(mw.add_log_message)
             mw.worker.queue_stats.connect(self.on_queue_stats)
-            mw.worker.bandwidth_updated.connect(self.bandwidth_manager.on_imx_bandwidth)
+            mw.worker.bandwidth_updated.connect(self.bandwidth_manager.on_upload_bandwidth)
 
             # Connect to worker status widget
-            mw.worker.gallery_started.connect(self._on_imx_worker_started)
-            mw.worker.bandwidth_updated.connect(self._on_imx_worker_speed)
-            mw.worker.gallery_completed.connect(self._on_imx_worker_finished)
-            mw.worker.gallery_failed.connect(self._on_imx_worker_finished)
+            mw.worker.gallery_started.connect(self._on_upload_worker_started)
+            mw.worker.bandwidth_updated.connect(self._on_upload_worker_speed)
+            mw.worker.gallery_completed.connect(self._on_upload_worker_finished)
+            mw.worker.gallery_failed.connect(self._on_upload_worker_finished)
 
             mw.worker.start()
 
@@ -262,48 +262,58 @@ class WorkerSignalHandler(QObject):
     # Worker Status Widget Signal Handlers
     # =========================================================================
 
-    def _on_imx_worker_started(self, path: str, total_images: int):
-        """Handle imx.to worker upload started."""
+    def _get_upload_worker_host_info(self):
+        """Get host_id and display name from the current upload worker."""
         mw = self._main_window
-        if not hasattr(mw, 'worker_status_widget'):
-            return  # Widget disabled, skip update
+        host_id = getattr(mw.worker, '_current_host_id', 'imx') if mw.worker else 'imx'
+        from src.core.image_host_config import get_image_host_config_manager
+        cfg = get_image_host_config_manager().get_host(host_id)
+        host_name = cfg.name if cfg else host_id
+        return host_id, host_name
 
+    def _on_upload_worker_started(self, path: str, total_images: int):
+        """Handle upload worker started (any image host)."""
+        mw = self._main_window
+        host_id, host_name = self._get_upload_worker_host_info()
+        # Update bandwidth source name to reflect the active host
+        self.bandwidth_manager._upload_source.name = host_name
+        if not hasattr(mw, 'worker_status_widget'):
+            return
         mw.worker_status_widget.update_worker_status(
-            worker_id="imx_worker_1",
-            worker_type="imx",
-            hostname="imx.to",
+            worker_id=f"upload_worker_{host_id}",
+            worker_type="imagehost",
+            hostname=host_name,
             speed_bps=0.0,
             status="uploading"
         )
 
-    def _on_imx_worker_speed(self, speed_kbps: float):
-        """Handle imx.to worker speed update."""
+    def _on_upload_worker_speed(self, speed_kbps: float):
+        """Handle upload worker speed update (any image host)."""
         mw = self._main_window
         if not hasattr(mw, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
+            return
+        host_id, host_name = self._get_upload_worker_host_info()
         mw.worker_status_widget.update_worker_status(
-            worker_id="imx_worker_1",
-            worker_type="imx",
-            hostname="imx.to",
-            speed_bps=speed_kbps * 1024,  # Convert KB/s to bytes/s
+            worker_id=f"upload_worker_{host_id}",
+            worker_type="imagehost",
+            hostname=host_name,
+            speed_bps=speed_kbps * 1024,
             status="uploading"
         )
 
-    def _on_imx_worker_finished(self, *args):
-        """Handle imx.to worker upload finished."""
-        # Deactivate IMX bandwidth source so monitor shows 0
-        self.bandwidth_manager._imx_source.active = False
-        self.bandwidth_manager._imx_source.reset()
+    def _on_upload_worker_finished(self, *args):
+        """Handle upload worker finished (any image host)."""
+        self.bandwidth_manager._upload_source.active = False
+        self.bandwidth_manager._upload_source.reset()
 
         mw = self._main_window
         if not hasattr(mw, 'worker_status_widget'):
-            return  # Widget disabled, skip update
-
+            return
+        host_id, host_name = self._get_upload_worker_host_info()
         mw.worker_status_widget.update_worker_status(
-            worker_id="imx_worker_1",
-            worker_type="imx",
-            hostname="imx.to",
+            worker_id=f"upload_worker_{host_id}",
+            worker_type="imagehost",
+            hostname=host_name,
             speed_bps=0.0,
             status="idle"
         )
@@ -391,7 +401,7 @@ class WorkerSignalHandler(QObject):
 
             if mw._file_host_startup_completed >= mw._file_host_startup_expected:
                 mw._file_host_startup_complete = True
-                log(f"All {mw._file_host_startup_expected} workers complete, startup finished",
+                log(f"File host startup complete ({mw._file_host_startup_expected} worker{'s' if mw._file_host_startup_expected != 1 else ''})",
                     level="info", category="startup")
 
     def _on_worker_status_updated(self, host_id: str, status_text: str):
@@ -458,6 +468,9 @@ class WorkerSignalHandler(QObject):
             return
 
         try:
+            # Get host_id from current upload worker
+            host_id, _ = self._get_upload_worker_host_info()
+
             # Calculate totals from queue
             total_files_remaining = 0
             total_bytes_remaining = 0
@@ -476,8 +489,8 @@ class WorkerSignalHandler(QObject):
                     if bytes_remaining > 0:
                         total_bytes_remaining += bytes_remaining
 
-            # Update worker status widget
-            mw.worker_status_widget.update_queue_columns(total_files_remaining, total_bytes_remaining)
+            # Update worker status widget with host_id as first parameter
+            mw.worker_status_widget.update_queue_columns(host_id, total_files_remaining, total_bytes_remaining)
 
         except Exception as e:
             log(f"Error updating worker queue stats: {e}", level="error", category="ui")
@@ -508,12 +521,14 @@ class WorkerSignalHandler(QObject):
             mw.speed_current_value_label.setText(speed_str)
 
             # Update fastest speed record if needed
+            # Cap at ~977 MiB/s to reject absurd outliers from measurement glitches
             settings = QSettings("BBDropUploader", "Stats")
             fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
-            if total_kbps > fastest_kbps and total_kbps < 10000:  # Sanity check
+            if total_kbps > fastest_kbps and total_kbps < 1000000:
                 settings.setValue("fastest_kbps", total_kbps)
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 settings.setValue("fastest_kbps_timestamp", timestamp)
+                settings.sync()
                 fastest_mib = total_kbps / 1024.0
                 fastest_str = f"{fastest_mib:.3f} MiB/s"
                 mw.speed_fastest_value_label.setText(fastest_str)

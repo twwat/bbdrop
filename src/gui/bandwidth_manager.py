@@ -192,8 +192,8 @@ class BandwidthManager(QObject):
         )
 
         # Create primary sources
-        self._imx_source = BandwidthSource(
-            "imx.to",
+        self._upload_source = BandwidthSource(
+            "",
             alpha_up=self._alpha_up,
             alpha_down=self._alpha_down,
         )
@@ -221,14 +221,14 @@ class BandwidthManager(QObject):
         self._cleanup_timers: Dict[str, QTimer] = {}
 
     @pyqtSlot(float)
-    def on_imx_bandwidth(self, instant_kbps: float) -> None:
+    def on_upload_bandwidth(self, instant_kbps: float) -> None:
         """Handle bandwidth update from IMX.to uploads.
 
         Args:
             instant_kbps: Instantaneous bandwidth in KB/s.
         """
-        self._imx_source.active = True
-        self._imx_source.add_sample(instant_kbps)
+        self._upload_source.active = True
+        self._upload_source.add_sample(instant_kbps)
 
     @pyqtSlot(str, float)
     def on_file_host_bandwidth(self, host_name: str, instant_kbps: float) -> None:
@@ -309,8 +309,8 @@ class BandwidthManager(QObject):
         total = 0.0
 
         # Add IMX bandwidth
-        if self._imx_source.active:
-            total += self._imx_source.smoothed_value
+        if self._upload_source.active:
+            total += self._upload_source.smoothed_value
 
         # Add link checker bandwidth
         if self._link_checker_source.active:
@@ -357,8 +357,8 @@ class BandwidthManager(QObject):
         """
         total = 0.0
 
-        if self._imx_source.active:
-            total += self._imx_source.smoothed_value
+        if self._upload_source.active:
+            total += self._upload_source.smoothed_value
 
         if self._link_checker_source.active:
             total += self._link_checker_source.smoothed_value
@@ -377,7 +377,7 @@ class BandwidthManager(QObject):
         Returns:
             IMX.to bandwidth in KB/s.
         """
-        return self._imx_source.smoothed_value
+        return self._upload_source.smoothed_value
 
     def get_file_host_bandwidth(self, host_name: str) -> float:
         """Get the current bandwidth for a specific file host.
@@ -436,7 +436,7 @@ class BandwidthManager(QObject):
         self._alpha_down = max(0.0, min(1.0, alpha_down))
 
         # Update all sources
-        self._imx_source.set_alpha(self._alpha_up, self._alpha_down)
+        self._upload_source.set_alpha(self._alpha_up, self._alpha_down)
         self._link_checker_source.set_alpha(self._alpha_up, self._alpha_down)
 
         locker = QMutexLocker(self._lock)
@@ -495,7 +495,7 @@ class BandwidthManager(QObject):
         self._session_peak = 0.0
 
         # Also reset all sources
-        self._imx_source.reset()
+        self._upload_source.reset()
         self._link_checker_source.reset()
 
         locker = QMutexLocker(self._lock)
