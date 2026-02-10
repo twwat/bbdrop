@@ -30,7 +30,8 @@ class ImageHostConfig:
 
     name: str                                        # "IMX.to"
     host_id: str = ""                                # "imx"
-    icon: Optional[str] = None                       # "imx.png"
+    icon: Optional[str] = None                       # "imx_icon.png" (small, for worker table rows)
+    logo: Optional[str] = None                       # "imx.png" (large, for settings panel)
     requires_auth: bool = False
     auth_type: Optional[str] = None                  # "api_key", "session", "api_key_or_session"
 
@@ -42,6 +43,19 @@ class ImageHostConfig:
     thumbnail_sizes: List[Dict[str, Any]] = field(default_factory=list)
     thumbnail_formats: List[Dict[str, Any]] = field(default_factory=list)
 
+    # TurboImageHost-style variable thumbnail support
+    thumbnail_mode: str = "fixed"                    # "fixed" (IMX dropdown) or "variable" (Turbo slider)
+    thumbnail_range: Optional[Dict[str, int]] = None # {"min": 150, "max": 600, "default": 300}
+
+    # Content type filtering (Turbo-style)
+    content_types: List[Dict[str, str]] = field(default_factory=list)  # [{"id": "all", "label": "Family Safe"}]
+
+    # Upload constraints
+    max_gallery_images: Optional[int] = None         # 500 for Turbo
+    max_file_size_mb: Optional[int] = None           # 35 for Turbo
+    allowed_formats: List[str] = field(default_factory=list)  # ["jpg", "jpeg", "png", "gif"]
+    gallery_name_max_length: Optional[int] = None    # 20 for Turbo
+
     # Per-host defaults (fallback for settings)
     defaults: Dict[str, Any] = field(default_factory=dict)
 
@@ -52,12 +66,20 @@ class ImageHostConfig:
             name=data.get('name', ''),
             host_id=host_id,
             icon=data.get('icon'),
+            logo=data.get('logo'),
             requires_auth=data.get('requires_auth', False),
             auth_type=data.get('auth_type'),
             gallery_url_template=data.get('gallery_url_template', ''),
             thumbnail_url_template=data.get('thumbnail_url_template', ''),
             thumbnail_sizes=data.get('thumbnail_sizes', []),
             thumbnail_formats=data.get('thumbnail_formats', []),
+            thumbnail_mode=data.get('thumbnail_mode', 'fixed'),
+            thumbnail_range=data.get('thumbnail_range'),
+            content_types=data.get('content_types', []),
+            max_gallery_images=data.get('max_gallery_images'),
+            max_file_size_mb=data.get('max_file_size_mb'),
+            allowed_formats=data.get('allowed_formats', []),
+            gallery_name_max_length=data.get('gallery_name_max_length'),
             defaults=data.get('defaults', {}),
         )
 
@@ -174,6 +196,54 @@ def save_image_host_setting(host_id: str, key: str, value: Any) -> None:
             raise
 
 
+def is_image_host_enabled(host_id: str) -> bool:
+    """Check if an image host is enabled.
+
+    Reads {host_id}_enabled from INI [IMAGE_HOSTS] section.
+    Default: True for 'imx' (backward compatibility), False for others.
+
+    Args:
+        host_id: Host identifier (e.g., 'imx', 'turbo')
+
+    Returns:
+        True if host is enabled, False otherwise
+    """
+    from bbdrop import get_config_path
+
+    ini_path = get_config_path()
+    if os.path.exists(ini_path):
+        with _ini_file_lock:
+            cfg = configparser.ConfigParser()
+            cfg.read(ini_path, encoding='utf-8')
+
+            # Check INI [IMAGE_HOSTS] section for {host_id}_enabled
+            if cfg.has_section("IMAGE_HOSTS"):
+                ini_key = f"{host_id}_enabled"
+                if cfg.has_option("IMAGE_HOSTS", ini_key):
+                    try:
+                        raw = cfg.get("IMAGE_HOSTS", ini_key)
+                        if raw and raw.strip():
+                            return cfg.getboolean("IMAGE_HOSTS", ini_key)
+                    except (ValueError, TypeError, configparser.Error):
+                        pass  # Fall through to defaults
+
+    # Not set in INI: apply defaults
+    # Default: imx enabled (backward compatibility), others disabled
+    return host_id == "imx"
+
+
+def save_image_host_enabled(host_id: str, enabled: bool) -> None:
+    """Enable or disable an image host.
+
+    Writes {host_id}_enabled to INI [IMAGE_HOSTS] section.
+
+    Args:
+        host_id: Host identifier (e.g., 'imx', 'turbo')
+        enabled: True to enable, False to disable
+    """
+    save_image_host_setting(host_id, "enabled", enabled)
+
+
 class ImageHostConfigManager:
     """Manages loading and accessing image host configurations."""
 
@@ -230,9 +300,27 @@ class ImageHostConfigManager:
         """Get a host configuration by ID."""
         return self.hosts.get(host_id)
 
-    def get_enabled_hosts(self) -> Dict[str, ImageHostConfig]:
-        """Get all enabled host configurations (Phase 1: all loaded hosts)."""
+    def get_all_hosts(self) -> Dict[str, ImageHostConfig]:
+        """Get all loaded host configurations (enabled and disabled).
+
+        Returns:
+            Dictionary of host_id -> ImageHostConfig for all loaded hosts
+        """
         return dict(self.hosts)
+
+    def get_enabled_hosts(self) -> Dict[str, ImageHostConfig]:
+        """Get only enabled host configurations.
+
+        Filters hosts based on is_image_host_enabled() check.
+
+        Returns:
+            Dictionary of host_id -> ImageHostConfig for enabled hosts only
+        """
+        result = {}
+        for host_id, host_config in self.hosts.items():
+            if is_image_host_enabled(host_id):
+                result[host_id] = host_config
+        return result
 
     def list_hosts(self) -> List[str]:
         """List all host IDs."""
@@ -253,3 +341,27 @@ def get_image_host_config_manager() -> ImageHostConfigManager:
                 _config_manager = ImageHostConfigManager()
                 _config_manager.load_all()
     return _config_manager
+
+
+def get_all_hosts() -> Dict[str, ImageHostConfig]:
+    """Get all loaded image host configurations.
+
+    Module-level convenience function.
+
+    Returns:
+        Dictionary of host_id -> ImageHostConfig for all loaded hosts
+    """
+    manager = get_image_host_config_manager()
+    return manager.get_all_hosts()
+
+
+def get_enabled_hosts() -> Dict[str, ImageHostConfig]:
+    """Get only enabled image host configurations.
+
+    Module-level convenience function.
+
+    Returns:
+        Dictionary of host_id -> ImageHostConfig for enabled hosts only
+    """
+    manager = get_image_host_config_manager()
+    return manager.get_enabled_hosts()
