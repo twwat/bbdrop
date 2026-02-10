@@ -56,7 +56,8 @@ class PlaceholderHighlighter(QSyntaxHighlighter):
         self.placeholders = [
             "#folderName#", "#width#", "#height#", "#longest#",
             "#extension#", "#pictureCount#", "#folderSize#",
-            "#galleryLink#", "#allImages#", "#hostLinks#", "#custom1#", "#custom2#", "#custom3#", "#custom4#",
+            "#galleryLink#", "#allImages#", "#hostLinks#", "#cover#",
+            "#custom1#", "#custom2#", "#custom3#", "#custom4#",
             "#ext1#", "#ext2#", "#ext3#", "#ext4#"
         ]
 
@@ -115,7 +116,7 @@ class ConditionalInsertDialog(QDialog):
         self.placeholder_combo.addItems([
             "folderName", "pictureCount", "width", "height", "longest",
             "extension", "folderSize", "galleryLink", "allImages", "hostLinks",
-            "custom1", "custom2", "custom3", "custom4",
+            "cover", "custom1", "custom2", "custom3", "custom4",
             "ext1", "ext2", "ext3", "ext4"
         ])
         layout.addWidget(self.placeholder_combo)
@@ -372,6 +373,7 @@ class TemplateManagerDialog(QDialog):
             ("#width#", "Width"),
             ("#folderSize#", "Folder Size"),
             ("#longest#", "Longest Side"),
+            ("#cover#", "Cover Photo"),
             ("#custom1#", "Custom 1"),
             ("#galleryLink#", "Gallery Link"),
             ("#custom2#", "Custom 2"),
