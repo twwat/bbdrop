@@ -1118,6 +1118,7 @@ def apply_template(template_content, data):
     composite_replacements = {
         '#hostLinks#': data.get('host_links', ''),
         '#allImages#': data.get('all_images', ''),
+        '#cover#': data.get('cover', ''),
     }
     for placeholder, value in composite_replacements.items():
         result = result.replace(placeholder, value)
@@ -1165,6 +1166,7 @@ def save_gallery_artifacts(
     store_in_uploaded: Optional[bool] = None,
     store_in_central: Optional[bool] = None,
     custom_fields: Optional[dict] = None,
+    cover_bbcode: str = "",
 ) -> dict:
     """Save BBCode and JSON artifacts for a completed gallery.
 
@@ -1259,9 +1261,10 @@ def save_gallery_artifacts(
         'extension': extension,
         'picture_count': successful_images,
         'folder_size': f"{total_size / (1024*1024):.1f} MB",
-        'gallery_link': f"https://imx.to/g/{gallery_id}",
+        'gallery_link': results.get('gallery_url', ''),
         'all_images': all_images_bbcode,
         'host_links': host_links,
+        'cover': cover_bbcode,
         'custom1': (custom_fields or {}).get('custom1', ''),
         'custom2': (custom_fields or {}).get('custom2', ''),
         'custom3': (custom_fields or {}).get('custom3', ''),
