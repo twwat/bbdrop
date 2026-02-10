@@ -1,0 +1,31 @@
+{
+    "name": "TurboImageHost",
+    "icon": "turboimagehost_icon.png",
+    "logo": "turboimagehost.png",
+    "requires_auth": false,
+    "auth_type": "session_optional",
+    "gallery_url_template": "https://www.turboimagehost.com/album/{gallery_id}/{gallery_name}",
+    "thumbnail_url_template": "https://www.turboimagehost.com/t/{img_id}",
+    "thumbnail_mode": "variable",
+    "thumbnail_range": {
+        "min": 150,
+        "max": 600,
+        "default": 300
+    },
+    "content_types": [
+        {"id": "all", "label": "Family Safe"},
+        {"id": "adult", "label": "Adult Content"}
+    ],
+    "max_gallery_images": 500,
+    "max_file_size_mb": 35,
+    "allowed_formats": ["jpg", "jpeg", "png", "gif"],
+    "gallery_name_max_length": 20,
+    "defaults": {
+        "max_retries": 3,
+        "parallel_batch_size": 4,
+        "upload_connect_timeout": 30,
+        "upload_read_timeout": 120,
+        "thumbnail_size": 300,
+        "content_type": "all"
+    }
+}
