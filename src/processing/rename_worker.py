@@ -524,6 +524,98 @@ class RenameWorker(QObject):
             self.queue.put({'gallery_id': gallery_id, 'gallery_name': gallery_name})
 
     # =========================================================================
+    # Cover Photo Upload Methods
+    # =========================================================================
+
+    def upload_cover(
+        self,
+        image_path: str,
+        gallery_id: str = "",
+        thumbnail_format: int = 2,
+        thumbnail_size_container: int = 5,  # 600x600px
+    ) -> Optional[dict]:
+        """Upload a cover photo via session-based POST.
+
+        Uses the imx.to ?mode=cover endpoint with session cookies.
+        Returns dict with {status, bbcode, image_url, thumb_url} or None on failure.
+        """
+        if not self.login_successful:
+            log("Cover upload: not authenticated", level="warning", category="cover")
+            return None
+
+        try:
+            with open(image_path, 'rb') as f:
+                files = {'uploaded': (os.path.basename(image_path), f, 'image/jpeg')}
+                data = {
+                    'thumb_size_contaner': str(thumbnail_size_container),
+                    'thumbnail_format': str(thumbnail_format),
+                    'simple_upload': 'submit',
+                }
+                if gallery_id:
+                    data['set_gallery'] = gallery_id
+
+                response = self.session.post(
+                    f"{self.web_url}/?mode=cover",
+                    files=files,
+                    data=data,
+                    timeout=(30, 120),
+                )
+
+            if response.status_code != 200:
+                log(f"Cover upload failed: HTTP {response.status_code}", level="warning", category="cover")
+                return None
+
+            # Parse BBCode from response textarea
+            bbcode, image_url, thumb_url = self._parse_cover_response(response.text)
+            if not bbcode:
+                log("Cover upload: failed to parse response", level="warning", category="cover")
+                return None
+
+            log(f"Cover uploaded successfully for gallery {gallery_id}", level="info", category="cover")
+            return {
+                "status": "success",
+                "bbcode": bbcode,
+                "image_url": image_url,
+                "thumb_url": thumb_url,
+            }
+
+        except Exception as e:
+            log(f"Cover upload error: {e}", level="error", category="cover")
+            return None
+
+    def _parse_cover_response(self, html: str) -> tuple:
+        """Parse cover upload response for BBCode, image URL, thumb URL.
+
+        Extracts BBCode from the textarea with class 'imageallcodes', then
+        parses the [url=...][img]...[/img][/url] pattern for image and thumb URLs.
+
+        Args:
+            html: Response HTML from the cover upload endpoint
+
+        Returns:
+            Tuple of (bbcode, image_url, thumb_url) - all empty strings on failure
+        """
+        bbcode = ""
+        image_url = ""
+        thumb_url = ""
+
+        textarea_match = re.search(
+            r'<textarea[^>]*class=["\']imageallcodes["\'][^>]*>(.*?)</textarea>',
+            html, re.DOTALL | re.IGNORECASE
+        )
+        if textarea_match:
+            bbcode = textarea_match.group(1).strip()
+            url_match = re.search(
+                r'\[url=(https?://[^\]]+)\]\[img\](https?://[^\[]+)\[/img\]\[/url\]',
+                bbcode
+            )
+            if url_match:
+                image_url = url_match.group(1)
+                thumb_url = url_match.group(2)
+
+        return bbcode, image_url, thumb_url
+
+    # =========================================================================
     # Image Status Checking Methods
     # =========================================================================
 
