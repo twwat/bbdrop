@@ -208,9 +208,9 @@ class TestColumnSorting:
 
     def test_sort_by_speed_column(self, widget, sample_workers):
         """Test sorting by speed column (text-based sorting with formatted values)."""
-        # Change filter to "Used This Session" to avoid placeholder workers
+        # Use "Active Only" filter to avoid placeholder workers
         widget._workers = sample_workers
-        widget.filter_combo.setCurrentIndex(1)  # "Used This Session"
+        widget._filter_index = 4  # "Active Only"
         widget._refresh_display()
 
         speed_col = widget._get_column_index('speed')
@@ -387,9 +387,9 @@ class TestTargetedUpdates:
 
     def test_new_worker_triggers_rebuild(self, widget, sample_workers):
         """Test that adding new worker DOES trigger rebuild."""
-        # Use "Used This Session" filter to only show active workers
+        # Use "Active Only" filter to only show active workers
         widget._workers = sample_workers.copy()
-        widget.filter_combo.setCurrentIndex(1)  # "Used This Session"
+        widget._filter_index = 4  # "Active Only"
         widget._refresh_display()
 
         initial_row_count = widget.status_table.rowCount()

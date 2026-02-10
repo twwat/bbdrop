@@ -288,7 +288,7 @@ class TestBandwidthManager:
         assert bandwidth_manager._alpha_up == 0.6
         assert bandwidth_manager._alpha_down == 0.35
         assert bandwidth_manager._session_peak == 0.0
-        assert bandwidth_manager._imx_source is not None
+        assert bandwidth_manager._upload_source is not None
         assert bandwidth_manager._link_checker_source is not None
         assert len(bandwidth_manager._file_host_sources) == 0
 
@@ -328,24 +328,24 @@ class TestBandwidthManager:
     # IMX Bandwidth Tests
     # =========================================================================
 
-    def test_on_imx_bandwidth_activates_source(self, bandwidth_manager):
-        """Verify on_imx_bandwidth activates the IMX source."""
-        bandwidth_manager._imx_source.active = False
-        bandwidth_manager.on_imx_bandwidth(100.0)
+    def test_on_upload_bandwidth_activates_source(self, bandwidth_manager):
+        """Verify on_upload_bandwidth activates the IMX source."""
+        bandwidth_manager._upload_source.active = False
+        bandwidth_manager.on_upload_bandwidth(100.0)
 
-        assert bandwidth_manager._imx_source.active is True
+        assert bandwidth_manager._upload_source.active is True
 
-    def test_on_imx_bandwidth_adds_sample(self, bandwidth_manager):
-        """Verify on_imx_bandwidth adds sample to IMX source."""
-        bandwidth_manager.on_imx_bandwidth(100.0)
-        assert bandwidth_manager._imx_source.smoothed_value > 0
+    def test_on_upload_bandwidth_adds_sample(self, bandwidth_manager):
+        """Verify on_upload_bandwidth adds sample to IMX source."""
+        bandwidth_manager.on_upload_bandwidth(100.0)
+        assert bandwidth_manager._upload_source.smoothed_value > 0
 
     def test_get_imx_bandwidth(self, bandwidth_manager):
         """Verify get_imx_bandwidth returns correct value."""
-        bandwidth_manager.on_imx_bandwidth(500.0)
+        bandwidth_manager.on_upload_bandwidth(500.0)
         result = bandwidth_manager.get_imx_bandwidth()
 
-        assert result == bandwidth_manager._imx_source.smoothed_value
+        assert result == bandwidth_manager._upload_source.smoothed_value
 
     # =========================================================================
     # File Host Bandwidth Tests
@@ -422,7 +422,7 @@ class TestBandwidthManager:
     def test_total_bandwidth_aggregates_all_sources(self, bandwidth_manager):
         """Verify total bandwidth includes all active sources."""
         # Add bandwidth to all source types
-        bandwidth_manager.on_imx_bandwidth(100.0)
+        bandwidth_manager.on_upload_bandwidth(100.0)
         bandwidth_manager.on_file_host_bandwidth("host1", 200.0)
         bandwidth_manager.on_link_checker_bandwidth(50.0)
 
@@ -437,11 +437,11 @@ class TestBandwidthManager:
 
     def test_total_bandwidth_excludes_inactive_sources(self, bandwidth_manager):
         """Verify total bandwidth excludes inactive sources."""
-        bandwidth_manager.on_imx_bandwidth(100.0)
+        bandwidth_manager.on_upload_bandwidth(100.0)
         bandwidth_manager.on_file_host_bandwidth("host1", 200.0)
 
         # Deactivate IMX source
-        bandwidth_manager._imx_source.active = False
+        bandwidth_manager._upload_source.active = False
 
         total = bandwidth_manager.get_total_bandwidth()
         host1 = bandwidth_manager.get_file_host_bandwidth("host1")
@@ -471,7 +471,7 @@ class TestBandwidthManager:
 
     def test_total_bandwidth_signal_emitted(self, bandwidth_manager, qtbot):
         """Verify total_bandwidth_updated signal is emitted periodically."""
-        bandwidth_manager.on_imx_bandwidth(100.0)
+        bandwidth_manager.on_upload_bandwidth(100.0)
 
         with qtbot.waitSignal(bandwidth_manager.total_bandwidth_updated, timeout=500) as blocker:
             pass  # Wait for periodic emission
@@ -484,7 +484,7 @@ class TestBandwidthManager:
         bandwidth_manager.reset_session()
 
         # Add high bandwidth to trigger peak update
-        bandwidth_manager.on_imx_bandwidth(1000.0)
+        bandwidth_manager.on_upload_bandwidth(1000.0)
 
         with qtbot.waitSignal(bandwidth_manager.peak_updated, timeout=500) as blocker:
             pass  # Wait for periodic aggregation
@@ -544,7 +544,7 @@ class TestBandwidthManager:
         bandwidth_manager.reset_session()
         assert bandwidth_manager.get_session_peak() == 0.0
 
-        bandwidth_manager.on_imx_bandwidth(500.0)
+        bandwidth_manager.on_upload_bandwidth(500.0)
         # Trigger aggregation manually
         bandwidth_manager._emit_aggregated()
 
@@ -553,7 +553,7 @@ class TestBandwidthManager:
 
     def test_reset_session_clears_peak(self, bandwidth_manager):
         """Verify reset_session clears the session peak."""
-        bandwidth_manager.on_imx_bandwidth(1000.0)
+        bandwidth_manager.on_upload_bandwidth(1000.0)
         bandwidth_manager._emit_aggregated()
 
         bandwidth_manager.reset_session()
@@ -562,13 +562,13 @@ class TestBandwidthManager:
 
     def test_reset_session_resets_sources(self, bandwidth_manager):
         """Verify reset_session resets all bandwidth sources."""
-        bandwidth_manager.on_imx_bandwidth(100.0)
+        bandwidth_manager.on_upload_bandwidth(100.0)
         bandwidth_manager.on_file_host_bandwidth("host1", 200.0)
         bandwidth_manager.on_link_checker_bandwidth(50.0)
 
         bandwidth_manager.reset_session()
 
-        assert bandwidth_manager._imx_source.smoothed_value == 0.0
+        assert bandwidth_manager._upload_source.smoothed_value == 0.0
         assert bandwidth_manager._link_checker_source.smoothed_value == 0.0
         # File host sources should also be reset
         if "host1" in bandwidth_manager._file_host_sources:
@@ -598,8 +598,8 @@ class TestBandwidthManager:
 
         bandwidth_manager.update_smoothing(0.8, 0.25)
 
-        assert bandwidth_manager._imx_source._alpha_up == 0.8
-        assert bandwidth_manager._imx_source._alpha_down == 0.25
+        assert bandwidth_manager._upload_source._alpha_up == 0.8
+        assert bandwidth_manager._upload_source._alpha_down == 0.25
         assert bandwidth_manager._link_checker_source._alpha_up == 0.8
         assert bandwidth_manager._file_host_sources["host1"]._alpha_up == 0.8
 
@@ -776,15 +776,15 @@ class TestBandwidthManagerIntegration:
         """Test a realistic multi-host upload scenario."""
         # Simulate IMX upload starting
         for i in range(5):
-            bandwidth_manager.on_imx_bandwidth(200.0 + i * 10)
+            bandwidth_manager.on_upload_bandwidth(200.0 + i * 10)
 
         # Simulate file host upload starting while IMX continues
         for i in range(5):
-            bandwidth_manager.on_imx_bandwidth(250.0)
+            bandwidth_manager.on_upload_bandwidth(250.0)
             bandwidth_manager.on_file_host_bandwidth("rapidgator", 150.0 + i * 5)
 
         # Both should be active
-        assert bandwidth_manager._imx_source.active
+        assert bandwidth_manager._upload_source.active
         assert "rapidgator" in bandwidth_manager.get_active_hosts()
 
         # Total should be sum of both
@@ -838,7 +838,7 @@ class TestBandwidthManagerIntegration:
         # Simulate upload session
         peak_values = []
         for bw in [100, 200, 300, 400, 500, 400, 300]:
-            bandwidth_manager.on_imx_bandwidth(float(bw))
+            bandwidth_manager.on_upload_bandwidth(float(bw))
             bandwidth_manager._emit_aggregated()
             peak_values.append(bandwidth_manager.get_session_peak())
 

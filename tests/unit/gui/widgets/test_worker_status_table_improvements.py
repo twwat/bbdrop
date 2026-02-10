@@ -437,7 +437,7 @@ class TestIntegration:
             )
 
         # Set filter to "Active Only"
-        widget.filter_combo.setCurrentIndex(3)  # Active Only
+        widget._filter_index = 4  # "Active Only"
 
         widget._refresh_display()
 

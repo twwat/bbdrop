@@ -311,9 +311,10 @@ def mock_dependencies(monkeypatch, tmp_path):
     mock_queue_mgr = Mock()
     mock_queue_mgr.items = {}
     mock_queue_mgr.get_version.return_value = 1
-    mock_queue_mgr.get_scan_queue_status.return_value = {'queue_size': 0, 'items_pending_scan': 0}
     mock_queue_mgr.status_changed = Mock()
     mock_queue_mgr.status_changed.connect = Mock()
+    mock_queue_mgr.scan_status_changed = Mock()
+    mock_queue_mgr.scan_status_changed.connect = Mock()
     mock_queue_mgr.queue_loaded = Mock()
     mock_queue_mgr.queue_loaded.connect = Mock()
     mock_queue_mgr.store = Mock()
