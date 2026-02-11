@@ -7,7 +7,7 @@ PyQt6-Qt6==6.9.1
 PyQt6_sip==13.10.2
 pillow==11.3.0
 tqdm==4.67.1
-cryptography==45.0.5
+cryptography==46.0.5
 standard-imghdr==3.10.14
 psutil>=5.9.0
 certifi>=2024.0.0
