@@ -251,6 +251,7 @@ class ImageHostsSettingsWidget(QWidget):
         """
         save_image_host_enabled(host_id, enabled)
         self._update_visual_state(host_id, enabled)
+        self._update_status(host_id)
         self._refresh_host_selector()
         self.settings_changed.emit()
 
