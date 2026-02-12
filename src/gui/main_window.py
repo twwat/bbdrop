@@ -2382,6 +2382,9 @@ class BBDropGUI(QMainWindow):
         else:
             log(f"Comprehensive settings cancelled", level="debug", category="ui")
 
+        # Refresh image host combo in case hosts were enabled/disabled
+        self.refresh_image_host_combo()
+
         # Refresh worker status widget to apply UI setting changes (e.g., show logos)
         if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
             self.worker_status_widget.refresh_icons()
