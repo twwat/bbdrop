@@ -291,7 +291,7 @@ CORE_COLUMNS = [
     ColumnConfig('icon', '', 30, ColumnType.ICON, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('hostname', 'host', 120, ColumnType.TEXT),
     ColumnConfig('speed', 'speed', 90, ColumnType.SPEED, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('status', 'status', 34, ColumnType.ICON, default_visible=True, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig('status', '', 34, ColumnType.ICON, default_visible=True, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('status_text', 'status text', 100, ColumnType.TEXT, default_visible=True, alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('files_remaining', 'queue (files)', 90, ColumnType.COUNT, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
     ColumnConfig('bytes_remaining', 'queue (bytes)', 110, ColumnType.BYTES, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
@@ -523,29 +523,30 @@ class WorkerStatusWidget(QWidget):
 
         main_layout.addWidget(self.status_table)
 
-        # Filter button — small icon overlaid on top-right corner of header
+        # Filter button — small icon overlaid on top-left corner of header
         self._filter_btn = QToolButton(self.status_table)
-        self._filter_btn.setText("\u2261")  # ≡ hamburger/filter symbol
+        icon_mgr = get_icon_manager()
+        filter_icon = icon_mgr.get_icon('filter') if icon_mgr else None
+        if filter_icon and not filter_icon.isNull():
+            self._filter_btn.setIcon(filter_icon)
+            self._filter_btn.setIconSize(QSize(14, 14))
+        else:
+            self._filter_btn.setText("\u2261")
         self._filter_btn.setFixedSize(20, 20)
         self._filter_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._filter_btn.setToolTip("Filter hosts")
         self._filter_btn.setStyleSheet(
-            "QToolButton { border: none; font-size: 14px; padding: 0; }"
+            "QToolButton { border: none; padding: 0; }"
             "QToolButton:hover { background: rgba(255,255,255,30); border-radius: 3px; }"
         )
         self._filter_btn.clicked.connect(self._show_filter_menu_from_button)
         self._position_filter_button()
 
     def _position_filter_button(self):
-        """Position filter button at the top-right corner of the table header."""
+        """Position filter button at the top-left corner of the table header."""
         header = self.status_table.horizontalHeader()
         header_height = header.height()
-        table_width = self.status_table.viewport().width() + self.status_table.verticalHeader().width()
-        # Account for vertical scrollbar if visible
-        vbar = self.status_table.verticalScrollBar()
-        if vbar and vbar.isVisible():
-            table_width += vbar.width()
-        btn_x = self.status_table.width() - self._filter_btn.width() - 2
+        btn_x = 2
         btn_y = max(0, (header_height - self._filter_btn.height()) // 2)
         self._filter_btn.move(btn_x, btn_y)
         self._filter_btn.raise_()
@@ -579,14 +580,12 @@ class WorkerStatusWidget(QWidget):
         self._on_filter_changed(index)
 
     def _update_filter_button(self):
-        """Update filter button appearance based on active filter."""
+        """Update filter button tooltip based on active filter."""
         if not hasattr(self, '_filter_btn'):
             return
         if self._filter_index == 0:
-            self._filter_btn.setText("\u2261")  # ≡ default
             self._filter_btn.setToolTip("Filter hosts")
         else:
-            self._filter_btn.setText("\u2261")
             self._filter_btn.setToolTip(f"Filter: {self._filter_labels[self._filter_index]}")
 
     def _load_icons(self):
