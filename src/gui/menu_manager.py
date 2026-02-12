@@ -13,7 +13,7 @@ import os
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, Qt
-from PyQt6.QtGui import QActionGroup, QPixmap
+from PyQt6.QtGui import QActionGroup, QFont, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QLabel,
@@ -221,7 +221,7 @@ class MenuManager(QObject):
             action_help = help_menu.addAction("Help")
             action_help.setShortcut("F1")
             action_help.triggered.connect(mw.open_help_dialog)
-            action_license = help_menu.addAction("License")
+            action_license = help_menu.addAction("License Info")
             action_license.triggered.connect(self.show_license_dialog)
             action_about = help_menu.addAction("About")
             action_about.triggered.connect(self.show_about_dialog)
@@ -326,7 +326,7 @@ class MenuManager(QObject):
         mw = self._main_window
 
         dialog = QDialog(mw)
-        dialog.setWindowTitle("License")
+        dialog.setWindowTitle("License Info")
         dialog.resize(700, 600)
         dialog.setModal(True)
 
@@ -337,6 +337,7 @@ class MenuManager(QObject):
         license_text = QTextEdit()
         license_text.setReadOnly(True)
         license_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        license_text.setFont(QFont("Courier New", 10))
 
         # Load LICENSE file
         try:
@@ -345,7 +346,7 @@ class MenuManager(QObject):
             if os.path.exists(license_path):
                 with open(license_path, 'r', encoding='utf-8') as f:
                     license_content = f.read()
-                license_text.setPlainText(license_content)
+                license_text.setPlainText("\n" + license_content)
             else:
                 license_text.setPlainText("LICENSE file not found. See https://spdx.org/licenses/MIT.html")
         except Exception as e:
