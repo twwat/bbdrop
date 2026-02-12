@@ -52,7 +52,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QPlainTextEdit, QInputDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QButtonGroup, QFrame, QSplitter, QRadioButton, QApplication, QScrollArea,
-    QProgressBar
+    QProgressBar, QStackedWidget
 )
 from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QTimer
 from PyQt6.QtGui import QIcon, QFont, QColor, QTextCharFormat, QPixmap, QPainter, QPen, QDragEnterEvent, QDropEvent
@@ -259,25 +259,57 @@ class ComprehensiveSettingsDialog(QDialog):
 
         self.setup_ui()
         self.load_settings()
-
-        # Connect tab change signal to check for unsaved changes
-        self.tab_widget.currentChanged.connect(self.on_tab_changed)
         
     def setup_ui(self):
         """Setup the tabbed settings interface"""
         self.setWindowTitle("Settings & Preferences")
         self.setModal(True)
-        self.resize(900, 600)
+        self.resize(1010, 670)
+        self.setMinimumSize(850, 550)
 
-        # Center dialog on parent window or screen
-        self._center_on_parent()
+        # Restore saved geometry or center on parent
+        saved_geometry = self.settings.value('settings_dialog/geometry')
+        if saved_geometry:
+            self.restoreGeometry(saved_geometry)
+        else:
+            self._center_on_parent()
         
         layout = QVBoxLayout(self)
         
-        # Create tab widget
-        self.tab_widget = QTabWidget()
-        self.tab_widget.currentChanged.connect(self.on_tab_changed)
-        layout.addWidget(self.tab_widget)
+        # Create sidebar navigation + content stack
+        nav_content_layout = QHBoxLayout()
+
+        # Left sidebar navigation
+        self.nav_list = QListWidget()
+        self.nav_list.setFixedWidth(160)
+        self.nav_list.setSpacing(1)
+        self.nav_list.currentRowChanged.connect(self.on_tab_changed)
+        self.nav_list.setStyleSheet("""
+            QListWidget {
+                border: none;
+                border-right: 1px solid palette(mid);
+                background: palette(window);
+                outline: none;
+            }
+            QListWidget::item {
+                padding: 6px 12px;
+                border-radius: 0px;
+            }
+            QListWidget::item:selected {
+                background: palette(highlight);
+                color: palette(highlighted-text);
+            }
+            QListWidget::item:hover:!selected {
+                background: palette(midlight);
+            }
+        """)
+        nav_content_layout.addWidget(self.nav_list)
+
+        # Right content area
+        self.stack_widget = QStackedWidget()
+        nav_content_layout.addWidget(self.stack_widget)
+
+        layout.addLayout(nav_content_layout)
 
         # Create tabs
         self.setup_general_tab()
@@ -319,6 +351,20 @@ class ComprehensiveSettingsDialog(QDialog):
         
         layout.addLayout(button_layout)
         
+    def _add_settings_page(self, widget, label, icon=None):
+        """Add a settings page to the sidebar navigation.
+
+        Args:
+            widget: The page widget to display when selected.
+            label: Text label for the sidebar item.
+            icon: Optional QIcon for the sidebar item.
+        """
+        item = QListWidgetItem(label)
+        if icon and not icon.isNull():
+            item.setIcon(icon)
+        self.nav_list.addItem(item)
+        self.stack_widget.addWidget(widget)
+
     def setup_general_tab(self):
         """Setup the General settings tab"""
         general_widget = QWidget()
@@ -559,7 +605,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.quick_settings_icons_only_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
         self.show_worker_logos_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
 
-        self.tab_widget.addTab(general_widget, "General")
+        self._add_settings_page(general_widget, "General")
 
     def setup_image_hosts_tab(self):
         """Setup the Image Hosts tab using dedicated widget"""
@@ -567,7 +613,10 @@ class ComprehensiveSettingsDialog(QDialog):
 
         self.image_hosts_widget = ImageHostsSettingsWidget(self)
         self.image_hosts_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_HOSTS))
-        self.tab_widget.addTab(self.image_hosts_widget, "Image Hosts")
+        # Live-refresh the main window's host combo when hosts are enabled/disabled
+        if self.parent_window and hasattr(self.parent_window, 'refresh_image_host_combo'):
+            self.image_hosts_widget.settings_changed.connect(self.parent_window.refresh_image_host_combo)
+        self._add_settings_page(self.image_hosts_widget, "Image Hosts")
 
     def setup_templates_tab(self):
         """Setup the Templates tab with integrated template management and selection"""
@@ -588,7 +637,7 @@ class ComprehensiveSettingsDialog(QDialog):
         # Add the template dialog to the layout
         layout.addWidget(self.template_dialog)
 
-        self.tab_widget.addTab(templates_widget, "Templates")
+        self._add_settings_page(templates_widget, "Templates")
         
     def setup_tabs_tab(self):
         """Setup the Tabs management tab"""
@@ -704,7 +753,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.load_tabs_settings()
 
         # Tab management temporarily hidden while deciding on functionality
-        # self.tab_widget.addTab(tabs_widget, "Tabs")
+        # self._add_settings_page(tabs_widget, "Tabs")
     
     def load_tabs_settings(self):
         """Load current tabs and settings"""
@@ -1049,7 +1098,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.log_settings_widget = LogSettingsWidget(self)
         self.log_settings_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.LOGS))
         self.log_settings_widget.load_settings()  # Load current settings
-        self.tab_widget.addTab(self.log_settings_widget, "Logs")
+        self._add_settings_page(self.log_settings_widget, "Logs")
         
     def setup_scanning_tab(self):
         """Setup the Image Scanning tab"""
@@ -1292,7 +1341,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.cover_patterns_edit.textChanged.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
         self.cover_also_upload_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
 
-        self.tab_widget.addTab(scanning_widget, "Image Scan")
+        self._add_settings_page(scanning_widget, "Image Scan")
 
     def setup_external_apps_tab(self):
         """Setup the External Apps tab for running external programs on gallery events"""
@@ -1325,7 +1374,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self._create_hook_section(layout, "On Gallery Completed", "completed")
 
         layout.addStretch()
-        self.tab_widget.addTab(external_widget, "Hooks")
+        self._add_settings_page(external_widget, "Hooks")
 
         # Connect signals to mark tab as dirty
         self.hooks_parallel_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.HOOKS))
@@ -2289,7 +2338,7 @@ class ComprehensiveSettingsDialog(QDialog):
             error_label.setStyleSheet("color: red; font-weight: bold;")
             layout.addWidget(error_label)
             layout.addStretch()
-            self.tab_widget.addTab(error_widget, "File Hosts")
+            self._add_settings_page(error_widget, "File Hosts")
             return
 
         # Create file hosts widget (no signals - reads from QSettings cache)
@@ -2297,7 +2346,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
 
         # Add tab
-        self.tab_widget.addTab(self.file_hosts_widget, "File Hosts")
+        self._add_settings_page(self.file_hosts_widget, "File Hosts")
 
     def setup_proxy_tab(self):
         """Setup the Proxy settings tab."""
@@ -2305,19 +2354,19 @@ class ComprehensiveSettingsDialog(QDialog):
 
         self.proxy_widget = ProxySettingsWidget(self)
         self.proxy_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.PROXY))
-        self.tab_widget.addTab(self.proxy_widget, "Proxy")
+        self._add_settings_page(self.proxy_widget, "Proxy")
 
     def setup_advanced_tab(self):
         """Setup the Advanced settings tab."""
         self.advanced_widget = AdvancedSettingsWidget()
         self.advanced_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ADVANCED))
-        self.tab_widget.addTab(self.advanced_widget, "Advanced")
+        self._add_settings_page(self.advanced_widget, "Advanced")
 
     def setup_archive_tab(self):
         """Setup the Archive settings tab."""
         self.archive_widget = ArchiveSettingsWidget()
         self.archive_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ARCHIVE))
-        self.tab_widget.addTab(self.archive_widget, "Archive")
+        self._add_settings_page(self.archive_widget, "Archive")
 
     def _load_advanced_settings(self):
         """Load advanced settings from INI file and QSettings."""
@@ -2626,7 +2675,7 @@ class ComprehensiveSettingsDialog(QDialog):
         # self.dark_icon_frame.icon_dropped.connect(lambda: self.mark_tab_dirty(TabIndex.FILE_HOSTS))
 
         # Icons management temporarily hidden while deciding on functionality
-        # self.tab_widget.addTab(icons_widget, "Icons")
+        # self._add_settings_page(icons_widget, "Icons")
         
     def browse_central_store(self):
         """Browse for central store directory"""
@@ -3187,10 +3236,10 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Check all other tabs for unsaved changes
         unsaved_tabs = []
-        for i in range(self.tab_widget.count()):
+        for i in range(self.stack_widget.count()):
             if i != self.current_tab_index and self.tab_dirty_states.get(i, False):
-                unsaved_tabs.append((i, self.tab_widget.tabText(i)))
-        
+                unsaved_tabs.append((i, self.nav_list.item(i).text()))
+
         if unsaved_tabs:
             # Ask user about unsaved changes in other tabs
             tab_names = ", ".join([name for _, name in unsaved_tabs])
@@ -3199,14 +3248,14 @@ class ComprehensiveSettingsDialog(QDialog):
             msg_box.setWindowTitle("Unsaved Changes")
             msg_box.setText(f"You have unsaved changes in other tabs: {tab_names}")
             msg_box.setInformativeText("Do you want to save all changes before closing?")
-            
+
             save_all_btn = msg_box.addButton("Save All", QMessageBox.ButtonRole.AcceptRole)
             discard_btn = msg_box.addButton("Discard All", QMessageBox.ButtonRole.DestructiveRole)
             cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-            
+
             msg_box.setDefaultButton(save_all_btn)
             result = msg_box.exec()
-            
+
             if msg_box.clickedButton() == save_all_btn:
                 # Save all dirty tabs
                 for tab_index, _ in unsaved_tabs:
@@ -3228,48 +3277,50 @@ class ComprehensiveSettingsDialog(QDialog):
         if hasattr(self, 'current_tab_index') and self.current_tab_index != new_index:
             if self.has_unsaved_changes(self.current_tab_index):
                 # Block the tab change and ask user about unsaved changes
-                self.tab_widget.blockSignals(True)
-                self.tab_widget.setCurrentIndex(self.current_tab_index)
-                self.tab_widget.blockSignals(False)
-                
+                self.nav_list.blockSignals(True)
+                self.nav_list.setCurrentRow(self.current_tab_index)
+                self.nav_list.blockSignals(False)
+
                 self._ask_about_unsaved_changes(
                     lambda: self._change_to_tab(new_index),
                     lambda: None  # Stay on current tab
                 )
                 return
-        
+
         # No unsaved changes or same tab, proceed with change
+        self.stack_widget.setCurrentIndex(new_index)
         self.current_tab_index = new_index
         self._update_apply_button()
     
     def _change_to_tab(self, new_index):
         """Actually change to the new tab after handling unsaved changes"""
         self.current_tab_index = new_index
-        self.tab_widget.blockSignals(True)
-        self.tab_widget.setCurrentIndex(new_index)
-        self.tab_widget.blockSignals(False)
+        self.nav_list.blockSignals(True)
+        self.nav_list.setCurrentRow(new_index)
+        self.nav_list.blockSignals(False)
+        self.stack_widget.setCurrentIndex(new_index)
         self._update_apply_button()
     
     def has_unsaved_changes(self, tab_index=None):
         """Check if the specified tab (or current tab) has unsaved changes"""
         if tab_index is None:
-            tab_index = self.tab_widget.currentIndex()
-        
+            tab_index = self.stack_widget.currentIndex()
+
         return self.tab_dirty_states.get(tab_index, False)
-    
+
     def mark_tab_dirty(self, tab_index=None):
         """Mark a tab as having unsaved changes"""
         if tab_index is None:
-            tab_index = self.tab_widget.currentIndex()
-        
+            tab_index = self.stack_widget.currentIndex()
+
         self.tab_dirty_states[tab_index] = True
         self._update_apply_button()
-    
+
     def mark_tab_clean(self, tab_index=None):
         """Mark a tab as having no unsaved changes"""
         if tab_index is None:
-            tab_index = self.tab_widget.currentIndex()
-        
+            tab_index = self.stack_widget.currentIndex()
+
         self.tab_dirty_states[tab_index] = False
         self._update_apply_button()
     
@@ -3280,8 +3331,8 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def apply_current_tab(self):
         """Apply changes for the current tab only"""
-        current_index = self.tab_widget.currentIndex()
-        tab_name = self.tab_widget.tabText(current_index)
+        current_index = self.stack_widget.currentIndex()
+        tab_name = self.nav_list.item(current_index).text()
         
         if self.save_current_tab():
             self.mark_tab_clean(current_index)
@@ -3290,7 +3341,7 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def save_current_tab(self):
         """Save only the current tab's settings"""
-        current_index = self.tab_widget.currentIndex()
+        current_index = self.stack_widget.currentIndex()
 
         try:
             # NOTE: Tabs and Icons tabs are created but not added to tab widget
@@ -3367,10 +3418,12 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def closeEvent(self, event):
         """Handle dialog closing with unsaved changes check"""
+        # Save dialog geometry for next open
+        self.settings.setValue('settings_dialog/geometry', self.saveGeometry())
 
         # Check for unsaved changes in any tab
         has_unsaved = False
-        for i in range(self.tab_widget.count()):
+        for i in range(self.stack_widget.count()):
             if self.tab_dirty_states.get(i, False):
                 has_unsaved = True
                 break
@@ -3398,10 +3451,10 @@ class ComprehensiveSettingsDialog(QDialog):
         
         # Check all other tabs for unsaved changes
         unsaved_tabs = []
-        for i in range(self.tab_widget.count()):
+        for i in range(self.stack_widget.count()):
             if i != self.current_tab_index and self.tab_dirty_states.get(i, False):
-                unsaved_tabs.append((i, self.tab_widget.tabText(i)))
-        
+                unsaved_tabs.append((i, self.nav_list.item(i).text()))
+
         if unsaved_tabs:
             # Ask user about unsaved changes in other tabs
             tab_names = ", ".join([name for _, name in unsaved_tabs])
@@ -3410,7 +3463,7 @@ class ComprehensiveSettingsDialog(QDialog):
             msg_box.setWindowTitle("Unsaved Changes")
             msg_box.setText(f"You have unsaved changes in other tabs: {tab_names}")
             msg_box.setInformativeText("Do you want to save all changes before closing?")
-            
+
             save_all_btn = msg_box.addButton("Save All", QMessageBox.ButtonRole.AcceptRole)
             discard_btn = msg_box.addButton("Discard All", QMessageBox.ButtonRole.DestructiveRole)
             cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
@@ -3427,10 +3480,10 @@ class ComprehensiveSettingsDialog(QDialog):
         if clicked_button == save_all_btn:
             # Save all dirty tabs
             unsaved_tabs = []
-            for i in range(self.tab_widget.count()):
+            for i in range(self.stack_widget.count()):
                 if i != self.current_tab_index and self.tab_dirty_states.get(i, False):
-                    unsaved_tabs.append((i, self.tab_widget.tabText(i)))
-            
+                    unsaved_tabs.append((i, self.nav_list.item(i).text()))
+
             for tab_index, _ in unsaved_tabs:
                 old_index = self.current_tab_index
                 self.current_tab_index = tab_index
@@ -3449,8 +3502,8 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def _ask_about_unsaved_changes(self, save_callback, cancel_callback):
         """Ask user about unsaved changes with save/discard/cancel options"""
-        current_index = self.tab_widget.currentIndex()
-        tab_name = self.tab_widget.tabText(current_index)
+        current_index = self.stack_widget.currentIndex()
+        tab_name = self.nav_list.item(current_index).text()
         
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Icon.Question)
@@ -3482,7 +3535,7 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def _reload_current_tab(self):
         """Reload current tab's form values from saved settings (discard changes)"""
-        current_index = self.tab_widget.currentIndex()
+        current_index = self.stack_widget.currentIndex()
         
         if current_index == TabIndex.GENERAL:
             self._reload_general_tab()

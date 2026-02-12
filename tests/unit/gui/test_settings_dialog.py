@@ -286,17 +286,20 @@ class TestSettingsDialogInit:
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
-    def test_dialog_has_tab_widget(self, mock_get_path, mock_load, qtbot, mock_config_file):
-        """Test dialog contains tab widget"""
+    def test_dialog_has_nav_and_stack(self, mock_get_path, mock_load, qtbot, mock_config_file):
+        """Test dialog contains nav_list and stack_widget"""
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        assert hasattr(dialog, 'tab_widget')
-        assert isinstance(dialog.tab_widget, QTabWidget)
-        assert dialog.tab_widget.count() > 0
+        from PyQt6.QtWidgets import QListWidget, QStackedWidget
+        assert hasattr(dialog, 'nav_list')
+        assert hasattr(dialog, 'stack_widget')
+        assert isinstance(dialog.nav_list, QListWidget)
+        assert isinstance(dialog.stack_widget, QStackedWidget)
+        assert dialog.stack_widget.count() > 0
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -368,44 +371,44 @@ class TestSettingsDialogTabs:
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
     def test_has_general_tab(self, mock_get_path, mock_load, qtbot, mock_config_file):
-        """Test dialog has General tab"""
+        """Test dialog has General page in nav list"""
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        tab_names = [dialog.tab_widget.tabText(i) for i in range(dialog.tab_widget.count())]
-        assert any('General' in name for name in tab_names)
+        labels = [dialog.nav_list.item(i).text() for i in range(dialog.nav_list.count())]
+        assert any('General' in name for name in labels)
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
     def test_has_scanning_tab(self, mock_get_path, mock_load, qtbot, mock_config_file):
-        """Test dialog has Scanning tab"""
+        """Test dialog has Scanning page in nav list"""
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        tab_names = [dialog.tab_widget.tabText(i) for i in range(dialog.tab_widget.count())]
-        # Tab is named "Image Scan"
-        assert any('Scan' in name for name in tab_names)
+        labels = [dialog.nav_list.item(i).text() for i in range(dialog.nav_list.count())]
+        # Page is named "Image Scan"
+        assert any('Scan' in name for name in labels)
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
     def test_tab_change_signal_connected(self, mock_get_path, mock_load, qtbot, mock_config_file):
-        """Test tab change signal is connected"""
+        """Test nav list change signal is connected to stack widget"""
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        # Change tab
-        if dialog.tab_widget.count() > 1:
-            dialog.tab_widget.setCurrentIndex(1)
-            assert dialog.current_tab_index == 1 or dialog.tab_widget.currentIndex() == 1
+        # Change page via nav list
+        if dialog.nav_list.count() > 1:
+            dialog.nav_list.setCurrentRow(1)
+            assert dialog.current_tab_index == 1 or dialog.stack_widget.currentIndex() == 1
 
 
 # ============================================================================
@@ -816,32 +819,32 @@ class TestSettingsDialogTabChanges:
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
     def test_tab_change_with_no_changes(self, mock_get_path, mock_load, qtbot, mock_config_file):
-        """Test tab change works when no unsaved changes"""
+        """Test page change works when no unsaved changes"""
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if dialog.tab_widget.count() > 1:
-            initial_tab = dialog.tab_widget.currentIndex()
+        if dialog.nav_list.count() > 1:
+            initial_tab = dialog.stack_widget.currentIndex()
             new_tab = 1 if initial_tab == 0 else 0
 
-            dialog.tab_widget.setCurrentIndex(new_tab)
+            dialog.nav_list.setCurrentRow(new_tab)
             # Should change without blocking
             qtbot.wait(100)
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
     def test_tab_change_blocks_with_unsaved_changes(self, mock_get_path, mock_load, qtbot, mock_config_file):
-        """Test tab change is blocked when there are unsaved changes"""
+        """Test page change is blocked when there are unsaved changes"""
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if dialog.tab_widget.count() > 1:
+        if dialog.nav_list.count() > 1:
             # Mark current tab as dirty
             dialog.mark_tab_dirty(dialog.current_tab_index)
 
@@ -1127,10 +1130,10 @@ class TestSettingsDialogIntegration:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if dialog.tab_widget.count() > 2:
-            # Change tabs multiple times
-            for i in range(min(3, dialog.tab_widget.count())):
-                dialog.tab_widget.setCurrentIndex(i)
+        if dialog.nav_list.count() > 2:
+            # Change pages multiple times
+            for i in range(min(3, dialog.nav_list.count())):
+                dialog.nav_list.setCurrentRow(i)
                 qtbot.wait(50)
 
 

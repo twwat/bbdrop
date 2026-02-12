@@ -2318,8 +2318,8 @@ class BBDropGUI(QMainWindow):
         # Pass file_host_manager to settings dialog
         file_host_manager = getattr(self, 'file_host_manager', None)
         dialog = ComprehensiveSettingsDialog(self, file_host_manager=file_host_manager)
-        if 0 <= tab_index < dialog.tab_widget.count():
-            dialog.tab_widget.setCurrentIndex(tab_index)
+        if 0 <= tab_index < dialog.stack_widget.count():
+            dialog.nav_list.setCurrentRow(tab_index)
 
         # Use non-blocking show() to prevent GUI freezing
         dialog.show()

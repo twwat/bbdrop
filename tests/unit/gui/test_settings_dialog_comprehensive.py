@@ -268,9 +268,10 @@ class TestSettingsDialogGeneralTab:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        # Check that dialog has a tab widget
-        assert hasattr(dialog, 'tab_widget')
-        assert dialog.tab_widget.count() > 0
+        # Check that dialog has nav_list and stack_widget
+        assert hasattr(dialog, 'nav_list')
+        assert hasattr(dialog, 'stack_widget')
+        assert dialog.stack_widget.count() > 0
 
         # Note: Some widgets like max_retries_slider may be on sub-panels
         # (e.g., in image_host_config_panel), not directly on the dialog
@@ -823,8 +824,8 @@ class TestSettingsDialogTabNavigation:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        # Should have multiple tabs (exact count may vary)
-        assert dialog.tab_widget.count() >= 5
+        # Should have multiple pages (exact count may vary)
+        assert dialog.stack_widget.count() >= 5
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -837,13 +838,13 @@ class TestSettingsDialogTabNavigation:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        tab_names = [dialog.tab_widget.tabText(i)
-                     for i in range(dialog.tab_widget.count())]
+        labels = [dialog.nav_list.item(i).text()
+                  for i in range(dialog.nav_list.count())]
 
-        # Core tabs should exist (based on actual implementation)
-        assert any('General' in name for name in tab_names), f"Expected 'General' tab in {tab_names}"
-        assert any('Templates' in name for name in tab_names), f"Expected 'Templates' tab in {tab_names}"
-        assert any('Image' in name or 'File' in name for name in tab_names), f"Expected image/file host tabs in {tab_names}"
+        # Core pages should exist (based on actual implementation)
+        assert any('General' in name for name in labels), f"Expected 'General' page in {labels}"
+        assert any('Templates' in name for name in labels), f"Expected 'Templates' page in {labels}"
+        assert any('Image' in name or 'File' in name for name in labels), f"Expected image/file host pages in {labels}"
 
 
 # ============================================================================
@@ -861,11 +862,14 @@ class TestSettingsDialogWindowBehavior:
         mock_load.return_value = {}
         mock_get_path.return_value = str(mock_config_file)
 
+        # Clear any saved geometry so we test the default size
+        QSettings("BBDropUploader", "BBDropGUI").remove('settings_dialog/geometry')
+
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        assert dialog.width() == 900
-        assert dialog.height() == 600
+        assert dialog.width() == 1010
+        assert dialog.height() == 670
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
