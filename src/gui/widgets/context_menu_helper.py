@@ -34,6 +34,7 @@ class GalleryContextMenuHelper(QObject):
             self._add_status_operations(menu, selected_paths)
             self._add_template_submenu(menu, selected_paths)
             self._add_image_host_submenu(menu, selected_paths)
+            self._add_cover_submenu(menu, selected_paths)
             self._add_move_to_submenu(menu, selected_paths)
         else:
             # No selection: offer Add Folders
@@ -295,6 +296,74 @@ class GalleryContextMenuHelper(QObject):
         else:
             method()
     
+    def _add_cover_submenu(self, menu, selected_paths):
+        """Add cover photo operations to context menu."""
+        if not self.main_window or not selected_paths:
+            return
+
+        # Only show for single selection (cover is per-gallery)
+        if len(selected_paths) != 1:
+            return
+
+        path = selected_paths[0]
+        item = self.main_window.queue_manager.items.get(path)
+        if not item:
+            return
+
+        menu.addSeparator()
+        cover_menu = menu.addMenu("Cover Photo")
+
+        # Set as Cover — pick from gallery's image files
+        action_set = cover_menu.addAction("Set as Cover...")
+        action_set.triggered.connect(lambda: self._set_cover(path))
+
+        # Clear Cover — only when cover is set
+        if item.cover_source_path:
+            action_clear = cover_menu.addAction("Clear Cover")
+            action_clear.triggered.connect(lambda: self._clear_cover(path))
+
+    def _set_cover(self, gallery_path):
+        """Open file picker for cover image selection within gallery folder."""
+        import os
+        from PyQt6.QtWidgets import QFileDialog
+        from src.core.constants import IMAGE_EXTENSIONS
+
+        qm = self.main_window.queue_manager
+        item = qm.items.get(gallery_path)
+        if not item:
+            return
+
+        # Build filter for image files
+        ext_filter = "Image files (" + " ".join(f"*{ext}" for ext in IMAGE_EXTENSIONS) + ")"
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.main_window,
+            "Select Cover Photo",
+            gallery_path,
+            ext_filter,
+        )
+
+        if file_path:
+            item.cover_source_path = file_path
+            qm._schedule_debounced_save()
+            # Refresh the table row
+            if hasattr(self.main_window, 'table_row_manager'):
+                self.main_window.table_row_manager.update_row_for_path(gallery_path)
+
+    def _clear_cover(self, gallery_path):
+        """Remove cover from gallery item."""
+        qm = self.main_window.queue_manager
+        item = qm.items.get(gallery_path)
+        if not item:
+            return
+
+        item.cover_source_path = None
+        item.cover_result = None
+        qm._schedule_debounced_save()
+        # Refresh the table row
+        if hasattr(self.main_window, 'table_row_manager'):
+            self.main_window.table_row_manager.update_row_for_path(gallery_path)
+
     def _add_template_submenu(self, menu: QMenu, selected_paths: list):
         """Add 'Set template to...' submenu to the context menu"""
         if not selected_paths:
@@ -416,8 +485,9 @@ class GalleryContextMenuHelper(QObject):
                 return
                 
             # Update visible rows where gallery path matches
-            COL_NAME = 1
-            COL_TEMPLATE = 12
+            from src.gui.widgets.gallery_table import GalleryTableWidget
+            COL_NAME = GalleryTableWidget.COL_NAME
+            COL_TEMPLATE = GalleryTableWidget.COL_TEMPLATE
             for row in range(table.rowCount()):
                 name_item = table.item(row, COL_NAME)
                 if name_item:
