@@ -51,6 +51,9 @@ DEFAULT_THUMBNAIL_FORMAT = 2
 DEFAULT_PUBLIC_GALLERY = 1  # 1=public, 0=private
 GALLERY_ID_LENGTH = 8
 
+# Default cover photo filename patterns (comma-separated globs)
+DEFAULT_COVER_PATTERNS = "cover.*, cover_*, poster.*, *_cover.*, *-cover.*"
+
 # Progress Updates
 PROGRESS_UPDATE_BATCH_INTERVAL = 0.05  # seconds
 PROGRESS_UPDATE_THRESHOLD = 100  # milliseconds

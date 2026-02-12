@@ -22,7 +22,7 @@ from src.core.constants import (
     QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED, QUEUE_STATE_SCAN_FAILED,
     QUEUE_STATE_UPLOAD_FAILED, QUEUE_STATE_PAUSED, QUEUE_STATE_INCOMPLETE,
     QUEUE_STATE_SCANNING, QUEUE_STATE_VALIDATING,
-    IMAGE_EXTENSIONS
+    IMAGE_EXTENSIONS, DEFAULT_COVER_PATTERNS
 )
 
 
@@ -736,11 +736,11 @@ class QueueManager(QObject):
         try:
             settings = QSettings("BBDropUploader", "BBDropGUI")
             return {
-                'patterns': settings.value('cover/filename_patterns', '', type=str),
+                'patterns': settings.value('cover/filename_patterns', DEFAULT_COVER_PATTERNS, type=str),
                 'also_upload': settings.value('cover/also_upload_as_gallery_image', False, type=bool),
             }
         except Exception:
-            return {'patterns': '', 'also_upload': False}
+            return {'patterns': DEFAULT_COVER_PATTERNS, 'also_upload': False}
 
     def _inc_version(self):
         """Increment version for change tracking"""

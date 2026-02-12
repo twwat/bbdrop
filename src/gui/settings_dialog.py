@@ -63,6 +63,7 @@ from bbdrop import load_user_defaults, get_config_path, encrypt_password, decryp
 from src.core.image_host_config import get_image_host_setting, save_image_host_setting
 from src.utils.format_utils import timestamp, format_binary_size
 from src.utils.logger import log
+from src.core.constants import DEFAULT_COVER_PATTERNS
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
 from src.gui.widgets.advanced_settings_widget import AdvancedSettingsWidget
@@ -1230,14 +1231,25 @@ class ComprehensiveSettingsDialog(QDialog):
         cover_group = QGroupBox("Cover Photo Detection")
         cover_layout = QVBoxLayout(cover_group)
 
+        # Explanation label
+        cover_info = QLabel(
+            "Automatically detect cover/poster images during scanning. "
+            "Detected covers are uploaded via the 600px cover endpoint and placed "
+            "in the #cover# template placeholder."
+        )
+        cover_info.setWordWrap(True)
+        cover_info.setStyleSheet("color: #888; font-style: italic; margin-bottom: 4px;")
+        cover_layout.addWidget(cover_info)
+
         # Filename patterns
         pattern_row = QHBoxLayout()
         pattern_row.addWidget(QLabel("Filename patterns:"))
         self.cover_patterns_edit = QLineEdit()
-        self.cover_patterns_edit.setPlaceholderText("cover*, poster*, *_cover.* (comma-separated)")
+        self.cover_patterns_edit.setPlaceholderText("cover.*, poster.*, *_cover.* (comma-separated globs)")
         self.cover_patterns_edit.setToolTip(
-            "Comma-separated glob patterns. First match wins.\n"
-            "Examples: cover*, poster*, *_cover.*, folder_cover.*"
+            "Comma-separated glob patterns. First matching pattern wins.\n"
+            "Examples: cover.*, poster.*, *_cover.*, *-cover.*\n\n"
+            "Clear this field to disable cover detection."
         )
         pattern_row.addWidget(self.cover_patterns_edit)
         cover_layout.addLayout(pattern_row)
@@ -2745,7 +2757,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
             # Load cover photo detection settings from QSettings
             self.cover_patterns_edit.setText(
-                self.settings.value('cover/filename_patterns', '', type=str)
+                self.settings.value('cover/filename_patterns', DEFAULT_COVER_PATTERNS, type=str)
             )
             self.cover_also_upload_check.setChecked(
                 self.settings.value('cover/also_upload_as_gallery_image', False, type=bool)
