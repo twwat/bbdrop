@@ -127,6 +127,7 @@ class GalleryTableWidget(QTableWidget):
     COL_UPLOADED: int
     COL_PROGRESS: int
     COL_STATUS: int
+    COL_COVER: int
     COL_STATUS_TEXT: int
     COL_ADDED: int
     COL_FINISHED: int
@@ -135,6 +136,7 @@ class GalleryTableWidget(QTableWidget):
     COL_TRANSFER: int
     COL_RENAMED: int
     COL_TEMPLATE: int
+    COL_IMAGE_HOST: int
     COL_GALLERY_ID: int
     COL_CUSTOM1: int
     COL_CUSTOM2: int
@@ -156,27 +158,28 @@ class GalleryTableWidget(QTableWidget):
         (2,  'UPLOADED',    'uploaded',     100, 'Interactive', False, False),
         (3,  'PROGRESS',    'progress',     200, 'Interactive', False, False),
         (4,  'STATUS',      'status',       40,  'Interactive', False, False),
-        (5,  'STATUS_TEXT', 'status text',  100, 'Interactive', True,  False),
-        (6,  'ADDED',       'added',        120, 'Interactive', False, False),
-        (7,  'FINISHED',    'finished',     120, 'Interactive', False, False),
-        (8,  'ACTION',      'action',       50,  'Interactive', False, True),
-        (9,  'SIZE',        'size',         110, 'Interactive', False, False),
-        (10, 'TRANSFER',    'transfer',     120, 'Interactive', True,  False),
-        (11, 'RENAMED',     'renamed',      40,  'Interactive', False, True),
-        (12, 'TEMPLATE',    'template',     140, 'Interactive', False, True),
-        (13, 'IMAGE_HOST',  'image host',   110, 'Interactive', False, True),
-        (14, 'GALLERY_ID',  'gallery_id',   90,  'Interactive', True,  True),
-        (15, 'CUSTOM1',     'Custom1',      100, 'Interactive', True,  True),
-        (16, 'CUSTOM2',     'Custom2',      100, 'Interactive', True,  True),
-        (17, 'CUSTOM3',     'Custom3',      100, 'Interactive', True,  True),
-        (18, 'CUSTOM4',     'Custom4',      100, 'Interactive', True,  True),
-        (19, 'EXT1',          'ext1',         100, 'Interactive', True,  True),
-        (20, 'EXT2',          'ext2',         100, 'Interactive', True,  True),
-        (21, 'EXT3',          'ext3',         100, 'Interactive', True,  True),
-        (22, 'EXT4',          'ext4',         100, 'Interactive', True,  True),
-        (23, 'HOSTS_STATUS',  'file hosts',   150, 'Interactive', False, True),
-        (24, 'HOSTS_ACTION',  'hosts action', 80,  'Interactive', False, True),
-        (25, 'ONLINE_IMX',    'online (imx)', 130, 'Interactive', True,  False),
+        (5,  'COVER',       '',             28,  'Fixed',       False, False),
+        (6,  'STATUS_TEXT', 'status text',  100, 'Interactive', True,  False),
+        (7,  'ADDED',       'added',        120, 'Interactive', False, False),
+        (8,  'FINISHED',    'finished',     120, 'Interactive', False, False),
+        (9,  'ACTION',      'action',       50,  'Interactive', False, True),
+        (10, 'SIZE',        'size',         110, 'Interactive', False, False),
+        (11, 'TRANSFER',    'transfer',     120, 'Interactive', True,  False),
+        (12, 'RENAMED',     'renamed',      40,  'Interactive', False, True),
+        (13, 'TEMPLATE',    'template',     140, 'Interactive', False, True),
+        (14, 'IMAGE_HOST',  'image host',   110, 'Interactive', False, True),
+        (15, 'GALLERY_ID',  'gallery_id',   90,  'Interactive', True,  True),
+        (16, 'CUSTOM1',     'Custom1',      100, 'Interactive', True,  True),
+        (17, 'CUSTOM2',     'Custom2',      100, 'Interactive', True,  True),
+        (18, 'CUSTOM3',     'Custom3',      100, 'Interactive', True,  True),
+        (19, 'CUSTOM4',     'Custom4',      100, 'Interactive', True,  True),
+        (20, 'EXT1',          'ext1',         100, 'Interactive', True,  True),
+        (21, 'EXT2',          'ext2',         100, 'Interactive', True,  True),
+        (22, 'EXT3',          'ext3',         100, 'Interactive', True,  True),
+        (23, 'EXT4',          'ext4',         100, 'Interactive', True,  True),
+        (24, 'HOSTS_STATUS',  'file hosts',   150, 'Interactive', False, True),
+        (25, 'HOSTS_ACTION',  'hosts action', 80,  'Interactive', False, True),
+        (26, 'ONLINE_IMX',    'online (imx)', 130, 'Interactive', True,  False),
     ]
 
     # Create class attributes dynamically from COLUMNS definition

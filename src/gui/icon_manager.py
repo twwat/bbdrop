@@ -71,6 +71,8 @@ class IconManager:
         'help':                 'help.png',
         'hooks':                'hooks.png',
         'scan':                 'scan.png',
+        'filter':               'filter.png',
+        'cover_photo':          'cover_photo.png',
         'toggle_theme':         ['toggle_theme-light.png',      'toggle_theme-dark.png'],
         'statistics':           'statistics.png',
         'log_viewer':           'log_viewer.png',

@@ -44,27 +44,28 @@ class _Col:
     UPLOADED = 2
     PROGRESS = 3
     STATUS = 4
-    STATUS_TEXT = 5
-    ADDED = 6
-    FINISHED = 7
-    ACTION = 8
-    SIZE = 9
-    TRANSFER = 10
-    RENAMED = 11
-    TEMPLATE = 12
-    IMAGE_HOST = 13
-    GALLERY_ID = 14
-    CUSTOM1 = 15
-    CUSTOM2 = 16
-    CUSTOM3 = 17
-    CUSTOM4 = 18
-    EXT1 = 19
-    EXT2 = 20
-    EXT3 = 21
-    EXT4 = 22
-    HOSTS_STATUS = 23
-    HOSTS_ACTION = 24
-    ONLINE_IMX = 25
+    COVER = 5
+    STATUS_TEXT = 6
+    ADDED = 7
+    FINISHED = 8
+    ACTION = 9
+    SIZE = 10
+    TRANSFER = 11
+    RENAMED = 12
+    TEMPLATE = 13
+    IMAGE_HOST = 14
+    GALLERY_ID = 15
+    CUSTOM1 = 16
+    CUSTOM2 = 17
+    CUSTOM3 = 18
+    CUSTOM4 = 19
+    EXT1 = 20
+    EXT2 = 21
+    EXT3 = 22
+    EXT4 = 23
+    HOSTS_STATUS = 24
+    HOSTS_ACTION = 25
+    ONLINE_IMX = 26
 
 
 def format_timestamp_for_display(timestamp_value, include_seconds=False):
@@ -253,9 +254,21 @@ class TableRowManager(QObject):
 
         # Status icon and text
         self._set_status_cell_icon(row, item.status)
-        # Skip STATUS_TEXT column (5) if hidden - optimization to avoid creating unused QTableWidgetItems
+        # Skip STATUS_TEXT column if hidden - optimization to avoid creating unused QTableWidgetItems
         if not mw.gallery_table.isColumnHidden(_Col.STATUS_TEXT):
             self._set_status_text_cell(row, item.status)
+
+        # Cover indicator
+        cover_item = QTableWidgetItem()
+        cover_item.setFlags(cover_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        if getattr(item, 'cover_source_path', None):
+            icon_mgr = get_icon_manager()
+            if icon_mgr:
+                cover_icon = icon_mgr.get_icon('cover_photo')
+                if cover_icon and not cover_icon.isNull():
+                    cover_item.setIcon(cover_icon)
+            cover_item.setToolTip(f"Cover: {os.path.basename(item.cover_source_path)}")
+        mw.gallery_table.setItem(row, _Col.COVER, cover_item)
 
         # Added time
         added_text, added_tooltip = format_timestamp_for_display(item.added_time)
