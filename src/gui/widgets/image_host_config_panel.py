@@ -72,6 +72,13 @@ class ImageHostConfigPanel(QWidget):
         cover_group = self._create_cover_group()
         main_layout.addWidget(cover_group)
 
+        # Disable cover settings when session credentials are not configured
+        # Cover upload requires session auth (username + password)
+        has_session_creds = bool(get_credential('username', self.host_id))
+        if not has_session_creds:
+            cover_group.setEnabled(False)
+            cover_group.setToolTip("Cover photo upload requires session credentials (username + password)")
+
         # Section 5: Options (only for IMX)
         if self.host_id == "imx":
             options_group = self._create_options_group()
