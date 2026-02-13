@@ -3,6 +3,7 @@ External program hooks executor for running programs at gallery lifecycle events
 """
 
 import os
+import re
 import subprocess
 import json
 import configparser
@@ -12,6 +13,9 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 from bbdrop import get_config_path
 from src.utils.logger import log
+from src.processing.hook_output_parser import detect_stdout_values, resolve_placeholder
+
+_PLACEHOLDER_RE = re.compile(r'^(URL|PATH)\[', re.IGNORECASE)
 
 
 class HooksExecutor:
@@ -174,18 +178,18 @@ class HooksExecutor:
 
         return result
 
-    def _execute_hook_with_config(self, hook_type: str, context: Dict, config: Dict) -> Tuple[bool, Optional[Dict]]:
-        """Execute a single hook with provided config and return success status and parsed JSON output"""
+    def _execute_hook_with_config(self, hook_type: str, context: Dict, config: Dict) -> Tuple[bool, Optional[Dict], str]:
+        """Execute a single hook with provided config and return (success, parsed_json, raw_stdout)"""
         hook_config = config.get(hook_type, {})
 
         if not hook_config.get('enabled'):
             log(f"Hook {hook_type} is disabled, skipping", level="debug", category="hooks")
-            return True, None
+            return True, None, ''
 
         command = hook_config.get('command', '').strip()
         if not command:
             log(f"Hook {hook_type} has no command configured, skipping", level="debug", category="hooks")
-            return True, None
+            return True, None, ''
 
         # Check if command uses %z parameter and create temp ZIP if needed
         temp_zip_path = None
@@ -200,7 +204,7 @@ class HooksExecutor:
                     log(f"Created temporary ZIP for hook: {temp_zip_path}", level="debug", category="hooks")
                 except Exception as e:
                     log(f"Failed to create temporary ZIP: {e}", level="error", category="hooks")
-                    return False, None
+                    return False, None, ''
 
         # Substitute variables
         final_command = self._substitute_variables(command, context)
@@ -248,7 +252,7 @@ class HooksExecutor:
 
             if result.returncode != 0:
                 log(f"Hook {hook_type} failed with code {result.returncode}\\n{combined_output}", level="error", category="hooks")
-                return False, None
+                return False, None, ''
             else:
                 log(f"Hook '{hook_type}' output:\\n{combined_output}", level="info", category="hooks")
         
@@ -267,20 +271,20 @@ class HooksExecutor:
 
             # Log single success message for GUI
             log(f"Hook '{hook_type}' completed successfully", level="info", category="hooks")
-            return True, json_data
+            return True, json_data, result.stdout or ''
 
         except subprocess.TimeoutExpired:
             log(f"Hook {hook_type} timed out after 300 seconds", level="error", category="hooks")
             # Clean up temp ZIP on timeout
             if temp_zip_path:
                 self._remove_temp_file_with_retry(temp_zip_path)
-            return False, None
+            return False, None, ''
         except Exception as e:
             log(f"Hook {hook_type} failed with exception: {e}", level="error", category="hooks")
             # Clean up temp ZIP on error
             if temp_zip_path:
                 self._remove_temp_file_with_retry(temp_zip_path)
-            return False, None
+            return False, None, ''
 
     def execute_hooks(self, hook_types: List[str], context: Dict) -> Dict[str, Any]:
         """
@@ -306,6 +310,7 @@ class HooksExecutor:
         # Execute hooks based on parallel/sequential setting
         parallel = config.get('parallel_execution', True)
         results = {}
+        raw_stdouts = []
 
         if parallel and len(enabled_hooks) > 1:
             log(f"Executing {len(enabled_hooks)} hooks in parallel", level="debug", category="hooks")
@@ -316,42 +321,62 @@ class HooksExecutor:
                 for future in concurrent.futures.as_completed(futures):
                     hook_type = futures[future]
                     try:
-                        success, json_data = future.result()
+                        success, json_data, raw_stdout = future.result()
                         if json_data:
-                            # Merge JSON results
                             results.update(json_data)
+                        if raw_stdout:
+                            raw_stdouts.append(raw_stdout)
                     except Exception as e:
                         log(f"Hook {hook_type} raised exception: {e}", level="error", category="hooks")
         else:
             log(f"Executing {len(enabled_hooks)} hooks sequentially", level="debug", category="hooks")
             for hook_type in enabled_hooks:
-                success, json_data = self._execute_hook_with_config(hook_type, context, config)
+                success, json_data, raw_stdout = self._execute_hook_with_config(hook_type, context, config)
                 if json_data:
-                    # Later hooks can overwrite earlier ones in sequential mode
                     results.update(json_data)
+                if raw_stdout:
+                    raw_stdouts.append(raw_stdout)
 
         # Extract ext1-4 fields from results using configured key mappings
         ext_fields = {}
 
-        # Merge key mappings from ALL enabled hooks (not just the first one)
-        # This allows different hooks to map to different ext fields
+        # Merge key mappings from ALL enabled hooks
         merged_key_mapping = {}
         for hook_type in enabled_hooks:
             hook_key_mapping = config.get(hook_type, {}).get('key_mapping', {})
             for ext_field, json_key in hook_key_mapping.items():
-                # Only add if not already mapped (first hook wins for conflicts)
                 if ext_field not in merged_key_mapping and json_key.strip():
                     merged_key_mapping[ext_field] = json_key.strip()
                     log(f"Added key mapping from {hook_type}: {json_key} -> {ext_field}", level="debug", category="hooks")
 
-        # Map JSON keys to ext1-4 using merged mappings
-        for ext_field, json_key in merged_key_mapping.items():
-            # Use configured JSON key (e.g., "download_url") to find value in results
-            if json_key in results:
-                ext_fields[ext_field] = str(results[json_key])
-                log(f"Mapped JSON key '{json_key}' -> {ext_field}: {results[json_key]}", level="debug", category="hooks")
+        # Check if any mappings use positional placeholders (URL[n], PATH[n])
+        needs_detection = any(
+            _PLACEHOLDER_RE.match(key) for key in merged_key_mapping.values()
+        )
+
+        # Run plain-text detection on combined stdout if needed
+        detected_values = None
+        if needs_detection and raw_stdouts:
+            combined_stdout = '\n'.join(raw_stdouts)
+            detected_values = detect_stdout_values(combined_stdout)
+            log(f"Detected {len(detected_values)} values from plain-text stdout", level="debug", category="hooks")
+
+        # Map keys to ext1-4
+        for ext_field, mapping_key in merged_key_mapping.items():
+            # Try 1: JSON key lookup (existing behavior)
+            if mapping_key in results:
+                ext_fields[ext_field] = str(results[mapping_key])
+                log(f"Mapped JSON key '{mapping_key}' -> {ext_field}: {results[mapping_key]}", level="debug", category="hooks")
+            # Try 2: Positional placeholder resolution (URL[1], PATH[-1], etc.)
+            elif detected_values is not None:
+                resolved = resolve_placeholder(mapping_key, detected_values)
+                if resolved:
+                    ext_fields[ext_field] = resolved
+                    log(f"Resolved placeholder '{mapping_key}' -> {ext_field}: {resolved}", level="debug", category="hooks")
+                else:
+                    log(f"Placeholder '{mapping_key}' could not be resolved for {ext_field}", level="debug", category="hooks")
             else:
-                log(f"JSON key '{json_key}' not found in hook results for {ext_field}", level="debug", category="hooks")
+                log(f"Key '{mapping_key}' not found in hook results for {ext_field}", level="debug", category="hooks")
 
         log(f"Hooks execution complete. Extracted fields: {ext_fields}", level="debug", category="hooks")
         return ext_fields

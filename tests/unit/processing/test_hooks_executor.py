@@ -192,7 +192,7 @@ class TestHooksExecutorExecution:
         }
         context = {'gallery_name': 'Test'}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is True
         mock_run.assert_called_once()
@@ -216,7 +216,7 @@ class TestHooksExecutorExecution:
         }
         context = {}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is False
         assert json_data is None
@@ -241,7 +241,7 @@ class TestHooksExecutorExecution:
         }
         context = {}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is True
         assert json_data == json_output
@@ -261,7 +261,7 @@ class TestHooksExecutorExecution:
         }
         context = {}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is False
         assert json_data is None
@@ -279,7 +279,7 @@ class TestHooksExecutorExecution:
         }
         context = {}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is True
         assert json_data is None
@@ -298,7 +298,7 @@ class TestHooksExecutorExecution:
         }
         context = {}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is True
         assert json_data is None
@@ -336,7 +336,7 @@ class TestHooksExecutorTempZip:
         }
 
         with patch.object(executor, '_remove_temp_file_with_retry'):
-            success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+            success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         mock_create_zip.assert_called_once_with('/path/to/gallery')
         assert success is True
@@ -363,7 +363,7 @@ class TestHooksExecutorTempZip:
             'zip_path': '/existing/gallery.zip'
         }
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         # Should use existing ZIP, not create new one
         assert success is True
@@ -672,7 +672,7 @@ class TestHooksExecutorCommandParsing:
         }
         context = {}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is True
         # Verify subprocess.run was called with proper argument list
@@ -699,7 +699,7 @@ class TestHooksExecutorCommandParsing:
         }
         context = {}
 
-        success, json_data = executor._execute_hook_with_config('test_hook', context, config)
+        success, json_data, _stdout = executor._execute_hook_with_config('test_hook', context, config)
 
         assert success is True
         call_args = mock_run.call_args[0][0]
