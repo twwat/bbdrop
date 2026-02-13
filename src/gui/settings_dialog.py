@@ -2009,10 +2009,6 @@ class ComprehensiveSettingsDialog(QDialog):
                 if result.stderr:
                     output_text += f"=== STDERR ===\n{result.stderr}\n\n"
 
-                # Smart detection variables
-                detected_data = {}
-                auto_map_suggestions = {}
-
                 # Try to parse as JSON first
                 if result.stdout.strip():
                     is_json = False
@@ -2081,9 +2077,6 @@ class ComprehensiveSettingsDialog(QDialog):
                             value_item.setToolTip(value_text)
                             results_table.setItem(row_position, 1, value_item)
 
-                            # Store for auto-mapping suggestions
-                            detected_data[key] = value_text
-
                         # Resize columns to content
                         results_table.resizeColumnsToContents()
 
@@ -2091,9 +2084,6 @@ class ComprehensiveSettingsDialog(QDialog):
                         if results_table.rowCount() > 0:
                             results_table.setVisible(True)
                             output_text += "✓ Valid JSON detected and parsed in left panel\n\n"
-
-                            # Smart auto-mapping suggestions for JSON
-                            suggest_json_mapping(json_data, auto_map_suggestions)
                         else:
                             results_table.setVisible(False)
                             output_text += "⚠ JSON was valid but empty\n\n"
@@ -2101,23 +2091,45 @@ class ComprehensiveSettingsDialog(QDialog):
                         test_output.setPlainText(output_text)
 
                     except json.JSONDecodeError:
-                        # Not valid JSON - try smart pattern detection
                         is_json = False
                         results_table.setVisible(False)
 
-                        # Detect URLs, file paths, and other useful data
-                        detect_patterns(result.stdout, detected_data, auto_map_suggestions)
+                        from src.processing.hook_output_parser import detect_stdout_values
+                        detected_values = detect_stdout_values(result.stdout)
 
-                        if detected_data:
-                            output_text += f"ℹ️ Output is not JSON, but found {len(detected_data)} useful value(s)\n\n"
+                        if detected_values:
+                            output_text += f"Found {len(detected_values)} value(s) in output\n\n"
+                            for det in detected_values:
+                                type_label = det['type'].upper()
+                                if det['type'] in ('url', 'path'):
+                                    output_text += f"  {type_label}[{det['index']}]: {det['value']}\n"
+                                else:
+                                    output_text += f"  {det['key']}: {det['value']}\n"
+                            output_text += "\n"
                         else:
-                            output_text += "⚠ Output is not JSON and no recognizable patterns found\n\n"
+                            output_text += "No recognizable patterns found in output\n\n"
+                            detected_values = None
 
                         test_output.setPlainText(output_text)
 
-                    # Show auto-mapping suggestion dialog if we found anything useful
-                    if auto_map_suggestions:
-                        show_auto_map_dialog(auto_map_suggestions, detected_data, is_json)
+                    # Show interactive mapper dialog
+                    from src.gui.dialogs.hook_mapper_dialog import HookMapperDialog
+                    if is_json and json_data:
+                        mapper = HookMapperDialog(
+                            detected_values=None, is_json=True,
+                            json_data=json_data, parent=dialog
+                        )
+                        if mapper.exec() == QDialog.DialogCode.Accepted:
+                            for ext_field, info in mapper.get_mappings().items():
+                                key_inputs[ext_field].setText(info['key'])
+                    elif not is_json and detected_values:
+                        mapper = HookMapperDialog(
+                            detected_values=detected_values, is_json=False,
+                            parent=dialog
+                        )
+                        if mapper.exec() == QDialog.DialogCode.Accepted:
+                            for ext_field, info in mapper.get_mappings().items():
+                                key_inputs[ext_field].setText(info['key'])
 
                 else:
                     # No output
@@ -2130,160 +2142,6 @@ class ComprehensiveSettingsDialog(QDialog):
             except Exception as e:
                 results_table.setVisible(False)
                 test_output.setPlainText(f"Error: {e}")
-
-        def suggest_json_mapping(json_data, suggestions):
-            """Suggest JSON key to ext field mappings based on common patterns"""
-            # Common patterns for URLs
-            url_keys = ['url', 'link', 'href', 'download_url', 'file_url', 'upload_url', 'direct_url']
-            # Common patterns for filenames
-            filename_keys = ['filename', 'name', 'file', 'title']
-            # Common patterns for IDs
-            id_keys = ['id', 'file_id', 'upload_id', 'unique_id']
-            # Common patterns for sizes
-            size_keys = ['size', 'filesize', 'bytes', 'length']
-
-            priority_order = []
-
-            for key, value in json_data.items():
-                key_lower = key.lower()
-
-                # Prioritize URL fields
-                if any(pattern in key_lower for pattern in url_keys):
-                    priority_order.append((1, key, value, "URL/Link"))
-                # Then filename fields
-                elif any(pattern in key_lower for pattern in filename_keys):
-                    priority_order.append((2, key, value, "Filename"))
-                # Then ID fields
-                elif any(pattern in key_lower for pattern in id_keys):
-                    priority_order.append((3, key, value, "ID"))
-                # Then size fields
-                elif any(pattern in key_lower for pattern in size_keys):
-                    priority_order.append((4, key, value, "Size"))
-                # Everything else
-                else:
-                    priority_order.append((5, key, value, "Data"))
-
-            # Sort by priority and assign to ext1-4
-            priority_order.sort(key=lambda x: x[0])
-            for i, (priority, key, value, data_type) in enumerate(priority_order[:4]):
-                suggestions[f'ext{i+1}'] = {
-                    'json_key': key,
-                    'value': value,
-                    'type': data_type
-                }
-
-        def detect_patterns(text, detected_data, suggestions):
-            """Detect URLs, file paths, and other patterns in plain text output"""
-            import re
-
-            # URL pattern (http, https, ftp)
-            url_pattern = r'https?://[^\s<>"\'\)]+|ftp://[^\s<>"\'\)]+'
-            urls = re.findall(url_pattern, text)
-
-            # File path pattern (Windows and Unix)
-            file_pattern = r'(?:[A-Za-z]:\\(?:[^\\\/:*?"<>|\r\n]+\\)*[^\\\/:*?"<>|\r\n]*)|(?:/[^\s:*?"<>|\r\n]+)'
-            file_paths = re.findall(file_pattern, text)
-
-            # Look for key:value or key=value patterns
-            kv_pattern = r'(\w+)\s*[:=]\s*([^\s,;\n]+)'
-            key_values = re.findall(kv_pattern, text)
-
-            ext_counter = 1
-
-            # Prioritize URLs
-            for url in urls[:4]:  # Limit to first 4 URLs
-                if ext_counter <= 4:
-                    detected_data[f'url_{ext_counter}'] = url
-                    suggestions[f'ext{ext_counter}'] = {
-                        'json_key': None,
-                        'value': url,
-                        'type': 'URL'
-                    }
-                    ext_counter += 1
-
-            # Then file paths that look like actual files (have extensions)
-            for path in file_paths:
-                if ext_counter <= 4 and '.' in path.split('/')[-1].split('\\')[-1]:
-                    detected_data[f'file_{ext_counter}'] = path
-                    suggestions[f'ext{ext_counter}'] = {
-                        'json_key': None,
-                        'value': path,
-                        'type': 'File Path'
-                    }
-                    ext_counter += 1
-
-            # Then key-value pairs
-            for key, value in key_values:
-                if ext_counter <= 4:
-                    detected_data[key] = value
-                    suggestions[f'ext{ext_counter}'] = {
-                        'json_key': key,
-                        'value': value,
-                        'type': 'Data'
-                    }
-                    ext_counter += 1
-
-        def show_auto_map_dialog(suggestions, detected_data, is_json):
-            """Show a simple dialog asking if user wants to auto-map detected values"""
-            from PyQt6.QtWidgets import QMessageBox, QCheckBox, QVBoxLayout, QLabel
-
-            msg_box = QMessageBox(dialog)
-            msg_box.setWindowTitle("Auto-Map Detected Values?")
-            msg_box.setIcon(QMessageBox.Icon.Question)
-
-            # Build the message
-            if is_json:
-                message = "✓ Found useful data in the JSON output!\n\n"
-            else:
-                message = "✓ Found useful data in the output!\n\n"
-
-            message += "Would you like to automatically map these values to ext fields?\n\n"
-
-            for ext_field, info in sorted(suggestions.items()):
-                value = info['value']
-                data_type = info['type']
-
-                # Truncate long values
-                if len(str(value)) > 50:
-                    display_value = str(value)[:47] + "..."
-                else:
-                    display_value = str(value)
-
-                if is_json and info['json_key']:
-                    message += f"• {ext_field}: {info['json_key']} = {display_value}\n   ({data_type})\n\n"
-                else:
-                    message += f"• {ext_field}: {display_value}\n   ({data_type})\n\n"
-
-            msg_box.setText(message)
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            msg_box.setDefaultButton(QMessageBox.StandardButton.Yes)
-
-            # Add "Don't ask again" checkbox
-            dont_ask_cb = QCheckBox("Don't ask me again (always auto-map)")
-            msg_box.setCheckBox(dont_ask_cb)
-
-            response = msg_box.exec()
-
-            if response == QMessageBox.StandardButton.Yes:
-                # Apply the mappings
-                for ext_field, info in suggestions.items():
-                    ext_num = ext_field[-1]  # Get the number (1-4)
-
-                    # Set the JSON key mapping (if it's JSON)
-                    if is_json and info['json_key']:
-                        key_inputs[ext_field].setText(info['json_key'])
-                    elif info['json_key']:  # Plain text key-value
-                        key_inputs[ext_field].setText(info['json_key'])
-                    # For plain URLs/paths without keys, leave the mapping empty
-                    # The value will still be accessible via the detected pattern
-
-                # Show confirmation
-                QMessageBox.information(
-                    dialog,
-                    "Mappings Applied",
-                    f"✓ Successfully mapped {len(suggestions)} value(s) to ext fields!\n\n"
-                    "Click 'Save' to keep these mappings."
-                )
 
         test_btn.clicked.connect(run_test)
         test_layout.addWidget(results_splitter)
