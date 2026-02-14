@@ -639,7 +639,7 @@ class ComprehensiveSettingsDialog(QDialog):
         # Add the template dialog to the layout
         layout.addWidget(self.template_dialog)
 
-        self._add_settings_page(templates_widget, "Templates")
+        self._add_settings_page(templates_widget, "BBCode templates")
         
     def setup_tabs_tab(self):
         """Setup the Tabs management tab"""
@@ -1100,7 +1100,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.log_settings_widget = LogSettingsWidget(self)
         self.log_settings_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.LOGS))
         self.log_settings_widget.load_settings()  # Load current settings
-        self._add_settings_page(self.log_settings_widget, "Logs")
+        self._add_settings_page(self.log_settings_widget, "Logging")
         
     def setup_scanning_tab(self):
         """Setup the Image Scanning tab"""
@@ -1301,7 +1301,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.avg_mean_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
         self.avg_median_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
 
-        self._add_settings_page(scanning_widget, "Image Scan")
+        self._add_settings_page(scanning_widget, "Image Scanner")
 
     def setup_covers_tab(self):
         """Setup the Cover Photos settings tab"""
@@ -1376,57 +1376,39 @@ class ComprehensiveSettingsDialog(QDialog):
 
         self.covers_dim_differs_check.toggled.connect(self.covers_dim_differs_spin.setEnabled)
 
-        # Min dimensions
+        # Min shortest side
         min_row = QHBoxLayout()
-        self.covers_dim_min_check = QCheckBox("Min width:")
-        self.covers_dim_min_check.setToolTip("Only consider images at least this wide/tall as covers")
+        self.covers_dim_min_check = QCheckBox("Minimum (on shortest side):")
+        self.covers_dim_min_check.setToolTip("Only consider images whose shortest side is at least this many pixels")
         min_row.addWidget(self.covers_dim_min_check)
 
-        self.covers_dim_min_width_spin = QSpinBox()
-        self.covers_dim_min_width_spin.setRange(0, 99999)
-        self.covers_dim_min_width_spin.setValue(0)
-        self.covers_dim_min_width_spin.setSuffix(" px")
-        self.covers_dim_min_width_spin.setEnabled(False)
-        min_row.addWidget(self.covers_dim_min_width_spin)
-
-        min_row.addWidget(QLabel("Min height:"))
-        self.covers_dim_min_height_spin = QSpinBox()
-        self.covers_dim_min_height_spin.setRange(0, 99999)
-        self.covers_dim_min_height_spin.setValue(0)
-        self.covers_dim_min_height_spin.setSuffix(" px")
-        self.covers_dim_min_height_spin.setEnabled(False)
-        min_row.addWidget(self.covers_dim_min_height_spin)
+        self.covers_dim_min_spin = QSpinBox()
+        self.covers_dim_min_spin.setRange(0, 99999)
+        self.covers_dim_min_spin.setValue(0)
+        self.covers_dim_min_spin.setSuffix(" px")
+        self.covers_dim_min_spin.setEnabled(False)
+        min_row.addWidget(self.covers_dim_min_spin)
         min_row.addStretch()
         dim_layout.addLayout(min_row)
 
-        self.covers_dim_min_check.toggled.connect(self.covers_dim_min_width_spin.setEnabled)
-        self.covers_dim_min_check.toggled.connect(self.covers_dim_min_height_spin.setEnabled)
+        self.covers_dim_min_check.toggled.connect(self.covers_dim_min_spin.setEnabled)
 
-        # Max dimensions
+        # Max longest side
         max_row = QHBoxLayout()
-        self.covers_dim_max_check = QCheckBox("Max width:")
-        self.covers_dim_max_check.setToolTip("Only consider images no wider/taller than this as covers")
+        self.covers_dim_max_check = QCheckBox("Maximum (on longest side):")
+        self.covers_dim_max_check.setToolTip("Only consider images whose longest side is no more than this many pixels")
         max_row.addWidget(self.covers_dim_max_check)
 
-        self.covers_dim_max_width_spin = QSpinBox()
-        self.covers_dim_max_width_spin.setRange(0, 99999)
-        self.covers_dim_max_width_spin.setValue(0)
-        self.covers_dim_max_width_spin.setSuffix(" px")
-        self.covers_dim_max_width_spin.setEnabled(False)
-        max_row.addWidget(self.covers_dim_max_width_spin)
-
-        max_row.addWidget(QLabel("Max height:"))
-        self.covers_dim_max_height_spin = QSpinBox()
-        self.covers_dim_max_height_spin.setRange(0, 99999)
-        self.covers_dim_max_height_spin.setValue(0)
-        self.covers_dim_max_height_spin.setSuffix(" px")
-        self.covers_dim_max_height_spin.setEnabled(False)
-        max_row.addWidget(self.covers_dim_max_height_spin)
+        self.covers_dim_max_spin = QSpinBox()
+        self.covers_dim_max_spin.setRange(0, 99999)
+        self.covers_dim_max_spin.setValue(0)
+        self.covers_dim_max_spin.setSuffix(" px")
+        self.covers_dim_max_spin.setEnabled(False)
+        max_row.addWidget(self.covers_dim_max_spin)
         max_row.addStretch()
         dim_layout.addLayout(max_row)
 
-        self.covers_dim_max_check.toggled.connect(self.covers_dim_max_width_spin.setEnabled)
-        self.covers_dim_max_check.toggled.connect(self.covers_dim_max_height_spin.setEnabled)
+        self.covers_dim_max_check.toggled.connect(self.covers_dim_max_spin.setEnabled)
 
         self.covers_dim_container.setEnabled(False)
         detection_layout.addWidget(self.covers_dim_container)
@@ -1572,7 +1554,7 @@ class ComprehensiveSettingsDialog(QDialog):
         layout.addWidget(self.covers_container)
 
         # Master checkbox enables/disables the entire container
-        self.covers_enabled_check.toggled.connect(self.covers_container.setEnabled)
+        self.covers_enabled_check.toggled.connect(self._update_covers_ui_state)
 
         # Connect ALL controls to mark_tab_dirty(TabIndex.COVERS)
         dirty = lambda: self.mark_tab_dirty(TabIndex.COVERS)
@@ -1583,11 +1565,9 @@ class ComprehensiveSettingsDialog(QDialog):
         self.covers_dim_differs_check.toggled.connect(dirty)
         self.covers_dim_differs_spin.valueChanged.connect(dirty)
         self.covers_dim_min_check.toggled.connect(dirty)
-        self.covers_dim_min_width_spin.valueChanged.connect(dirty)
-        self.covers_dim_min_height_spin.valueChanged.connect(dirty)
+        self.covers_dim_min_spin.valueChanged.connect(dirty)
         self.covers_dim_max_check.toggled.connect(dirty)
-        self.covers_dim_max_width_spin.valueChanged.connect(dirty)
-        self.covers_dim_max_height_spin.valueChanged.connect(dirty)
+        self.covers_dim_max_spin.valueChanged.connect(dirty)
         self.covers_filesize_check.toggled.connect(dirty)
         self.covers_fs_min_check.toggled.connect(dirty)
         self.covers_fs_min_spin.valueChanged.connect(dirty)
@@ -1600,7 +1580,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.covers_gallery_edit.textChanged.connect(dirty)
         self.covers_also_upload_check.toggled.connect(dirty)
 
-        self._add_settings_page(covers_widget, "Covers")
+        self._add_settings_page(covers_widget, "Cover Photos")
 
         # Load saved settings
         self._load_covers_settings()
@@ -1614,8 +1594,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.covers_filename_check, self.covers_filename_edit,
                 self.covers_dimension_check,
                 self.covers_dim_differs_check, self.covers_dim_differs_spin,
-                self.covers_dim_min_check, self.covers_dim_min_width_spin, self.covers_dim_min_height_spin,
-                self.covers_dim_max_check, self.covers_dim_max_width_spin, self.covers_dim_max_height_spin,
+                self.covers_dim_min_check, self.covers_dim_min_spin,
+                self.covers_dim_max_check, self.covers_dim_max_spin,
                 self.covers_filesize_check,
                 self.covers_fs_min_check, self.covers_fs_min_spin,
                 self.covers_fs_max_check, self.covers_fs_max_spin,
@@ -1653,24 +1633,16 @@ class ComprehensiveSettingsDialog(QDialog):
 
             dim_min = self.settings.value('cover/dimension_min_enabled', False, type=bool)
             self.covers_dim_min_check.setChecked(dim_min)
-            self.covers_dim_min_width_spin.setEnabled(dim_min)
-            self.covers_dim_min_height_spin.setEnabled(dim_min)
-            self.covers_dim_min_width_spin.setValue(
-                self.settings.value('cover/dimension_min_width', 0, type=int)
-            )
-            self.covers_dim_min_height_spin.setValue(
-                self.settings.value('cover/dimension_min_height', 0, type=int)
+            self.covers_dim_min_spin.setEnabled(dim_min)
+            self.covers_dim_min_spin.setValue(
+                self.settings.value('cover/dimension_min_shortest_side', 0, type=int)
             )
 
             dim_max = self.settings.value('cover/dimension_max_enabled', False, type=bool)
             self.covers_dim_max_check.setChecked(dim_max)
-            self.covers_dim_max_width_spin.setEnabled(dim_max)
-            self.covers_dim_max_height_spin.setEnabled(dim_max)
-            self.covers_dim_max_width_spin.setValue(
-                self.settings.value('cover/dimension_max_width', 0, type=int)
-            )
-            self.covers_dim_max_height_spin.setValue(
-                self.settings.value('cover/dimension_max_height', 0, type=int)
+            self.covers_dim_max_spin.setEnabled(dim_max)
+            self.covers_dim_max_spin.setValue(
+                self.settings.value('cover/dimension_max_longest_side', 0, type=int)
             )
 
             # File size detection
@@ -1722,8 +1694,25 @@ class ComprehensiveSettingsDialog(QDialog):
             for control in controls_to_block:
                 control.blockSignals(False)
 
+            # Apply dimmed visual state
+            self._update_covers_ui_state(enabled)
+
         except Exception as e:
             log(f"Failed to load covers settings: {e}", level="warning", category="settings")
+
+    def _update_covers_ui_state(self, enabled=None):
+        """Enable/disable and dim/undim covers container based on master checkbox."""
+        if enabled is None:
+            enabled = self.covers_enabled_check.isChecked()
+        self.covers_container.setEnabled(enabled)
+
+        dimmed_class = "" if enabled else "dimmed"
+        from PyQt6.QtWidgets import QWidget
+        for widget in [self.covers_container] + self.covers_container.findChildren(QWidget):
+            widget.setProperty("class", dimmed_class)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def _save_covers_settings(self):
         """Save cover settings to QSettings"""
@@ -1735,11 +1724,9 @@ class ComprehensiveSettingsDialog(QDialog):
             self.settings.setValue('cover/dimension_differs_enabled', self.covers_dim_differs_check.isChecked())
             self.settings.setValue('cover/dimension_differs_percent', self.covers_dim_differs_spin.value())
             self.settings.setValue('cover/dimension_min_enabled', self.covers_dim_min_check.isChecked())
-            self.settings.setValue('cover/dimension_min_width', self.covers_dim_min_width_spin.value())
-            self.settings.setValue('cover/dimension_min_height', self.covers_dim_min_height_spin.value())
+            self.settings.setValue('cover/dimension_min_shortest_side', self.covers_dim_min_spin.value())
             self.settings.setValue('cover/dimension_max_enabled', self.covers_dim_max_check.isChecked())
-            self.settings.setValue('cover/dimension_max_width', self.covers_dim_max_width_spin.value())
-            self.settings.setValue('cover/dimension_max_height', self.covers_dim_max_height_spin.value())
+            self.settings.setValue('cover/dimension_max_longest_side', self.covers_dim_max_spin.value())
             self.settings.setValue('cover/filesize_enabled', self.covers_filesize_check.isChecked())
             self.settings.setValue('cover/filesize_min_enabled', self.covers_fs_min_check.isChecked())
             self.settings.setValue('cover/filesize_min_kb', self.covers_fs_min_spin.value())
@@ -1785,7 +1772,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self._create_hook_section(layout, "On Gallery Completed", "completed")
 
         layout.addStretch()
-        self._add_settings_page(external_widget, "Hooks")
+        self._add_settings_page(external_widget, "App Hooks")
 
         # Connect signals to mark tab as dirty
         self.hooks_parallel_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.HOOKS))
@@ -1808,7 +1795,7 @@ class ComprehensiveSettingsDialog(QDialog):
         }
         # Top row: Enable checkbox + Configure button
         top_row = QHBoxLayout()
-        enable_check = QCheckBox(f"Enable this hook: called when galleries are {hook_titles.get(hook_type, hook_type.title())}")
+        enable_check = QCheckBox(f"Enable hook: called when galleries are {hook_titles.get(hook_type, hook_type.title())}")
         enable_check.setToolTip("Enable this hook")
         setattr(self, f'hook_{hook_type}_enabled', enable_check)
         top_row.addWidget(enable_check, 2)  # Stretch factor 2 (left 2/3)
@@ -2623,7 +2610,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
         self.proxy_widget = ProxySettingsWidget(self)
         self.proxy_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.PROXY))
-        self._add_settings_page(self.proxy_widget, "Proxy")
+        self._add_settings_page(self.proxy_widget, "Proxy Servers")
 
     def setup_advanced_tab(self):
         """Setup the Advanced settings tab."""
@@ -2635,7 +2622,7 @@ class ComprehensiveSettingsDialog(QDialog):
         """Setup the Archive settings tab."""
         self.archive_widget = ArchiveSettingsWidget()
         self.archive_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ARCHIVE))
-        self._add_settings_page(self.archive_widget, "Archive")
+        self._add_settings_page(self.archive_widget, "Zip Archives")
 
     def _load_advanced_settings(self):
         """Load advanced settings from INI file and QSettings."""

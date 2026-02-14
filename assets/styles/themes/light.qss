@@ -246,9 +246,12 @@ QScrollBar::handle:horizontal { background: $colors.light.scrollbar.handle; min-
 QScrollBar::handle:horizontal:hover { background: $colors.light.scrollbar.handle_hover; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
 
-/* Dimmed widgets (proxy settings when not in custom mode) */
+/* Dimmed widgets (disabled sections) */
 QGroupBox[class="dimmed"] { color: #aaaaaa; }
 QLabel[class="dimmed"] { color: #aaaaaa; }
+QCheckBox[class="dimmed"] { color: #aaaaaa; }
+QSpinBox[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
+QLineEdit[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
 QPushButton[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
 QListWidget[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
 QComboBox[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
