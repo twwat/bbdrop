@@ -171,30 +171,41 @@ def migrate_from_imxup() -> bool:
     try:
         from PyQt6.QtCore import QSettings
 
-        old_qsettings_pairs = [
-            ("ImxUploader", "ImxUploadGUI", "BBDropUploader", "BBDropGUI"),
-            ("ImxUploader", "QueueManager", "BBDropUploader", "QueueManager"),
-            ("ImxUploader", "Stats", "BBDropUploader", "Stats"),
-            ("ImxUploader", "Settings", "BBDropUploader", "Settings"),
-            ("ImxUploader", "TabManager", "BBDropUploader", "TabManager"),
-            ("imxup", "imxup", "bbdrop", "bbdrop"),
-        ]
-
         # Check for custom base path in OLD settings FIRST
         old_main_settings = QSettings("ImxUploader", "ImxUploadGUI")
         old_custom_base = old_main_settings.value("config/base_path", "", type=str)
 
-        # Migrate all QSettings
-        for old_org, old_app, new_org, new_app in old_qsettings_pairs:
-            old_settings = QSettings(old_org, old_app)
-            new_settings = QSettings(new_org, new_app)
+        # Only migrate QSettings if old keys exist and new keys don't yet
+        new_main_settings = QSettings("BBDropUploader", "BBDropGUI")
+        if old_main_settings.allKeys() and not new_main_settings.contains("_migrated_from_imxup"):
+            old_qsettings_pairs = [
+                ("ImxUploader", "ImxUploadGUI", "BBDropUploader", "BBDropGUI"),
+                ("ImxUploader", "QueueManager", "BBDropUploader", "QueueManager"),
+                ("ImxUploader", "Stats", "BBDropUploader", "Stats"),
+                ("ImxUploader", "Settings", "BBDropUploader", "Settings"),
+                ("ImxUploader", "TabManager", "BBDropUploader", "TabManager"),
+                ("imxup", "imxup", "bbdrop", "bbdrop"),
+            ]
 
-            for key in old_settings.allKeys():
-                value = old_settings.value(key)
-                if value is not None:
-                    new_settings.setValue(key, value)
+            for old_org, old_app, new_org, new_app in old_qsettings_pairs:
+                old_settings = QSettings(old_org, old_app)
+                new_settings = QSettings(new_org, new_app)
 
-            new_settings.sync()
+                for key in old_settings.allKeys():
+                    value = old_settings.value(key)
+                    if value is not None:
+                        new_settings.setValue(key, value)
+
+                new_settings.sync()
+
+                # Remove old keys so they can't interfere
+                old_settings.clear()
+                old_settings.sync()
+
+            # Mark migration as done so it never runs again
+            new_main_settings.setValue("_migrated_from_imxup", True)
+            new_main_settings.sync()
+            log("QSettings migrated from ImxUploader to BBDropUploader", level="info", category="migration")
     except Exception:
         pass  # QSettings migration is optional, continue with file migration
 
@@ -265,29 +276,38 @@ def migrate_from_imxup() -> bool:
             else:
                 shutil.copy2(old_item, new_item)
 
-        # Migrate QSettings (Windows registry or ini files)
+        # Migrate QSettings (Windows registry or ini files) — guarded by _migrated_from_imxup flag
+        # (The early migration block above already handles this, but keep as fallback
+        #  for the file-copy path which only runs when old_path exists and new_path is empty)
         try:
             from PyQt6.QtCore import QSettings
+            new_check = QSettings("BBDropUploader", "BBDropGUI")
+            if not new_check.contains("_migrated_from_imxup"):
+                old_qsettings_pairs = [
+                    ("ImxUploader", "ImxUploadGUI", "BBDropUploader", "BBDropGUI"),
+                    ("ImxUploader", "QueueManager", "BBDropUploader", "QueueManager"),
+                    ("ImxUploader", "Stats", "BBDropUploader", "Stats"),
+                    ("ImxUploader", "Settings", "BBDropUploader", "Settings"),
+                    ("ImxUploader", "TabManager", "BBDropUploader", "TabManager"),
+                    ("imxup", "imxup", "bbdrop", "bbdrop"),
+                ]
 
-            old_qsettings_pairs = [
-                ("ImxUploader", "ImxUploadGUI", "BBDropUploader", "BBDropGUI"),
-                ("ImxUploader", "QueueManager", "BBDropUploader", "QueueManager"),
-                ("ImxUploader", "Stats", "BBDropUploader", "Stats"),
-                ("ImxUploader", "Settings", "BBDropUploader", "Settings"),
-                ("ImxUploader", "TabManager", "BBDropUploader", "TabManager"),
-                ("imxup", "imxup", "bbdrop", "bbdrop"),
-            ]
+                for old_org, old_app, new_org, new_app in old_qsettings_pairs:
+                    old_settings = QSettings(old_org, old_app)
+                    new_settings = QSettings(new_org, new_app)
 
-            for old_org, old_app, new_org, new_app in old_qsettings_pairs:
-                old_settings = QSettings(old_org, old_app)
-                new_settings = QSettings(new_org, new_app)
+                    for key in old_settings.allKeys():
+                        value = old_settings.value(key)
+                        if value is not None:
+                            new_settings.setValue(key, value)
 
-                for key in old_settings.allKeys():
-                    value = old_settings.value(key)
-                    if value is not None:
-                        new_settings.setValue(key, value)
+                    new_settings.sync()
 
-                new_settings.sync()
+                    old_settings.clear()
+                    old_settings.sync()
+
+                new_check.setValue("_migrated_from_imxup", True)
+                new_check.sync()
         except Exception:
             pass  # QSettings migration is optional
 
