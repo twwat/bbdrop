@@ -653,6 +653,137 @@ def migrate_credentials_from_ini():
             config.write(f)
         log("Migrated credentials from INI to Registry", level="info", category="auth")
 
+def _migrate_encryption_keys():
+    """One-time migration: re-encrypt all credentials from SHA-256-derived key to CSPRNG key.
+
+    Called automatically on first run after upgrade when no master key exists in keyring.
+    Reads from both keyring and QSettings (one last time) to capture all credentials,
+    then re-encrypts with the new key and removes the QSettings entries.
+
+    Returns:
+        str: The new CSPRNG master key (base64-encoded, Fernet-compatible)
+    """
+    from src.utils.credential_helpers import generate_fernet_key
+
+    new_key = generate_fernet_key()
+    old_key = _get_legacy_encryption_key()
+
+    old_fernet = Fernet(old_key)
+    new_fernet = Fernet(new_key)
+
+    # All known credential keys that may hold Fernet-encrypted values
+    encrypted_keys = [
+        'password', 'api_key',
+        'imx_password', 'imx_api_key',
+        'turbo_password', 'turbo_api_key',
+    ]
+
+    # File host credential keys
+    file_host_ids = [
+        'rapidgator', 'fileboom', 'keep2share', 'tezfiles', 'filedot',
+        'filespace', 'katfile',
+    ]
+    for fh_id in file_host_ids:
+        encrypted_keys.append(f'file_host_{fh_id}_credentials')
+
+    # Plaintext keys (just need to ensure they're in keyring)
+    plaintext_keys = ['username', 'imx_username', 'turbo_username']
+
+    # Scan QSettings for any proxy_*_password keys we might have missed
+    proxy_keys = []
+    try:
+        from PyQt6.QtCore import QSettings
+        qs = QSettings("bbdrop", "bbdrop")
+        qs.beginGroup("Credentials")
+        for qs_key in qs.allKeys():
+            if qs_key.startswith('proxy_') and qs_key.endswith('_password'):
+                if qs_key not in encrypted_keys:
+                    encrypted_keys.append(qs_key)
+                    proxy_keys.append(qs_key)
+        qs.endGroup()
+    except Exception:
+        pass
+
+    def _read_from_both(credential_key):
+        """Read a credential from keyring first, then QSettings as fallback."""
+        try:
+            import keyring
+            value = keyring.get_password("bbdrop", credential_key)
+            if value:
+                return value
+        except Exception:
+            pass
+        try:
+            from PyQt6.QtCore import QSettings
+            qs = QSettings("bbdrop", "bbdrop")
+            qs.beginGroup("Credentials")
+            value = qs.value(credential_key, "")
+            qs.endGroup()
+            return value
+        except Exception:
+            return ""
+
+    migrated_count = 0
+    skipped_count = 0
+
+    # Migrate encrypted credentials: decrypt with old key, re-encrypt with new key
+    for cred_key in encrypted_keys:
+        old_value = _read_from_both(cred_key)
+        if not old_value:
+            continue
+
+        try:
+            plaintext = old_fernet.decrypt(old_value.encode()).decode()
+            new_encrypted = new_fernet.encrypt(plaintext.encode()).decode()
+            set_credential(cred_key, new_encrypted)
+            migrated_count += 1
+        except Exception:
+            # Can't decrypt — might be corrupted or already plaintext. Copy as-is.
+            try:
+                set_credential(cred_key, old_value)
+                skipped_count += 1
+            except Exception as e:
+                log(f"Failed to migrate credential '{cred_key}': {e}",
+                    level="warning", category="auth")
+
+    # Migrate plaintext credentials (just ensure they're in keyring)
+    for cred_key in plaintext_keys:
+        value = _read_from_both(cred_key)
+        if value:
+            try:
+                set_credential(cred_key, value)
+            except Exception:
+                pass
+
+    # Store the new master key in keyring
+    try:
+        import keyring
+        keyring.set_password("bbdrop", "_master_key", new_key)
+    except Exception as e:
+        log(f"CRITICAL: Failed to store master key in keyring: {e}",
+            level="error", category="auth")
+        raise CredentialDecryptionError(
+            f"Cannot store master encryption key in OS keyring: {e}"
+        ) from e
+
+    # Clean up: remove QSettings Credentials group
+    try:
+        from PyQt6.QtCore import QSettings
+        qs = QSettings("bbdrop", "bbdrop")
+        qs.beginGroup("Credentials")
+        for qs_key in qs.allKeys():
+            qs.remove(qs_key)
+        qs.endGroup()
+        qs.sync()
+    except Exception:
+        pass  # QSettings cleanup is best-effort
+
+    log(f"Encryption key migration complete: {migrated_count} re-encrypted, "
+        f"{skipped_count} copied as-is", level="info", category="auth")
+
+    return new_key
+
+
 def load_user_defaults():
     """Load user defaults from config file
 
@@ -2236,8 +2367,15 @@ class ImxToUploader(ImageHostClient):
         return results
 
 def main():
-    # Migrate credentials from INI to Registry (runs once, safe to call multiple times)
+    # Migrate credentials from INI to keyring (runs once, safe to call multiple times)
     migrate_credentials_from_ini()
+
+    # Ensure CSPRNG master key exists — triggers one-time re-encryption migration
+    # if upgrading from SHA-256-derived key. Must run after INI migration above.
+    try:
+        get_encryption_key()
+    except CredentialDecryptionError as e:
+        log(f"Encryption key initialization failed: {e}", level="error", category="auth")
 
     # Auto-launch GUI if double-clicked (no arguments, no other console processes)
     if len(sys.argv) == 1:  # No arguments provided
