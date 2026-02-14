@@ -2,11 +2,11 @@
 
 ## Quick Reference
 
-**Version:** v0.6.16
+**Version:** v0.8.4
 **Feature:** Secure storage and management of passwords and authentication keys
-**Storage:** OS Keyring (primary) + Encrypted fallback (Fernet)
+**Storage:** Fernet encryption (AES-128-CBC + HMAC-SHA256) with CSPRNG master key, stored in OS Keyring
 **Supported Hosts:** IMX.to + 7 file hosting services
-**Last Updated:** 2026-01-03
+**Last Updated:** 2026-02-13
 
 ---
 
@@ -77,7 +77,7 @@ IMXuploader handles four types of credentials, each with different authenticatio
 
 **What it is:** Username:password that imxup converts to a temporary access token.
 
-**Storage:** OS Keyring (credentials) + `~/.imxup/token_cache.db` (token)
+**Storage:** OS Keyring (credentials) + `~/.bbdrop/token_cache.db` (token)
 - **Used for:** Uploading files to Rapidgator
 - **Format:** `username:password` (credentials stored separately from token)
 - **Token Expiry:** 24 hours (auto-refresh before expiry)
@@ -119,27 +119,27 @@ IMXuploader handles four types of credentials, each with different authenticatio
 
 ---
 
-## Storage Methods
+## Storage Method
 
-IMXuploader uses a two-tier storage system to maximize both security and compatibility.
+BBDrop uses dual-layer encryption for credential storage:
 
-### Method 1: OS Keyring (Preferred)
+1. **Fernet encryption** (AES-128-CBC + HMAC-SHA256) — encrypts each credential using a CSPRNG master key
+2. **OS Keyring** — stores both the encrypted credentials and the master key in the OS-native secure vault
+
+### OS Keyring
 
 **Supported Platforms:**
 - **Windows:** Credential Manager (built-in)
 - **macOS:** Keychain (built-in)
 - **Linux:** Secret Service / GNOME Keyring (install `python3-keyring`)
 
-**Security:** Credentials stored in OS-protected vault with user authentication
-- Windows: Windows Credential Manager encryption
-- macOS: Keychain encryption with system password
-- Linux: Secret Service daemon encryption
+**Security:** Credentials are Fernet-encrypted before storage, then the OS keyring adds its own encryption layer on top.
 
 **Advantages:**
-- Most secure (OS-level encryption)
-- Zero plaintext exposure
-- Automatic cleanup on logout (Windows)
-- Integration with system password manager
+- Dual-layer encryption (Fernet + OS-native)
+- CSPRNG master key is non-reproducible — tied to your user account, not derivable from system info
+- Zero plaintext exposure on disk
+- Credentials won't transfer to other computers
 
 **How to verify OS Keyring is working:**
 ```bash
@@ -153,38 +153,7 @@ systemctl --user status secrets-tool
 open /Applications/Utilities/Keychain\ Access.app
 ```
 
-If OS keyring unavailable, imxup automatically falls back to encrypted storage.
-
----
-
-### Method 2: Encrypted Fallback (Fernet)
-
-**Location:** `~/.imxup/config.ini` (encrypted sections only)
-
-**Encryption:** Fernet (AES-128 in CBC mode)
-- **Key:** Derived from PBKDF2-HMAC-SHA256 (100,000 iterations)
-- **Format:** Encrypted binary blob (not readable as plaintext)
-
-**When it's used:**
-- OS Keyring unavailable or broken
-- System doesn't support keyring access
-- Development/testing environments
-
-**File Structure:**
-```ini
-[credentials]
-imxto_username = <encrypted>
-imxto_password = <encrypted>
-rapidgator_creds = <encrypted>
-fileboom_api_key = <encrypted>
-```
-
-**Decryption is automatic:**
-- On application startup, imxup attempts OS Keyring first
-- If unavailable, automatically uses encrypted config file
-- User never interacts with decryption—it's transparent
-
-**Security Note:** The encrypted file is still more secure than plaintext, but OS Keyring is strongly preferred for production use.
+**Note:** OS Keyring is required. If no keyring backend is available, BBDrop will display an error and credentials cannot be saved. On Linux, install `python3-secretstorage` or `python3-keyring` if needed.
 
 ---
 
@@ -239,8 +208,7 @@ Storage: 245.8 GB / 1000 GB
 ### Step 4: Save and Done
 
 After successful test, click **OK** or **Save** to store credentials:
-- Saved to OS Keyring first
-- Falls back to encrypted config if keyring unavailable
+- Fernet-encrypted and saved to OS Keyring
 - Credentials persist across application restarts
 
 ---
@@ -249,12 +217,14 @@ After successful test, click **OK** or **Save** to store credentials:
 
 ### What's Encrypted?
 
-**All credentials are encrypted:**
-- ✓ IMX.to username and password
-- ✓ File host API keys
-- ✓ Rapidgator username/password
-- ✓ Filedot/Filespace username/password
-- ✓ Session cookies (during storage)
+**Sensitive credentials are Fernet-encrypted:**
+- ✓ IMX.to password and API key
+- ✓ File host API keys and passwords
+- ✓ Proxy passwords
+- ✓ Session tokens (during storage)
+
+**Stored in keyring without Fernet encryption (keyring still encrypts natively):**
+- Usernames (not considered secret)
 
 **Note:** Credentials in RAM (during active upload) are decrypted for use, which is necessary for authentication.
 
@@ -264,14 +234,14 @@ After successful test, click **OK** or **Save** to store credentials:
 - ✗ Credentials sent to third-party servers (except the file host itself)
 - ✗ Plaintext passwords on disk
 - ✗ Credentials in log files or debug output
-- ✗ Passwords in registry/plist (only in OS Keyring)
+- ✗ Passwords in registry/config files (stored only in OS Keyring)
 
 ### Best Practices
 
 1. **Use strong passwords** for all accounts
 2. **API keys:** Treat like passwords—don't share or commit to version control
 3. **Rapid Gator:** Use a unique password (not your main email password)
-4. **Never disable OS Keyring** if available (encrypted fallback is less secure)
+4. **Ensure OS Keyring is available** — it is required for credential storage
 5. **Check account security** periodically:
    - Verify login from Settings → Test Connection
    - Check account access logs on file host websites
@@ -288,22 +258,22 @@ After successful test, click **OK** or **Save** to store credentials:
 
 **Windows:**
 1. Open **Credential Manager** (Control.exe /name Microsoft.CredentialManager)
-2. Look for "imxup" entries
+2. Look for "bbdrop" entries
 3. If present, delete them
-4. In imxup, re-enter credentials and test connection
+4. In BBDrop, re-enter credentials and test connection
 
 **macOS:**
 1. Open **Keychain Access** (Applications → Utilities)
-2. Search for "imxup"
+2. Search for "bbdrop"
 3. Delete any found entries
-4. In imxup, re-enter credentials and test connection
+4. In BBDrop, re-enter credentials and test connection
 
 **Linux:**
 1. Restart Secret Service daemon:
    ```bash
    systemctl --user restart secrets-tool
    ```
-2. Or use encrypted config fallback (no action needed)
+2. Ensure `python3-secretstorage` or `python3-keyring` is installed
 
 ### Password Change
 
@@ -375,16 +345,14 @@ If you change your password on a file host:
 
 ### Credentials Lost After Restart
 
-**Cause:** Credentials not saved to OS Keyring
+**Cause:** OS Keyring was unavailable when credentials were saved
 
 **Solution:**
-1. Check if encrypted fallback exists: `~/.imxup/config.ini`
-2. If not, OS Keyring wasn't available when saving
-3. Re-enter credentials and ensure test passes
-4. Check OS Keyring availability:
+1. Ensure OS Keyring is working:
    - Windows: Control.exe /name Microsoft.CredentialManager
-   - Linux: `sudo apt-get install python3-keyring`
+   - Linux: `sudo apt-get install python3-keyring python3-secretstorage`
    - macOS: Keychain should always be available
+2. Re-enter credentials and ensure test passes
 
 ### Multiple Credentials Not Working
 
@@ -431,5 +399,5 @@ If you change your password on a file host:
 
 ---
 
-**Version:** 0.6.16
-**Last Updated:** 2026-01-03
+**Version:** 0.8.4
+**Last Updated:** 2026-02-13
