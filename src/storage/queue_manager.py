@@ -394,7 +394,9 @@ class QueueManager(QObject):
             'max_width': 0.0,
             'max_height': 0.0,
             'min_width': 0.0,
-            'min_height': 0.0
+            'min_height': 0.0,
+            'file_sizes': {},        # {filename: size_bytes}
+            'file_dimensions': {},   # {filename: (width, height)}
         }
 
         # Get scan configuration
@@ -419,7 +421,9 @@ class QueueManager(QObject):
             for i, f in enumerate(files):
                 fp = os.path.join(path, f)
                 try:
-                    result['total_size'] += os.path.getsize(fp)
+                    file_size = os.path.getsize(fp)
+                    result['total_size'] += file_size
+                    result['file_sizes'][f] = file_size
 
                     # Validate with imghdr if available, otherwise use PIL directly
                     if has_imghdr:
@@ -470,7 +474,21 @@ class QueueManager(QObject):
                 result['max_height'] = stats['max_height']
                 result['min_width'] = stats['min_width']
                 result['min_height'] = stats['min_height']
-        
+
+            # Collect per-file dimensions for cover detection
+            # PIL Image.open().size only reads the header — very fast
+            try:
+                from PIL import Image
+                for f in files:
+                    fp = os.path.join(path, f)
+                    try:
+                        with Image.open(fp) as img:
+                            result['file_dimensions'][f] = img.size
+                    except (OSError, IOError):
+                        pass  # Skip files PIL can't read
+            except ImportError:
+                pass
+
         return result
     
     def _calculate_dimensions(self, path: str, files: List[str], sampling: int) -> List[tuple]:
