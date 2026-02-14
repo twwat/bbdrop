@@ -18,6 +18,19 @@ class CredentialError(Exception):
     pass
 
 
+def generate_fernet_key() -> str:
+    """Generate a CSPRNG Fernet-compatible key (256-bit).
+
+    Uses the OS cryptographic random number generator (/dev/urandom on Linux,
+    CryptGenRandom on Windows) to produce a 32-byte key, base64url-encoded
+    for Fernet compatibility.
+
+    Returns:
+        str: Base64url-encoded 32-byte key suitable for Fernet
+    """
+    return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('ascii')
+
+
 def generate_salt(length: int = 32) -> bytes:
     """
     Generate a cryptographically secure random salt.
