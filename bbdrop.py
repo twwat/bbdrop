@@ -488,27 +488,50 @@ class CredentialDecryptionError(Exception):
     """Raised when credential decryption fails"""
     pass
 
-def get_encryption_key():
-    """Generate encryption key from system info (LEGACY - WEAK SECURITY).
+def _get_legacy_encryption_key():
+    """Generate encryption key from system info (LEGACY - used for migration only).
 
     WARNING: This uses hostname+username which is predictable and insecure.
-    Kept only for backward compatibility. New credentials should use keyring.
+    Only called during one-time migration to decrypt old credentials.
     """
-    # Use username and hostname to create a consistent key
-    # NOTE: platform.node() can HANG on systems with WMI/network issues
-    # Use COMPUTERNAME environment variable instead (Windows-specific but safer)
     hostname = os.getenv('COMPUTERNAME') or os.getenv('HOSTNAME') or 'localhost'
     username = os.getenv('USERNAME') or os.getenv('USER') or 'user'
     system_info = f"{username}{hostname}"
     key = hashlib.sha256(system_info.encode()).digest()
     return base64.urlsafe_b64encode(key)
 
-def encrypt_password(password):
-    """Encrypt password using legacy Fernet encryption.
+_cached_master_key = None
 
-    NOTE: This is kept for backward compatibility only.
-    New code should store credentials directly via keyring (see set_credential).
+def get_encryption_key():
+    """Get the CSPRNG master Fernet key from OS keyring.
+
+    On first call after upgrade, triggers one-time migration that re-encrypts
+    all existing credentials from the old SHA-256-derived key to the new
+    CSPRNG key.
     """
+    global _cached_master_key
+    if _cached_master_key:
+        return _cached_master_key
+
+    try:
+        import keyring
+        key = keyring.get_password("bbdrop", "_master_key")
+        if key:
+            _cached_master_key = key
+            return key
+    except Exception as e:
+        raise CredentialDecryptionError(
+            "OS keyring is not available. Credentials cannot be accessed. "
+            f"Install a keyring backend (e.g., SecretStorage on Linux): {e}"
+        ) from e
+
+    # No master key yet — first run after upgrade (or fresh install)
+    key = _migrate_encryption_keys()
+    _cached_master_key = key
+    return key
+
+def encrypt_password(password):
+    """Encrypt password using Fernet with the CSPRNG master key."""
     key = get_encryption_key()
     f = Fernet(key)
     return f.encrypt(password.encode()).decode()
