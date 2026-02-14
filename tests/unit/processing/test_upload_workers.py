@@ -132,12 +132,12 @@ class TestUploadWorkerControl:
 class TestUploadWorkerInitialization:
     """Test uploader initialization"""
 
-    @patch('src.processing.upload_workers.GUIImxToUploader')
+    @patch('src.processing.upload_workers.create_image_host_client')
     @patch('src.processing.upload_workers.RenameWorker')
-    def test_initialize_uploader(self, mock_rename_worker_class, mock_uploader_class):
-        """Test uploader initialization"""
+    def test_initialize_uploader(self, mock_rename_worker_class, mock_factory):
+        """Test uploader initialization via factory"""
         mock_uploader = Mock()
-        mock_uploader_class.return_value = mock_uploader
+        mock_factory.return_value = mock_uploader
 
         mock_rename_worker = Mock()
         mock_rename_worker_class.return_value = mock_rename_worker
@@ -148,15 +148,15 @@ class TestUploadWorkerInitialization:
 
         assert worker.uploader == mock_uploader
         assert worker.rename_worker == mock_rename_worker
-        mock_uploader_class.assert_called_once()
+        mock_factory.assert_called_once_with("imx")
 
-    @patch('src.processing.upload_workers.GUIImxToUploader')
+    @patch('src.processing.upload_workers.create_image_host_client')
     @patch('src.processing.upload_workers.RenameWorker')
     def test_initialize_uploader_rename_worker_fails(self, mock_rename_worker_class,
-                                                      mock_uploader_class):
+                                                      mock_factory):
         """Test uploader initialization when RenameWorker fails"""
         mock_uploader = Mock()
-        mock_uploader_class.return_value = mock_uploader
+        mock_factory.return_value = mock_uploader
 
         mock_rename_worker_class.side_effect = Exception("Init error")
 
@@ -173,33 +173,33 @@ class TestUploadWorkerProcessing:
     """Test upload processing (without running thread)"""
 
     @patch('src.processing.upload_workers.RenameWorker')
-    @patch('src.processing.upload_workers.load_user_defaults')
     @patch('src.processing.upload_workers.execute_gallery_hooks')
-    def test_upload_gallery_basic(self, mock_hooks, mock_defaults, mock_rename_worker_class):
+    @patch('src.processing.upload_workers.get_image_host_setting')
+    @patch('src.processing.upload_workers.is_image_host_enabled', return_value=True)
+    @patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True})
+    def test_upload_gallery_basic(self, mock_enabled_hosts, mock_is_enabled,
+                                  mock_get_setting, mock_hooks, mock_rename_worker_class):
         """Test basic gallery upload flow"""
-        mock_defaults.return_value = {
-            'thumbnail_size': 3,
-            'thumbnail_format': 2,
-            'max_retries': 3,
-            'parallel_batch_size': 4
-        }
-
+        mock_get_setting.return_value = 3  # Return numeric default for all settings
         mock_hooks.return_value = {}
 
         mock_queue_manager = Mock()
         worker = UploadWorker(mock_queue_manager)
 
-        # Mock uploader
+        # Set up uploader so host switch is not triggered
         mock_uploader = Mock()
-        mock_uploader.upload_folder.return_value = {
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        # Mock _run_upload_engine to return results directly
+        upload_results = {
             'successful_count': 50,
             'failed_count': 0,
             'gallery_id': 'gal123',
             'gallery_url': 'http://example.com/gal123'
         }
-        worker.uploader = mock_uploader
 
-        # Create mock item
+        # Create mock item with all required attributes
         mock_item = Mock()
         mock_item.path = "/path/to/gallery"
         mock_item.name = "Test Gallery"
@@ -210,40 +210,46 @@ class TestUploadWorkerProcessing:
         mock_item.avg_width = 1920
         mock_item.avg_height = 1080
         mock_item.status = "uploading"
+        mock_item.image_host_id = "imx"
+        mock_item.start_time = 0.0
+        mock_item.uploaded_bytes = 0
+        mock_item.cover_source_path = None
+        mock_item.cover_result = None
+        mock_item.observed_peak_kbps = 0.0
 
-        worker.upload_gallery(mock_item)
+        with patch.object(worker, '_run_upload_engine', return_value=upload_results), \
+             patch.object(worker, '_process_upload_results') as mock_process:
+            worker.upload_gallery(mock_item)
 
-        # Verify upload was called
-        mock_uploader.upload_folder.assert_called_once()
         # Verify status was updated to uploading
-        mock_queue_manager.update_item_status.assert_called()
+        mock_queue_manager.update_item_status.assert_any_call(mock_item.path, "uploading")
+        # Verify _process_upload_results was called with the results
+        mock_process.assert_called_once_with(mock_item, upload_results)
 
     @patch('src.processing.upload_workers.RenameWorker')
-    @patch('src.processing.upload_workers.load_user_defaults')
     @patch('src.processing.upload_workers.execute_gallery_hooks')
-    def test_upload_gallery_with_hooks(self, mock_hooks, mock_defaults, mock_rename_worker_class):
+    @patch('src.processing.upload_workers.get_image_host_setting')
+    @patch('src.processing.upload_workers.is_image_host_enabled', return_value=True)
+    @patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True})
+    def test_upload_gallery_with_hooks(self, mock_enabled_hosts, mock_is_enabled,
+                                       mock_get_setting, mock_hooks, mock_rename_worker_class):
         """Test upload with hook execution"""
-        mock_defaults.return_value = {
-            'thumbnail_size': 3,
-            'thumbnail_format': 2,
-            'max_retries': 3,
-            'parallel_batch_size': 4
-        }
-
-        # Hook returns ext field values
+        mock_get_setting.return_value = 3
         mock_hooks.return_value = {'ext1': 'hook_value'}
 
         mock_queue_manager = Mock()
         worker = UploadWorker(mock_queue_manager)
 
         mock_uploader = Mock()
-        mock_uploader.upload_folder.return_value = {
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        upload_results = {
             'successful_count': 50,
             'failed_count': 0,
             'gallery_id': 'gal123',
             'gallery_url': 'http://example.com/gal123'
         }
-        worker.uploader = mock_uploader
 
         mock_item = Mock()
         mock_item.path = "/path/to/gallery"
@@ -253,33 +259,38 @@ class TestUploadWorkerProcessing:
         mock_item.template_name = "default"
         mock_item.scan_complete = True
         mock_item.status = "uploading"
+        mock_item.image_host_id = "imx"
+        mock_item.start_time = 0.0
+        mock_item.uploaded_bytes = 0
+        mock_item.cover_source_path = None
+        mock_item.cover_result = None
+        mock_item.observed_peak_kbps = 0.0
 
-        # Don't mock threading.Thread - let it run naturally for hook execution
-        worker.upload_gallery(mock_item)
+        with patch.object(worker, '_run_upload_engine', return_value=upload_results), \
+             patch.object(worker, '_process_upload_results'):
+            worker.upload_gallery(mock_item)
 
         # Give background thread time to complete
         time.sleep(0.1)
 
-        # Hook should have been executed (called twice: 'started' and 'completed' events)
+        # Hook should have been executed (at least for 'started' event)
         assert mock_hooks.call_count >= 1
 
     @patch('src.processing.upload_workers.RenameWorker')
-    @patch('src.processing.upload_workers.load_user_defaults')
-    def test_upload_gallery_soft_stop(self, mock_defaults, mock_rename_worker_class):
+    @patch('src.processing.upload_workers.execute_gallery_hooks')
+    @patch('src.processing.upload_workers.is_image_host_enabled', return_value=True)
+    @patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True})
+    def test_upload_gallery_soft_stop(self, mock_enabled_hosts, mock_is_enabled,
+                                      mock_hooks, mock_rename_worker_class):
         """Test upload respects soft stop request"""
-        mock_defaults.return_value = {
-            'thumbnail_size': 3,
-            'thumbnail_format': 2,
-            'max_retries': 3,
-            'parallel_batch_size': 4
-        }
+        mock_hooks.return_value = {}
 
         mock_queue_manager = Mock()
         worker = UploadWorker(mock_queue_manager)
 
-        # Initialize uploader (required but won't be called due to early return)
         mock_uploader = Mock()
         worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
 
         mock_item = Mock()
         mock_item.path = "/path/to/gallery"
@@ -287,36 +298,38 @@ class TestUploadWorkerProcessing:
         mock_item.tab_name = "Main"
         mock_item.total_images = 50
         mock_item.status = "uploading"
+        mock_item.image_host_id = "imx"
+        mock_item.start_time = 0.0
+        mock_item.cover_source_path = None
 
         # Request soft stop before upload starts
         worker._soft_stop_requested_for = mock_item.path
 
-        with patch('src.processing.upload_workers.execute_gallery_hooks'):
-            worker.upload_gallery(mock_item)
+        worker.upload_gallery(mock_item)
 
         # Give hook thread time to complete
         time.sleep(0.1)
 
-        # Should mark as incomplete (soft stop check at line 222 returns early)
+        # Should mark as incomplete (soft stop check returns early before engine runs)
         mock_queue_manager.update_item_status.assert_any_call(mock_item.path, "incomplete")
 
     @patch('src.processing.upload_workers.RenameWorker')
-    @patch('src.processing.upload_workers.load_user_defaults')
-    def test_upload_gallery_error(self, mock_defaults, mock_rename_worker_class):
+    @patch('src.processing.upload_workers.execute_gallery_hooks')
+    @patch('src.processing.upload_workers.get_image_host_setting')
+    @patch('src.processing.upload_workers.is_image_host_enabled', return_value=True)
+    @patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True})
+    def test_upload_gallery_error(self, mock_enabled_hosts, mock_is_enabled,
+                                   mock_get_setting, mock_hooks, mock_rename_worker_class):
         """Test upload error handling"""
-        mock_defaults.return_value = {
-            'thumbnail_size': 3,
-            'thumbnail_format': 2,
-            'max_retries': 3,
-            'parallel_batch_size': 4
-        }
+        mock_get_setting.return_value = 3
+        mock_hooks.return_value = {}
 
         mock_queue_manager = Mock()
         worker = UploadWorker(mock_queue_manager)
 
         mock_uploader = Mock()
-        mock_uploader.upload_folder.side_effect = Exception("Upload error")
         worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
 
         mock_item = Mock()
         mock_item.path = "/path/to/gallery"
@@ -324,11 +337,16 @@ class TestUploadWorkerProcessing:
         mock_item.tab_name = "Main"
         mock_item.total_images = 50
         mock_item.status = "uploading"
+        mock_item.image_host_id = "imx"
+        mock_item.start_time = time.time()
+        mock_item.uploaded_bytes = 0
+        mock_item.cover_source_path = None
+        mock_item.observed_peak_kbps = 0.0
 
         failed_spy = Mock()
         worker.gallery_failed.connect(failed_spy)
 
-        with patch('src.processing.upload_workers.execute_gallery_hooks'):
+        with patch.object(worker, '_run_upload_engine', side_effect=Exception("Upload error")):
             worker.upload_gallery(mock_item)
 
         # Should emit failed signal
@@ -352,6 +370,11 @@ class TestUploadWorkerProcessResults:
         mock_item.total_images = 50
         mock_item.start_time = time.time()  # Set numeric timestamp
         mock_item.uploaded_bytes = 1024 * 1024  # Set numeric value
+        mock_item.image_host_id = "imx"
+        mock_item.observed_peak_kbps = 500.0
+        mock_item.cover_source_path = None
+        mock_item.cover_result = None
+        mock_item.tab_name = "Main"
 
         results = {
             'successful_count': 50,
@@ -361,6 +384,7 @@ class TestUploadWorkerProcessResults:
         }
 
         with patch.object(worker, '_save_artifacts_for_result', return_value={}), \
+             patch.object(worker, '_upload_cover', return_value=None), \
              patch('src.processing.upload_workers.execute_gallery_hooks'):
             worker._process_upload_results(mock_item, results)
 
@@ -379,6 +403,11 @@ class TestUploadWorkerProcessResults:
         mock_item.total_images = 50
         mock_item.start_time = time.time()  # Set numeric timestamp
         mock_item.uploaded_bytes = 1024 * 900  # 45 files of ~20KB each
+        mock_item.image_host_id = "imx"
+        mock_item.observed_peak_kbps = 400.0
+        mock_item.cover_source_path = None
+        mock_item.cover_result = None
+        mock_item.tab_name = "Main"
 
         results = {
             'successful_count': 45,
@@ -388,7 +417,8 @@ class TestUploadWorkerProcessResults:
             'gallery_url': 'http://example.com/gal123'
         }
 
-        with patch.object(worker, '_save_artifacts_for_result', return_value={}):
+        with patch.object(worker, '_save_artifacts_for_result', return_value={}), \
+             patch.object(worker, '_upload_cover', return_value=None):
             worker._process_upload_results(mock_item, results)
 
         # Should mark as failed with partial failure message
@@ -421,6 +451,8 @@ class TestUploadWorkerProcessResults:
         mock_item.total_images = 50
         mock_item.start_time = time.time()  # Set numeric timestamp
         mock_item.uploaded_bytes = 1024 * 600  # 30 files worth of data
+        mock_item.image_host_id = "imx"
+        mock_item.observed_peak_kbps = 300.0
 
         worker._soft_stop_requested_for = mock_item.path
 
