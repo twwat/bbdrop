@@ -131,6 +131,8 @@ class HooksExecutor:
         - %z: ZIP archive path
         - %s: Gallery size in bytes
         - %t: Template name
+        - %cv: Cover photo source path
+        - %cu: Cover photo URL (after upload)
         - %e1-%e4: ext1-4 field values
         - %c1-%c4: custom1-4 field values
 
@@ -140,6 +142,8 @@ class HooksExecutor:
         # Process longer variable names first to avoid conflicts
         substitutions = {
             # Multi-character variables (process first)
+            '%cv': context.get('cover_path', ''),
+            '%cu': context.get('cover_url', ''),
             '%e1': str(context.get('ext1', '')),
             '%e2': str(context.get('ext2', '')),
             '%e3': str(context.get('ext3', '')),
@@ -378,6 +382,13 @@ class HooksExecutor:
             else:
                 log(f"Key '{mapping_key}' not found in hook results for {ext_field}", level="debug", category="hooks")
 
+        # Pass through cover_path and cover_url from raw JSON results
+        # These are handled specially by upload_workers (not via key mapping)
+        for cover_key in ('cover_path', 'cover_url'):
+            if cover_key in results and results[cover_key]:
+                ext_fields[cover_key] = str(results[cover_key])
+                log(f"Hook returned {cover_key}: {results[cover_key]}", level="info", category="hooks")
+
         log(f"Hooks execution complete. Extracted fields: {ext_fields}", level="debug", category="hooks")
         return ext_fields
 
@@ -402,7 +413,9 @@ def execute_gallery_hooks(event_type: str, gallery_path: str, gallery_name: Opti
                           ext1: Optional[str] = None, ext2: Optional[str] = None,
                           ext3: Optional[str] = None, ext4: Optional[str] = None,
                           custom1: Optional[str] = None, custom2: Optional[str] = None,
-                          custom3: Optional[str] = None, custom4: Optional[str] = None) -> Dict[str, str]:
+                          custom3: Optional[str] = None, custom4: Optional[str] = None,
+                          cover_path: Optional[str] = None,
+                          cover_url: Optional[str] = None) -> Dict[str, str]:
     """
     Convenience function to execute hooks for a gallery event.
 
@@ -420,6 +433,8 @@ def execute_gallery_hooks(event_type: str, gallery_path: str, gallery_name: Opti
         template_name: Template name used for BBCode generation
         ext1-4: Current ext field values
         custom1-4: Current custom field values
+        cover_path: Absolute path to cover photo source file
+        cover_url: Cover photo URL after upload
 
     Returns:
         Dictionary with ext1-4 fields to update
@@ -446,6 +461,8 @@ def execute_gallery_hooks(event_type: str, gallery_path: str, gallery_name: Opti
         'custom2': custom2 or '',
         'custom3': custom3 or '',
         'custom4': custom4 or '',
+        'cover_path': cover_path or '',
+        'cover_url': cover_url or '',
     }
 
     executor = get_hooks_executor()

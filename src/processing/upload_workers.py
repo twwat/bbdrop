@@ -254,12 +254,17 @@ class UploadWorker(QThread):
                         gallery_path=item.path,
                         gallery_name=item.name,
                         tab_name=item.tab_name,
-                        image_count=item.total_images or 0
+                        image_count=item.total_images or 0,
+                        cover_path=item.cover_source_path or '',
                     )
                     # Update ext fields if hook returned any
                     if ext_fields:
+                        # Handle cover from hook output before generic field update
+                        self._apply_cover_from_hook(item, ext_fields)
+                        # Set ext1-4 fields on item (skip cover keys)
                         for key, value in ext_fields.items():
-                            setattr(item, key, value)
+                            if key not in ('cover_path', 'cover_url'):
+                                setattr(item, key, value)
                         self.queue_manager._schedule_debounced_save([item.path])
                         log(f"Updated ext fields from started hook: {ext_fields}", level="info", category="hooks")
                         # Emit signal to update GUI
@@ -343,6 +348,44 @@ class UploadWorker(QThread):
 
             # Clear gallery counter
             self.current_gallery_counter = None
+
+    def _apply_cover_from_hook(self, item: GalleryQueueItem, ext_fields: Dict[str, str]) -> None:
+        """Set cover_source_path from hook output if no cover is already set.
+
+        Handles two keys from the hook JSON result:
+        - ``cover_path``: local file path used directly
+        - ``cover_url``: remote URL downloaded to a temp file
+
+        Manual / auto-detected covers take priority -- an existing
+        ``cover_source_path`` is never overwritten.
+        """
+        if item.cover_source_path:
+            return
+
+        cover_path = ext_fields.get('cover_path')
+        if cover_path:
+            if os.path.isfile(cover_path):
+                item.cover_source_path = cover_path
+                log(f"Cover set from hook: {cover_path}", level="info", category="cover")
+            else:
+                log(f"Cover path from hook does not exist: {cover_path}", level="warning", category="cover")
+            return
+
+        cover_url = ext_fields.get('cover_url')
+        if cover_url:
+            import tempfile
+            import requests
+            try:
+                resp = requests.get(cover_url, timeout=30)
+                resp.raise_for_status()
+                # Derive file extension from URL (strip query string first)
+                suffix = os.path.splitext(cover_url.split('?')[0])[1] or '.jpg'
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix='cover_') as tmp:
+                    tmp.write(resp.content)
+                    item.cover_source_path = tmp.name
+                log(f"Downloaded cover from hook URL: {cover_url}", level="info", category="cover")
+            except Exception as e:
+                log(f"Failed to download cover from hook URL: {e}", level="warning", category="cover")
 
     def _upload_cover(self, item: GalleryQueueItem, gallery_id: str = ""):
         """Upload cover photo if configured. Returns result dict or None.
@@ -478,12 +521,18 @@ class UploadWorker(QThread):
                         gallery_id=results.get('gallery_id', ''),
                         json_path=json_path,
                         bbcode_path=bbcode_path,
-                        zip_path=''  # ZIP support not implemented yet
+                        zip_path='',  # ZIP support not implemented yet
+                        cover_path=item.cover_source_path or '',
+                        cover_url=(item.cover_result or {}).get('image_url', ''),
                     )
                     # Update ext fields if hook returned any
                     if ext_fields:
+                        # Handle cover from hook output before generic field update
+                        self._apply_cover_from_hook(item, ext_fields)
+                        # Set ext1-4 fields on item (skip cover keys)
                         for key, value in ext_fields.items():
-                            setattr(item, key, value)
+                            if key not in ('cover_path', 'cover_url'):
+                                setattr(item, key, value)
                         self.queue_manager._schedule_debounced_save([item.path])
                         log(f"Updated ext fields from completed hook: {ext_fields}", level="info", category="hooks")
                         # Emit signal to update GUI
