@@ -4,6 +4,27 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.3] - 2026-02-14
+
+### Added
+- **TurboImageHost support**: Upload galleries to TurboImageHost in addition to IMX.to, with per-host settings and gallery management
+- **Cover photos redesign**: New dedicated Cover Photos tab in settings
+  - Auto-detect covers by filename patterns, image dimensions, or file size
+  - Choose which host uploads your covers (independent of gallery host)
+  - Set cover-specific thumbnail size (e.g. 600px on IMX via dedicated cover endpoint)
+  - Limit max covers per gallery, skip duplicates
+  - Set or clear covers manually via right-click context menu
+- **Hooks**: New `%cv` (cover path) and `%cu` (cover URL) variables; hooks can also provide covers via JSON output
+- **Interactive hook mapper**: Visual tool for mapping hook output fields to placeholders
+- **Settings sidebar**: Vertical sidebar navigation replaces horizontal tabs
+- **Stronger credential encryption**: Credentials now use a cryptographically random master key stored in your OS keyring (auto-migrated from previous versions)
+
+### Fixed
+- Settings migration from ImxUploader no longer re-runs on every launch
+- Gallery storage path could contain a duplicate segment
+- Host status not refreshing after toggling enabled state
+- TurboImageHost reporting failed uploads as successful
+
 ## [0.8.2] - 2026-02-03
 
 ### Added
@@ -527,6 +548,7 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.8.3  | 2026-02-14 | Multi-host uploads, cover redesign, CSPRNG credentials, hooks |
 | 0.8.2  | 2026-01-31 | Multi-format archives, split uploads, tooltips |
 | 0.8.0  | 2026-01-27 | Proxy system, bbdrop rebrand, status icons |
 | 0.7.4  | 2026-01-19 | Unified icons, bandwidth manager, table delegates |
