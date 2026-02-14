@@ -1277,44 +1277,6 @@ class ComprehensiveSettingsDialog(QDialog):
         strategy_layout.addWidget(perf_info)
         
         layout.addWidget(strategy_group)
-
-        # Cover Photo Detection group
-        cover_group = QGroupBox("Cover Photo Detection")
-        cover_layout = QVBoxLayout(cover_group)
-
-        # Explanation label
-        cover_info = QLabel(
-            "Automatically detect cover/poster images during scanning. "
-            "Detected covers are uploaded via the 600px cover endpoint and placed "
-            "in the #cover# template placeholder."
-        )
-        cover_info.setWordWrap(True)
-        cover_info.setStyleSheet("color: #888; font-style: italic; margin-bottom: 4px;")
-        cover_layout.addWidget(cover_info)
-
-        # Filename patterns
-        pattern_row = QHBoxLayout()
-        pattern_row.addWidget(QLabel("Filename patterns:"))
-        self.cover_patterns_edit = QLineEdit()
-        self.cover_patterns_edit.setPlaceholderText("cover.*, poster.*, *_cover.* (comma-separated globs)")
-        self.cover_patterns_edit.setToolTip(
-            "Comma-separated glob patterns. First matching pattern wins.\n"
-            "Examples: cover.*, poster.*, *_cover.*, *-cover.*\n\n"
-            "Clear this field to disable cover detection."
-        )
-        pattern_row.addWidget(self.cover_patterns_edit)
-        cover_layout.addLayout(pattern_row)
-
-        # Also upload as gallery image checkbox
-        self.cover_also_upload_check = QCheckBox("Also upload cover as gallery image")
-        self.cover_also_upload_check.setToolTip(
-            "When checked, the cover file is uploaded both as a cover photo\n"
-            "AND as a normal gallery image. When unchecked (default),\n"
-            "it only goes through the cover endpoint."
-        )
-        cover_layout.addWidget(self.cover_also_upload_check)
-
-        layout.addWidget(cover_group)
         layout.addStretch()
 
         # Connect change signals to mark tab as dirty
@@ -1338,10 +1300,6 @@ class ComprehensiveSettingsDialog(QDialog):
         self.stats_exclude_outliers_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
         self.avg_mean_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
         self.avg_median_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-
-        # Connect cover photo detection controls
-        self.cover_patterns_edit.textChanged.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.cover_also_upload_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
 
         self._add_settings_page(scanning_widget, "Image Scan")
 
@@ -3064,7 +3022,6 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.exclude_last_check, self.exclude_small_check, self.exclude_small_spin,
                 self.exclude_patterns_check, self.exclude_patterns_edit,
                 self.stats_exclude_outliers_check, self.avg_mean_radio, self.avg_median_radio,
-                self.cover_patterns_edit, self.cover_also_upload_check
             ]
             for control in controls_to_block:
                 control.blockSignals(True)
@@ -3114,14 +3071,6 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.avg_median_radio.setChecked(True)
             else:
                 self.avg_mean_radio.setChecked(True)
-
-            # Load cover photo detection settings from QSettings
-            self.cover_patterns_edit.setText(
-                self.settings.value('cover/filename_patterns', DEFAULT_COVER_PATTERNS, type=str)
-            )
-            self.cover_also_upload_check.setChecked(
-                self.settings.value('cover/also_upload_as_gallery_image', False, type=bool)
-            )
 
             # Unblock signals
             for control in controls_to_block:
@@ -3408,10 +3357,6 @@ class ComprehensiveSettingsDialog(QDialog):
 
             with open(config_file, 'w', encoding='utf-8') as f:
                 config.write(f)
-
-            # Save cover photo detection settings to QSettings
-            self.settings.setValue('cover/filename_patterns', self.cover_patterns_edit.text())
-            self.settings.setValue('cover/also_upload_as_gallery_image', self.cover_also_upload_check.isChecked())
 
         except Exception as e:
             log(f"Failed to save scanning settings: {e}", level="warning", category="settings")

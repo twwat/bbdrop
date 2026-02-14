@@ -737,7 +737,7 @@ class QueueManager(QObject):
             settings = QSettings("BBDropUploader", "BBDropGUI")
             return {
                 'patterns': settings.value('cover/filename_patterns', DEFAULT_COVER_PATTERNS, type=str),
-                'also_upload': settings.value('cover/also_upload_as_gallery_image', False, type=bool),
+                'also_upload': settings.value('cover/also_upload_as_gallery', False, type=bool),
             }
         except Exception:
             return {'patterns': DEFAULT_COVER_PATTERNS, 'also_upload': False}

@@ -9,7 +9,7 @@ Provides UI for credentials, connection settings, thumbnails, and host-specific 
 import os
 import configparser
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout, QLabel,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
     QGroupBox, QPushButton, QSlider, QComboBox, QCheckBox, QLineEdit,
     QDialog, QMessageBox, QStyle
 )
@@ -68,18 +68,7 @@ class ImageHostConfigPanel(QWidget):
         thumbnails_group = self._create_thumbnails_group()
         main_layout.addWidget(thumbnails_group)
 
-        # Section 4: Cover Photo Settings
-        cover_group = self._create_cover_group()
-        main_layout.addWidget(cover_group)
-
-        # Disable cover settings when session credentials are not configured
-        # Cover upload requires session auth (username + password)
-        has_session_creds = bool(get_credential('username', self.host_id))
-        if not has_session_creds:
-            cover_group.setEnabled(False)
-            cover_group.setToolTip("Cover photo upload requires session credentials (username + password)")
-
-        # Section 5: Options (only for IMX)
+        # Section 4: Options (only for IMX)
         if self.host_id == "imx":
             options_group = self._create_options_group()
             main_layout.addWidget(options_group)
@@ -396,44 +385,6 @@ class ImageHostConfigPanel(QWidget):
 
         return group
 
-    def _create_cover_group(self) -> QGroupBox:
-        """Create the cover photo settings group."""
-        group = QGroupBox("Cover Photo Settings")
-        layout = QFormLayout(group)
-
-        # Cover Thumbnail Format
-        self.cover_thumbnail_format_combo = QComboBox()
-        self.cover_thumbnail_format_combo.addItems(
-            ["Fixed Width", "Proportional", "Square", "Fixed Height"]
-        )
-        current_cover_format = get_image_host_setting(
-            self.host_id, 'cover_thumbnail_format', 'int'
-        )
-        if current_cover_format and 1 <= current_cover_format <= 4:
-            self.cover_thumbnail_format_combo.setCurrentIndex(current_cover_format - 1)
-        else:
-            # Default to Proportional (value 2, index 1)
-            self.cover_thumbnail_format_combo.setCurrentIndex(1)
-        self.cover_thumbnail_format_combo.currentIndexChanged.connect(self._mark_modified)
-        layout.addRow("Cover thumbnail format:", self.cover_thumbnail_format_combo)
-
-        # Cover Gallery ID
-        self.cover_gallery_edit = QLineEdit()
-        self.cover_gallery_edit.setPlaceholderText("Optional gallery ID for orphan covers")
-        self.cover_gallery_edit.setToolTip(
-            "Gallery ID where covers not associated with a gallery on this host are collected.\n"
-            "Leave empty to upload to account root."
-        )
-        current_cover_gallery = get_image_host_setting(
-            self.host_id, 'cover_gallery', 'str'
-        )
-        if current_cover_gallery:
-            self.cover_gallery_edit.setText(current_cover_gallery)
-        self.cover_gallery_edit.textChanged.connect(self._mark_modified)
-        layout.addRow("Cover gallery:", self.cover_gallery_edit)
-
-        return group
-
     def _create_options_group(self) -> QGroupBox:
         """Create the options group (IMX-specific)."""
         group = QGroupBox("Options")
@@ -486,16 +437,6 @@ class ImageHostConfigPanel(QWidget):
         # Save content type (if available)
         if self.content_type_combo is not None:
             save_image_host_setting(self.host_id, 'content_type', self.content_type_combo.currentData())
-
-        # Save cover photo settings
-        save_image_host_setting(
-            self.host_id, 'cover_thumbnail_format',
-            self.cover_thumbnail_format_combo.currentIndex() + 1
-        )
-        save_image_host_setting(
-            self.host_id, 'cover_gallery',
-            self.cover_gallery_edit.text().strip()
-        )
 
         if self.host_id == "imx":
             save_image_host_setting(self.host_id, 'auto_rename', self.auto_rename_check.isChecked())

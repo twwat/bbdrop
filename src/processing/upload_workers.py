@@ -613,7 +613,7 @@ class UploadWorker(QThread):
             from PyQt6.QtCore import QSettings
             settings = QSettings("BBDropUploader", "BBDropGUI")
             also_upload = settings.value(
-                'cover/also_upload_as_gallery_image', False, type=bool)
+                'cover/also_upload_as_gallery', False, type=bool)
             if not also_upload:
                 exclude_cover = os.path.basename(item.cover_source_path)
 
