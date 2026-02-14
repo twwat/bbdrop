@@ -129,63 +129,65 @@ class TestDetectCoverByDimensions:
         result = detect_cover_by_dimensions(dims, differs_percent=0)
         assert result == []
 
-    def test_min_width_filter(self):
+    def test_min_shortest_side_filter(self):
         from src.core.cover_detector import detect_cover_by_dimensions
+        # small: shortest side = 100, wide: shortest side = 200
         dims = {
             "small.jpg": (100, 200),
             "wide.jpg": (500, 200),
         }
-        result = detect_cover_by_dimensions(dims, min_width=400)
+        result = detect_cover_by_dimensions(dims, min_shortest_side=200)
         assert result == ["wide.jpg"]
 
-    def test_min_height_filter(self):
+    def test_min_shortest_side_portrait(self):
         from src.core.cover_detector import detect_cover_by_dimensions
+        # Portrait image: shortest side is width
         dims = {
-            "short.jpg": (200, 100),
-            "tall.jpg": (200, 500),
+            "narrow.jpg": (150, 500),
+            "square.jpg": (300, 300),
         }
-        result = detect_cover_by_dimensions(dims, min_height=400)
-        assert result == ["tall.jpg"]
+        result = detect_cover_by_dimensions(dims, min_shortest_side=200)
+        assert result == ["square.jpg"]
 
-    def test_max_width_filter(self):
+    def test_max_longest_side_filter(self):
         from src.core.cover_detector import detect_cover_by_dimensions
+        # small: longest side = 200, wide: longest side = 500
         dims = {
             "small.jpg": (100, 200),
             "wide.jpg": (500, 200),
         }
-        result = detect_cover_by_dimensions(dims, max_width=200)
+        result = detect_cover_by_dimensions(dims, max_longest_side=300)
         assert result == ["small.jpg"]
 
-    def test_max_height_filter(self):
+    def test_max_longest_side_portrait(self):
         from src.core.cover_detector import detect_cover_by_dimensions
+        # Portrait image: longest side is height
         dims = {
-            "short.jpg": (200, 100),
-            "tall.jpg": (200, 500),
+            "tall.jpg": (200, 600),
+            "compact.jpg": (200, 250),
         }
-        result = detect_cover_by_dimensions(dims, max_height=200)
-        assert result == ["short.jpg"]
+        result = detect_cover_by_dimensions(dims, max_longest_side=300)
+        assert result == ["compact.jpg"]
 
     def test_all_criteria_combined_as_and(self):
         from src.core.cover_detector import detect_cover_by_dimensions
         # Only "big.jpg" should pass ALL criteria:
         # - differs from average by > 30%
-        # - min_width=150, min_height=150, max_width=300, max_height=300
+        # - min_shortest_side=150, max_longest_side=300
         dims = {
-            "small.jpg": (100, 100),   # area 10000
-            "medium.jpg": (150, 150),  # area 22500
-            "big.jpg": (250, 250),     # area 62500
+            "small.jpg": (100, 100),   # area 10000, shortest=100, longest=100
+            "medium.jpg": (150, 150),  # area 22500, shortest=150, longest=150
+            "big.jpg": (250, 250),     # area 62500, shortest=250, longest=250
         }
         # avg area = (10000+22500+62500)/3 = 31666.67
-        # small: |10000-31666|/31666 = 68.4% > 30% -- but min_width=150 fails
-        # medium: |22500-31666|/31666 = 28.9% -- not > 30%, fails differs
-        # big: |62500-31666|/31666 = 97.4% > 30%, width 250>=150, height 250>=150, width 250<=300, height 250<=300 -- passes
+        # small: deviation 68.4% > 30% -- but shortest=100 < 150, fails min
+        # medium: deviation 28.9% -- not > 30%, fails differs
+        # big: deviation 97.4% > 30%, shortest=250>=150, longest=250<=300 -- passes
         result = detect_cover_by_dimensions(
             dims,
             differs_percent=30,
-            min_width=150,
-            min_height=150,
-            max_width=300,
-            max_height=300,
+            min_shortest_side=150,
+            max_longest_side=300,
         )
         assert result == ["big.jpg"]
 

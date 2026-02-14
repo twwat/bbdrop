@@ -279,11 +279,9 @@ class QueueManager(QObject):
                                 if cover_config.get('dimension_differs_enabled', False):
                                     dim_kwargs['differs_percent'] = cover_config.get('dimension_differs_percent', 30)
                                 if cover_config.get('dimension_min_enabled', False):
-                                    dim_kwargs['min_width'] = cover_config.get('dimension_min_width', 0)
-                                    dim_kwargs['min_height'] = cover_config.get('dimension_min_height', 0)
+                                    dim_kwargs['min_shortest_side'] = cover_config.get('dimension_min_shortest_side', 0)
                                 if cover_config.get('dimension_max_enabled', False):
-                                    dim_kwargs['max_width'] = cover_config.get('dimension_max_width', 0)
-                                    dim_kwargs['max_height'] = cover_config.get('dimension_max_height', 0)
+                                    dim_kwargs['max_longest_side'] = cover_config.get('dimension_max_longest_side', 0)
                                 if dim_kwargs:
                                     dim_matches = detect_cover_by_dimensions(file_dimensions, **dim_kwargs)
                                     for f in dim_matches:

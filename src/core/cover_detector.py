@@ -84,10 +84,8 @@ def detect_covers_by_filename(
 def detect_cover_by_dimensions(
     file_dimensions: Dict[str, Tuple[int, int]],
     differs_percent: Optional[float] = None,
-    min_width: Optional[int] = None,
-    min_height: Optional[int] = None,
-    max_width: Optional[int] = None,
-    max_height: Optional[int] = None,
+    min_shortest_side: Optional[int] = None,
+    max_longest_side: Optional[int] = None,
 ) -> list[str]:
     """Detect covers by image dimensions.
 
@@ -98,10 +96,10 @@ def detect_cover_by_dimensions(
         file_dimensions: Mapping of ``{filename: (width, height)}``.
         differs_percent: Include files whose pixel area differs from the
             average area by more than this percentage.
-        min_width: Minimum width (inclusive).
-        min_height: Minimum height (inclusive).
-        max_width: Maximum width (inclusive).
-        max_height: Maximum height (inclusive).
+        min_shortest_side: Minimum size on the shortest side (inclusive).
+            Rejects images where ``min(w, h) < min_shortest_side``.
+        max_longest_side: Maximum size on the longest side (inclusive).
+            Rejects images where ``max(w, h) > max_longest_side``.
 
     Returns:
         List of filenames matching all criteria, in iteration order.
@@ -111,7 +109,7 @@ def detect_cover_by_dimensions(
 
     has_criteria = any(
         v is not None
-        for v in (differs_percent, min_width, min_height, max_width, max_height)
+        for v in (differs_percent, min_shortest_side, max_longest_side)
     )
     if not has_criteria:
         return []
@@ -133,13 +131,9 @@ def detect_cover_by_dimensions(
             if deviation <= differs_percent:
                 continue
 
-        if min_width is not None and w < min_width:
+        if min_shortest_side is not None and min(w, h) < min_shortest_side:
             continue
-        if min_height is not None and h < min_height:
-            continue
-        if max_width is not None and w > max_width:
-            continue
-        if max_height is not None and h > max_height:
+        if max_longest_side is not None and max(w, h) > max_longest_side:
             continue
 
         result.append(fname)
