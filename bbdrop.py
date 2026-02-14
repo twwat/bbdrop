@@ -556,9 +556,7 @@ def decrypt_password(encrypted_password):
         ) from e
 
 def get_credential(key, host_id=None):
-    """Get credential using OS-native secure storage (keyring).
-
-    Falls back to QSettings/Registry for backward compatibility.
+    """Get credential from OS keyring.
 
     Args:
         key: Credential key (username, password, api_key)
@@ -567,92 +565,61 @@ def get_credential(key, host_id=None):
     Returns:
         The credential value, or empty string if not found.
     """
-    # Determine the effective key (host-specific or global)
     effective_key = f"{host_id}_{key}" if host_id else key
 
     try:
-        # Try keyring first (secure OS-native storage)
         import keyring
         value = keyring.get_password("bbdrop", effective_key)
         if value:
             return value
-        # Only fall back to global key for legacy IMX compat (not other hosts)
+        # Fall back to global key for legacy IMX compat (not other hosts)
         if host_id and host_id == "imx":
             value = keyring.get_password("bbdrop", key)
             if value:
                 return value
     except ImportError:
-        pass  # Fall through to legacy storage
-    except Exception:
-        pass  # Keyring not available, fall through to QSettings (normal)
+        log("keyring not available — credentials inaccessible", level="error", category="auth")
+    except Exception as e:
+        log(f"Keyring error: {e}", level="error", category="auth")
 
-    # Fallback to legacy QSettings/Registry storage
-    from PyQt6.QtCore import QSettings
-    settings = QSettings("bbdrop", "bbdrop")
-    settings.beginGroup("Credentials")
-    value = settings.value(effective_key, "")
-    # Only fall back to global key for legacy IMX compat (not other hosts)
-    if not value and host_id and host_id == "imx":
-        value = settings.value(key, "")
-    settings.endGroup()
-    return value
+    return ""
 
 def set_credential(key, value, host_id=None):
-    """Set credential using OS-native secure storage (keyring).
-
-    Also stores in QSettings/Registry for backward compatibility.
+    """Store credential in OS keyring.
 
     Args:
         key: Credential key (username, password, api_key)
         value: Credential value to store
         host_id: Optional host identifier for host-specific storage.
+
+    Raises:
+        CredentialDecryptionError: If keyring is not available.
     """
-    # Determine the effective key (host-specific or global)
     effective_key = f"{host_id}_{key}" if host_id else key
 
     try:
-        # Try to use keyring (secure OS-native storage)
         import keyring
         keyring.set_password("bbdrop", effective_key, value)
-        log(f"Credential '{effective_key}' stored securely in OS keyring", level="debug", category="auth")
+        log(f"Credential '{effective_key}' stored in OS keyring", level="debug", category="auth")
     except ImportError:
-        log("keyring not available, using QSettings only", level="warning", category="auth")
+        raise CredentialDecryptionError("OS keyring not available. Cannot store credentials.")
     except Exception as e:
-        log(f"Keyring storage failed: {e}, falling back to QSettings", level="warning", category="auth")
-
-    # Also store in QSettings/Registry for backward compatibility
-    from PyQt6.QtCore import QSettings
-    settings = QSettings("bbdrop", "bbdrop")
-    settings.beginGroup("Credentials")
-    settings.setValue(effective_key, value)
-    settings.endGroup()
-    settings.sync()
+        raise CredentialDecryptionError(f"Failed to store credential: {e}") from e
 
 def remove_credential(key, host_id=None):
-    """Remove credential from QSettings and keyring.
+    """Remove credential from OS keyring.
 
     Args:
         key: Credential key (username, password, api_key)
         host_id: Optional host identifier for host-specific removal.
     """
-    # Determine the effective key (host-specific or global)
     effective_key = f"{host_id}_{key}" if host_id else key
 
     try:
-        # Try to remove from keyring
         import keyring
         keyring.delete_password("bbdrop", effective_key)
-    except ImportError:
-        pass  # keyring not available
     except Exception:
-        pass  # Key may not exist in keyring
-
-    from PyQt6.QtCore import QSettings
-    settings = QSettings("bbdrop", "bbdrop")
-    settings.beginGroup("Credentials")
-    settings.remove(effective_key)
-    settings.endGroup()
-    settings.sync()
+        pass  # Key may not exist
 
 def migrate_credentials_from_ini():
     """Migrate credentials from INI file to QSettings, then remove from INI"""
