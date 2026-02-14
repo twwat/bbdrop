@@ -5,6 +5,17 @@ import pytest
 from bbdrop import get_credential, set_credential, encrypt_password, decrypt_password, remove_credential
 
 
+def _has_real_keyring():
+    """Check if a real keyring backend is available (not the fail backend)."""
+    try:
+        import keyring
+        backend = keyring.get_keyring()
+        return 'fail' not in type(backend).__module__
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _has_real_keyring(), reason="No real keyring backend available")
 class TestCredentialPersistence:
     """Test actual credential storage without mocking."""
 

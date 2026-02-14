@@ -56,6 +56,17 @@ class TestAsteriskPasswordEdit:
         assert widget.echoMode() == QLineEdit.EchoMode.Password
 
 
+def _has_real_keyring():
+    """Check if a real keyring backend is available (not the fail backend)."""
+    try:
+        import keyring
+        backend = keyring.get_keyring()
+        return 'fail' not in type(backend).__module__
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _has_real_keyring(), reason="No real keyring backend available")
 class TestDialogCredentialFlow:
     """Test the full dialog credential flow with real storage."""
 
