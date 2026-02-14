@@ -1060,8 +1060,7 @@ class GalleryTableWidget(QTableWidget):
             folder_name = os.path.basename(path)
             # Use cached functions or fallbacks
             if hasattr(widget, '_get_central_storage_path'):
-                base_path = widget._get_central_storage_path()
-                central_path = os.path.join(base_path, "galleries")
+                central_path = widget._get_central_storage_path()
                 #print(f"DEBUG: Using widget._get_central_storage_path: {central_path}")
             else:
                 central_path = os.path.expanduser("~/.bbdrop/galleries")
