@@ -160,7 +160,7 @@ class CredentialSetupDialog(QDialog):
 
         # Credential storage note
         encryption_note = QLabel(
-            "<small>Credentials are encrypted with Fernet (AES-128-CBC + HMAC-SHA256) using a key derived from your hostname, then stored in your OS keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service).<br><br>They are tied to your user account and won't transfer to other computers.</small>"
+            "<small>Credentials are encrypted with Fernet (AES-128-CBC + HMAC-SHA256) using a CSPRNG master key stored in your OS keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service).<br><br>They are tied to your user account and won't transfer to other computers.</small>"
         )
         encryption_note.setWordWrap(True)
         encryption_note.setProperty("class", "label-credential-note")
