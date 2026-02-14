@@ -17,7 +17,7 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(620, 405)  # Increased height for logo
+        pixmap = QPixmap(620, 370)  # Increased height for logo
         pixmap.fill(QColor(29, 22, 22))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
@@ -88,7 +88,7 @@ class SplashScreen(QSplashScreen):
         y_offset = 22
         if self.logo_pixmap and not self.logo_pixmap.isNull():
             # Scale logo to fit nicely at top
-            logo_height = 120
+            logo_height = 100
             logo_scaled = self.logo_pixmap.scaledToHeight(logo_height, Qt.TransformationMode.SmoothTransformation)
             logo_x = (self.width() - logo_scaled.width()) // 2
             painter.drawPixmap(logo_x, y_offset, logo_scaled)
@@ -101,25 +101,25 @@ class SplashScreen(QSplashScreen):
         version_rect = painter.fontMetrics().boundingRect(self.version)
         version_x = (self.width() - version_rect.width()) // 2
         painter.drawText(version_x, y_offset + 12, self.version)
-        y_offset += 42
+        y_offset += 38
         
         copyright_text = "Copyright © 2025-2026 twat"
-        copyright_font = QFont("Courier", 12)
+        copyright_font = QFont("Courier", 11)
         painter.setFont(copyright_font)
         painter.setPen(QColor(148, 138, 126))
         copyright_rect = painter.fontMetrics().boundingRect(copyright_text)
         copyright_x = (self.width() - copyright_rect.width()) // 2
         painter.drawText(copyright_x, y_offset + 20, copyright_text)
-        y_offset += 45
+        y_offset += 38
         
         mit_text = "Licensed under the MIT License"
-        mit_font = QFont("Courier", 12)
+        mit_font = QFont("Courier", 11)
         painter.setFont(mit_font)
         painter.setPen(QColor(195, 195, 195))
         mit_rect = painter.fontMetrics().boundingRect(mit_text)
         mit_x = (self.width() - mit_rect.width()) // 2
         painter.drawText(mit_x, y_offset + 20, mit_text)
-        y_offset += 68
+        y_offset += 60
         
         # Draw copyright and license info
         painter.setPen(QColor(102, 99, 99))
@@ -156,16 +156,16 @@ class SplashScreen(QSplashScreen):
         # Draw status text at bottom
         #painter.setPen(QColor(89, 152, 222))
         painter.setPen(QColor(16,141,204))
-        status_font = QFont("Verdana", 11)
+        status_font = QFont("Verdana", 10)
         #status_font = QFont("Arial", 11, QFont.Weight.Bold)
         painter.setFont(status_font)
         
         status_rect = painter.fontMetrics().boundingRect(self.status_text)
         status_x = (self.width() - status_rect.width()) // 2
-        painter.drawText(status_x, self.height() - 35, self.status_text)
+        painter.drawText(status_x, self.height() - 32, self.status_text)
         
         # Draw progress dots centered
-        dots_font = QFont("Courier", 12)
+        dots_font = QFont("Courier", 11)
         painter.setFont(dots_font)
         #painter.setPen(QColor(89, 152, 222))
         painter.setPen(QColor(16, 141, 204))
