@@ -256,11 +256,71 @@ class QueueManager(QObject):
 
                     # Detect cover photo
                     cover_config = self._get_cover_detection_config()
-                    if cover_config.get('patterns'):
-                        from src.core.cover_detector import detect_cover
-                        cover_file = detect_cover(files, patterns=cover_config['patterns'])
-                        if cover_file:
+                    if cover_config:
+                        from src.core.cover_detector import (
+                            detect_covers_by_filename, detect_cover_by_dimensions,
+                            detect_cover_by_file_size, deduplicate_covers,
+                            apply_max_covers,
+                        )
+
+                        candidates: list[str] = []
+
+                        # Filename-based detection
+                        if cover_config.get('filename_enabled', True) and cover_config.get('patterns'):
+                            candidates.extend(
+                                detect_covers_by_filename(files, patterns=cover_config['patterns'])
+                            )
+
+                        # Dimension-based detection (only if scan_result has dimension data)
+                        if cover_config.get('dimension_enabled', False):
+                            file_dimensions = scan_result.get('file_dimensions', {})
+                            if file_dimensions:
+                                dim_kwargs: dict = {}
+                                if cover_config.get('dimension_differs_enabled', False):
+                                    dim_kwargs['differs_percent'] = cover_config.get('dimension_differs_percent', 30)
+                                if cover_config.get('dimension_min_enabled', False):
+                                    dim_kwargs['min_width'] = cover_config.get('dimension_min_width', 0)
+                                    dim_kwargs['min_height'] = cover_config.get('dimension_min_height', 0)
+                                if cover_config.get('dimension_max_enabled', False):
+                                    dim_kwargs['max_width'] = cover_config.get('dimension_max_width', 0)
+                                    dim_kwargs['max_height'] = cover_config.get('dimension_max_height', 0)
+                                if dim_kwargs:
+                                    dim_matches = detect_cover_by_dimensions(file_dimensions, **dim_kwargs)
+                                    for f in dim_matches:
+                                        if f not in candidates:
+                                            candidates.append(f)
+
+                        # Filesize-based detection (only if scan_result has size data)
+                        if cover_config.get('filesize_enabled', False):
+                            file_sizes = scan_result.get('file_sizes', {})
+                            if file_sizes:
+                                size_kwargs: dict = {}
+                                if cover_config.get('filesize_min_enabled', False):
+                                    size_kwargs['min_kb'] = cover_config.get('filesize_min_kb', 0)
+                                if cover_config.get('filesize_max_enabled', False):
+                                    size_kwargs['max_kb'] = cover_config.get('filesize_max_kb', 0)
+                                if size_kwargs:
+                                    size_matches = detect_cover_by_file_size(file_sizes, **size_kwargs)
+                                    for f in size_matches:
+                                        if f not in candidates:
+                                            candidates.append(f)
+
+                        # Deduplication (requires file_sizes)
+                        if cover_config.get('skip_duplicates', True) and candidates:
+                            file_sizes = scan_result.get('file_sizes', {})
+                            if file_sizes:
+                                candidates = deduplicate_covers(candidates, file_sizes)
+
+                        # Apply max covers limit
+                        max_covers = cover_config.get('max_per_gallery', 1)
+                        if max_covers > 0:
+                            candidates = apply_max_covers(candidates, max_covers)
+
+                        # Use first candidate as cover (multi-cover is future)
+                        if candidates:
+                            cover_file = candidates[0]
                             item.cover_source_path = os.path.join(path, cover_file)
+                            item.cover_host_id = cover_config.get('host_id') or None
                             log(f"Scan Worker: Detected cover photo: {cover_file}", level="debug", category="scan")
                             if not cover_config.get('also_upload', False):
                                 # Cover-only: exclude from gallery image count
@@ -735,12 +795,33 @@ class QueueManager(QObject):
         """Get cover photo detection configuration from settings."""
         try:
             settings = QSettings("BBDropUploader", "BBDropGUI")
+            if not settings.value('cover/enabled', False, type=bool):
+                return {}
+
             return {
+                'filename_enabled': settings.value('cover/filename_enabled', True, type=bool),
                 'patterns': settings.value('cover/filename_patterns', DEFAULT_COVER_PATTERNS, type=str),
+                'dimension_enabled': settings.value('cover/dimension_enabled', False, type=bool),
+                'dimension_differs_enabled': settings.value('cover/dimension_differs_enabled', False, type=bool),
+                'dimension_differs_percent': settings.value('cover/dimension_differs_percent', 30, type=int),
+                'dimension_min_enabled': settings.value('cover/dimension_min_enabled', False, type=bool),
+                'dimension_min_width': settings.value('cover/dimension_min_width', 0, type=int),
+                'dimension_min_height': settings.value('cover/dimension_min_height', 0, type=int),
+                'dimension_max_enabled': settings.value('cover/dimension_max_enabled', False, type=bool),
+                'dimension_max_width': settings.value('cover/dimension_max_width', 0, type=int),
+                'dimension_max_height': settings.value('cover/dimension_max_height', 0, type=int),
+                'filesize_enabled': settings.value('cover/filesize_enabled', False, type=bool),
+                'filesize_min_enabled': settings.value('cover/filesize_min_enabled', False, type=bool),
+                'filesize_min_kb': settings.value('cover/filesize_min_kb', 0, type=int),
+                'filesize_max_enabled': settings.value('cover/filesize_max_enabled', False, type=bool),
+                'filesize_max_kb': settings.value('cover/filesize_max_kb', 0, type=int),
+                'max_per_gallery': settings.value('cover/max_per_gallery', 1, type=int),
+                'skip_duplicates': settings.value('cover/skip_duplicates', True, type=bool),
                 'also_upload': settings.value('cover/also_upload_as_gallery', False, type=bool),
+                'host_id': settings.value('cover/host_id', '', type=str),
             }
         except Exception:
-            return {'patterns': DEFAULT_COVER_PATTERNS, 'also_upload': False}
+            return {}
 
     def _inc_version(self):
         """Increment version for change tracking"""

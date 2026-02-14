@@ -9,7 +9,7 @@ import time
 import threading
 from typing import Optional, Dict, Any
 
-from PyQt6.QtCore import QThread, pyqtSignal, QMutex
+from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QSettings
 
 from bbdrop import (
     timestamp, load_user_defaults, rename_all_unnamed_with_session,
@@ -352,28 +352,35 @@ class UploadWorker(QThread):
         if not item.cover_source_path:
             return None
 
-        if not self.rename_worker or not getattr(self.rename_worker, 'login_successful', False):
-            log("Cover upload skipped: no authenticated session", level="debug", category="cover")
-            return None
-
         try:
-            # Get per-host cover settings
-            cover_host_id = item.cover_host_id or item.image_host_id or "imx"
-            thumbnail_format = get_image_host_setting(cover_host_id, 'cover_thumbnail_format', 'int') or 2
+            settings = QSettings("BBDropUploader", "BBDropGUI")
 
-            # Determine the gallery_id to attach the cover to
+            cover_host_id = (item.cover_host_id
+                             or settings.value('cover/host_id', '', type=str)
+                             or item.image_host_id or "imx")
+            thumbnail_format = settings.value('cover/thumbnail_format', 2, type=int)
+            cover_gallery = settings.value('cover/gallery', '', type=str)
+
+            # Determine gallery attachment
             if item.image_host_id == cover_host_id:
-                # Same host: cover goes into the gallery
                 cover_gallery_id = gallery_id
             else:
-                # Different hosts: use per-host cover_gallery setting, or omit
-                cover_gallery_id = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ""
+                cover_gallery_id = cover_gallery
 
-            result = self.rename_worker.upload_cover(
-                image_path=item.cover_source_path,
-                gallery_id=cover_gallery_id,
-                thumbnail_format=thumbnail_format,
-            )
+            # Route to appropriate upload method
+            if cover_host_id == "imx":
+                if not self.rename_worker or not getattr(self.rename_worker, 'login_successful', False):
+                    log("Cover upload skipped: no authenticated IMX session", level="debug", category="cover")
+                    return None
+                result = self.rename_worker.upload_cover(
+                    image_path=item.cover_source_path,
+                    gallery_id=cover_gallery_id,
+                    thumbnail_format=thumbnail_format,
+                )
+            else:
+                cover_client = create_image_host_client(cover_host_id)
+                raw_result = cover_client.upload_image(item.cover_source_path)
+                result = cover_client.normalize_response(raw_result) if raw_result else None
 
             if result:
                 item.cover_result = result
@@ -610,7 +617,6 @@ class UploadWorker(QThread):
         # exclude the cover from the normal gallery upload.
         exclude_cover = None
         if item.cover_source_path:
-            from PyQt6.QtCore import QSettings
             settings = QSettings("BBDropUploader", "BBDropGUI")
             also_upload = settings.value(
                 'cover/also_upload_as_gallery', False, type=bool)

@@ -34,7 +34,14 @@ class TestCoverDefaults:
              patch('src.storage.queue_manager.QSettings') as MockSettings, \
              patch('src.storage.queue_manager.QObject.__init__'):
             mock_settings = MockSettings.return_value
-            mock_settings.value.side_effect = lambda key, default, **kw: default
+
+            def _return_default(key, default, **kw):
+                # Simulate cover/enabled = True so the config is populated
+                if key == 'cover/enabled':
+                    return True
+                return default
+
+            mock_settings.value.side_effect = _return_default
             qm = QueueManager.__new__(QueueManager)
             config = qm._get_cover_detection_config()
             assert config['patterns'] == DEFAULT_COVER_PATTERNS
