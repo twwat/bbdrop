@@ -54,6 +54,20 @@ GALLERY_ID_LENGTH = 8
 # Default cover photo filename patterns (comma-separated globs)
 DEFAULT_COVER_PATTERNS = "cover.*, cover_*, poster.*, *_cover.*, *-cover.*"
 
+# Cover detection defaults
+DEFAULT_COVER_DIMENSION_DIFFERS_PERCENT = 30
+DEFAULT_COVER_MAX_PER_GALLERY = 1
+DEFAULT_COVER_SKIP_DUPLICATES = True
+DEFAULT_COVER_THUMBNAIL_FORMAT = 2  # Proportional
+
+# Cover thumbnail format labels (for UI)
+COVER_THUMBNAIL_FORMATS = {
+    1: "Fixed Width",
+    2: "Proportional",
+    3: "Square",
+    4: "Fixed Height",
+}
+
 # Progress Updates
 PROGRESS_UPDATE_BATCH_INTERVAL = 0.05  # seconds
 PROGRESS_UPDATE_THRESHOLD = 100  # milliseconds

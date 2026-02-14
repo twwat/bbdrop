@@ -77,11 +77,12 @@ class TabIndex:
     FILE_HOSTS = 2
     TEMPLATES = 3
     IMAGE_SCAN = 4
-    HOOKS = 5
-    PROXY = 6
-    LOGS = 7
-    ARCHIVE = 8
-    ADVANCED = 9
+    COVERS = 5
+    HOOKS = 6
+    PROXY = 7
+    LOGS = 8
+    ARCHIVE = 9
+    ADVANCED = 10
 
 
 class IconDropFrame(QFrame):
