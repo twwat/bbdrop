@@ -302,14 +302,14 @@ class TestSettingsDialogGeneralTab:
         qtbot.addWidget(dialog)
 
         # Test mutual exclusivity
-        dialog.home_radio.setChecked(True)
-        assert dialog.home_radio.isChecked()
-        assert not dialog.portable_radio.isChecked()
-        assert not dialog.custom_radio.isChecked()
+        dialog.general_tab.home_radio.setChecked(True)
+        assert dialog.general_tab.home_radio.isChecked()
+        assert not dialog.general_tab.portable_radio.isChecked()
+        assert not dialog.general_tab.custom_radio.isChecked()
 
-        dialog.custom_radio.setChecked(True)
-        assert not dialog.home_radio.isChecked()
-        assert dialog.custom_radio.isChecked()
+        dialog.general_tab.custom_radio.setChecked(True)
+        assert not dialog.general_tab.home_radio.isChecked()
+        assert dialog.general_tab.custom_radio.isChecked()
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -323,14 +323,14 @@ class TestSettingsDialogGeneralTab:
         qtbot.addWidget(dialog)
 
         # When custom is selected, controls should be enabled
-        dialog.custom_radio.setChecked(True)
+        dialog.general_tab.custom_radio.setChecked(True)
         qtbot.wait(50)  # Allow signal processing
-        assert dialog.browse_btn.isEnabled()
+        assert dialog.general_tab.browse_btn.isEnabled()
 
         # When home is selected, controls should be disabled
-        dialog.home_radio.setChecked(True)
+        dialog.general_tab.home_radio.setChecked(True)
         qtbot.wait(50)
-        assert not dialog.browse_btn.isEnabled()
+        assert not dialog.general_tab.browse_btn.isEnabled()
 
 
 # ============================================================================
@@ -529,7 +529,7 @@ class TestSettingsDialogTheme:
         qtbot.addWidget(dialog)
 
         # Check theme options
-        themes = [dialog.theme_combo.itemText(i) for i in range(dialog.theme_combo.count())]
+        themes = [dialog.general_tab.theme_combo.itemText(i) for i in range(dialog.general_tab.theme_combo.count())]
         assert 'light' in themes
         assert 'dark' in themes
 
@@ -544,9 +544,9 @@ class TestSettingsDialogTheme:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        assert dialog.font_size_spin.minimum() == 6
-        assert dialog.font_size_spin.maximum() == 24
-        assert dialog.font_size_spin.suffix() == " pt"
+        assert dialog.general_tab.font_size_spin.minimum() == 6
+        assert dialog.general_tab.font_size_spin.maximum() == 24
+        assert dialog.general_tab.font_size_spin.suffix() == " pt"
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -559,9 +559,9 @@ class TestSettingsDialogTheme:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        assert hasattr(dialog, 'quick_settings_icons_only_check')
-        dialog.quick_settings_icons_only_check.setChecked(True)
-        assert dialog.quick_settings_icons_only_check.isChecked()
+        assert hasattr(dialog.general_tab, 'quick_settings_icons_only_check')
+        dialog.general_tab.quick_settings_icons_only_check.setChecked(True)
+        assert dialog.general_tab.quick_settings_icons_only_check.isChecked()
 
 
 # ============================================================================
@@ -740,15 +740,15 @@ class TestSettingsDialogBrowse:
         qtbot.addWidget(dialog)
 
         # Select custom radio to enable browse
-        dialog.custom_radio.setChecked(True)
+        dialog.general_tab.custom_radio.setChecked(True)
         qtbot.wait(50)
 
-        # Verify browse method exists
-        assert hasattr(dialog, 'browse_central_store')
-        assert callable(dialog.browse_central_store)
+        # Verify browse method exists on the general tab
+        assert hasattr(dialog.general_tab, '_browse_central_store')
+        assert callable(dialog.general_tab._browse_central_store)
 
         # Verify browse button is enabled when custom is selected
-        assert dialog.browse_btn.isEnabled()
+        assert dialog.general_tab.browse_btn.isEnabled()
 
 
 # ============================================================================
@@ -795,11 +795,11 @@ class TestSettingsDialogResetExtended:
         qtbot.addWidget(dialog)
 
         # Change checkboxes
-        dialog.confirm_delete_check.setChecked(False)
+        dialog.general_tab.confirm_delete_check.setChecked(False)
         dialog.auto_rename_check.setChecked(False)
 
         # Verify changes took effect
-        assert not dialog.confirm_delete_check.isChecked()
+        assert not dialog.general_tab.confirm_delete_check.isChecked()
         assert not dialog.auto_rename_check.isChecked()
 
         # Verify reset methods exist
@@ -965,8 +965,8 @@ class TestSettingsDialogParentIntegration:
         qtbot.addWidget(dialog)
 
         # Should use parent's theme
-        assert dialog.theme_combo.currentText() == 'light'
-        assert dialog.font_size_spin.value() == 12
+        assert dialog.general_tab.theme_combo.currentText() == 'light'
+        assert dialog.general_tab.font_size_spin.value() == 12
 
 
 # ============================================================================
@@ -994,7 +994,7 @@ class TestSettingsDialogWorkflows:
         # Modify settings
         dialog.max_retries_slider.setValue(5)
         dialog.batch_size_slider.setValue(6)
-        dialog.confirm_delete_check.setChecked(False)
+        dialog.general_tab.confirm_delete_check.setChecked(False)
 
         # Verify dirty
         assert dialog.has_unsaved_changes()

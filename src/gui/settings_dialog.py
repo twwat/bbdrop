@@ -258,246 +258,11 @@ class ComprehensiveSettingsDialog(QDialog):
         self.stack_widget.addWidget(widget)
 
     def setup_general_tab(self):
-        """Setup the General settings tab"""
-        general_widget = QWidget()
-        layout = QVBoxLayout(general_widget)
-
-        desc = QLabel("Application-wide preferences including storage location, theme, and automation behavior.")
-        desc.setWordWrap(True)
-        desc.setProperty("class", "tab-description")
-        layout.addWidget(desc)
-
-        # Load defaults
-        defaults = load_user_defaults()
-
-        # General settings group
-        general_group = QGroupBox("General Options")
-        general_layout = QGridLayout(general_group)
-        
-        # Confirm delete
-        self.confirm_delete_check = QCheckBox("Confirm when removing galleries")
-        self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
-        self.confirm_delete_check.setToolTip("Show confirmation dialog before removing a gallery")
-        general_layout.addWidget(self.confirm_delete_check, 0, 0)
-
-        # Auto-regenerate BBCode
-        self.auto_regenerate_bbcode_check = QCheckBox("Auto-regenerate artifacts when data changes")
-        self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
-        self.auto_regenerate_bbcode_check.setToolTip("Automatically regenerate BBCode when template, gallery name, or custom fields change")
-        general_layout.addWidget(self.auto_regenerate_bbcode_check, 1, 0)
-
-        # Auto-start uploads
-        self.auto_start_upload_check = QCheckBox("Start uploads automatically")
-        self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
-        self.auto_start_upload_check.setToolTip("Automatically start uploads when scanning completes instead of waiting for manual start")
-        general_layout.addWidget(self.auto_start_upload_check, 2, 0)
-
-        # Auto-clear completed uploads
-        self.auto_clear_completed_check = QCheckBox("Clear completed items automatically")
-        self.auto_clear_completed_check.setChecked(defaults.get('auto_clear_completed', False))
-        self.auto_clear_completed_check.setToolTip("Automatically remove completed galleries from the queue")
-        general_layout.addWidget(self.auto_clear_completed_check, 3, 0)
-
-        # Check for updates on startup
-        self.check_updates_checkbox = QCheckBox("Check for updates on startup")
-        self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
-        self.check_updates_checkbox.setToolTip("Automatically check for new versions when the application starts")
-        general_layout.addWidget(self.check_updates_checkbox, 4, 0)
-
-        # Storage options group
-        storage_group = QGroupBox("Central Storage")
-        storage_layout = QGridLayout(storage_group)
-        
-        
-        # Data location section
-        location_label = QLabel("<b>Choose location to save data</b> <i>(database, artifacts, settings, etc.)</i>")
-        storage_layout.addWidget(location_label, 2, 0, 1, 3)
-        
-        # Import path functions
-        from bbdrop import get_central_store_base_path, get_default_central_store_base_path, get_project_root, get_base_path
-
-        # Get ACTUAL current path from QSettings (source of truth)
-        current_path = get_base_path()
-        home_path = get_default_central_store_base_path()
-        app_root = get_project_root()
-        portable_path = os.path.join(app_root, '.bbdrop')
-
-        # Radio buttons for location selection
-        # Display home path with ~ instead of full username path for privacy/brevity
-        home_display = home_path.replace(os.path.expanduser("~"), "~")
-        self.home_radio = QRadioButton(f"Home folder: {home_display}")
-        self.home_radio.setToolTip("Store data in your home directory")
-        self.portable_radio = QRadioButton(f"App folder (portable): {portable_path}")
-        self.portable_radio.setToolTip("Store data alongside the application for portable use")
-        self.custom_radio = QRadioButton("Custom location:")
-        self.custom_radio.setToolTip("Store data in a custom directory")
-
-        # Determine which radio to check based on ACTUAL current path
-        current_norm = os.path.normpath(current_path)
-        home_norm = os.path.normpath(home_path)
-        portable_norm = os.path.normpath(portable_path)
-
-        if current_norm == portable_norm:
-            self.portable_radio.setChecked(True)
-            storage_mode = 'portable'
-        elif current_norm == home_norm:
-            self.home_radio.setChecked(True)
-            storage_mode = 'home'
-        else:
-            self.custom_radio.setChecked(True)
-            storage_mode = 'custom'
-
-        # Custom path input and browse button
-        self.path_edit = QLineEdit(current_path if storage_mode == 'custom' else '')
-        self.path_edit.setReadOnly(True)
-        self.browse_btn = QPushButton("Browse...")
-        self.browse_btn.setToolTip("Browse for custom data directory")
-        self.browse_btn.clicked.connect(self.browse_central_store)
-        
-        # Layout radio buttons and custom path controls
-        storage_layout.addWidget(self.home_radio, 3, 0, 1, 3)
-        storage_layout.addWidget(self.portable_radio, 4, 0, 1, 3)
-        storage_layout.addWidget(self.custom_radio, 5, 0)
-        storage_layout.addWidget(self.path_edit, 5, 1)
-        storage_layout.addWidget(self.browse_btn, 5, 2)
-        
-        # Enable/disable custom path controls based on radio selection
-        def update_custom_path_controls():
-            is_custom = self.custom_radio.isChecked()
-            self.path_edit.setReadOnly(not is_custom)
-            self.browse_btn.setEnabled(is_custom)
-            if not is_custom:
-                self.path_edit.clear()
-        
-        # Connect radio button changes
-        self.home_radio.toggled.connect(update_custom_path_controls)
-        self.portable_radio.toggled.connect(update_custom_path_controls)
-        self.custom_radio.toggled.connect(update_custom_path_controls)
-        
-        # Initialize custom path controls state
-        update_custom_path_controls()
-        
-        # Artifacts group
-        artifacts_group = QGroupBox("Gallery Artifacts")
-        artifacts_layout = QVBoxLayout(artifacts_group)
-        artifacts_info = QLabel("JSON / BBcode files containing uploaded gallery details.")
-        artifacts_info.setWordWrap(True)
-        artifacts_info.setStyleSheet("color: #666; font-style: italic;")
-        artifacts_layout.addWidget(artifacts_info)
-        # Store in uploaded folder
-        self.store_in_uploaded_check = QCheckBox("Save artifacts in '.uploaded' subfolder within the gallery")
-        self.store_in_uploaded_check.setToolTip("Save BBCode in the uploaded folder for each gallery")
-        self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
-        artifacts_layout.addWidget(self.store_in_uploaded_check)
-
-        # Store in central location
-        self.store_in_central_check = QCheckBox("Save artifacts in central storage")
-        self.store_in_central_check.setToolTip("Save all BBCode in a central location")
-        self.store_in_central_check.setChecked(defaults.get('store_in_central', True))
-        artifacts_layout.addWidget(self.store_in_central_check)
-
-        # Theme & Display group
-        theme_group = QGroupBox("Appearance / Theme")
-        theme_layout = QGridLayout(theme_group)
-        
-        # Theme setting
-        self.theme_combo = QComboBox()
-        self.theme_combo.setToolTip("Select light or dark UI theme")
-        self.theme_combo.addItems(["light", "dark"])
-
-        # Load current theme from QSettings
-        if self.parent_window and hasattr(self.parent_window, 'settings'):
-            current_theme = self.parent_window.settings.value('ui/theme', 'dark')
-            index = self.theme_combo.findText(current_theme)
-            if index >= 0:
-                self.theme_combo.setCurrentIndex(index)
-        
-        # Add theme controls
-        theme_label = QLabel("<b>Theme mode</b>:")
-        theme_layout.addWidget(theme_label, 0, 0)
-        theme_layout.addWidget(self.theme_combo, 0, 1)
-        
-        # Font size setting
-        self.font_size_spin = QSpinBox()
-        self.font_size_spin.setRange(6, 24)  # Reasonable range for UI fonts
-        self.font_size_spin.setSuffix(" pt")
-        self.font_size_spin.setToolTip("Base font size for the interface (affects table, labels, buttons)")
-        
-        # Load current font size from QSettings (default to 9pt)
-        if self.parent_window and hasattr(self.parent_window, 'settings'):
-            current_font_size = int(self.parent_window.settings.value('ui/font_size', 9))
-            self.font_size_spin.setValue(current_font_size)
-        else:
-            self.font_size_spin.setValue(9)
-        
-        # Add font size controls
-        font_label = QLabel("<b>Text size</b>:")
-        theme_layout.addWidget(font_label, 1, 0)
-        theme_layout.addWidget(self.font_size_spin, 1, 1)
-
-        # Icons-only mode for quick settings buttons
-        self.quick_settings_icons_only_check = QCheckBox("Show icons only on quick settings buttons")
-        self.quick_settings_icons_only_check.setToolTip(
-            "When enabled, quick settings buttons will always show icons only,\n"
-            "regardless of available space (overrides adaptive text display)"
-        )
-
-        # Load current setting from QSettings
-        if self.parent_window and hasattr(self.parent_window, 'settings'):
-            icons_only = self.parent_window.settings.value('ui/quick_settings_icons_only', False, type=bool)
-            self.quick_settings_icons_only_check.setChecked(icons_only)
-
-        theme_layout.addWidget(self.quick_settings_icons_only_check, 2, 0, 1, 2)  # Row 2, span 2 columns
-
-        # Show file host logos in worker table (default: True)
-        self.show_worker_logos_check = QCheckBox("Show file host logos in upload workers table")
-        self.show_worker_logos_check.setToolTip(
-            "When enabled, shows file host logos instead of text names\n"
-            "in the upload workers status table"
-        )
-        if self.parent_window and hasattr(self.parent_window, 'settings'):
-            show_logos = self.parent_window.settings.value('ui/show_worker_logos', True, type=bool)
-            self.show_worker_logos_check.setChecked(show_logos)
-
-        theme_layout.addWidget(self.show_worker_logos_check, 3, 0, 1, 2)  # Row 3, span 2 columns
-
-        # Set column stretch for 50/50 split
-        theme_layout.setColumnStretch(0, 1)  # Label column 50%
-        theme_layout.setColumnStretch(1, 1)  # Control column 50%
-        
-        # Add all groups to layout in 2x2 grid
-        grid_layout = QGridLayout()
-        grid_layout.setVerticalSpacing(12)  # Extra vertical spacing between groups
-        grid_layout.addWidget(general_group, 0, 0)     # Top left
-        grid_layout.addWidget(theme_group, 0, 1)       # Top right
-        grid_layout.addWidget(storage_group, 1, 0)     # Row 1 left
-        grid_layout.addWidget(artifacts_group, 1, 1)   # Row 1 right
-
-        # Set column stretch factors for 50/50 split
-        grid_layout.setColumnStretch(0, 50)  # Left column 50%
-        grid_layout.setColumnStretch(1, 50)  # Right column 50%
-        
-        layout.addLayout(grid_layout)
-        layout.addStretch()
-        
-        # Connect change signals to mark tab as dirty
-        self.confirm_delete_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.auto_regenerate_bbcode_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.auto_start_upload_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.auto_clear_completed_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.check_updates_checkbox.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.store_in_uploaded_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.store_in_central_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.home_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.portable_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.custom_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.path_edit.textChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.theme_combo.currentIndexChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.font_size_spin.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.quick_settings_icons_only_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self.show_worker_logos_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-
-        self._add_settings_page(general_widget, "General")
+        """Setup the General settings tab (delegated to GeneralTab widget)."""
+        from src.gui.settings.general_tab import GeneralTab
+        self.general_tab = GeneralTab(parent_window=self.parent_window, settings=self.settings)
+        self.general_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
+        self._add_settings_page(self.general_tab, "General")
 
     def setup_image_hosts_tab(self):
         """Setup the Image Hosts tab using dedicated widget"""
@@ -2823,29 +2588,6 @@ class ComprehensiveSettingsDialog(QDialog):
         # Icons management temporarily hidden while deciding on functionality
         # self._add_settings_page(icons_widget, "Icons")
         
-    def browse_central_store(self):
-        """Browse for central store directory"""
-        from bbdrop import get_default_central_store_base_path
-        current_path = self.path_edit.text() or get_default_central_store_base_path()
-        
-        # Use non-blocking file dialog
-        dialog = QFileDialog(self)
-        dialog.setWindowTitle("Select Central Store Directory")
-        dialog.setFileMode(QFileDialog.FileMode.Directory)
-        dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
-        dialog.setDirectory(current_path)
-        
-        # Connect to slot for non-blocking execution
-        # PyQt6 uses fileSelected for directory mode, not directorySelected
-        dialog.fileSelected.connect(self._handle_directory_selected)
-        dialog.open()
-    
-    def _handle_directory_selected(self, directory):
-        """Handle selected directory"""
-        if directory:
-            self.custom_radio.setChecked(True)
-            self.path_edit.setText(directory)
-            self.mark_tab_dirty(TabIndex.GENERAL)
 
 
     def _center_on_parent(self):
@@ -3141,49 +2883,13 @@ class ComprehensiveSettingsDialog(QDialog):
             log(f"Failed to save file hosts settings: {e}", level="warning", category="settings")
 
     def save_settings(self):
-        """Save all settings"""
+        """Save all settings (legacy bulk-save — prefer per-tab save_current_tab)."""
         try:
-            # Save to .ini file via parent
+            # Save general tab via its own widget
+            if hasattr(self, 'general_tab'):
+                self.general_tab.save_settings()
+
             if self.parent_window:
-                # Update parent's settings objects for checkboxes
-                if hasattr(self.parent_window, 'confirm_delete_check'):
-                    self.parent_window.confirm_delete_check.setChecked(self.confirm_delete_check.isChecked())
-                if hasattr(self.parent_window, 'store_in_uploaded_check'):
-                    self.parent_window.store_in_uploaded_check.setChecked(self.store_in_uploaded_check.isChecked())
-                if hasattr(self.parent_window, 'store_in_central_check'):
-                    self.parent_window.store_in_central_check.setChecked(self.store_in_central_check.isChecked())
-                
-                # Save theme
-                if hasattr(self.parent_window, 'settings'):
-                    theme = self.theme_combo.currentText()
-                    self.parent_window.settings.setValue('ui/theme', theme)
-                    self.parent_window.apply_theme(theme)
-                    # Update theme toggle button tooltip
-                    if hasattr(self.parent_window, 'theme_toggle_btn'):
-                        tooltip = "Switch to light theme" if theme == 'dark' else "Switch to dark theme"
-                        self.parent_window.theme_toggle_btn.setToolTip(tooltip)
-
-                # Save font size
-                if hasattr(self.parent_window, 'settings'):
-                    font_size = self.font_size_spin.value()
-                    #print(f"Saving font size to settings: {font_size}")
-                    self.parent_window.settings.setValue('ui/font_size', font_size)
-                    if hasattr(self.parent_window, 'apply_font_size'):
-                        #print(f"Applying font size: {font_size}")
-                        self.parent_window.apply_font_size(font_size)
-
-                # Save icons-only setting
-                icons_only = self.quick_settings_icons_only_check.isChecked()
-                self.parent_window.settings.setValue('ui/quick_settings_icons_only', icons_only)
-
-                # Apply to adaptive panel immediately
-                if hasattr(self.parent_window, 'adaptive_settings_panel'):
-                    self.parent_window.adaptive_settings_panel.set_icons_only_mode(icons_only)
-
-                # Save worker logos setting
-                show_logos = self.show_worker_logos_check.isChecked()
-                self.parent_window.settings.setValue('ui/show_worker_logos', show_logos)
-                
                 # Save scanning settings
                 self._save_scanning_settings()
 
@@ -3195,7 +2901,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
                 # Save tabs settings
                 self._save_tabs_settings()
-                    
+
             return True
         except Exception as e:
             # Create non-blocking error message
@@ -3340,16 +3046,9 @@ class ComprehensiveSettingsDialog(QDialog):
                     if hasattr(panel, 'auto_rename_check'):
                         panel.auto_rename_check.setChecked(True)
 
-            # Reset checkboxes
-            self.confirm_delete_check.setChecked(True)
-            self.store_in_uploaded_check.setChecked(True)
-            self.store_in_central_check.setChecked(True)
-            
-            # Reset theme
-            self.theme_combo.setCurrentText("dark")
-            
-            # Reset font size
-            self.font_size_spin.setValue(9)
+            # Reset general tab
+            if hasattr(self, 'general_tab'):
+                self.general_tab.reset_to_defaults()
             
             # Reset scanning
             self.fast_scan_check.setChecked(True)
@@ -3482,7 +3181,7 @@ class ComprehensiveSettingsDialog(QDialog):
             #                   Image Scan(4), Covers(5), Hooks(6), Proxy(7), Logs(8),
             #                   Archive(9), Advanced(10)
             if current_index == TabIndex.GENERAL:
-                return self._save_general_tab()
+                return self.general_tab.save_settings()
             elif current_index == TabIndex.IMAGE_HOSTS:
                 return self._save_image_hosts_tab()
             elif current_index == TabIndex.FILE_HOSTS:
@@ -3675,43 +3374,12 @@ class ComprehensiveSettingsDialog(QDialog):
         current_index = self.stack_widget.currentIndex()
         
         if current_index == TabIndex.GENERAL:
-            self._reload_general_tab()
+            self.general_tab.reload_settings()
         elif current_index == TabIndex.IMAGE_SCAN:
             self._reload_scanning_tab()
         elif current_index == TabIndex.COVERS:
             self._reload_covers_tab()
         # Other tabs don't have form controls that need reloading
-    
-    def _reload_general_tab(self):
-        """Reload General tab form values from saved settings"""
-        defaults = load_user_defaults()
-
-        # Reload general settings
-        self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
-        self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
-        self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
-        self.auto_clear_completed_check.setChecked(defaults.get('auto_clear_completed', False))
-        self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
-
-        # Reload storage settings
-        self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
-        self.store_in_central_check.setChecked(defaults.get('store_in_central', True))
-        
-        from bbdrop import get_central_store_base_path
-        current_path = defaults.get('central_store_path') or get_central_store_base_path()
-        self.path_edit.setText(current_path)
-        
-        # Reload theme
-        if self.parent_window and hasattr(self.parent_window, 'settings'):
-            current_theme = self.parent_window.settings.value('ui/theme', 'dark')
-            index = self.theme_combo.findText(current_theme)
-            if index >= 0:
-                self.theme_combo.setCurrentIndex(index)
-        
-        # Reload font size
-        if self.parent_window and hasattr(self.parent_window, 'settings'):
-            current_font_size = int(self.parent_window.settings.value('ui/font_size', 9))
-            self.font_size_spin.setValue(current_font_size)
     
     def _reload_scanning_tab(self):
         """Reload Scanning tab form values from saved settings"""
@@ -3724,298 +3392,6 @@ class ComprehensiveSettingsDialog(QDialog):
         """Reload Covers tab form values from saved settings"""
         self._load_covers_settings()
 
-    def _save_general_tab(self):
-        """Save General tab settings only"""
-        try:
-            config = configparser.ConfigParser()
-            config_file = get_config_path()
-            
-            if os.path.exists(config_file):
-                config.read(config_file, encoding='utf-8')
-            
-            if 'UPLOAD' not in config:
-                config.add_section('UPLOAD')
-            
-            if 'DEFAULTS' not in config:
-                config.add_section('DEFAULTS')
-
-            # Save general settings
-            config.set('DEFAULTS', 'confirm_delete', str(self.confirm_delete_check.isChecked()))
-            config.set('DEFAULTS', 'auto_regenerate_bbcode', str(self.auto_regenerate_bbcode_check.isChecked()))
-            config.set('DEFAULTS', 'auto_start_upload', str(self.auto_start_upload_check.isChecked()))
-            config.set('DEFAULTS', 'auto_clear_completed', str(self.auto_clear_completed_check.isChecked()))
-            config.set('DEFAULTS', 'check_updates_on_startup', str(self.check_updates_checkbox.isChecked()))
-            config.set('DEFAULTS', 'store_in_uploaded', str(self.store_in_uploaded_check.isChecked()))
-            config.set('DEFAULTS', 'store_in_central', str(self.store_in_central_check.isChecked()))
-            
-            # Determine storage mode and path
-            from bbdrop import get_central_store_base_path, get_default_central_store_base_path
-            
-            # Get the CURRENT active path (what's actually being used)
-            current_active_path = get_central_store_base_path()
-            
-            # Determine what the new path should be
-            new_path = None
-            storage_mode = 'home'
-            
-            if self.home_radio.isChecked():
-                storage_mode = 'home'
-                new_path = get_default_central_store_base_path()
-            elif self.portable_radio.isChecked():
-                storage_mode = 'portable'
-                from bbdrop import get_project_root
-                app_root = get_project_root()  # Use centralized function that handles frozen exe correctly
-                new_path = os.path.join(app_root, '.bbdrop')
-            elif self.custom_radio.isChecked():
-                storage_mode = 'custom'
-                new_path = self.path_edit.text().strip()
-            
-            # Check if path is actually changing
-            if new_path and os.path.normpath(new_path) != os.path.normpath(current_active_path):
-                # Check if NEW location already has a config file
-                new_config_file = os.path.join(new_path, 'bbdrop.ini')
-                if os.path.exists(new_config_file):
-                    # NEW location already has config - ask what to do
-                    conflict_msg = QMessageBox(self)
-                    conflict_msg.setIcon(QMessageBox.Icon.Warning)
-                    conflict_msg.setWindowTitle("Existing Configuration Found")
-                    conflict_msg.setText(f"The new location already contains an bbdrop.ini file:\n{new_config_file}")
-                    conflict_msg.setInformativeText("How would you like to handle this?")
-
-                    keep_btn = conflict_msg.addButton("Keep Existing", QMessageBox.ButtonRole.YesRole)
-                    overwrite_btn = conflict_msg.addButton("Overwrite with Current", QMessageBox.ButtonRole.NoRole)
-                    cancel_btn = conflict_msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-
-                    conflict_msg.setDefaultButton(keep_btn)
-                    conflict_msg.exec()
-
-                    if conflict_msg.clickedButton() == cancel_btn:
-                        return True  # Cancel the save
-                    elif conflict_msg.clickedButton() == keep_btn:
-                        # Just update QSettings, don't write new config file
-                        if self.parent_window and hasattr(self.parent_window, 'settings'):
-                            if storage_mode == 'home':
-                                self.parent_window.settings.remove("config/base_path")
-                            else:
-                                self.parent_window.settings.setValue("config/base_path", new_path)
-                        QMessageBox.information(self, "Restart Required",
-                                              "Please restart the application to use the new storage location.")
-                        return True
-                    # else: overwrite_btn - continue with migration logic below
-
-                # Path is changing - handle migration
-                if os.path.exists(current_active_path):
-                    # Ask about migration
-                    msg_box = QMessageBox(self)
-                    msg_box.setIcon(QMessageBox.Icon.Question)
-                    msg_box.setWindowTitle("Storage Location Change")
-                    msg_box.setText(f"You're changing the data location from:\n{current_active_path}\nto:\n{new_path}")
-                    msg_box.setInformativeText("Would you like to migrate your existing data?\n\nNote: The application will need to restart after migration.")
-                    
-                    yes_btn = msg_box.addButton("Yes - Migrate & Restart", QMessageBox.ButtonRole.YesRole)
-                    no_btn = msg_box.addButton("No - Fresh Start", QMessageBox.ButtonRole.NoRole)
-                    cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-                    
-                    msg_box.setDefaultButton(yes_btn)
-                    result = msg_box.exec()
-                    
-                    if msg_box.clickedButton() == cancel_btn:
-                        # Don't save changes
-                        return True
-
-                    # CRITICAL: Save base path to QSettings FIRST (before writing config file)
-                    if self.parent_window and hasattr(self.parent_window, 'settings'):
-                        if storage_mode == 'home':
-                            self.parent_window.settings.remove("config/base_path")
-                        else:
-                            self.parent_window.settings.setValue("config/base_path", new_path)
-
-                    # Save new settings to INI file in NEW location
-                    config.set('DEFAULTS', 'storage_mode', storage_mode)
-                    config.set('DEFAULTS', 'central_store_path', new_path)
-                    # Write to NEW location (not config_file which is old location)
-                    new_config_file = os.path.join(new_path, 'bbdrop.ini')
-                    os.makedirs(new_path, exist_ok=True)
-                    with open(new_config_file, 'w', encoding='utf-8') as f:
-                        config.write(f)
-
-                    if msg_box.clickedButton() == yes_btn:
-                        # Perform migration then restart
-                        self._perform_migration_and_restart(current_active_path, new_path)
-                    else:
-                        # Just restart with new location
-                        QMessageBox.information(self, "Restart Required", 
-                                              "Please restart the application to use the new storage location.")
-                else:
-                    # Old path doesn't exist, just save
-                    # CRITICAL: Save base path to QSettings FIRST
-                    if self.parent_window and hasattr(self.parent_window, 'settings'):
-                        if storage_mode == 'home':
-                            self.parent_window.settings.remove("config/base_path")
-                        else:
-                            self.parent_window.settings.setValue("config/base_path", new_path)
-
-                    config.set('DEFAULTS', 'storage_mode', storage_mode)
-                    config.set('DEFAULTS', 'central_store_path', new_path)
-                    # Write to NEW location
-                    new_config_file = os.path.join(new_path, 'bbdrop.ini')
-                    os.makedirs(new_path, exist_ok=True)
-                    with open(new_config_file, 'w', encoding='utf-8') as f:
-                        config.write(f)
-            else:
-                # Path not changing, just save other settings
-                config.set('DEFAULTS', 'storage_mode', storage_mode)
-                if new_path:
-                    config.set('DEFAULTS', 'central_store_path', new_path)
-                with open(config_file, 'w', encoding='utf-8') as f:
-                    config.write(f)
-
-                # CRITICAL: Save base path to QSettings for bootstrap
-                if self.parent_window and hasattr(self.parent_window, 'settings'):
-                    if storage_mode == 'home':
-                        # Clear custom path - use default home folder
-                        self.parent_window.settings.remove("config/base_path")
-                    elif new_path:
-                        # Save custom/portable path
-                        self.parent_window.settings.setValue("config/base_path", new_path)
-            
-            # Update parent GUI controls
-            if self.parent_window:
-                # Update storage settings (only those that exist in parent)
-                if hasattr(self.parent_window, 'confirm_delete_check'):
-                    self.parent_window.confirm_delete_check.setChecked(self.confirm_delete_check.isChecked())
-                if hasattr(self.parent_window, 'store_in_uploaded_check'):
-                    self.parent_window.store_in_uploaded_check.setChecked(self.store_in_uploaded_check.isChecked())
-                if hasattr(self.parent_window, 'store_in_central_check'):
-                    self.parent_window.store_in_central_check.setChecked(self.store_in_central_check.isChecked())
-                if storage_mode == 'custom':
-                    self.parent_window.central_store_path_value = new_path
-                
-                # Save theme and font size to QSettings
-                if hasattr(self.parent_window, 'settings'):
-                    font_size = self.font_size_spin.value()
-                    theme = self.theme_combo.currentText()
-                    #print(f"_save_general_tab: Saving font size to settings: {font_size}")
-                    self.parent_window.settings.setValue('ui/theme', theme)
-                    self.parent_window.settings.setValue('ui/font_size', font_size)
-
-                    # Save icons-only setting
-                    icons_only = self.quick_settings_icons_only_check.isChecked()
-                    self.parent_window.settings.setValue('ui/quick_settings_icons_only', icons_only)
-
-                    # Apply to adaptive panel immediately
-                    if hasattr(self.parent_window, 'adaptive_settings_panel'):
-                        self.parent_window.adaptive_settings_panel.set_icons_only_mode(icons_only)
-
-                    # Save worker logos setting
-                    show_logos = self.show_worker_logos_check.isChecked()
-                    self.parent_window.settings.setValue('ui/show_worker_logos', show_logos)
-
-                    # Apply theme and font size immediately
-                    self.parent_window.apply_theme(theme)
-                    # Update theme toggle button tooltip
-                    if hasattr(self.parent_window, 'theme_toggle_btn'):
-                        tooltip = "Switch to light theme" if theme == 'dark' else "Switch to dark theme"
-                        self.parent_window.theme_toggle_btn.setToolTip(tooltip)
-                    if hasattr(self.parent_window, 'apply_font_size'):
-                        #print(f"_save_general_tab: Applying font size: {font_size}")
-                        self.parent_window.apply_font_size(font_size)
-            
-            return True
-        except Exception as e:
-            log(f"Error saving general settings: {e}", level="warning", category="settings")
-            return False
-    
-    def _perform_migration_and_restart(self, old_path, new_path):
-        """Perform migration of data and restart the application"""
-        import shutil
-        from PyQt6.QtWidgets import QProgressDialog
-        import subprocess
-        
-        progress = QProgressDialog("Migrating data...", None, 0, 5, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(0)
-        progress.setCancelButton(None)  # Can't cancel during migration
-        progress.setValue(0)
-        
-        try:
-            # Create new directory if needed
-            os.makedirs(new_path, exist_ok=True)
-            
-            # Close database connection if parent has one
-            if self.parent_window and hasattr(self.parent_window, 'queue_manager'):
-                progress.setLabelText("Closing database connection...")
-                try:
-                    self.parent_window.queue_manager.shutdown()
-                except (AttributeError, RuntimeError):
-                    pass
-            
-            progress.setValue(1)
-            
-            # Migrate database files (all of them)
-            progress.setLabelText("Migrating database...")
-            for db_file in ['bbdrop.db', 'bbdrop.db-shm', 'bbdrop.db-wal']:
-                old_db = os.path.join(old_path, db_file)
-                new_db = os.path.join(new_path, db_file)
-                if os.path.exists(old_db):
-                    shutil.copy2(old_db, new_db)
-            
-            progress.setValue(2)
-            
-            # Migrate templates
-            progress.setLabelText("Migrating templates...")
-            old_templates = os.path.join(old_path, 'templates')
-            new_templates = os.path.join(new_path, 'templates')
-            if os.path.exists(old_templates):
-                if os.path.exists(new_templates):
-                    shutil.rmtree(new_templates)
-                shutil.copytree(old_templates, new_templates)
-            
-            progress.setValue(3)
-            
-            # Migrate galleries
-            progress.setLabelText("Migrating galleries...")
-            old_galleries = os.path.join(old_path, 'galleries')
-            new_galleries = os.path.join(new_path, 'galleries')
-            if os.path.exists(old_galleries):
-                if os.path.exists(new_galleries):
-                    shutil.rmtree(new_galleries)
-                shutil.copytree(old_galleries, new_galleries)
-            
-            progress.setValue(4)
-            
-            # Migrate logs
-            progress.setLabelText("Migrating logs...")
-            old_logs = os.path.join(old_path, 'logs')
-            new_logs = os.path.join(new_path, 'logs')
-            if os.path.exists(old_logs):
-                if os.path.exists(new_logs):
-                    shutil.rmtree(new_logs)
-                shutil.copytree(old_logs, new_logs)
-            
-            progress.setValue(5)
-            progress.close()
-            
-            # Show success and restart
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setWindowTitle("Migration Complete")
-            msg.setText(f"Data successfully migrated to:\n{new_path}")
-            msg.setInformativeText("The application will now restart to use the new location.")
-            msg.exec()
-            
-            # Restart the application
-            if self.parent_window:
-                self.parent_window.close()
-            python = sys.executable
-            subprocess.Popen([python, "bbdrop.py", "--gui"])
-            QApplication.quit()
-            
-        except Exception as e:
-            progress.close()
-            QMessageBox.critical(self, "Migration Failed", 
-                               f"Failed to migrate data: {str(e)}\n\nThe settings have been saved but data was not migrated.\nPlease manually copy your data or revert the settings.")
-    
     def _save_image_hosts_tab(self):
         """Save Image Hosts tab settings"""
         try:

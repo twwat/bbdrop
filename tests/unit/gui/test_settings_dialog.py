@@ -708,15 +708,15 @@ class TestSettingsDialogReset:
         qtbot.addWidget(dialog)
 
         # Change from defaults
-        if hasattr(dialog, 'theme_combo'):
-            dialog.theme_combo.setCurrentText("light")
+        if hasattr(dialog, 'general_tab'):
+            dialog.general_tab.theme_combo.setCurrentText("light")
 
         # Reset
         dialog._handle_reset_confirmation(QMessageBox.StandardButton.Yes)
 
         # Verify reset to default
-        if hasattr(dialog, 'theme_combo'):
-            assert dialog.theme_combo.currentText() == "dark"
+        if hasattr(dialog, 'general_tab'):
+            assert dialog.general_tab.theme_combo.currentText() == "dark"
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -729,17 +729,17 @@ class TestSettingsDialogReset:
         qtbot.addWidget(dialog)
 
         # Change from defaults
-        if hasattr(dialog, 'theme_combo'):
-            original = dialog.theme_combo.currentText()
-            dialog.theme_combo.setCurrentText("light" if original == "dark" else "dark")
-            changed_value = dialog.theme_combo.currentText()
+        if hasattr(dialog, 'general_tab'):
+            original = dialog.general_tab.theme_combo.currentText()
+            dialog.general_tab.theme_combo.setCurrentText("light" if original == "dark" else "dark")
+            changed_value = dialog.general_tab.theme_combo.currentText()
 
         # Don't reset
         dialog._handle_reset_confirmation(QMessageBox.StandardButton.No)
 
         # Verify value unchanged
-        if hasattr(dialog, 'theme_combo'):
-            assert dialog.theme_combo.currentText() == changed_value
+        if hasattr(dialog, 'general_tab'):
+            assert dialog.general_tab.theme_combo.currentText() == changed_value
 
 
 # ============================================================================
@@ -774,11 +774,11 @@ class TestSettingsDialogWidgets:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if hasattr(dialog, 'theme_combo') and dialog.theme_combo.count() > 1:
-            original_index = dialog.theme_combo.currentIndex()
+        if hasattr(dialog, 'general_tab') and dialog.general_tab.theme_combo.count() > 1:
+            original_index = dialog.general_tab.theme_combo.currentIndex()
             new_index = 1 if original_index == 0 else 0
-            dialog.theme_combo.setCurrentIndex(new_index)
-            assert dialog.theme_combo.currentIndex() == new_index
+            dialog.general_tab.theme_combo.setCurrentIndex(new_index)
+            assert dialog.general_tab.theme_combo.currentIndex() == new_index
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -790,9 +790,9 @@ class TestSettingsDialogWidgets:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if hasattr(dialog, 'font_size_spin'):
-            dialog.font_size_spin.setValue(12)
-            assert dialog.font_size_spin.value() == 12
+        if hasattr(dialog, 'general_tab'):
+            dialog.general_tab.font_size_spin.setValue(12)
+            assert dialog.general_tab.font_size_spin.value() == 12
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
