@@ -40,91 +40,21 @@ WHY THIS SEPARATION:
 """
 
 import os
-import sys
 import configparser
-import subprocess
-from typing import List, Dict, Any, Optional
 
 from PyQt6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
-    QTabWidget, QPushButton, QCheckBox, QComboBox, QSpinBox, QSlider,
-    QLabel, QGroupBox, QLineEdit, QMessageBox, QFileDialog,
-    QListWidget, QListWidgetItem, QPlainTextEdit, QInputDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QButtonGroup, QFrame, QSplitter, QRadioButton, QApplication, QScrollArea,
-    QProgressBar, QStackedWidget
+    QDialog, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QMessageBox,
+    QListWidget, QListWidgetItem, QApplication, QStackedWidget
 )
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QTimer
-from PyQt6.QtGui import QIcon, QFont, QColor, QTextCharFormat, QPixmap, QPainter, QPen, QDragEnterEvent, QDropEvent
-from PyQt6.QtGui import QSyntaxHighlighter
+from PyQt6.QtCore import QSettings
 
-# Import local modules
-from bbdrop import load_user_defaults, get_config_path, encrypt_password, decrypt_password
-from src.core.image_host_config import get_image_host_setting, save_image_host_setting
-from src.utils.format_utils import timestamp, format_binary_size
+from bbdrop import load_user_defaults, get_config_path
+from src.core.image_host_config import save_image_host_setting
 from src.utils.logger import log
-from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 from src.gui.settings.advanced_tab import AdvancedSettingsWidget
 from src.gui.settings.archive_tab import ArchiveSettingsWidget
-
-
-class TabIndex:
-    """Named constants for settings tab indices to prevent index mismatch bugs."""
-    GENERAL = 0
-    IMAGE_HOSTS = 1
-    FILE_HOSTS = 2
-    TEMPLATES = 3
-    IMAGE_SCAN = 4
-    COVERS = 5
-    HOOKS = 6
-    PROXY = 7
-    LOGS = 8
-    ARCHIVE = 9
-    ADVANCED = 10
-
-
-class IconDropFrame(QFrame):
-    """Drop-enabled frame for icon files"""
-    
-    icon_dropped = pyqtSignal(str)  # Emits file path when icon is dropped
-    
-    def __init__(self, variant_type):
-        super().__init__()
-        self.variant_type = variant_type
-        self.setAcceptDrops(True)
-        
-    def dragEnterEvent(self, event: QDragEnterEvent | None) -> None:
-        """Handle drag enter event"""
-        if event is None:
-            return
-        mime_data = event.mimeData()
-        if mime_data and mime_data.hasUrls():
-            urls = mime_data.urls()
-            if len(urls) == 1:
-                file_path = urls[0].toLocalFile()
-                if file_path.lower().endswith(('.png', '.ico', '.svg', '.jpg', '.jpeg')):
-                    event.acceptProposedAction()
-                    return
-        event.ignore()
-        
-    def dropEvent(self, event: QDropEvent | None) -> None:
-        """Handle drop event"""
-        if event is None:
-            return
-        mime_data = event.mimeData()
-        if not mime_data:
-            if event:
-                event.ignore()
-            return
-        urls = mime_data.urls()
-        if len(urls) == 1:
-            file_path = urls[0].toLocalFile()
-            if file_path.lower().endswith(('.png', '.ico', '.svg', '.jpg', '.jpeg')):
-                self.icon_dropped.emit(file_path)
-                event.acceptProposedAction()
-                return
-        event.ignore()
-
+from src.gui.settings.tab_index import TabIndex
 
 # HostTestDialog moved to src/gui/settings/host_test_dialog.py
 # Re-exported here for backward compatibility
@@ -658,7 +588,8 @@ class ComprehensiveSettingsDialog(QDialog):
 
             if self.parent_window:
                 # Save scanning settings
-                self._save_scanning_settings()
+                if hasattr(self, 'scanning_tab'):
+                    self.scanning_tab.save_settings()
 
                 # Save external apps settings
                 if hasattr(self, 'hooks_tab'):
@@ -1119,129 +1050,3 @@ class ComprehensiveSettingsDialog(QDialog):
         except Exception as e:
             log(f"Error saving logs tab: {e}", level="warning", category="settings")
             return False
-
-
-
-class LogViewerDialog(QDialog):
-    """Popout viewer for application logs."""
-    def __init__(self, initial_text: str = "", parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Log Viewer")
-        self.setModal(False)
-        self.resize(1000, 720)
-
-        self.follow_enabled = True
-
-        layout = QVBoxLayout(self)
-
-        # Prepare logger and settings (used by both tabs)
-        try:
-            from src.utils.logging import get_logger as _get_logger
-            self._logger: Any = _get_logger()
-            settings = self._logger.get_settings()
-        except Exception:
-            self._logger = None
-            settings = {
-                'enabled': True,
-                'rotation': 'daily',
-                'backup_count': 7,
-                'compress': True,
-                'max_bytes': 10485760,
-                'level_file': 'INFO',
-                'level_gui': 'INFO',
-            }
-
-        # Build Settings tab content
-        header = QGroupBox("Log Settings")
-        grid = QGridLayout(header)
-
-        self.chk_enabled = QCheckBox("Enable file logging")
-        self.chk_enabled.setChecked(bool(settings.get('enabled', True)))
-        grid.addWidget(self.chk_enabled, 0, 0, 1, 2)
-
-        self.cmb_rotation = QComboBox()
-        self.cmb_rotation.addItems(["daily", "size"])
-        try:
-            idx = ["daily", "size"].index(str(settings.get('rotation', 'daily')).lower())
-        except Exception:
-            idx = 0
-        self.cmb_rotation.setCurrentIndex(idx)
-        grid.addWidget(QLabel("Rotation:"), 1, 0)
-        grid.addWidget(self.cmb_rotation, 1, 1)
-
-        self.spn_backup = QSpinBox()
-        self.spn_backup.setRange(0, 3650)
-        self.spn_backup.setValue(int(settings.get('backup_count', 7)))
-        grid.addWidget(QLabel("<span style='font-weight: 600'>Backups to keep</span>:"), 1, 2)
-        grid.addWidget(self.spn_backup, 1, 3)
-
-        self.chk_compress = QCheckBox("Compress rotated logs (.gz)")
-        self.chk_compress.setChecked(bool(settings.get('compress', True)))
-        grid.addWidget(self.chk_compress, 2, 0, 1, 2)
-
-        self.spn_max_bytes = QSpinBox()
-        self.spn_max_bytes.setRange(1024, 1024 * 1024 * 1024)
-        self.spn_max_bytes.setSingleStep(1024 * 1024)
-        self.spn_max_bytes.setValue(int(settings.get('max_bytes', 10485760)))
-        grid.addWidget(QLabel("<span style='font-weight: 600'>Max size (bytes, size mode)</span>:"), 2, 2)
-        grid.addWidget(self.spn_max_bytes, 2, 3)
-
-        self.cmb_gui_level = QComboBox()
-        levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        self.cmb_gui_level.addItems(levels)
-        try:
-            self.cmb_gui_level.setCurrentIndex(levels.index(str(settings.get('level_gui', 'INFO')).upper()))
-        except Exception:
-            pass
-        grid.addWidget(QLabel("GUI level:"), 3, 0)
-        grid.addWidget(self.cmb_gui_level, 3, 1)
-
-        self.cmb_file_level = QComboBox()
-        self.cmb_file_level.addItems(levels)
-        try:
-            self.cmb_file_level.setCurrentIndex(levels.index(str(settings.get('level_file', 'INFO')).upper()))
-        except Exception:
-            pass
-        grid.addWidget(QLabel("File level:"), 3, 2)
-        grid.addWidget(self.cmb_file_level, 3, 3)
-
-        buttons_row = QHBoxLayout()
-        self.btn_apply = QPushButton("Apply Settings")
-        self.btn_open_dir = QPushButton("Open Logs Folder")
-        buttons_row.addWidget(self.btn_apply)
-        buttons_row.addWidget(self.btn_open_dir)
-        grid.addLayout(buttons_row, 4, 0, 1, 4)
-
-        # Add the settings to the layout
-        layout.addWidget(header)
-        
-        # Add log content viewer
-        log_group = QGroupBox("Log Content")
-        log_layout = QVBoxLayout(log_group)
-        
-        # Log text area
-        self.log_text = QPlainTextEdit()
-        self.log_text.setPlainText(initial_text)
-        self.log_text.setReadOnly(True)
-        log_layout.addWidget(self.log_text)
-        
-        # Follow checkbox
-        self.follow_check = QCheckBox("Follow log updates")
-        self.follow_check.setChecked(True)
-        log_layout.addWidget(self.follow_check)
-        
-        layout.addWidget(log_group)
-        
-        # Connect signals
-        self.btn_apply.clicked.connect(self.apply_settings)
-        self.btn_open_dir.clicked.connect(self.open_logs_folder)
-        
-    def apply_settings(self):
-        """Apply log settings"""
-        # Implementation would go here
-        pass
-        
-    def open_logs_folder(self):
-        """Open the logs folder"""
-        # Implementation would go here
-        pass
