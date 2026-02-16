@@ -351,22 +351,25 @@ class TestSettingsDialogScanningTab:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
+        # Scanning tab exists
+        assert hasattr(dialog, 'scanning_tab')
+
         # Scanning strategy
-        assert hasattr(dialog, 'fast_scan_check')
+        assert hasattr(dialog.scanning_tab, 'fast_scan_check')
 
         # Sampling method
-        assert hasattr(dialog, 'sampling_fixed_radio')
-        assert hasattr(dialog, 'sampling_percent_radio')
-        assert hasattr(dialog, 'sampling_fixed_spin')
-        assert hasattr(dialog, 'sampling_percent_spin')
+        assert hasattr(dialog.scanning_tab, 'sampling_fixed_radio')
+        assert hasattr(dialog.scanning_tab, 'sampling_percent_radio')
+        assert hasattr(dialog.scanning_tab, 'sampling_fixed_spin')
+        assert hasattr(dialog.scanning_tab, 'sampling_percent_spin')
 
         # Exclusions
-        assert hasattr(dialog, 'exclude_first_check')
-        assert hasattr(dialog, 'exclude_last_check')
-        assert hasattr(dialog, 'exclude_small_check')
-        assert hasattr(dialog, 'exclude_small_spin')
-        assert hasattr(dialog, 'exclude_patterns_check')
-        assert hasattr(dialog, 'exclude_patterns_edit')
+        assert hasattr(dialog.scanning_tab, 'exclude_first_check')
+        assert hasattr(dialog.scanning_tab, 'exclude_last_check')
+        assert hasattr(dialog.scanning_tab, 'exclude_small_check')
+        assert hasattr(dialog.scanning_tab, 'exclude_small_spin')
+        assert hasattr(dialog.scanning_tab, 'exclude_patterns_check')
+        assert hasattr(dialog.scanning_tab, 'exclude_patterns_edit')
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -380,17 +383,17 @@ class TestSettingsDialogScanningTab:
         qtbot.addWidget(dialog)
 
         # Verify radio buttons exist and work
-        assert hasattr(dialog, 'sampling_fixed_radio')
-        assert hasattr(dialog, 'sampling_percent_radio')
+        assert hasattr(dialog.scanning_tab, 'sampling_fixed_radio')
+        assert hasattr(dialog.scanning_tab, 'sampling_percent_radio')
 
         # Test mutual exclusivity
-        dialog.sampling_percent_radio.setChecked(True)
-        assert dialog.sampling_percent_radio.isChecked()
-        assert not dialog.sampling_fixed_radio.isChecked()
+        dialog.scanning_tab.sampling_percent_radio.setChecked(True)
+        assert dialog.scanning_tab.sampling_percent_radio.isChecked()
+        assert not dialog.scanning_tab.sampling_fixed_radio.isChecked()
 
-        dialog.sampling_fixed_radio.setChecked(True)
-        assert dialog.sampling_fixed_radio.isChecked()
-        assert not dialog.sampling_percent_radio.isChecked()
+        dialog.scanning_tab.sampling_fixed_radio.setChecked(True)
+        assert dialog.scanning_tab.sampling_fixed_radio.isChecked()
+        assert not dialog.scanning_tab.sampling_percent_radio.isChecked()
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -404,15 +407,15 @@ class TestSettingsDialogScanningTab:
         qtbot.addWidget(dialog)
 
         # Verify widgets exist
-        assert hasattr(dialog, 'exclude_small_check')
-        assert hasattr(dialog, 'exclude_small_spin')
+        assert hasattr(dialog.scanning_tab, 'exclude_small_check')
+        assert hasattr(dialog.scanning_tab, 'exclude_small_spin')
 
         # Test checkbox can be toggled
-        dialog.exclude_small_check.setChecked(True)
-        assert dialog.exclude_small_check.isChecked()
+        dialog.scanning_tab.exclude_small_check.setChecked(True)
+        assert dialog.scanning_tab.exclude_small_check.isChecked()
 
-        dialog.exclude_small_check.setChecked(False)
-        assert not dialog.exclude_small_check.isChecked()
+        dialog.scanning_tab.exclude_small_check.setChecked(False)
+        assert not dialog.scanning_tab.exclude_small_check.isChecked()
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -426,12 +429,12 @@ class TestSettingsDialogScanningTab:
         qtbot.addWidget(dialog)
 
         # Median is default
-        assert dialog.avg_median_radio.isChecked()
+        assert dialog.scanning_tab.avg_median_radio.isChecked()
 
         # Switch to mean
-        dialog.avg_mean_radio.setChecked(True)
-        assert dialog.avg_mean_radio.isChecked()
-        assert not dialog.avg_median_radio.isChecked()
+        dialog.scanning_tab.avg_mean_radio.setChecked(True)
+        assert dialog.scanning_tab.avg_mean_radio.isChecked()
+        assert not dialog.scanning_tab.avg_median_radio.isChecked()
 
 
 # ============================================================================
@@ -629,26 +632,29 @@ class TestSettingsDialogDirtyStateTracking:
 class TestSettingsDialogSaveLoad:
     """Test save and load functionality"""
 
+    @patch('src.gui.settings.scanning_tab.get_config_path')
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
     def test_save_scanning_settings_creates_section(self, mock_get_path, mock_load,
-                                                     qtbot, tmp_path, mock_bbdrop_functions):
+                                                     mock_scan_path, qtbot, tmp_path,
+                                                     mock_bbdrop_functions):
         """Test saving scanning settings creates proper INI section"""
         mock_load.return_value = {}
 
         config_path = tmp_path / "test_config.ini"
         config_path.write_text("")
         mock_get_path.return_value = str(config_path)
+        mock_scan_path.return_value = str(config_path)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
         # Set some values
-        dialog.fast_scan_check.setChecked(True)
-        dialog.sampling_fixed_spin.setValue(30)
+        dialog.scanning_tab.fast_scan_check.setChecked(True)
+        dialog.scanning_tab.sampling_fixed_spin.setValue(30)
 
         # Save
-        dialog._save_scanning_settings()
+        dialog.scanning_tab.save_settings()
 
         # Verify
         config = configparser.ConfigParser()
@@ -1066,13 +1072,13 @@ class TestSettingsDialogEdgeCasesExtended:
         qtbot.addWidget(dialog)
 
         # Enable patterns
-        dialog.exclude_patterns_check.setChecked(True)
+        dialog.scanning_tab.exclude_patterns_check.setChecked(True)
 
         # Set pattern with special characters
         special_pattern = "*.jpg, cover_*.png, thumb[0-9].gif"
-        dialog.exclude_patterns_edit.setText(special_pattern)
+        dialog.scanning_tab.exclude_patterns_edit.setText(special_pattern)
 
-        assert dialog.exclude_patterns_edit.text() == special_pattern
+        assert dialog.scanning_tab.exclude_patterns_edit.text() == special_pattern
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -1132,9 +1138,9 @@ class TestSettingsDialogSignals:
         qtbot.addWidget(dialog)
 
         # Test checkbox can be toggled
-        original = dialog.fast_scan_check.isChecked()
-        dialog.fast_scan_check.setChecked(not original)
-        assert dialog.fast_scan_check.isChecked() != original
+        original = dialog.scanning_tab.fast_scan_check.isChecked()
+        dialog.scanning_tab.fast_scan_check.setChecked(not original)
+        assert dialog.scanning_tab.fast_scan_check.isChecked() != original
 
 
 # ============================================================================

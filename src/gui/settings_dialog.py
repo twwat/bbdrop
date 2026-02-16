@@ -758,205 +758,13 @@ class ComprehensiveSettingsDialog(QDialog):
         self._add_settings_page(self.log_settings_widget, "Logging")
         
     def setup_scanning_tab(self):
-        """Setup the Image Scanning tab"""
-        scanning_widget = QWidget()
-        layout = QVBoxLayout(scanning_widget)
-        
-        # Info label
-        info_label = QLabel("Configure image scanning behavior for performance optimization.")
-        info_label.setWordWrap(True)
-        info_label.setProperty("class", "tab-description")
-        info_label.setMaximumHeight(40)  # Consistent with Icon Manager tab
-        from PyQt6.QtWidgets import QSizePolicy
-        info_label.setSizePolicy(info_label.sizePolicy().horizontalPolicy(), 
-                                QSizePolicy.Policy.Fixed)  # Fixed vertical size policy
-        layout.addWidget(info_label)
-        
-        # Scanning strategy group
-        strategy_group = QGroupBox("Scanning Strategy")
-        strategy_layout = QVBoxLayout(strategy_group)
-        
-        # Fast scanning with imghdr
-        self.fast_scan_check = QCheckBox("Use fast corruption checking (imghdr)")
-        self.fast_scan_check.setToolTip("Use fast imghdr-based corruption detection")
-        self.fast_scan_check.setChecked(True)  # Default enabled
-        strategy_layout.addWidget(self.fast_scan_check)
-        
-        # Separator line
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Sunken)
-        strategy_layout.addWidget(separator)
-
-        # PIL Sampling Section
-        sampling_label = QLabel("<b>Dimension Calculation Sampling</b>")
-        strategy_layout.addWidget(sampling_label)
-
-        # Sampling Method
-        method_layout = QHBoxLayout()
-        method_label = QLabel("Method:")
-        method_layout.addWidget(method_label)
-
-        self.sampling_fixed_radio = QRadioButton("Fixed count")
-        self.sampling_fixed_radio.setToolTip("Sample a fixed number of images")
-        self.sampling_fixed_radio.setProperty("class", "scanning-radio")
-        self.sampling_fixed_radio.setChecked(True)
-        method_layout.addWidget(self.sampling_fixed_radio)
-
-        self.sampling_fixed_spin = QSpinBox()
-        self.sampling_fixed_spin.setToolTip("Number of images to sample")
-        self.sampling_fixed_spin.setRange(1, 100)
-        self.sampling_fixed_spin.setValue(25)
-        self.sampling_fixed_spin.setSuffix(" images")
-        method_layout.addWidget(self.sampling_fixed_spin)
-
-        self.sampling_percent_radio = QRadioButton("Percentage")
-        self.sampling_percent_radio.setToolTip("Sample a percentage of images")
-        self.sampling_percent_radio.setProperty("class", "scanning-radio")
-        method_layout.addWidget(self.sampling_percent_radio)
-
-        self.sampling_percent_spin = QSpinBox()
-        self.sampling_percent_spin.setToolTip("Percentage of images to sample")
-        self.sampling_percent_spin.setRange(1, 100)
-        self.sampling_percent_spin.setValue(10)
-        self.sampling_percent_spin.setSuffix("%")
-        self.sampling_percent_spin.setEnabled(False)
-        method_layout.addWidget(self.sampling_percent_spin)
-
-        method_layout.addStretch()
-        strategy_layout.addLayout(method_layout)
-
-        # Create button group for sampling method (Fixed vs Percentage)
-        self.sampling_method_group = QButtonGroup(self)
-        self.sampling_method_group.addButton(self.sampling_fixed_radio)
-        self.sampling_method_group.addButton(self.sampling_percent_radio)
-
-        # Connect radio buttons to enable/disable spinboxes
-        self.sampling_fixed_radio.toggled.connect(lambda checked: self.sampling_fixed_spin.setEnabled(checked))
-        self.sampling_fixed_radio.toggled.connect(lambda checked: self.sampling_percent_spin.setEnabled(not checked))
-
-        # Exclusions Section
-        exclusions_label = QLabel("<b>Exclusions</b> (skip these images from sampling)")
-        exclusions_label.setStyleSheet("margin-top: 10px;")
-        strategy_layout.addWidget(exclusions_label)
-
-        # Exclude first/last checkboxes
-        position_layout = QHBoxLayout()
-        self.exclude_first_check = QCheckBox("Skip first image")
-        self.exclude_first_check.setToolTip("Often cover/poster image")
-        position_layout.addWidget(self.exclude_first_check)
-
-        self.exclude_last_check = QCheckBox("Skip last image")
-        self.exclude_last_check.setToolTip("Often credits/logo image")
-        position_layout.addWidget(self.exclude_last_check)
-        position_layout.addStretch()
-        strategy_layout.addLayout(position_layout)
-
-        # Exclude small images
-        small_layout = QHBoxLayout()
-        self.exclude_small_check = QCheckBox("Skip images smaller than")
-        self.exclude_small_check.setToolTip("Exclude images below a size threshold")
-        small_layout.addWidget(self.exclude_small_check)
-
-        self.exclude_small_spin = QSpinBox()
-        self.exclude_small_spin.setToolTip("Size threshold as percentage of largest image")
-        self.exclude_small_spin.setRange(10, 90)
-        self.exclude_small_spin.setValue(50)
-        self.exclude_small_spin.setSuffix("% of largest")
-        self.exclude_small_spin.setEnabled(False)
-        small_layout.addWidget(self.exclude_small_spin)
-
-        small_layout.addWidget(QLabel("(thumbnails, previews)"))
-        small_layout.addStretch()
-        strategy_layout.addLayout(small_layout)
-
-        self.exclude_small_check.toggled.connect(self.exclude_small_spin.setEnabled)
-
-        # Exclude filename patterns
-        pattern_layout = QVBoxLayout()
-        pattern_h_layout = QHBoxLayout()
-        self.exclude_patterns_check = QCheckBox("Skip filenames matching:")
-        self.exclude_patterns_check.setToolTip("Exclude images matching filename patterns")
-        pattern_h_layout.addWidget(self.exclude_patterns_check)
-        pattern_h_layout.addStretch()
-        pattern_layout.addLayout(pattern_h_layout)
-
-        self.exclude_patterns_edit = QLineEdit()
-        self.exclude_patterns_edit.setToolTip("Comma-separated wildcard patterns (e.g. cover*, thumb*)")
-        self.exclude_patterns_edit.setPlaceholderText("e.g., cover*, poster*, thumb*, *_small.* (comma-separated patterns)")
-        self.exclude_patterns_edit.setEnabled(False)
-        pattern_layout.addWidget(self.exclude_patterns_edit)
-        strategy_layout.addLayout(pattern_layout)
-
-        self.exclude_patterns_check.toggled.connect(self.exclude_patterns_edit.setEnabled)
-
-        # Statistics Calculation
-        stats_label = QLabel("<b>Statistics Calculation</b>")
-        stats_label.setStyleSheet("margin-top: 10px;")
-        strategy_layout.addWidget(stats_label)
-
-        stats_layout = QHBoxLayout()
-        self.stats_exclude_outliers_check = QCheckBox("Exclude outliers (±1.5 IQR)")
-        self.stats_exclude_outliers_check.setToolTip("Remove images with dimensions outside 1.5x interquartile range")
-        stats_layout.addWidget(self.stats_exclude_outliers_check)
-        stats_layout.addStretch()
-        strategy_layout.addLayout(stats_layout)
-
-        # Average Method
-        avg_layout = QHBoxLayout()
-        avg_layout.addWidget(QLabel("Average method:"))
-        self.avg_mean_radio = QRadioButton("Mean")
-        self.avg_mean_radio.setProperty("class", "scanning-radio")
-        self.avg_mean_radio.setToolTip("Arithmetic mean (sum / count)")
-        # Default is median, not mean
-        avg_layout.addWidget(self.avg_mean_radio)
-
-        self.avg_median_radio = QRadioButton("Median")
-        self.avg_median_radio.setProperty("class", "scanning-radio")
-        self.avg_median_radio.setToolTip("Middle value (more robust to outliers)")
-        self.avg_median_radio.setChecked(True)
-        avg_layout.addWidget(self.avg_median_radio)
-        avg_layout.addStretch()
-        strategy_layout.addLayout(avg_layout)
-        
-
-        # Create button group for average method (Mean vs Median)
-        self.avg_method_group = QButtonGroup(self)
-        self.avg_method_group.addButton(self.avg_mean_radio)
-        self.avg_method_group.addButton(self.avg_median_radio)
-        
-        # Performance info
-        perf_info = QLabel("Fast mode uses imghdr for corruption detection and PIL for dimension calculations and to rescan images that fail imghdr test.")
-        perf_info.setWordWrap(True)
-        perf_info.setStyleSheet("color: #666; font-style: italic;")
-        strategy_layout.addWidget(perf_info)
-        
-        layout.addWidget(strategy_group)
-        layout.addStretch()
-
-        # Connect change signals to mark tab as dirty
-        self.fast_scan_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-
-        # Connect new sampling controls
-        self.sampling_fixed_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.sampling_percent_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.sampling_fixed_spin.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.sampling_percent_spin.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-
-        # Connect exclusion controls
-        self.exclude_first_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.exclude_last_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.exclude_small_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.exclude_small_spin.valueChanged.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.exclude_patterns_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.exclude_patterns_edit.textChanged.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-
-        # Connect stats calculation controls
-        self.stats_exclude_outliers_check.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.avg_mean_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-        self.avg_median_radio.toggled.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN))
-
-        self._add_settings_page(scanning_widget, "Image Scanner")
+        """Setup the Image Scanning tab (delegated to ScanningTab widget)."""
+        from src.gui.settings.scanning_tab import ScanningTab
+        self.scanning_tab = ScanningTab()
+        self.scanning_tab.dirty.connect(
+            lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN)
+        )
+        self._add_settings_page(self.scanning_tab, "Image Scanner")
 
     def setup_covers_tab(self):
         """Setup the Cover Photos settings tab"""
@@ -2612,8 +2420,8 @@ class ComprehensiveSettingsDialog(QDialog):
     def load_settings(self):
         """Load current settings"""
         # Settings are loaded in setup_ui for each tab
-        # Load scanning settings from QSettings
-        self._load_scanning_settings()
+        # Load scanning settings from INI
+        self.scanning_tab.load_settings()
         # Load tabs settings
         self._load_tabs_settings()
         # Load external apps settings
@@ -2625,79 +2433,6 @@ class ComprehensiveSettingsDialog(QDialog):
         # Load archive settings
         self._load_archive_settings()
 
-    def _load_scanning_settings(self):
-        """Load scanning settings from INI file"""
-        try:
-            config = configparser.ConfigParser()
-            config_file = get_config_path()
-
-            if os.path.exists(config_file):
-                config.read(config_file, encoding='utf-8')
-
-            # Block ALL signals during loading to prevent marking tab as dirty
-            controls_to_block = [
-                self.fast_scan_check, self.sampling_fixed_radio, self.sampling_percent_radio,
-                self.sampling_fixed_spin, self.sampling_percent_spin, self.exclude_first_check,
-                self.exclude_last_check, self.exclude_small_check, self.exclude_small_spin,
-                self.exclude_patterns_check, self.exclude_patterns_edit,
-                self.stats_exclude_outliers_check, self.avg_mean_radio, self.avg_median_radio,
-            ]
-            for control in controls_to_block:
-                control.blockSignals(True)
-
-            # Load fast scan setting
-            fast_scan = config.getboolean('SCANNING', 'fast_scanning', fallback=True)
-            self.fast_scan_check.setChecked(fast_scan)
-
-            # Load sampling method and values
-            sampling_method = config.getint('SCANNING', 'sampling_method', fallback=0)
-            if sampling_method == 0:
-                self.sampling_fixed_radio.setChecked(True)
-                self.sampling_fixed_spin.setEnabled(True)
-                self.sampling_percent_spin.setEnabled(False)
-            else:
-                self.sampling_percent_radio.setChecked(True)
-                self.sampling_fixed_spin.setEnabled(False)
-                self.sampling_percent_spin.setEnabled(True)
-
-            self.sampling_fixed_spin.setValue(
-                config.getint('SCANNING', 'sampling_fixed_count', fallback=25))
-            self.sampling_percent_spin.setValue(
-                config.getint('SCANNING', 'sampling_percentage', fallback=10))
-
-            # Load exclusion settings
-            self.exclude_first_check.setChecked(
-                config.getboolean('SCANNING', 'exclude_first', fallback=False))
-            self.exclude_last_check.setChecked(
-                config.getboolean('SCANNING', 'exclude_last', fallback=False))
-            exclude_small = config.getboolean('SCANNING', 'exclude_small_images', fallback=False)
-            self.exclude_small_check.setChecked(exclude_small)
-            self.exclude_small_spin.setEnabled(exclude_small)
-            self.exclude_small_spin.setValue(
-                config.getint('SCANNING', 'exclude_small_threshold', fallback=50))
-            self.exclude_patterns_check.setChecked(
-                config.getboolean('SCANNING', 'exclude_patterns', fallback=False))
-            self.exclude_patterns_edit.setText(
-                config.get('SCANNING', 'exclude_patterns_text', fallback=''))
-
-            # Load statistics calculation setting
-            self.stats_exclude_outliers_check.setChecked(
-                config.getboolean('SCANNING', 'stats_exclude_outliers', fallback=False))
-
-            # Load average method setting
-            use_median = config.getboolean('SCANNING', 'use_median', fallback=True)
-            if use_median:
-                self.avg_median_radio.setChecked(True)
-            else:
-                self.avg_mean_radio.setChecked(True)
-
-            # Unblock signals
-            for control in controls_to_block:
-                control.blockSignals(False)
-
-        except Exception as e:
-            log(f"Failed to load scanning settings: {e}", level="warning", category="settings")
-    
     def _load_tabs_settings(self):
         """Load tabs settings if available"""
         try:
@@ -2912,38 +2647,6 @@ class ComprehensiveSettingsDialog(QDialog):
             msg_box.open()
             return False
     
-    def _save_scanning_settings(self):
-        """Save scanning settings to INI file"""
-        try:
-            config = configparser.ConfigParser()
-            config_file = get_config_path()
-
-            if os.path.exists(config_file):
-                config.read(config_file, encoding='utf-8')
-
-            if 'SCANNING' not in config:
-                config.add_section('SCANNING')
-
-            # Save all scanning settings
-            config.set('SCANNING', 'fast_scanning', str(self.fast_scan_check.isChecked()))
-            config.set('SCANNING', 'sampling_method', '0' if self.sampling_fixed_radio.isChecked() else '1')
-            config.set('SCANNING', 'sampling_fixed_count', str(self.sampling_fixed_spin.value()))
-            config.set('SCANNING', 'sampling_percentage', str(self.sampling_percent_spin.value()))
-            config.set('SCANNING', 'exclude_first', str(self.exclude_first_check.isChecked()))
-            config.set('SCANNING', 'exclude_last', str(self.exclude_last_check.isChecked()))
-            config.set('SCANNING', 'exclude_small_images', str(self.exclude_small_check.isChecked()))
-            config.set('SCANNING', 'exclude_small_threshold', str(self.exclude_small_spin.value()))
-            config.set('SCANNING', 'exclude_patterns', str(self.exclude_patterns_check.isChecked()))
-            config.set('SCANNING', 'exclude_patterns_text', self.exclude_patterns_edit.text())
-            config.set('SCANNING', 'stats_exclude_outliers', str(self.stats_exclude_outliers_check.isChecked()))
-            config.set('SCANNING', 'use_median', str(self.avg_median_radio.isChecked()))
-
-            with open(config_file, 'w', encoding='utf-8') as f:
-                config.write(f)
-
-        except Exception as e:
-            log(f"Failed to save scanning settings: {e}", level="warning", category="settings")
-    
     def _save_tabs_settings(self):
         """Save tabs settings - handled by TabManager automatically"""
         # TabManager automatically persists settings through QSettings
@@ -3051,8 +2754,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.general_tab.reset_to_defaults()
             
             # Reset scanning
-            self.fast_scan_check.setChecked(True)
-            self.pil_sampling_combo.setCurrentIndex(2)
+            if hasattr(self, 'scanning_tab'):
+                self.scanning_tab.reset_to_defaults()
             
             # Reset tabs settings
             self._reset_tabs_settings()
@@ -3192,8 +2895,7 @@ class ComprehensiveSettingsDialog(QDialog):
             elif current_index == TabIndex.LOGS:
                 return self._save_logs_tab()
             elif current_index == TabIndex.IMAGE_SCAN:
-                self._save_scanning_settings()
-                return True
+                return self.scanning_tab.save_settings()
             elif current_index == TabIndex.COVERS:
                 self._save_covers_settings()
                 return True
@@ -3376,18 +3078,11 @@ class ComprehensiveSettingsDialog(QDialog):
         if current_index == TabIndex.GENERAL:
             self.general_tab.reload_settings()
         elif current_index == TabIndex.IMAGE_SCAN:
-            self._reload_scanning_tab()
+            self.scanning_tab.reload_settings()
         elif current_index == TabIndex.COVERS:
             self._reload_covers_tab()
         # Other tabs don't have form controls that need reloading
     
-    def _reload_scanning_tab(self):
-        """Reload Scanning tab form values from saved settings"""
-        # Reload scanning settings from QSettings
-        if self.parent_window and hasattr(self.parent_window, 'settings'):
-            # Just call the main load function - it handles everything
-            self._load_scanning_settings()
-
     def _reload_covers_tab(self):
         """Reload Covers tab form values from saved settings"""
         self._load_covers_settings()

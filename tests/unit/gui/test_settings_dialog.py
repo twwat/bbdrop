@@ -516,9 +516,10 @@ class TestSettingsDialogLoadSave:
             qtbot.addWidget(dialog)
             mock_load_settings.assert_called_once()
 
+    @patch('src.gui.settings.scanning_tab.get_config_path')
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
-    def test_load_scanning_settings(self, mock_get_path, mock_load, qtbot, tmp_path):
+    def test_load_scanning_settings(self, mock_get_path, mock_load, mock_scan_path, qtbot, tmp_path):
         """Test loading scanning settings from config file"""
         mock_load.return_value = {}
 
@@ -539,33 +540,35 @@ class TestSettingsDialogLoadSave:
             config.write(f)
 
         mock_get_path.return_value = str(config_file)
+        mock_scan_path.return_value = str(config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
         # Verify settings loaded
-        if hasattr(dialog, 'fast_scan_check'):
-            assert dialog.fast_scan_check.isChecked() is True
-        if hasattr(dialog, 'exclude_small_check'):
-            assert dialog.exclude_small_check.isChecked() is True
+        if hasattr(dialog, 'scanning_tab'):
+            assert dialog.scanning_tab.fast_scan_check.isChecked() is True
+            assert dialog.scanning_tab.exclude_small_check.isChecked() is True
 
+    @patch('src.gui.settings.scanning_tab.get_config_path')
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
-    def test_save_scanning_settings(self, mock_get_path, mock_load, qtbot, tmp_path):
+    def test_save_scanning_settings(self, mock_get_path, mock_load, mock_scan_path, qtbot, tmp_path):
         """Test saving scanning settings to config file"""
         mock_load.return_value = {}
         config_file = tmp_path / "bbdrop.ini"
         config_file.write_text("[SCANNING]\n")
         mock_get_path.return_value = str(config_file)
+        mock_scan_path.return_value = str(config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
         # Modify settings
-        if hasattr(dialog, 'fast_scan_check'):
-            dialog.fast_scan_check.setChecked(False)
+        if hasattr(dialog, 'scanning_tab'):
+            dialog.scanning_tab.fast_scan_check.setChecked(False)
 
-        dialog._save_scanning_settings()
+        dialog.scanning_tab.save_settings()
 
         # Verify saved
         config = configparser.ConfigParser()
@@ -592,11 +595,11 @@ class TestSettingsDialogValidation:
         qtbot.addWidget(dialog)
 
         # Test sampling spinbox
-        if hasattr(dialog, 'sampling_fixed_spin'):
-            min_val = dialog.sampling_fixed_spin.minimum()
-            max_val = dialog.sampling_fixed_spin.maximum()
-            dialog.sampling_fixed_spin.setValue(max_val + 10)  # Try to exceed max
-            assert dialog.sampling_fixed_spin.value() <= max_val
+        if hasattr(dialog, 'scanning_tab'):
+            min_val = dialog.scanning_tab.sampling_fixed_spin.minimum()
+            max_val = dialog.scanning_tab.sampling_fixed_spin.maximum()
+            dialog.scanning_tab.sampling_fixed_spin.setValue(max_val + 10)  # Try to exceed max
+            assert dialog.scanning_tab.sampling_fixed_spin.value() <= max_val
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -759,10 +762,10 @@ class TestSettingsDialogWidgets:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if hasattr(dialog, 'fast_scan_check'):
-            original = dialog.fast_scan_check.isChecked()
-            dialog.fast_scan_check.setChecked(not original)
-            assert dialog.fast_scan_check.isChecked() == (not original)
+        if hasattr(dialog, 'scanning_tab'):
+            original = dialog.scanning_tab.fast_scan_check.isChecked()
+            dialog.scanning_tab.fast_scan_check.setChecked(not original)
+            assert dialog.scanning_tab.fast_scan_check.isChecked() == (not original)
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -1077,10 +1080,10 @@ class TestSettingsDialogEdgeCases:
         qtbot.addWidget(dialog)
 
         # Force exception in load
-        with patch('src.gui.settings_dialog.configparser.ConfigParser.read',
+        with patch('src.gui.settings.scanning_tab.configparser.ConfigParser.read',
                   side_effect=Exception("Read error")):
             # Should not crash
-            dialog._load_scanning_settings()
+            dialog.scanning_tab.load_settings()
 
 
 # ============================================================================
@@ -1090,9 +1093,10 @@ class TestSettingsDialogEdgeCases:
 class TestSettingsDialogIntegration:
     """Integration tests for complete workflows"""
 
+    @patch('src.gui.settings.scanning_tab.get_config_path')
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
-    def test_complete_edit_save_workflow(self, mock_get_path, mock_load, qtbot, tmp_path):
+    def test_complete_edit_save_workflow(self, mock_get_path, mock_load, mock_scan_path, qtbot, tmp_path):
         """Test complete workflow: open, edit, save, close"""
         mock_load.return_value = {}
 
@@ -1103,21 +1107,22 @@ class TestSettingsDialogIntegration:
             config.write(f)
 
         mock_get_path.return_value = str(config_file)
+        mock_scan_path.return_value = str(config_file)
 
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
         # Edit setting
-        if hasattr(dialog, 'fast_scan_check'):
-            dialog.fast_scan_check.setChecked(False)
+        if hasattr(dialog, 'scanning_tab'):
+            dialog.scanning_tab.fast_scan_check.setChecked(False)
             dialog.mark_tab_dirty()
 
         # Save
-        dialog._save_scanning_settings()
+        dialog.scanning_tab.save_settings()
 
         # Verify
         config.read(config_file)
-        if hasattr(dialog, 'fast_scan_check'):
+        if hasattr(dialog, 'scanning_tab'):
             assert config.getboolean('SCANNING', 'fast_scanning') is False
 
     @patch('src.gui.settings_dialog.load_user_defaults')
