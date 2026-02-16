@@ -3,6 +3,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QComboBox, QSpinBox, QLineEdit, QFrame, QLabel,
+    QPushButton, QMessageBox,
 )
 from PyQt6.QtCore import pyqtSignal
 
@@ -74,13 +75,16 @@ class CoversTab(QWidget):
         filename_row.addWidget(self.covers_filename_check)
 
         self.covers_filename_edit = QLineEdit()
-        self.covers_filename_edit.setPlaceholderText("cover.*, poster.*, *_cover.* (comma-separated globs)")
-        self.covers_filename_edit.setToolTip(
-            "Comma-separated glob patterns. First matching pattern wins.\n"
-            "Examples: cover.*, poster.*, *_cover.*, *-cover.*"
-        )
+        self.covers_filename_edit.setPlaceholderText("cover.*, poster.*, *_cover.*")
+        self.covers_filename_edit.setToolTip("Comma-separated filename patterns")
         self.covers_filename_edit.setEnabled(False)
         filename_row.addWidget(self.covers_filename_edit)
+
+        info_btn = QPushButton("ⓘ")
+        info_btn.setFixedSize(24, 24)
+        info_btn.setToolTip("Pattern syntax help")
+        info_btn.clicked.connect(self._show_pattern_help)
+        filename_row.addWidget(info_btn)
         detection_layout.addLayout(filename_row)
 
         self.covers_filename_check.toggled.connect(self.covers_filename_edit.setEnabled)
@@ -475,6 +479,26 @@ class CoversTab(QWidget):
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _show_pattern_help(self):
+        """Show a help dialog explaining filename pattern syntax."""
+        QMessageBox.information(
+            self,
+            "Filename Pattern Syntax",
+            "Patterns use shell-style wildcards (not regex).\n\n"
+            "Wildcards:\n"
+            "  *     matches anything (e.g. cover.* matches cover.jpg, cover.png)\n"
+            "  ?     matches exactly one character\n"
+            "  [abc] matches any character in the brackets\n\n"
+            "Separate multiple patterns with commas.\n"
+            "Matching is case-insensitive. First match wins.\n\n"
+            "Examples:\n"
+            "  cover.*       — any file named \"cover\" with any extension\n"
+            "  cover_*       — cover_01.jpg, cover_front.png, etc.\n"
+            "  *_cover.*     — gallery_cover.jpg, my_cover.png\n"
+            "  poster.*      — poster.jpg, poster.png\n"
+            "  folder?.jpg   — folder1.jpg, folder2.jpg (but not folder10.jpg)",
+        )
 
     def _update_covers_ui_state(self, enabled=None):
         """Enable/disable and dim/undim covers container based on master checkbox."""
