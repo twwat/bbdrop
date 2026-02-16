@@ -318,3 +318,30 @@ class ImageHostsSettingsWidget(QWidget):
             Empty list (all saving happens in dialogs)
         """
         return []
+
+    def save_to_config(self):
+        """Save Image Hosts tab settings and refresh session pool if needed.
+
+        Returns:
+            True on success, False on error.
+        """
+        try:
+            from src.utils.logger import log
+
+            results = self.save()
+            # Check if any batch size changed to trigger pool refresh
+            main_window = self._get_main_window()
+            for old_batch, new_batch in results:
+                if old_batch != new_batch and main_window and hasattr(main_window, 'uploader'):
+                    try:
+                        main_window.uploader.refresh_session_pool()
+                    except Exception as e:
+                        log(f"Failed to refresh connection pool: {e}", level="warning", category="settings")
+                    break  # Only need to refresh once
+            if main_window and hasattr(main_window, 'refresh_image_host_combo'):
+                main_window.refresh_image_host_combo()
+            return True
+        except Exception as e:
+            from src.utils.logger import log
+            log(f"Error saving Image Hosts tab: {e}", level="warning", category="settings")
+            return False

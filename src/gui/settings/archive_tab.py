@@ -301,3 +301,38 @@ class ArchiveSettingsWidget(QWidget):
             'archive_split_enabled': self.split_enabled_checkbox.isChecked(),
             'archive_split_size_mb': self.split_size_spinbox.value()
         }
+
+    def load_from_config(self):
+        """Load archive settings from user defaults (INI file)."""
+        from bbdrop import load_user_defaults
+        settings = load_user_defaults()
+        self.load_settings(settings)
+
+    def save_to_config(self):
+        """Save archive settings to INI file."""
+        import os
+        import configparser
+        from bbdrop import get_config_path
+
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+
+        if os.path.exists(config_file):
+            config.read(config_file, encoding='utf-8')
+
+        if not config.has_section('DEFAULTS'):
+            config.add_section('DEFAULTS')
+
+        # Get settings from widget
+        archive_settings = self.get_settings()
+
+        # Save to DEFAULTS section
+        config.set('DEFAULTS', 'archive_format', archive_settings['archive_format'])
+        config.set('DEFAULTS', 'archive_compression', archive_settings['archive_compression'])
+        config.set('DEFAULTS', 'archive_split_enabled', str(archive_settings['archive_split_enabled']))
+        config.set('DEFAULTS', 'archive_split_size_mb', str(archive_settings['archive_split_size_mb']))
+
+        with open(config_file, 'w', encoding='utf-8') as f:
+            config.write(f)
+
+        return True

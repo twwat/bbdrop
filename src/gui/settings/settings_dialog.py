@@ -39,9 +39,6 @@ WHY THIS SEPARATION:
 - Clear semantics: "How it looks" (QSettings) vs "How it behaves" (INI)
 """
 
-import os
-import configparser
-
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QMessageBox,
@@ -49,7 +46,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QSettings
 
-from bbdrop import load_user_defaults, get_config_path
 from src.core.image_host_config import save_image_host_setting
 from src.utils.logger import log
 from src.gui.settings.advanced_tab import AdvancedSettingsWidget
@@ -294,129 +290,6 @@ class ComprehensiveSettingsDialog(QDialog):
         self.archive_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ARCHIVE))
         self._add_settings_page(self.archive_widget, "Zip Archives")
 
-    def _load_advanced_settings(self):
-        """Load advanced settings from INI file and QSettings."""
-        from bbdrop import get_config_path
-
-        config = configparser.ConfigParser()
-        config_file = get_config_path()
-        values = {}
-
-        if os.path.exists(config_file):
-            config.read(config_file, encoding='utf-8')
-            if config.has_section('Advanced'):
-                for key, value in config.items('Advanced'):
-                    # Convert string values back to appropriate types
-                    if value.lower() in ('true', 'false'):
-                        values[key] = value.lower() == 'true'
-                    else:
-                        try:
-                            values[key] = int(value)
-                        except ValueError:
-                            try:
-                                values[key] = float(value)
-                            except ValueError:
-                                values[key] = value
-
-        # Load bandwidth settings from QSettings (where BandwidthManager stores them)
-        qsettings = QSettings("BBDropUploader", "Settings")
-        alpha_up = qsettings.value("bandwidth/alpha_up", None)
-        alpha_down = qsettings.value("bandwidth/alpha_down", None)
-        if alpha_up is not None:
-            values["bandwidth/alpha_up"] = float(alpha_up)
-        if alpha_down is not None:
-            values["bandwidth/alpha_down"] = float(alpha_down)
-
-        if values:
-            self.advanced_widget.set_values(values)
-
-    def _save_proxy_settings(self):
-        """Save proxy settings.
-
-        The ProxySettingsWidget handles its own persistence via ProxyStorage,
-        so this just marks the tab as clean.
-        """
-        return True
-
-    def _save_advanced_settings(self):
-        """Save advanced settings to INI file (only non-default values).
-
-        Bandwidth settings are also saved to QSettings for BandwidthManager.
-        """
-        from bbdrop import get_config_path
-
-        config = configparser.ConfigParser()
-        config_file = get_config_path()
-
-        if os.path.exists(config_file):
-            config.read(config_file, encoding='utf-8')
-
-        # Remove existing Advanced section and recreate with current values
-        if config.has_section('Advanced'):
-            config.remove_section('Advanced')
-
-        all_values = self.advanced_widget.get_values()
-        non_defaults = self.advanced_widget.get_non_default_values()
-
-        # Save non-defaults to INI (excluding bandwidth settings which use QSettings)
-        non_bandwidth_settings = {k: v for k, v in non_defaults.items()
-                                  if not k.startswith('bandwidth/')}
-        if non_bandwidth_settings:
-            config.add_section('Advanced')
-            for key, value in non_bandwidth_settings.items():
-                config.set('Advanced', key, str(value))
-
-        with open(config_file, 'w', encoding='utf-8') as f:
-            config.write(f)
-
-        # Save bandwidth settings to QSettings (for BandwidthManager)
-        alpha_up = all_values.get('bandwidth/alpha_up', 0.6)
-        alpha_down = all_values.get('bandwidth/alpha_down', 0.15)
-
-        qsettings = QSettings("BBDropUploader", "Settings")
-        qsettings.setValue("bandwidth/alpha_up", alpha_up)
-        qsettings.setValue("bandwidth/alpha_down", alpha_down)
-
-        # Update the running BandwidthManager if available
-        if self.parent() and hasattr(self.parent(), 'worker_signal_handler'):
-            handler = self.parent().worker_signal_handler
-            if hasattr(handler, 'bandwidth_manager'):
-                handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down)
-
-        return True
-
-    def _save_archive_settings(self):
-        """Save archive settings to INI file."""
-        from bbdrop import get_config_path
-
-        config = configparser.ConfigParser()
-        config_file = get_config_path()
-
-        if os.path.exists(config_file):
-            config.read(config_file, encoding='utf-8')
-
-        if not config.has_section('DEFAULTS'):
-            config.add_section('DEFAULTS')
-
-        # Get settings from widget
-        archive_settings = self.archive_widget.get_settings()
-
-        # Save to DEFAULTS section
-        config.set('DEFAULTS', 'archive_format', archive_settings['archive_format'])
-        config.set('DEFAULTS', 'archive_compression', archive_settings['archive_compression'])
-        config.set('DEFAULTS', 'archive_split_enabled', str(archive_settings['archive_split_enabled']))
-        config.set('DEFAULTS', 'archive_split_size_mb', str(archive_settings['archive_split_size_mb']))
-
-        with open(config_file, 'w', encoding='utf-8') as f:
-            config.write(f)
-
-        return True
-
-    def _load_archive_settings(self):
-        """Load archive settings from user defaults."""
-        settings = load_user_defaults()
-        self.archive_widget.load_settings(settings)
-
     def setup_icons_tab(self):
         """Setup the Icons management tab (delegated to IconsTab widget)."""
         from src.gui.settings.icons_tab import IconsTab
@@ -454,11 +327,12 @@ class ComprehensiveSettingsDialog(QDialog):
         # Load external apps settings
         self._load_external_apps_settings()
         # Load file hosts settings
-        self._load_file_hosts_settings()
+        if hasattr(self, 'file_hosts_widget') and self.file_hosts_widget:
+            self.file_hosts_widget.load_from_config()
         # Load advanced settings
-        self._load_advanced_settings()
+        self.advanced_widget.load_from_config()
         # Load archive settings
-        self._load_archive_settings()
+        self.archive_widget.load_from_config()
 
     def _load_tabs_settings(self):
         """Load tabs settings if available"""
@@ -473,111 +347,6 @@ class ComprehensiveSettingsDialog(QDialog):
         """Load external apps settings from INI file (delegated to HooksTab)."""
         if hasattr(self, 'hooks_tab'):
             self.hooks_tab.load_settings()
-
-    def _load_file_hosts_settings(self):
-        """Load file hosts settings from INI file and encrypted credentials from QSettings"""
-        try:
-            # Check if widget exists
-            if not hasattr(self, 'file_hosts_widget') or not self.file_hosts_widget:
-                return
-
-            from src.core.file_host_config import get_config_manager
-            from bbdrop import get_credential, decrypt_password
-
-            config = configparser.ConfigParser()
-            config_file = get_config_path()
-
-            if os.path.exists(config_file):
-                config.read(config_file, encoding='utf-8')
-
-            # Prepare settings dict
-            settings_dict = {
-                'global_limit': 3,
-                'per_host_limit': 2,
-                'hosts': {}
-            }
-
-            # Load connection limits
-            if 'FILE_HOSTS' in config:
-                settings_dict['global_limit'] = config.getint('FILE_HOSTS', 'global_limit', fallback=3)
-                settings_dict['per_host_limit'] = config.getint('FILE_HOSTS', 'per_host_limit', fallback=2)
-
-            # Load per-host settings
-            config_manager = get_config_manager()
-            for host_id in config_manager.hosts.keys():
-                # Use new API for layered config (INI → JSON defaults → hardcoded)
-                from src.core.file_host_config import get_file_host_setting
-
-                host_settings = {
-                    'enabled': get_file_host_setting(host_id, 'enabled', 'bool'),
-                    'credentials': '',
-                    'trigger': get_file_host_setting(host_id, 'trigger', 'str')  # Single string value
-                }
-
-                # Load encrypted credentials from QSettings
-                encrypted_creds = get_credential(f'file_host_{host_id}_credentials')
-                if encrypted_creds:
-                    decrypted = decrypt_password(encrypted_creds)
-                    if decrypted:
-                        host_settings['credentials'] = decrypted
-
-                settings_dict['hosts'][host_id] = host_settings
-
-            # Apply settings to widget
-            self.file_hosts_widget.load_settings(settings_dict)
-
-        except Exception as e:
-            import traceback
-            log(f"Failed to load file hosts settings: {e}", level="error", category="settings")
-            traceback.print_exc()
-
-    def _save_file_hosts_settings(self):
-        """Save file hosts settings to INI file and encrypt credentials to QSettings"""
-        try:
-            # Get settings from widget if available
-            if not hasattr(self, 'file_hosts_widget') or not self.file_hosts_widget:
-                return
-
-            from bbdrop import set_credential, encrypt_password
-
-            config = configparser.ConfigParser()
-            config_file = get_config_path()
-
-            if os.path.exists(config_file):
-                config.read(config_file, encoding='utf-8')
-
-            if 'FILE_HOSTS' not in config:
-                config.add_section('FILE_HOSTS')
-
-            # Get settings from widget
-            widget_settings = self.file_hosts_widget.get_settings()
-
-            # Save connection limits
-            config.set('FILE_HOSTS', 'global_limit', str(widget_settings['global_limit']))
-            config.set('FILE_HOSTS', 'per_host_limit', str(widget_settings['per_host_limit']))
-
-            # Save per-host settings using new API
-            from src.core.file_host_config import save_file_host_setting
-            for host_id, host_settings in widget_settings['hosts'].items():
-                # Save enabled state and trigger (single string value)
-                save_file_host_setting(host_id, 'enabled', host_settings['enabled'])
-                save_file_host_setting(host_id, 'trigger', host_settings['trigger'])
-
-                # Save encrypted credentials to QSettings
-                creds_text = host_settings.get('credentials', '')
-                if creds_text:
-                    encrypted = encrypt_password(creds_text)
-                    set_credential(f'file_host_{host_id}_credentials', encrypted)
-                else:
-                    # Clear credentials if empty
-                    set_credential(f'file_host_{host_id}_credentials', '')
-
-            # Write INI file
-            with open(config_file, 'w', encoding='utf-8') as f:
-                config.write(f)
-
-        except Exception as e:
-            log(f"Failed to save file hosts settings: {e}", level="warning", category="settings")
 
     def save_settings(self):
         """Save all settings (legacy bulk-save — prefer per-tab save_current_tab)."""
@@ -596,7 +365,8 @@ class ComprehensiveSettingsDialog(QDialog):
                     self.hooks_tab.save_settings()
 
                 # Save file hosts settings
-                self._save_file_hosts_settings()
+                if hasattr(self, 'file_hosts_widget') and self.file_hosts_widget:
+                    self.file_hosts_widget.save_to_config()
 
                 # Save tabs settings
                 self._save_tabs_settings()
@@ -801,14 +571,15 @@ class ComprehensiveSettingsDialog(QDialog):
             if current_index == TabIndex.GENERAL:
                 return self.general_tab.save_settings()
             elif current_index == TabIndex.IMAGE_HOSTS:
-                return self._save_image_hosts_tab()
+                return self.image_hosts_widget.save_to_config()
             elif current_index == TabIndex.FILE_HOSTS:
-                self._save_file_hosts_settings()
+                if hasattr(self, 'file_hosts_widget') and self.file_hosts_widget:
+                    self.file_hosts_widget.save_to_config()
                 return True
             elif current_index == TabIndex.TEMPLATES:
                 return self.templates_tab.save_settings()
             elif current_index == TabIndex.LOGS:
-                return self._save_logs_tab()
+                return self.log_settings_widget.save_to_config()
             elif current_index == TabIndex.IMAGE_SCAN:
                 return self.scanning_tab.save_settings()
             elif current_index == TabIndex.COVERS:
@@ -816,11 +587,12 @@ class ComprehensiveSettingsDialog(QDialog):
             elif current_index == TabIndex.HOOKS:
                 return self.hooks_tab.save_settings()
             elif current_index == TabIndex.PROXY:
-                return self._save_proxy_settings()
+                # ProxySettingsWidget handles its own persistence via ProxyStorage
+                return True
             elif current_index == TabIndex.ADVANCED:
-                return self._save_advanced_settings()
+                return self.advanced_widget.save_to_config(parent_window=self.parent_window)
             elif current_index == TabIndex.ARCHIVE:
-                return self._save_archive_settings()
+                return self.archive_widget.save_to_config()
             else:
                 return True
         except Exception as e:
@@ -998,55 +770,3 @@ class ComprehensiveSettingsDialog(QDialog):
             self.templates_tab.reload_settings()
         # Other tabs don't have form controls that need reloading
 
-    def _save_image_hosts_tab(self):
-        """Save Image Hosts tab settings"""
-        try:
-            if hasattr(self, 'image_hosts_widget') and self.image_hosts_widget:
-                results = self.image_hosts_widget.save()
-                # Check if any batch size changed to trigger pool refresh
-                for old_batch, new_batch in results:
-                    if old_batch != new_batch and self.parent_window and hasattr(self.parent_window, 'uploader'):
-                        try:
-                            self.parent_window.uploader.refresh_session_pool()
-                        except Exception as e:
-                            log(f"Failed to refresh connection pool: {e}", level="warning", category="settings")
-                        break  # Only need to refresh once
-            if self.parent_window and hasattr(self.parent_window, 'refresh_image_host_combo'):
-                self.parent_window.refresh_image_host_combo()
-            return True
-        except Exception as e:
-            log(f"Error saving Image Hosts tab: {e}", level="warning", category="settings")
-            return False
-
-    def _save_upload_tab(self):
-        """Save Upload/Credentials tab settings only"""
-        try:
-            # Credentials are saved through their individual button handlers
-            # This tab doesn't have bulk settings to save
-            return True
-        except Exception as e:
-            log(f"Error saving upload settings: {e}", level="warning", category="settings")
-            return False
-
-    def _save_tabs_tab(self):
-        """Save Tabs tab settings only (delegated to TabsTab widget)."""
-        if hasattr(self, 'tabs_tab'):
-            return self.tabs_tab.save_settings()
-        return True
-    
-    def _save_icons_tab(self):
-        """Save Icons tab settings (delegated to IconsTab widget)."""
-        if hasattr(self, 'icons_tab'):
-            return self.icons_tab.save_settings()
-        return True
-    
-    def _save_logs_tab(self):
-        """Save Logs tab settings"""
-        try:
-            if hasattr(self, 'log_settings_widget'):
-                self.log_settings_widget.save_settings()
-                # Cache refresh and re-rendering handled by main_window._handle_settings_dialog_result()
-            return True
-        except Exception as e:
-            log(f"Error saving logs tab: {e}", level="warning", category="settings")
-            return False

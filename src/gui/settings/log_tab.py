@@ -287,6 +287,20 @@ class LogSettingsWidget(QWidget):
         except Exception:
             pass
 
+    def save_to_config(self):
+        """Save log settings to config and return success status.
+
+        Returns:
+            True on success, False on error.
+        """
+        try:
+            self.save_settings()
+            return True
+        except Exception as e:
+            from src.utils.logger import log
+            log(f"Error saving logs tab: {e}", level="warning", category="settings")
+            return False
+
     def open_log_viewer(self):
         """Open the log viewer dialog"""
         try:

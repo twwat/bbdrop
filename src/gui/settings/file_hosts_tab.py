@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from src.utils.format_utils import format_binary_size
+from src.utils.logger import log
 from src.core.file_host_config import get_config_manager, HostConfig
 from src.gui.icon_manager import get_icon_manager
 
@@ -704,6 +705,102 @@ class FileHostsSettingsWidget(QWidget):
         # File Hosts tab is display-only - no settings to get
         # All editing happens in config dialog
         return {"global_limit": 3, "per_host_limit": 2, "hosts": {}}
+
+    def load_from_config(self):
+        """Load file hosts settings from INI file and encrypted credentials from QSettings."""
+        try:
+            import os
+            import configparser
+            from src.core.file_host_config import get_config_manager, get_file_host_setting
+            from bbdrop import get_config_path, get_credential, decrypt_password
+
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+
+            if os.path.exists(config_file):
+                config.read(config_file, encoding='utf-8')
+
+            # Prepare settings dict
+            settings_dict = {
+                'global_limit': 3,
+                'per_host_limit': 2,
+                'hosts': {}
+            }
+
+            # Load connection limits
+            if 'FILE_HOSTS' in config:
+                settings_dict['global_limit'] = config.getint('FILE_HOSTS', 'global_limit', fallback=3)
+                settings_dict['per_host_limit'] = config.getint('FILE_HOSTS', 'per_host_limit', fallback=2)
+
+            # Load per-host settings
+            config_manager = get_config_manager()
+            for host_id in config_manager.hosts.keys():
+                host_settings = {
+                    'enabled': get_file_host_setting(host_id, 'enabled', 'bool'),
+                    'credentials': '',
+                    'trigger': get_file_host_setting(host_id, 'trigger', 'str')
+                }
+
+                # Load encrypted credentials from QSettings
+                encrypted_creds = get_credential(f'file_host_{host_id}_credentials')
+                if encrypted_creds:
+                    decrypted = decrypt_password(encrypted_creds)
+                    if decrypted:
+                        host_settings['credentials'] = decrypted
+
+                settings_dict['hosts'][host_id] = host_settings
+
+            # Apply settings to widget
+            self.load_settings(settings_dict)
+
+        except Exception as e:
+            import traceback
+            log(f"Failed to load file hosts settings: {e}", level="error", category="settings")
+            traceback.print_exc()
+
+    def save_to_config(self):
+        """Save file hosts settings to INI file and encrypt credentials to QSettings."""
+        try:
+            import os
+            import configparser
+            from src.core.file_host_config import save_file_host_setting
+            from bbdrop import get_config_path, set_credential, encrypt_password
+
+            config = configparser.ConfigParser()
+            config_file = get_config_path()
+
+            if os.path.exists(config_file):
+                config.read(config_file, encoding='utf-8')
+
+            if 'FILE_HOSTS' not in config:
+                config.add_section('FILE_HOSTS')
+
+            # Get settings from widget
+            widget_settings = self.get_settings()
+
+            # Save connection limits
+            config.set('FILE_HOSTS', 'global_limit', str(widget_settings['global_limit']))
+            config.set('FILE_HOSTS', 'per_host_limit', str(widget_settings['per_host_limit']))
+
+            # Save per-host settings
+            for host_id, host_settings in widget_settings['hosts'].items():
+                save_file_host_setting(host_id, 'enabled', host_settings['enabled'])
+                save_file_host_setting(host_id, 'trigger', host_settings['trigger'])
+
+                # Save encrypted credentials to QSettings
+                creds_text = host_settings.get('credentials', '')
+                if creds_text:
+                    encrypted = encrypt_password(creds_text)
+                    set_credential(f'file_host_{host_id}_credentials', encrypted)
+                else:
+                    set_credential(f'file_host_{host_id}_credentials', '')
+
+            # Write INI file
+            with open(config_file, 'w', encoding='utf-8') as f:
+                config.write(f)
+
+        except Exception as e:
+            log(f"Failed to save file hosts settings: {e}", level="warning", category="settings")
 
     def _on_storage_updated(self, host_id: str, total: int, left: int):
         """Handle storage update signal from manager.

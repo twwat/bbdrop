@@ -248,3 +248,95 @@ class AdvancedSettingsWidget(QWidget):
         self.set_values(defaults)
         self._current_values = defaults.copy()
         self.settings_changed.emit()
+
+    def load_from_config(self):
+        """Load advanced settings from INI file and QSettings."""
+        import os
+        import configparser
+        from bbdrop import get_config_path
+        from PyQt6.QtCore import QSettings
+
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+        values = {}
+
+        if os.path.exists(config_file):
+            config.read(config_file, encoding='utf-8')
+            if config.has_section('Advanced'):
+                for key, value in config.items('Advanced'):
+                    # Convert string values back to appropriate types
+                    if value.lower() in ('true', 'false'):
+                        values[key] = value.lower() == 'true'
+                    else:
+                        try:
+                            values[key] = int(value)
+                        except ValueError:
+                            try:
+                                values[key] = float(value)
+                            except ValueError:
+                                values[key] = value
+
+        # Load bandwidth settings from QSettings (where BandwidthManager stores them)
+        qsettings = QSettings("BBDropUploader", "Settings")
+        alpha_up = qsettings.value("bandwidth/alpha_up", None)
+        alpha_down = qsettings.value("bandwidth/alpha_down", None)
+        if alpha_up is not None:
+            values["bandwidth/alpha_up"] = float(alpha_up)
+        if alpha_down is not None:
+            values["bandwidth/alpha_down"] = float(alpha_down)
+
+        if values:
+            self.set_values(values)
+
+    def save_to_config(self, parent_window=None):
+        """Save advanced settings to INI file (only non-default values).
+
+        Bandwidth settings are also saved to QSettings for BandwidthManager.
+
+        Args:
+            parent_window: Optional parent window for accessing BandwidthManager.
+        """
+        import os
+        import configparser
+        from bbdrop import get_config_path
+        from PyQt6.QtCore import QSettings
+
+        config = configparser.ConfigParser()
+        config_file = get_config_path()
+
+        if os.path.exists(config_file):
+            config.read(config_file, encoding='utf-8')
+
+        # Remove existing Advanced section and recreate with current values
+        if config.has_section('Advanced'):
+            config.remove_section('Advanced')
+
+        all_values = self.get_values()
+        non_defaults = self.get_non_default_values()
+
+        # Save non-defaults to INI (excluding bandwidth settings which use QSettings)
+        non_bandwidth_settings = {k: v for k, v in non_defaults.items()
+                                  if not k.startswith('bandwidth/')}
+        if non_bandwidth_settings:
+            config.add_section('Advanced')
+            for key, value in non_bandwidth_settings.items():
+                config.set('Advanced', key, str(value))
+
+        with open(config_file, 'w', encoding='utf-8') as f:
+            config.write(f)
+
+        # Save bandwidth settings to QSettings (for BandwidthManager)
+        alpha_up = all_values.get('bandwidth/alpha_up', 0.6)
+        alpha_down = all_values.get('bandwidth/alpha_down', 0.15)
+
+        qsettings = QSettings("BBDropUploader", "Settings")
+        qsettings.setValue("bandwidth/alpha_up", alpha_up)
+        qsettings.setValue("bandwidth/alpha_down", alpha_down)
+
+        # Update the running BandwidthManager if available
+        if parent_window and hasattr(parent_window, 'worker_signal_handler'):
+            handler = parent_window.worker_signal_handler
+            if hasattr(handler, 'bandwidth_manager'):
+                handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down)
+
+        return True
