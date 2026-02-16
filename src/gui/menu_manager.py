@@ -174,7 +174,7 @@ class MenuManager(QObject):
 
             # Settings menu
             settings_menu = menu_bar.addMenu("Settings")
-            from src.gui.settings_dialog import TabIndex
+            from src.gui.settings import TabIndex
             action_general = settings_menu.addAction("General")
             action_general.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.GENERAL))
             action_image_hosts = settings_menu.addAction("Image Hosts")

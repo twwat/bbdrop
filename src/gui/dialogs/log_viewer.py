@@ -436,7 +436,7 @@ class LogViewerDialog(QDialog):
 
             if main_window:
                 # Open settings to Log tab - keep this dialog open
-                from src.gui.settings_dialog import TabIndex
+                from src.gui.settings import TabIndex
                 main_window.open_comprehensive_settings(tab_index=TabIndex.LOGS)
         except Exception as e:
             log(f"Error opening log settings: {e}", level="error", category="ui")

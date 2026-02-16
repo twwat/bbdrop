@@ -104,7 +104,7 @@ from src.core.engine import UploadEngine
 from src.core.constants import IMAGE_EXTENSIONS
 from src.storage.database import QueueStore
 from src.utils.logging import get_logger
-from src.gui.settings_dialog import ComprehensiveSettingsDialog
+from src.gui.settings import ComprehensiveSettingsDialog
 from src.gui.tab_manager import TabManager
 
 # Import widget classes from module
@@ -1737,7 +1737,7 @@ class BBDropGUI(QMainWindow):
         except Exception as e:
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
-        from src.gui.settings_dialog import TabIndex as _TabIndex
+        from src.gui.settings import TabIndex as _TabIndex
         self.hooks_btn.clicked.connect(lambda: self.open_comprehensive_settings(tab_index=_TabIndex.HOOKS))
 
         # File Hosts button (opens comprehensive settings to File Hosts tab)
@@ -2139,7 +2139,7 @@ class BBDropGUI(QMainWindow):
         """Prompt to set credentials only if API key is not set."""
         if not api_key_is_set():
             log(f"No API key set. Opening settings at Image Hosts tab...", level="warning", category="auth")
-            from src.gui.settings_dialog import TabIndex
+            from src.gui.settings import TabIndex
             self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
         else:
             log("IMX API key found", category="auth", level="debug")
@@ -2275,7 +2275,7 @@ class BBDropGUI(QMainWindow):
 
     def manage_templates(self):
         """Open comprehensive settings to templates tab"""
-        from src.gui.settings_dialog import TabIndex
+        from src.gui.settings import TabIndex
         self.open_comprehensive_settings(tab_index=TabIndex.TEMPLATES)  # Templates tab
         # Refresh template combo box after dialog closes
         current_template = self.template_combo.currentText()
@@ -2305,12 +2305,12 @@ class BBDropGUI(QMainWindow):
     
     def manage_credentials(self):
         """Open comprehensive settings to Image Hosts tab"""
-        from src.gui.settings_dialog import TabIndex
+        from src.gui.settings import TabIndex
         self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
 
     def manage_file_hosts(self):
         """Open comprehensive settings to file hosts tab"""
-        from src.gui.settings_dialog import TabIndex
+        from src.gui.settings import TabIndex
         self.open_comprehensive_settings(tab_index=TabIndex.FILE_HOSTS)
 
     def open_comprehensive_settings(self, tab_index=0):
@@ -3835,7 +3835,7 @@ class BBDropGUI(QMainWindow):
 
     def open_log_viewer(self):
         """Open comprehensive settings to logs tab"""
-        from src.gui.settings_dialog import TabIndex
+        from src.gui.settings import TabIndex
         self.open_comprehensive_settings(tab_index=TabIndex.LOGS)
 
     def open_log_viewer_popup(self):

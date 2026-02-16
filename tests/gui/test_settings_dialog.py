@@ -8,18 +8,18 @@ import pytest
 from unittest.mock import patch, Mock, MagicMock
 from PyQt6.QtWidgets import QDialog, QTabWidget
 
-from src.gui.settings_dialog import ComprehensiveSettingsDialog
+from src.gui.settings import ComprehensiveSettingsDialog
 
 
 class TestSettingsDialogInit:
     """Test ComprehensiveSettingsDialog initialization"""
 
-    @patch('src.gui.settings_dialog.load_user_defaults')
+    @patch('src.gui.settings.settings_dialog.load_user_defaults')
     def test_settings_dialog_creates(self, mock_load, qtbot, mock_config_file, mock_bbdrop_functions):
         """Test ComprehensiveSettingsDialog instantiation"""
         mock_load.return_value = {}
 
-        with patch('src.gui.settings_dialog.get_config_path', return_value=str(mock_config_file.parent)):
+        with patch('src.gui.settings.settings_dialog.get_config_path', return_value=str(mock_config_file.parent)):
             dialog = ComprehensiveSettingsDialog()
             qtbot.addWidget(dialog)
 
