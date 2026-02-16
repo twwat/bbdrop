@@ -12,7 +12,7 @@ import re
 
 from src.proxy.models import ProxyPool
 from src.proxy.storage import ProxyStorage
-from .simple_proxy_dropdown import SimpleProxyDropdown
+from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
 
 logger = logging.getLogger(__name__)
 

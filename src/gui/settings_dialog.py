@@ -66,8 +66,8 @@ from src.utils.logger import log
 from src.core.constants import DEFAULT_COVER_PATTERNS, COVER_THUMBNAIL_FORMATS, DEFAULT_COVER_DIMENSION_DIFFERS_PERCENT, DEFAULT_COVER_MAX_PER_GALLERY, DEFAULT_COVER_SKIP_DUPLICATES, DEFAULT_COVER_THUMBNAIL_FORMAT
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
-from src.gui.widgets.advanced_settings_widget import AdvancedSettingsWidget
-from src.gui.widgets.archive_settings_widget import ArchiveSettingsWidget
+from src.gui.settings.advanced_tab import AdvancedSettingsWidget
+from src.gui.settings.archive_tab import ArchiveSettingsWidget
 
 
 class TabIndex:
@@ -128,119 +128,9 @@ class IconDropFrame(QFrame):
         event.ignore()
 
 
-class HostTestDialog(QDialog):
-    """Dialog showing file host test progress with checklist"""
-
-    def __init__(self, host_name: str, parent=None):
-        super().__init__(parent)
-        self.host_name = host_name
-        self.test_items: Dict[str, Dict[str, Any]] = {}
-        self.setup_ui()
-
-    def setup_ui(self):
-        """Setup the test dialog UI"""
-        self.setWindowTitle(f"Testing {self.host_name}")
-        self.setModal(True)
-        self.resize(400, 250)
-
-        layout = QVBoxLayout(self)
-
-        # Title
-        title_label = QLabel(f"<b>Testing {self.host_name}</b>")
-        layout.addWidget(title_label)
-
-        layout.addSpacing(10)
-
-        # Test items list
-        self.tests_layout = QVBoxLayout()
-
-        # Add test items
-        test_names = [
-            ("login", "Logging in..."),
-            ("credentials", "Validating credentials..."),
-            ("user_info", "Retrieving account info..."),
-            ("upload", "Testing upload..."),
-            ("cleanup", "Cleaning up test file...")
-        ]
-
-        for test_id, test_name in test_names:
-            test_row = QHBoxLayout()
-
-            status_label = QLabel("⏳")  # Waiting
-            status_label.setFixedWidth(30)
-
-            name_label = QLabel(test_name)
-
-            test_row.addWidget(status_label)
-            test_row.addWidget(name_label)
-            test_row.addStretch()
-
-            self.tests_layout.addLayout(test_row)
-
-            # Store references
-            self.test_items[test_id] = {
-                'status_label': status_label,
-                'name_label': name_label,
-                'row': test_row
-            }
-
-        layout.addLayout(self.tests_layout)
-        layout.addStretch()
-
-        # Close button (initially hidden)
-        self.close_btn = QPushButton("Close")
-        self.close_btn.clicked.connect(self.accept)
-        self.close_btn.setVisible(False)
-        layout.addWidget(self.close_btn)
-
-    def update_test_status(self, test_id: str, status: str, message: Optional[str] = None):
-        """Update status of a test
-
-        Args:
-            test_id: Test identifier
-            status: 'running', 'success', 'failure', 'skipped'
-            message: Optional status message
-        """
-        if test_id not in self.test_items:
-            return
-
-        item = self.test_items[test_id]
-
-        status_label = item['status_label']
-        if status == 'running':
-            status_label.setText("⏳")
-            status_label.setProperty("status", "running")
-        elif status == 'success':
-            status_label.setText("✓")
-            status_label.setProperty("status", "success")
-        elif status == 'failure':
-            status_label.setText("✗")
-            status_label.setProperty("status", "failure")
-        elif status == 'skipped':
-            status_label.setText("○")
-            status_label.setProperty("status", "skipped")
-        # Reapply stylesheet to pick up property change
-        status_label.style().unpolish(status_label)
-        status_label.style().polish(status_label)
-
-        if message:
-            item['name_label'].setText(message)
-
-        # Force UI update
-        self.repaint()
-        QApplication.processEvents()
-
-    def set_complete(self, success: bool):
-        """Mark testing as complete
-
-        Args:
-            success: True if all tests passed
-        """
-        self.close_btn.setVisible(True)
-        if success:
-            self.setWindowTitle(f"Testing {self.host_name} - Complete ✓")
-        else:
-            self.setWindowTitle(f"Testing {self.host_name} - Failed ✗")
+# HostTestDialog moved to src/gui/settings/host_test_dialog.py
+# Re-exported here for backward compatibility
+from src.gui.settings.host_test_dialog import HostTestDialog  # noqa: F401
 
 
 class ComprehensiveSettingsDialog(QDialog):
@@ -611,7 +501,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
     def setup_image_hosts_tab(self):
         """Setup the Image Hosts tab using dedicated widget"""
-        from src.gui.widgets.image_hosts_settings_widget import ImageHostsSettingsWidget
+        from src.gui.settings.image_hosts_tab import ImageHostsSettingsWidget
 
         self.image_hosts_widget = ImageHostsSettingsWidget(self)
         self.image_hosts_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_HOSTS))
@@ -1096,7 +986,7 @@ class ComprehensiveSettingsDialog(QDialog):
         
     def setup_logs_tab(self):
         """Setup the Logs tab with log settings"""
-        from src.gui.dialogs.log_settings_widget import LogSettingsWidget
+        from src.gui.settings.log_tab import LogSettingsWidget
         self.log_settings_widget = LogSettingsWidget(self)
         self.log_settings_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.LOGS))
         self.log_settings_widget.load_settings()  # Load current settings
@@ -2178,7 +2068,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 ('%p', 'C:\\test\\path', GALLERY_COLOR),
                 ('%C', '10', GALLERY_COLOR),
                 ('%s', '1048576', GALLERY_COLOR),
-                ('%t', 'Main', GALLERY_COLOR),
+                ('%t', 'default', GALLERY_COLOR),
                 # ZIP path (green - upload-related)
                 ('%z', zip_path, UPLOAD_COLOR),
             ]
@@ -2583,7 +2473,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
     def setup_file_hosts_tab(self):
         """Setup the File Hosts tab using dedicated widget"""
-        from src.gui.widgets.file_hosts_settings_widget import FileHostsSettingsWidget
+        from src.gui.settings.file_hosts_tab import FileHostsSettingsWidget
 
         if not self.file_host_manager:
             # No manager available - show error
@@ -2606,7 +2496,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
     def setup_proxy_tab(self):
         """Setup the Proxy settings tab."""
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
         self.proxy_widget = ProxySettingsWidget(self)
         self.proxy_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.PROXY))

@@ -71,9 +71,9 @@ class TestProxyModeIntegration:
 
     def test_mode_switch_persists_to_storage(self, qapp, proxy_storage):
         """Test that mode switches are persisted to storage."""
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
             # Switch to system proxy
@@ -97,9 +97,9 @@ class TestProxyModeIntegration:
         # Set up storage state
         proxy_storage.set_use_os_proxy(True)
 
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
             # Should load system proxy mode
@@ -113,9 +113,9 @@ class TestProxyModeIntegration:
             proxy_storage.save_pool(pool)
         proxy_storage.set_global_default_pool("pool-1")
 
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
             # Should load custom mode
@@ -282,9 +282,9 @@ class TestPoolManagementIntegration:
 
     def test_pool_creation_updates_all_dropdowns(self, qapp, proxy_storage):
         """Test that creating a pool updates all dropdowns."""
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
             widget.custom_proxy_radio.setChecked(True)
             widget._update_ui_state()
@@ -328,13 +328,13 @@ class TestPoolManagementIntegration:
 
     def test_pool_list_reflects_deletions(self, qapp, proxy_storage, sample_pools):
         """Test that pool list widget reflects deletions."""
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
         # Save pools
         for pool in sample_pools:
             proxy_storage.save_pool(pool)
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
             initial_count = widget.pools_list.count()
 
@@ -404,9 +404,9 @@ class TestUIRefreshIntegration:
 
     def test_widget_refresh_after_external_storage_change(self, qapp, proxy_storage, sample_pools):
         """Test that widget refreshes correctly after external storage changes."""
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
             # Simulate external change (another process modifies storage)
@@ -421,9 +421,9 @@ class TestUIRefreshIntegration:
 
     def test_all_controls_refresh_synchronously(self, qapp, proxy_storage, sample_pools):
         """Test that all dropdown widgets refresh together."""
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
             # Get initial list count
@@ -514,9 +514,9 @@ class TestPerformanceIntegration:
         for pool in pools:
             proxy_storage.save_pool(pool)
 
-        from src.gui.widgets.proxy_settings_widget import ProxySettingsWidget
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.widgets.proxy_settings_widget.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             import time
             start = time.time()
 

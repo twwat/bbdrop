@@ -282,7 +282,7 @@ def mock_qsettings(monkeypatch) -> Generator[Mock, None, None]:
     # Patch QSettings in PyQt6.QtCore AND in all modules that import it
     monkeypatch.setattr('PyQt6.QtCore.QSettings', mock_settings)
     monkeypatch.setattr('src.gui.widgets.worker_status_widget.QSettings', mock_settings)
-    monkeypatch.setattr('src.gui.widgets.file_hosts_settings_widget.QSettings', mock_settings)
+    monkeypatch.setattr('src.gui.settings.file_hosts_tab.QSettings', mock_settings)
     monkeypatch.setattr('src.gui.widgets.tabbed_gallery.QSettings', mock_settings)
     # CRITICAL: Also patch in test modules that have already imported QSettings
     # Check sys.modules for already-loaded test modules
