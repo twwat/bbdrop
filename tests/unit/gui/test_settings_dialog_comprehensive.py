@@ -455,15 +455,18 @@ class TestSettingsDialogHooksTab:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
+        # Hooks tab exists
+        assert hasattr(dialog, 'hooks_tab')
+
         # Execution mode radios
-        assert hasattr(dialog, 'hooks_parallel_radio')
-        assert hasattr(dialog, 'hooks_sequential_radio')
+        assert hasattr(dialog.hooks_tab, 'hooks_parallel_radio')
+        assert hasattr(dialog.hooks_tab, 'hooks_sequential_radio')
 
         # Hook sections for each event
         for hook_type in ['added', 'started', 'completed']:
-            assert hasattr(dialog, f'hook_{hook_type}_enabled')
-            assert hasattr(dialog, f'hook_{hook_type}_command')
-            assert hasattr(dialog, f'hook_{hook_type}_show_console')
+            assert hasattr(dialog.hooks_tab, f'hook_{hook_type}_enabled')
+            assert hasattr(dialog.hooks_tab, f'hook_{hook_type}_command')
+            assert hasattr(dialog.hooks_tab, f'hook_{hook_type}_show_console')
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -476,8 +479,8 @@ class TestSettingsDialogHooksTab:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        assert dialog.hooks_parallel_radio.isChecked()
-        assert not dialog.hooks_sequential_radio.isChecked()
+        assert dialog.hooks_tab.hooks_parallel_radio.isChecked()
+        assert not dialog.hooks_tab.hooks_sequential_radio.isChecked()
 
     @patch('src.gui.settings_dialog.load_user_defaults')
     @patch('src.gui.settings_dialog.get_config_path')
@@ -491,7 +494,7 @@ class TestSettingsDialogHooksTab:
         qtbot.addWidget(dialog)
 
         for hook_type in ['added', 'started', 'completed']:
-            checkbox = getattr(dialog, f'hook_{hook_type}_enabled')
+            checkbox = getattr(dialog.hooks_tab, f'hook_{hook_type}_enabled')
             checkbox.setChecked(True)
             assert checkbox.isChecked()
             checkbox.setChecked(False)
@@ -509,8 +512,8 @@ class TestSettingsDialogHooksTab:
         qtbot.addWidget(dialog)
 
         test_command = 'python script.py "%p"'
-        dialog.hook_added_command.setText(test_command)
-        assert dialog.hook_added_command.text() == test_command
+        dialog.hooks_tab.hook_added_command.setText(test_command)
+        assert dialog.hooks_tab.hook_added_command.text() == test_command
 
 
 # ============================================================================

@@ -909,8 +909,9 @@ class TestSettingsDialogExternalApps:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        # Verify method exists
-        assert hasattr(dialog, '_load_external_apps_settings')
+        # Verify hooks_tab exists with load_settings method
+        assert hasattr(dialog, 'hooks_tab')
+        assert hasattr(dialog.hooks_tab, 'load_settings')
 
 
 # ============================================================================
