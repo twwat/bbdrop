@@ -64,7 +64,6 @@ from src.core.image_host_config import get_image_host_setting, save_image_host_s
 from src.utils.format_utils import timestamp, format_binary_size
 from src.utils.logger import log
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
-from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
 from src.gui.settings.advanced_tab import AdvancedSettingsWidget
 from src.gui.settings.archive_tab import ArchiveSettingsWidget
 
@@ -275,25 +274,11 @@ class ComprehensiveSettingsDialog(QDialog):
         self._add_settings_page(self.image_hosts_widget, "Image Hosts")
 
     def setup_templates_tab(self):
-        """Setup the Templates tab with integrated template management and selection"""
-        templates_widget = QWidget()
-        layout = QVBoxLayout(templates_widget)
-
-        # Get current active template from parent window
-        active_template = "default"
-        if self.parent_window and hasattr(self.parent_window, 'template_combo'):
-            active_template = self.parent_window.template_combo.currentText()
-
-        # Create and integrate the template manager dialog
-        self.template_dialog = TemplateManagerDialog(self, current_template=active_template)
-        self.template_dialog.setParent(templates_widget)
-        self.template_dialog.setWindowFlags(Qt.WindowType.Widget)  # Make it a child widget
-        self.template_dialog.setModal(False)  # Not modal when embedded
-
-        # Add the template dialog to the layout
-        layout.addWidget(self.template_dialog)
-
-        self._add_settings_page(templates_widget, "BBCode templates")
+        """Setup the Templates tab (delegated to TemplatesTab widget)."""
+        from src.gui.settings.templates_tab import TemplatesTab
+        self.templates_tab = TemplatesTab(parent_window=self.parent_window)
+        self.templates_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.TEMPLATES))
+        self._add_settings_page(self.templates_tab, "BBCode templates")
         
     def setup_tabs_tab(self):
         """Setup the Tabs management tab"""
@@ -1527,7 +1512,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 self._save_file_hosts_settings()
                 return True
             elif current_index == TabIndex.TEMPLATES:
-                return self._save_templates_tab()
+                return self.templates_tab.save_settings()
             elif current_index == TabIndex.LOGS:
                 return self._save_logs_tab()
             elif current_index == TabIndex.IMAGE_SCAN:
@@ -1555,8 +1540,8 @@ class ComprehensiveSettingsDialog(QDialog):
     def _check_unsaved_changes_before_close(self, close_callback):
         """Check for unsaved changes and handle closing"""
         has_template_changes = (
-            hasattr(self, 'template_dialog')
-            and self.template_dialog.has_pending_changes()
+            hasattr(self, 'templates_tab')
+            and self.templates_tab.has_pending_changes()
         )
 
         if has_template_changes:
@@ -1576,15 +1561,13 @@ class ComprehensiveSettingsDialog(QDialog):
         """Handle the result of unsaved changes dialog"""
         if result == QMessageBox.StandardButton.Yes:
             # Commit pending template changes, then close
-            if hasattr(self, 'template_dialog'):
-                self.template_dialog.commit_all_changes()
-                if self.parent_window and hasattr(self.parent_window, 'refresh_template_combo'):
-                    self.parent_window.refresh_template_combo()
+            if hasattr(self, 'templates_tab'):
+                self.templates_tab.commit_all_changes()
             close_callback()
         elif result == QMessageBox.StandardButton.No:
             # Discard changes and close
-            if hasattr(self, 'template_dialog'):
-                self.template_dialog.discard_all_changes()
+            if hasattr(self, 'templates_tab'):
+                self.templates_tab.discard_all_changes()
             close_callback()
         # Cancel - do nothing (dialog stays open)
     
@@ -1601,7 +1584,7 @@ class ComprehensiveSettingsDialog(QDialog):
                 break
 
         # Also check if Templates tab has pending changes
-        if hasattr(self, 'template_dialog') and self.template_dialog.has_pending_changes():
+        if hasattr(self, 'templates_tab') and self.templates_tab.has_pending_changes():
             has_unsaved = True
 
         if has_unsaved:
@@ -1717,6 +1700,8 @@ class ComprehensiveSettingsDialog(QDialog):
             self.covers_tab.reload_settings()
         elif current_index == TabIndex.HOOKS:
             self.hooks_tab.reload_settings()
+        elif current_index == TabIndex.TEMPLATES:
+            self.templates_tab.reload_settings()
         # Other tabs don't have form controls that need reloading
 
     def _save_image_hosts_tab(self):
@@ -1749,21 +1734,6 @@ class ComprehensiveSettingsDialog(QDialog):
             log(f"Error saving upload settings: {e}", level="warning", category="settings")
             return False
 
-    def _save_templates_tab(self):
-        """Save Templates tab settings only"""
-        try:
-            if hasattr(self, 'template_dialog'):
-                result = self.template_dialog.commit_all_changes()
-                # Refresh main window template dropdown immediately
-                # (QFileSystemWatcher is unreliable on WSL2)
-                if result and self.parent_window and hasattr(self.parent_window, 'refresh_template_combo'):
-                    self.parent_window.refresh_template_combo()
-                return result
-            return True
-        except Exception as e:
-            log(f"Error saving template settings: {e}", level="warning", category="settings")
-            return False
-    
     def _save_tabs_tab(self):
         """Save Tabs tab settings only"""
         try:
