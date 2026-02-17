@@ -134,6 +134,8 @@ class FileHostClient:
                     self._login_session_based(credentials)
 
 
+    _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
     def _configure_ssl(self, curl):
         """Configure SSL/TLS certificate verification for a curl handle."""
         curl.setopt(pycurl.CAINFO, certifi.where())
@@ -833,8 +835,8 @@ class FileHostClient:
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)
-
         self._configure_proxy(curl)
+
         response_buffer = BytesIO()
 
         try:
@@ -850,7 +852,7 @@ class FileHostClient:
             curl.setopt(pycurl.LOW_SPEED_LIMIT, 1024)  # 1 KB/s minimum
 
             curl.setopt(pycurl.FOLLOWLOCATION, True)
-            curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
 
             # Set up progress callbacks
             curl.setopt(pycurl.NOPROGRESS, False)
@@ -1099,56 +1101,58 @@ class FileHostClient:
             curl.close()
 
         # Step 3: Upload file
-        if self._log_callback: self._log_callback("Uploading {file_path.name}...", "debug")
+        if self._log_callback: self._log_callback(f"Uploading {file_path.name}...", "debug")
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)
-
         self._configure_proxy(curl)
+
         response_buffer = BytesIO()
 
         try:
-            with open(file_path, 'rb') as f:
-                curl.setopt(pycurl.URL, upload_url)
-                curl.setopt(pycurl.WRITEDATA, response_buffer)
+            curl.setopt(pycurl.URL, upload_url)
+            curl.setopt(pycurl.WRITEDATA, response_buffer)
 
-                # Optional total timeout (None = unlimited)
-                if self.config.upload_timeout:
-                    curl.setopt(pycurl.TIMEOUT, self.config.upload_timeout)
+            # Optional total timeout (None = unlimited)
+            if self.config.upload_timeout:
+                curl.setopt(pycurl.TIMEOUT, self.config.upload_timeout)
 
-                # Inactivity timeout (abort if <1KB/s for this many seconds)
-                curl.setopt(pycurl.LOW_SPEED_TIME, self.config.inactivity_timeout)
-                curl.setopt(pycurl.LOW_SPEED_LIMIT, 1024)  # 1 KB/s minimum
+            # Inactivity timeout (abort if <1KB/s for this many seconds)
+            curl.setopt(pycurl.LOW_SPEED_TIME, self.config.inactivity_timeout)
+            curl.setopt(pycurl.LOW_SPEED_LIMIT, 1024)  # 1 KB/s minimum
 
-                curl.setopt(pycurl.NOPROGRESS, False)
-                curl.setopt(pycurl.XFERINFOFUNCTION, self._xferinfo_callback)
+            curl.setopt(pycurl.FOLLOWLOCATION, True)
+            curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
 
-                # Build form fields: file + form_data (ajax, params, signature for K2S)
-                form_fields: List[Any] = [
-                    (file_field, (
-                        pycurl.FORM_FILE, str(file_path),
-                        pycurl.FORM_FILENAME, self._get_clean_filename(file_path.name)
-                    ))
-                ]
+            curl.setopt(pycurl.NOPROGRESS, False)
+            curl.setopt(pycurl.XFERINFOFUNCTION, self._xferinfo_callback)
 
-                # Add form_data fields if present (K2S: ajax, params, signature)
-                for key, value in form_data.items():
-                    form_fields.append((key, str(value)))
+            # Build form fields: file + form_data (ajax, params, signature for K2S)
+            form_fields: List[Any] = [
+                (file_field, (
+                    pycurl.FORM_FILE, str(file_path),
+                    pycurl.FORM_FILENAME, self._get_clean_filename(file_path.name)
+                ))
+            ]
 
-                curl.setopt(pycurl.HTTPPOST, form_fields)
+            # Add form_data fields if present (K2S: ajax, params, signature)
+            for key, value in form_data.items():
+                form_fields.append((key, str(value)))
 
-                curl.perform()
+            curl.setopt(pycurl.HTTPPOST, form_fields)
 
-                response_code = curl.getinfo(pycurl.RESPONSE_CODE)
-                if response_code not in [200, 201]:
-                    raise Exception(f"File upload for {file_path.name} failed with status {response_code}")
+            curl.perform()
 
-                # Parse upload response (K2S returns URL directly here)
-                upload_response_text = response_buffer.getvalue().decode('utf-8')
-                try:
-                    upload_data = json.loads(upload_response_text)
-                except json.JSONDecodeError:
-                    upload_data = {}
+            response_code = curl.getinfo(pycurl.RESPONSE_CODE)
+            if response_code not in [200, 201]:
+                raise Exception(f"File upload for {file_path.name} failed with status {response_code}")
+
+            # Parse upload response (K2S returns URL directly here)
+            upload_response_text = response_buffer.getvalue().decode('utf-8')
+            try:
+                upload_data = json.loads(upload_response_text)
+            except json.JSONDecodeError:
+                upload_data = {}
 
         finally:
             curl.close()
