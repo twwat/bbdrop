@@ -23,6 +23,7 @@ For imxup External Apps integration:
 
 import sys
 import json
+import time
 import requests
 import argparse
 from pathlib import Path
@@ -217,7 +218,12 @@ def main():
 
     # Step 2: Upload file
     print(f"Uploading file: {file_path.name}", file=sys.stderr)
+    start_time = time.time()
     upload_response = upload_file(session, file_path, form_data, service_name)
+    elapsed_time = time.time() - start_time
+    file_size_bytes = file_path.stat().st_size
+    file_size_mb = file_size_bytes / 1024 / 1024
+    avg_speed_mbps = file_size_mb / elapsed_time if elapsed_time > 0 else 0
 
     # Step 3: Output the raw JSON response
     # This is what imxup will capture and you can map the fields you want
@@ -232,7 +238,14 @@ def main():
         # Truncate long values for display
         value_str = str(value)[:100] + "..." if len(str(value)) > 100 else str(value)
         print(f"  - {key}: {value_str}", file=sys.stderr)
-    print(f"[{service_name}] Finished uploading '{file_path.name}' ({file_path.stat().st_size / 1024 / 1024:.2f} MB) to {service_name}", file=sys.stderr)
+    # Format elapsed time
+    if elapsed_time >= 60:
+        time_str = f"{int(elapsed_time // 60)}m {elapsed_time % 60:.1f}s"
+    else:
+        time_str = f"{elapsed_time:.1f}s"
+
+    print(f"[{service_name}] Finished uploading '{file_path.name}' ({file_size_mb:.2f} MB) to {service_name}", file=sys.stderr)
+    print(f"[{service_name}] Time: {time_str} | Avg Speed: {avg_speed_mbps:.2f} MB/s", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
