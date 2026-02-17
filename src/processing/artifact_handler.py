@@ -137,7 +137,7 @@ class CompletionWorker(QThread):
             # Prepare template data (include successes; failed shown separately)
             all_images_bbcode = ""
             for image_data in results.get('images', []):
-                all_images_bbcode += image_data.get('bbcode', '') + "  "
+                all_images_bbcode += (image_data.get('bbcode') or '') + "  "
             failed_details = results.get('failed_details', [])
             failed_summary = ""
             if failed_details:
