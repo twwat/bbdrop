@@ -605,16 +605,13 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def _check_unsaved_changes_before_close(self, close_callback):
         """Check for unsaved changes and handle closing"""
-        has_template_changes = (
-            hasattr(self, 'templates_tab')
-            and self.templates_tab.has_pending_changes()
-        )
+        has_any_changes = any(self.tab_dirty_states.get(i, False) for i in range(self.stack_widget.count()))
 
-        if has_template_changes:
+        if has_any_changes:
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Icon.Question)
             msg_box.setWindowTitle("Unsaved Changes")
-            msg_box.setText("You have unsaved template changes. Do you want to save them before closing?")
+            msg_box.setText("You have unsaved changes. Do you want to save them before closing?")
             msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
             msg_box.setDefaultButton(QMessageBox.StandardButton.Yes)
             msg_box.finished.connect(lambda result: self._handle_unsaved_changes_result(result, close_callback))
@@ -648,10 +645,6 @@ class ComprehensiveSettingsDialog(QDialog):
             if self.tab_dirty_states.get(i, False):
                 has_unsaved = True
                 break
-
-        # Also check if Templates tab has pending changes
-        if hasattr(self, 'templates_tab') and self.templates_tab.has_pending_changes():
-            has_unsaved = True
 
         if has_unsaved:
             # Use the same logic as save_and_close but for close
