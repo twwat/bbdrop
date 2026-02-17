@@ -340,7 +340,7 @@ class TableUpdateQueue:
 
 
 def check_stored_credentials() -> bool:
-    """Check if credentials are stored in QSettings (Registry)"""
+    """Check if credentials are stored in OS keyring."""
     try:
         from bbdrop import get_credential
 

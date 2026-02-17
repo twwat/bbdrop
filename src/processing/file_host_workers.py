@@ -125,7 +125,7 @@ class FileHostWorker(QThread):
         log(f"{self.log_prefix}: {message}", level=level, category="file_hosts")
 
     def _load_credentials(self) -> None:
-        """Load this host's credentials from QSettings."""
+        """Load this host's credentials from OS keyring."""
         encrypted_creds = get_credential(f'file_host_{self.host_id}_credentials')
         if encrypted_creds:
             try:
