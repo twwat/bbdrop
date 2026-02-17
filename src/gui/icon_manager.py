@@ -79,6 +79,7 @@ class IconManager:
         'radio_check':          ['radio_check-light.png',       'radio_check-dark.png'],
         'check':                'check.png',          #green, also used for rename
         'checkbox_check':       'checkbox_check.png', #blue
+        'more_info':            ['more_info-light.png',         'more_info-dark.png'],
         'main_window':          'bbdrop-main-icon.png',
         'app_icon':             'bbdrop.ico',
         # Alternative sizes (optional)

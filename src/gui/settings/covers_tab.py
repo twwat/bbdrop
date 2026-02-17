@@ -3,7 +3,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QComboBox, QSpinBox, QLineEdit, QFrame, QLabel,
-    QPushButton, QMessageBox,
 )
 from PyQt6.QtCore import pyqtSignal
 
@@ -15,6 +14,7 @@ from src.core.constants import (
     DEFAULT_COVER_SKIP_DUPLICATES,
     DEFAULT_COVER_THUMBNAIL_FORMAT,
 )
+from src.gui.widgets.info_button import InfoButton
 from src.utils.logger import log
 
 
@@ -74,17 +74,31 @@ class CoversTab(QWidget):
         self.covers_filename_check.setToolTip("Detect covers by matching filename patterns")
         filename_row.addWidget(self.covers_filename_check)
 
+        filename_row.addWidget(InfoButton(
+            "<b>Patterns use shell-style wildcards (not regex).</b><br><br>"
+            "<table cellpadding='2'>"
+            "<tr><td><code>*</code></td><td>matches anything "
+            "(e.g. <code>cover.*</code> → cover.jpg, cover.png)</td></tr>"
+            "<tr><td><code>?</code></td><td>matches exactly one character</td></tr>"
+            "<tr><td><code>[abc]</code></td><td>matches any character in the brackets</td></tr>"
+            "</table><br>"
+            "Separate multiple patterns with commas.<br>"
+            "Matching is case-insensitive. First match wins.<br><br>"
+            "<b>Examples:</b><br>"
+            "<table cellpadding='2'>"
+            "<tr><td><code>cover.*</code></td><td>any file named \"cover\" with any extension</td></tr>"
+            "<tr><td><code>cover_*</code></td><td>cover_01.jpg, cover_front.png, etc.</td></tr>"
+            "<tr><td><code>*_cover.*</code></td><td>gallery_cover.jpg, my_cover.png</td></tr>"
+            "<tr><td><code>poster.*</code></td><td>poster.jpg, poster.png</td></tr>"
+            "<tr><td><code>folder?.jpg</code></td><td>folder1.jpg, folder2.jpg (not folder10.jpg)</td></tr>"
+            "</table>"
+        ))
+
         self.covers_filename_edit = QLineEdit()
         self.covers_filename_edit.setPlaceholderText("cover.*, poster.*, *_cover.*")
         self.covers_filename_edit.setToolTip("Comma-separated filename patterns")
         self.covers_filename_edit.setEnabled(False)
         filename_row.addWidget(self.covers_filename_edit)
-
-        info_btn = QPushButton("ⓘ")
-        info_btn.setFixedSize(24, 24)
-        info_btn.setToolTip("Pattern syntax help")
-        info_btn.clicked.connect(self._show_pattern_help)
-        filename_row.addWidget(info_btn)
         detection_layout.addLayout(filename_row)
 
         self.covers_filename_check.toggled.connect(self.covers_filename_edit.setEnabled)
@@ -479,26 +493,6 @@ class CoversTab(QWidget):
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
-
-    def _show_pattern_help(self):
-        """Show a help dialog explaining filename pattern syntax."""
-        QMessageBox.information(
-            self,
-            "Filename Pattern Syntax",
-            "Patterns use shell-style wildcards (not regex).\n\n"
-            "Wildcards:\n"
-            "  *     matches anything (e.g. cover.* matches cover.jpg, cover.png)\n"
-            "  ?     matches exactly one character\n"
-            "  [abc] matches any character in the brackets\n\n"
-            "Separate multiple patterns with commas.\n"
-            "Matching is case-insensitive. First match wins.\n\n"
-            "Examples:\n"
-            "  cover.*       — any file named \"cover\" with any extension\n"
-            "  cover_*       — cover_01.jpg, cover_front.png, etc.\n"
-            "  *_cover.*     — gallery_cover.jpg, my_cover.png\n"
-            "  poster.*      — poster.jpg, poster.png\n"
-            "  folder?.jpg   — folder1.jpg, folder2.jpg (but not folder10.jpg)",
-        )
 
     def _update_covers_ui_state(self, enabled=None):
         """Enable/disable and dim/undim covers container based on master checkbox."""

@@ -77,6 +77,7 @@ class ImageHostsSettingsWidget(QWidget):
         # Container frame
         frame = QFrame()
         frame.setFrameShape(QFrame.Shape.StyledPanel)
+        frame.setProperty("class", "host-panel")
         row_layout = QHBoxLayout(frame)
         row_layout.setContentsMargins(8, 4, 8, 4)
         row_layout.setSpacing(8)

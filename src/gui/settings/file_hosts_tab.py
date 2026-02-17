@@ -140,6 +140,7 @@ class FileHostsSettingsWidget(QWidget):
         host_frame = QFrame()
         host_frame.setFrameShape(QFrame.Shape.StyledPanel)
         host_frame.setFrameShadow(QFrame.Shadow.Raised)
+        host_frame.setProperty("class", "host-panel")
         frame_layout = QHBoxLayout(host_frame)
         frame_layout.setContentsMargins(8, 4, 8, 4)  # Tighter vertical spacing
         frame_layout.setSpacing(8)
@@ -707,7 +708,7 @@ class FileHostsSettingsWidget(QWidget):
         return {"global_limit": 3, "per_host_limit": 2, "hosts": {}}
 
     def load_from_config(self):
-        """Load file hosts settings from INI file and encrypted credentials from QSettings."""
+        """Load file hosts settings from INI and encrypted credentials from OS keyring."""
         try:
             import os
             import configparser
@@ -741,7 +742,7 @@ class FileHostsSettingsWidget(QWidget):
                     'trigger': get_file_host_setting(host_id, 'trigger', 'str')
                 }
 
-                # Load encrypted credentials from QSettings
+                # Load encrypted credentials from OS keyring
                 encrypted_creds = get_credential(f'file_host_{host_id}_credentials')
                 if encrypted_creds:
                     decrypted = decrypt_password(encrypted_creds)
@@ -759,7 +760,7 @@ class FileHostsSettingsWidget(QWidget):
             traceback.print_exc()
 
     def save_to_config(self):
-        """Save file hosts settings to INI file and encrypt credentials to QSettings."""
+        """Save file hosts settings to INI and encrypted credentials to OS keyring."""
         try:
             import os
             import configparser
@@ -787,7 +788,7 @@ class FileHostsSettingsWidget(QWidget):
                 save_file_host_setting(host_id, 'enabled', host_settings['enabled'])
                 save_file_host_setting(host_id, 'trigger', host_settings['trigger'])
 
-                # Save encrypted credentials to QSettings
+                # Save encrypted credentials to OS keyring
                 creds_text = host_settings.get('credentials', '')
                 if creds_text:
                     encrypted = encrypt_password(creds_text)

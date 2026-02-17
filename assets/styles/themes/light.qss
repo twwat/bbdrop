@@ -255,3 +255,9 @@ QLineEdit[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1
 QPushButton[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
 QListWidget[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
 QComboBox[class="dimmed"] { color: #aaaaaa; background-color: #e8e8e8; border: 1px solid #cccccc; }
+
+/* Host panels */
+QFrame[class="host-panel"] { border: 1px solid #ccc; border-radius: 4px; }
+
+/* Info popover */
+QFrame[class="info-popover"] { background-color: #fff; border: 1px solid #ccc; border-radius: 6px; }
