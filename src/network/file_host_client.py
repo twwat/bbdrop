@@ -134,6 +134,11 @@ class FileHostClient:
                     self._login_session_based(credentials)
 
 
+    # Maximum upload buffer size (1MB) — libcurl default is only 64KB which
+    # limits throughput to ~640 KB/s at 100ms RTT.  Larger buffers let the
+    # TCP stack batch more data per round-trip.
+    _UPLOAD_BUFFERSIZE = 1 * 1024 * 1024  # 1 MB
+
     _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     def _configure_ssl(self, curl):
@@ -145,6 +150,19 @@ class FileHostClient:
     def _configure_proxy(self, curl: pycurl.Curl) -> None:
         """Configure proxy settings on curl handle."""
         PyCurlProxyAdapter.configure_proxy(curl, self.proxy)
+
+    def _configure_upload_performance(self, curl: pycurl.Curl) -> None:
+        """Configure pycurl options for maximum upload throughput.
+
+        Applies three key optimisations:
+        1. Increase upload buffer from 64KB default to 1MB.
+        2. Disable Nagle's algorithm (TCP_NODELAY) to avoid batching delays.
+        3. Suppress ``Expect: 100-continue`` header — libcurl sends it by
+           default for large POST bodies, which adds a 1-second stall when
+           the server doesn't reply with 100 Continue promptly.
+        """
+        curl.setopt(pycurl.UPLOAD_BUFFERSIZE, self._UPLOAD_BUFFERSIZE)
+        curl.setopt(pycurl.TCP_NODELAY, 1)
 
     def _login_token_based(self, credentials: str) -> str:
         """Login to get authentication token.
@@ -836,7 +854,7 @@ class FileHostClient:
         curl = pycurl.Curl()
         self._configure_ssl(curl)
         self._configure_proxy(curl)
-
+        self._configure_upload_performance(curl)
         response_buffer = BytesIO()
 
         try:
@@ -858,10 +876,11 @@ class FileHostClient:
             curl.setopt(pycurl.NOPROGRESS, False)
             curl.setopt(pycurl.XFERINFOFUNCTION, self._xferinfo_callback)
 
-            # Prepare headers
+            # Prepare headers — suppress Expect: 100-continue to avoid 1s stall
             headers = self._prepare_headers()
-            if headers:
-                curl.setopt(pycurl.HTTPHEADER, [f"{k}: {v}" for k, v in headers.items()])
+            header_list = [f"{k}: {v}" for k, v in headers.items()] if headers else []
+            header_list.append("Expect:")
+            curl.setopt(pycurl.HTTPHEADER, header_list)
 
             # Session cookies
             if self.cookie_jar:
@@ -1106,7 +1125,7 @@ class FileHostClient:
         curl = pycurl.Curl()
         self._configure_ssl(curl)
         self._configure_proxy(curl)
-
+        self._configure_upload_performance(curl)
         response_buffer = BytesIO()
 
         try:
@@ -1123,6 +1142,7 @@ class FileHostClient:
 
             curl.setopt(pycurl.FOLLOWLOCATION, True)
             curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
+            curl.setopt(pycurl.HTTPHEADER, ["Expect:"])
 
             curl.setopt(pycurl.NOPROGRESS, False)
             curl.setopt(pycurl.XFERINFOFUNCTION, self._xferinfo_callback)
