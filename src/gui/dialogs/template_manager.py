@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QWidget, QGridLayout, QComboBox, QRadioButton, QButtonGroup, QLineEdit, QApplication
 )
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QListWidgetItem
 
 # Built-in templates that are read-only and cannot be deleted
@@ -268,7 +268,9 @@ class BBCodeValidator:
 
 class TemplateManagerDialog(QDialog):
     """Dialog for managing BBCode templates"""
-    
+
+    content_changed = pyqtSignal()
+
     def __init__(self, parent=None, current_template="default"):
         super().__init__(parent)
         self.setWindowTitle("Manage BBCode Templates")
@@ -728,6 +730,7 @@ class TemplateManagerDialog(QDialog):
             # Store change in pending changes
             self.pending_changes[self.current_template_name] = self.template_editor.toPlainText()
             self.unsaved_changes = True
+            self.content_changed.emit()
     
     def create_new_template(self):
         """Create a new template.
@@ -773,7 +776,8 @@ class TemplateManagerDialog(QDialog):
             self.template_editor.clear()
             self.current_template_name = name
             self.unsaved_changes = True
-    
+            self.content_changed.emit()
+
     def rename_template(self):
         """Rename the current template.
 
@@ -835,7 +839,8 @@ class TemplateManagerDialog(QDialog):
             current_item.setText(new_name)
             current_item.setData(Qt.ItemDataRole.UserRole, new_name)
             self.current_template_name = new_name
-    
+            self.content_changed.emit()
+
     def delete_template(self):
         """Delete the current template.
 
@@ -881,6 +886,7 @@ class TemplateManagerDialog(QDialog):
 
             self.unsaved_changes = False
             self.current_template_name = None
+            self.content_changed.emit()
 
     def copy_template(self):
         """Copy the current template to a new template.
@@ -934,6 +940,7 @@ class TemplateManagerDialog(QDialog):
 
             self.current_template_name = new_name
             self.unsaved_changes = True
+            self.content_changed.emit()
 
     def commit_all_changes(self) -> bool:
         """Commit all pending changes to disk.

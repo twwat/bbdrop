@@ -46,6 +46,7 @@ class TemplatesTab(QWidget):
         self.template_dialog.setModal(False)
 
         layout.addWidget(self.template_dialog)
+        self.template_dialog.content_changed.connect(self.dirty.emit)
 
     # ------------------------------------------------------------------
     # Pending-changes API (used by orchestrator close/save logic)
