@@ -4,9 +4,9 @@ Multi-host file uploader for Keep2Share, Tezfiles, and Fboom
 Uploads files using their API v2
 
 Usage:
-  python upload_multi_host.py <filename> --service k2s --api-key YOUR_KEY
-  python upload_multi_host.py <filename> -s tez -k YOUR_KEY
-  python upload_multi_host.py <filename> -s fb -k YOUR_KEY
+  python k2s.py <filename> --service k2s --api-key YOUR_KEY
+  python k2s.py <filename> -s tez -k YOUR_KEY
+  python k2s.py <filename> -s fb -k YOUR_KEY
 
 Supported services:
   k2s, keep2share  -> https://keep2share.cc/api/v2/
@@ -17,7 +17,7 @@ This script outputs the raw JSON response from the service, which you can
 map to ext1-4 fields in imxup's External Apps JSON mapping dialog.
 
 For imxup External Apps integration:
-  Command: python "path/to/upload_multi_host.py" "%p" --service k2s --api-key YOUR_KEY
+  Command: python "path/to/k2s.py" "%p" --service k2s --api-key YOUR_KEY
   Then use "Map JSON Keys..." to choose which fields to use
 """
 
@@ -147,9 +147,9 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python upload_multi_host.py image.jpg --service k2s --api-key YOUR_KEY
-  python upload_multi_host.py video.mp4 -s tez -k YOUR_KEY
-  python upload_multi_host.py archive.zip -s fboom -k YOUR_KEY
+  python k2s.py image.jpg --service k2s --api-key YOUR_KEY
+  python k2s.py video.mp4 -s tez -k YOUR_KEY
+  python k2s.py archive.zip -s fboom -k YOUR_KEY
 
 Supported services:
   k2s, keep2share  -> Keep2Share (https://keep2share.cc)
