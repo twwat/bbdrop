@@ -246,6 +246,7 @@ class WorkerStatus:
     worker_type: str  # 'imagehost' or 'filehost'
     hostname: str
     display_name: str
+    host_id: Optional[str] = None  # Canonical host identifier for config/logo/dedup lookups
     speed_bps: float = 0.0
     status: str = "idle"  # idle, uploading, paused, error
     gallery_id: Optional[int] = None
@@ -943,7 +944,8 @@ class WorkerStatusWidget(QWidget):
 
     @pyqtSlot(str, str, str, float, str)
     def update_worker_status(self, worker_id: str, worker_type: str, hostname: str,
-                            speed_bps: float, status: str):
+                            speed_bps: float, status: str,
+                            host_id: Optional[str] = None):
         """Update worker status information.
 
         Args:
@@ -952,10 +954,15 @@ class WorkerStatusWidget(QWidget):
             hostname: Host display name
             speed_bps: Current upload speed in bytes per second
             status: Worker status ('idle', 'uploading', 'paused', 'error')
+            host_id: Canonical host identifier for config/logo/dedup lookups
         """
         if worker_id in self._workers:
             # Existing worker - use targeted updates ONLY (no refresh)
             worker = self._workers[worker_id]
+
+            # Backfill host_id if not set
+            if host_id and not worker.host_id:
+                worker.host_id = host_id
 
             # Only update cells that changed
             if worker.speed_bps != speed_bps:
@@ -973,10 +980,11 @@ class WorkerStatusWidget(QWidget):
             # Load cached storage data from QSettings for file hosts
             storage_used = 0
             storage_total = 0
+            lookup_id = host_id or hostname.lower()
             if worker_type == 'filehost':
                 settings = QSettings("BBDropUploader", "BBDropGUI")
-                total_str = settings.value(f"FileHosts/{hostname.lower()}/storage_total", "0")
-                left_str = settings.value(f"FileHosts/{hostname.lower()}/storage_left", "0")
+                total_str = settings.value(f"FileHosts/{lookup_id}/storage_total", "0")
+                left_str = settings.value(f"FileHosts/{lookup_id}/storage_left", "0")
                 try:
                     storage_total = int(total_str) if total_str else 0
                     storage_left = int(left_str) if left_str else 0
@@ -990,6 +998,7 @@ class WorkerStatusWidget(QWidget):
                 worker_type=worker_type,
                 hostname=hostname,
                 display_name=self._format_display_name(hostname, worker_type),
+                host_id=host_id,
                 speed_bps=speed_bps,
                 status=status,
                 last_update=datetime.now().timestamp(),
@@ -1070,7 +1079,7 @@ class WorkerStatusWidget(QWidget):
         """
         with QMutexLocker(self._workers_mutex):
             for worker_id, worker in self._workers.items():
-                if worker.worker_type == 'imagehost' and worker.hostname == host_id:
+                if worker.worker_type == 'imagehost' and worker.host_id == host_id:
                     worker.files_remaining = files_remaining
                     worker.bytes_remaining = bytes_remaining
                     self._update_files_remaining(worker_id, files_remaining)
@@ -1091,7 +1100,7 @@ class WorkerStatusWidget(QWidget):
         """
         with QMutexLocker(self._workers_mutex):
             for worker_id, worker in self._workers.items():
-                if worker.worker_type == 'filehost' and worker.hostname.lower() == host_name.lower():
+                if worker.worker_type == 'filehost' and (worker.host_id or worker.hostname).lower() == host_name.lower():
                     worker.files_remaining = files_remaining
                     worker.bytes_remaining = bytes_remaining
                     self._update_files_remaining(worker_id, files_remaining)
@@ -1258,9 +1267,9 @@ class WorkerStatusWidget(QWidget):
                 worker = self._workers.get(worker_id)
                 is_auto = False
                 if worker and worker.worker_type == 'filehost':
-                    host_id = worker.hostname.lower()
-                    enabled = get_file_host_setting(host_id, "enabled", "bool")
-                    trigger = get_file_host_setting(host_id, "trigger", "str")
+                    fh_id = worker.host_id or worker.hostname.lower()
+                    enabled = get_file_host_setting(fh_id, "enabled", "bool")
+                    trigger = get_file_host_setting(fh_id, "trigger", "str")
                     has_auto = enabled and trigger and trigger != "disabled"
                     if has_auto:
                         status_icon = self._icon_cache.get('auto', QIcon())
@@ -1273,8 +1282,8 @@ class WorkerStatusWidget(QWidget):
                         status_icon = self._icon_cache.get('host_disabled', QIcon())
                         tooltip_text = "Disabled"
                 elif worker and worker.worker_type == 'imagehost':
-                    host_id = worker.hostname
-                    enabled = is_image_host_enabled(host_id)
+                    ih_id = worker.host_id or worker.hostname
+                    enabled = is_image_host_enabled(ih_id)
                     if enabled:
                         status_icon = self._icon_cache.get('host_enabled', QIcon())
                         tooltip_text = "Enabled"
@@ -1487,7 +1496,7 @@ class WorkerStatusWidget(QWidget):
                 if col_config.id == 'icon':
                     # Icon column - clickable button that opens host settings
                     icon_btn = QPushButton()
-                    icon_btn.setIcon(self._get_host_icon(worker.hostname, worker.worker_type))
+                    icon_btn.setIcon(self._get_host_icon(worker.host_id or worker.hostname, worker.worker_type))
                     icon_btn.setFixedSize(26, 26)
                     icon_btn.setIconSize(QSize(20, 20))
                     icon_btn.setFlat(True)
@@ -1517,7 +1526,8 @@ class WorkerStatusWidget(QWidget):
                     # Check if this host has automatic uploads enabled
                     has_auto_upload = False
                     if worker.worker_type == 'filehost':
-                        trigger = get_file_host_setting(worker.hostname.lower(), "trigger", "str")
+                        fh_id = worker.host_id or worker.hostname.lower()
+                        trigger = get_file_host_setting(fh_id, "trigger", "str")
                         has_auto_upload = trigger and trigger != "disabled"
 
                     # Check if logos should be shown instead of text
@@ -1525,8 +1535,8 @@ class WorkerStatusWidget(QWidget):
                     logo_label = None
                     if show_logos:
                         # Try to load host logo
-                        host_id = worker.hostname if worker.worker_type == 'imagehost' else worker.hostname.lower()
-                        logo_label = self._load_host_logo(host_id, height=22, worker_type=worker.worker_type)
+                        logo_host_id = worker.host_id or worker.hostname.lower()
+                        logo_label = self._load_host_logo(logo_host_id, height=22, worker_type=worker.worker_type)
 
                     # Decide whether to use widget (logo) or plain text
                     use_widget = (show_logos and logo_label is not None)
@@ -1608,9 +1618,9 @@ class WorkerStatusWidget(QWidget):
                     # Determine enabled/disabled/auto state
                     is_auto = False
                     if worker.worker_type == 'filehost':
-                        host_id = worker.hostname.lower()
-                        enabled = get_file_host_setting(host_id, "enabled", "bool")
-                        trigger = get_file_host_setting(host_id, "trigger", "str")
+                        fh_id = worker.host_id or worker.hostname.lower()
+                        enabled = get_file_host_setting(fh_id, "enabled", "bool")
+                        trigger = get_file_host_setting(fh_id, "trigger", "str")
                         has_auto = enabled and trigger and trigger != "disabled"
                         if has_auto:
                             icon = self._icon_cache.get('auto', QIcon())
@@ -1623,8 +1633,8 @@ class WorkerStatusWidget(QWidget):
                             icon = self._icon_cache.get('host_disabled', QIcon())
                             tooltip = "Disabled"
                     elif worker.worker_type == 'imagehost':
-                        host_id = worker.hostname
-                        enabled = is_image_host_enabled(host_id)
+                        ih_id = worker.host_id or worker.hostname
+                        enabled = is_image_host_enabled(ih_id)
                         if enabled:
                             icon = self._icon_cache.get('host_enabled', QIcon())
                             tooltip = "Enabled"
@@ -1844,12 +1854,13 @@ class WorkerStatusWidget(QWidget):
             image_host_config_mgr = get_image_host_config_manager()
             if image_host_config_mgr:
                 for host_id, host_config in get_all_hosts().items():
-                    if not any(w.worker_type == 'imagehost' and w.hostname == host_id for w in self._workers.values()):
+                    if not any(w.worker_type == 'imagehost' and w.host_id == host_id for w in self._workers.values()):
                         result.append(WorkerStatus(
                             worker_id=f"placeholder_{host_id}",
                             worker_type="imagehost",
                             hostname=host_id,
                             display_name=host_config.name,
+                            host_id=host_id,
                             status="idle" if is_image_host_enabled(host_id) else "disabled"
                         ))
             return result
@@ -1883,7 +1894,7 @@ class WorkerStatusWidget(QWidget):
         image_host_config_mgr = get_image_host_config_manager()
         if image_host_config_mgr:
             for host_id, host_config in get_all_hosts().items():
-                if not any(w.worker_type == 'imagehost' and w.hostname == host_id for w in self._workers.values()):
+                if not any(w.worker_type == 'imagehost' and w.host_id == host_id for w in self._workers.values()):
                     host_enabled = is_image_host_enabled(host_id)
                     if enabled_only and not host_enabled:
                         continue
@@ -1892,6 +1903,7 @@ class WorkerStatusWidget(QWidget):
                         worker_type="imagehost",
                         hostname=host_id,
                         display_name=host_config.name,
+                        host_id=host_id,
                         status="idle" if host_enabled else "disabled"
                     ))
 
@@ -1935,6 +1947,7 @@ class WorkerStatusWidget(QWidget):
             worker_type="filehost",
             hostname=host_id,
             display_name=host_config.name,
+            host_id=host_id,
             status="disabled",
             storage_used_bytes=storage_used,
             storage_total_bytes=storage_total
@@ -2099,9 +2112,9 @@ class WorkerStatusWidget(QWidget):
 
         # Open the appropriate dialog based on worker type
         if worker.worker_type == 'imagehost':
-            self._open_image_host_config(worker.hostname)
+            self._open_image_host_config(worker.host_id or worker.hostname)
         else:
-            self.open_host_config_requested.emit(worker.hostname.lower())
+            self.open_host_config_requested.emit(worker.host_id or worker.hostname.lower())
 
     # =========================================================================
     # Public API
@@ -2178,14 +2191,13 @@ class WorkerStatusWidget(QWidget):
             worker = self._workers[worker_id]
             if worker.worker_type == 'imagehost':
                 is_image_host = True
-                # For image hosts, hostname IS the host_id
-                host_id = worker.hostname
+                host_id = worker.host_id or worker.hostname
                 # Verify it exists
                 all_image_hosts = get_all_hosts()
                 if host_id not in all_image_hosts:
                     return
             elif worker.worker_type == 'filehost':
-                host_id = worker.hostname.lower()
+                host_id = worker.host_id or worker.hostname.lower()
             else:
                 return
         else:

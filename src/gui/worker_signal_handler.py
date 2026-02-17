@@ -148,6 +148,8 @@ class WorkerSignalHandler(QObject):
             level="debug", category="file_hosts")
         # Defer UI refresh to avoid blocking signal emission
         QTimer.singleShot(0, lambda: self._main_window._refresh_file_host_widgets_for_db_id(db_id))
+        # Update queue display for this host so bytes column populates immediately
+        self._update_filehost_queue_for_host(host_name)
 
     def on_file_host_upload_progress(self, db_id: int, host_name: str,
                                       uploaded_bytes: int, total_bytes: int, speed_bps: float = 0.0):
@@ -284,7 +286,8 @@ class WorkerSignalHandler(QObject):
             worker_type="imagehost",
             hostname=host_name,
             speed_bps=0.0,
-            status="uploading"
+            status="uploading",
+            host_id=host_id
         )
 
     def _on_upload_worker_speed(self, speed_kbps: float):
@@ -298,7 +301,8 @@ class WorkerSignalHandler(QObject):
             worker_type="imagehost",
             hostname=host_name,
             speed_bps=speed_kbps * 1024,
-            status="uploading"
+            status="uploading",
+            host_id=host_id
         )
 
     def _on_upload_worker_finished(self, *args):
@@ -315,7 +319,8 @@ class WorkerSignalHandler(QObject):
             worker_type="imagehost",
             hostname=host_name,
             speed_bps=0.0,
-            status="idle"
+            status="idle",
+            host_id=host_id
         )
 
     def _on_filehost_worker_started(self, db_id: int, host_name: str):
@@ -330,7 +335,8 @@ class WorkerSignalHandler(QObject):
             worker_type="filehost",
             hostname=host_name,
             speed_bps=0.0,
-            status="uploading"
+            status="uploading",
+            host_id=host_name.lower()
         )
 
     def _on_filehost_worker_progress(self, db_id: int, host_name: str,
@@ -346,7 +352,8 @@ class WorkerSignalHandler(QObject):
             worker_type="filehost",
             hostname=host_name,
             speed_bps=speed_bps,
-            status="uploading"
+            status="uploading",
+            host_id=host_name.lower()
         )
         mw.worker_status_widget.update_worker_progress(
             worker_id=worker_id,
@@ -370,7 +377,8 @@ class WorkerSignalHandler(QObject):
             worker_type="filehost",
             hostname=host_name,
             speed_bps=0.0,
-            status="idle"
+            status="idle",
+            host_id=host_name.lower()
         )
 
     def _on_filehost_worker_failed(self, db_id: int, host_name: str, error: str):
