@@ -288,8 +288,6 @@ class UploadWorker(QThread):
             thumbnail_format = get_image_host_setting(host_id, 'thumbnail_format', 'int')
             max_retries = get_image_host_setting(host_id, 'max_retries', 'int')
             parallel_batch_size = get_image_host_setting(host_id, 'parallel_batch_size', 'int')
-            content_type = get_image_host_setting(host_id, 'content_type', 'str') or 'all'
-
             # Pass the item directly for precalculated dimensions (engine uses getattr on it)
             if item.scan_complete and (item.avg_width or item.avg_height):
                 log(f"Using precalculated dimensions for {item.name}: {item.avg_width}x{item.avg_height}", level="debug", category="uploads")
@@ -297,7 +295,7 @@ class UploadWorker(QThread):
             # Run upload engine directly with any ImageHostClient (host-agnostic)
             results = self._run_upload_engine(
                 item, thumbnail_size, thumbnail_format,
-                max_retries, parallel_batch_size, content_type,
+                max_retries, parallel_batch_size,
             )
 
             # Handle paused state
@@ -611,8 +609,7 @@ class UploadWorker(QThread):
 
     def _run_upload_engine(self, item: GalleryQueueItem, thumbnail_size: int,
                            thumbnail_format: int, max_retries: int,
-                           parallel_batch_size: int,
-                           content_type: str = "all") -> dict:
+                           parallel_batch_size: int) -> dict:
         """Run UploadEngine directly with any ImageHostClient.
 
         Replaces the previous uploader.upload_folder() call so that hosts
@@ -681,7 +678,6 @@ class UploadWorker(QThread):
             max_retries=max_retries,
             parallel_batch_size=parallel_batch_size,
             template_name=item.template_name,
-            content_type=content_type,
             already_uploaded=already_uploaded,
             existing_gallery_id=existing_gallery_id,
             precalculated_dimensions=item,

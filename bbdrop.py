@@ -1765,7 +1765,7 @@ class ImxToUploader(ImageHostClient):
         sanitized = re.sub(r'\s+', ' ', sanitized).strip()
         return sanitized or 'untitled'
 
-    def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None, progress_callback=None, content_type="all", gallery_name=None):
+    def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None, progress_callback=None, gallery_name=None):
         """
         Upload a single image to imx.to
 

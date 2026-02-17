@@ -225,11 +225,11 @@ class TurboImageHostClient(ImageHostClient):
         thumbnail_format: int = 2,
         thread_session: Optional[Any] = None,
         progress_callback: Optional[Callable] = None,
-        content_type: str = "all",
         gallery_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Upload a single image to TurboImageHost via pycurl."""
         self._ensure_session()
+        content_type = get_image_host_setting('turbo', 'content_type', 'str') or 'all'
 
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found: {image_path}")

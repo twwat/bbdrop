@@ -31,7 +31,6 @@ class ImageHostClient(ABC):
                      thumbnail_format: int = 2,
                      thread_session: Optional[Any] = None,
                      progress_callback: Optional[Callable] = None,
-                     content_type: str = "all",
                      gallery_name: Optional[str] = None) -> Dict[str, Any]:
         """Upload single image. Return API response dict."""
         ...

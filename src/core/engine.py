@@ -122,7 +122,6 @@ class UploadEngine:
         max_retries: int,
         parallel_batch_size: int,
         template_name: str,
-        content_type: str = "all",
         # Resume support from GUI; pass empty for CLI
         already_uploaded: Optional[Set[str]] = None,
         # Existing gallery ID for resume/append operations
@@ -256,7 +255,6 @@ class UploadEngine:
                 thumbnail_size=thumbnail_size,
                 thumbnail_format=thumbnail_format,
                 progress_callback=ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
-                content_type=content_type,
                 gallery_name=gallery_name,
             )
             first_upload_duration = time.time() - first_upload_start
@@ -330,7 +328,6 @@ class UploadEngine:
                     thumbnail_size=thumbnail_size,
                     thumbnail_format=thumbnail_format,
                     progress_callback=ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
-                    content_type=content_type,
                     gallery_name=gallery_name,
                 )
                 upload_duration = time.time() - upload_start

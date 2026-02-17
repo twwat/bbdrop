@@ -55,7 +55,7 @@ class MockImageHostClient(ImageHostClient):
     def upload_image(self, image_path, create_gallery=False,
                      gallery_id=None, thumbnail_size=3, thumbnail_format=2,
                      thread_session=None, progress_callback=None,
-                     content_type="all", gallery_name=None) -> dict:
+                     gallery_name=None) -> dict:
         self.upload_calls.append(image_path)
         fname = os.path.basename(image_path)
         return self.normalize_response(
