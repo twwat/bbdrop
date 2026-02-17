@@ -585,12 +585,9 @@ class TemplateManagerDialog(QDialog):
             if template_name is None:
                 template_name = current_item.text()
 
-            # Before switching, save current content to pending_changes if modified
+            # Before switching, save current content to pending_changes
             if self.current_template_name and self.current_template_name not in BUILTIN_TEMPLATES:
-                current_content = self.template_editor.toPlainText()
-                # Always store the current content in pending_changes when switching
-                if self.unsaved_changes:
-                    self.pending_changes[self.current_template_name] = current_content
+                self.pending_changes[self.current_template_name] = self.template_editor.toPlainText()
 
             self.load_template_content(template_name)
             self.current_template_name = template_name
@@ -623,19 +620,23 @@ class TemplateManagerDialog(QDialog):
 
         Checks pending_changes first, then loads from disk.
         """
-        # Check pending_changes first
-        if template_name in self.pending_changes:
-            self.template_editor.setPlainText(self.pending_changes[template_name])
-            return
+        self.template_editor.blockSignals(True)
+        try:
+            # Check pending_changes first
+            if template_name in self.pending_changes:
+                self.template_editor.setPlainText(self.pending_changes[template_name])
+                return
 
-        # Load from disk
-        from bbdrop import load_templates
-        templates = load_templates()
+            # Load from disk
+            from bbdrop import load_templates
+            templates = load_templates()
 
-        if template_name in templates:
-            self.template_editor.setPlainText(templates[template_name])
-        else:
-            self.template_editor.clear()
+            if template_name in templates:
+                self.template_editor.setPlainText(templates[template_name])
+            else:
+                self.template_editor.clear()
+        finally:
+            self.template_editor.blockSignals(False)
     
     def insert_placeholder(self, placeholder):
         """Insert a placeholder at cursor position"""
