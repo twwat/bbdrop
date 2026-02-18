@@ -40,6 +40,10 @@ class WorkerSignalHandler(QObject):
         self.bandwidth_manager = BandwidthManager(self)
         self.bandwidth_manager.total_bandwidth_updated.connect(self._on_total_bandwidth_updated)
 
+        # Base bytes remaining per file host (from last DB query) for real-time adjustment
+        self._filehost_base_bytes: Dict[str, int] = {}
+        self._filehost_base_files: Dict[str, int] = {}
+
 
     def start_worker(self):
         """Start the upload worker thread."""
@@ -210,6 +214,10 @@ class WorkerSignalHandler(QObject):
         try:
             if mw.queue_manager and mw.queue_manager.store:
                 stats = mw.queue_manager.store.get_file_host_pending_stats(host_name)
+                # Store base values for real-time progress adjustment
+                key = host_name.lower()
+                self._filehost_base_bytes[key] = stats['bytes']
+                self._filehost_base_files[key] = stats['files']
                 mw.worker_status_widget.update_filehost_queue_columns(
                     host_name, stats['files'], stats['bytes']
                 )
@@ -383,6 +391,16 @@ class WorkerSignalHandler(QObject):
             progress_bytes=uploaded,
             total_bytes=total
         )
+
+        # Update bytes_remaining in real-time: base (from last DB query) minus progress
+        key = host_name.lower()
+        base = self._filehost_base_bytes.get(key, 0)
+        if base > 0:
+            adjusted = max(0, base - uploaded)
+            worker = mw.worker_status_widget._workers.get(worker_id)
+            if worker:
+                worker.bytes_remaining = adjusted
+                mw.worker_status_widget._update_bytes_remaining(worker_id, adjusted)
 
     def _on_filehost_worker_completed(self, db_id: int, host_name: str, result: dict):
         """Handle file host worker upload completion."""
