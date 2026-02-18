@@ -158,7 +158,7 @@ class GalleryTableWidget(QTableWidget):
         (2,  'UPLOADED',    'uploaded',     100, 'Interactive', False, False),
         (3,  'PROGRESS',    'progress',     200, 'Interactive', False, False),
         (4,  'STATUS',      'status',       40,  'Interactive', False, False),
-        (5,  'COVER',       '',             28,  'Fixed',       False, False),
+        (5,  'COVER',       'cover',        28,  'Fixed',       False, False),
         (6,  'STATUS_TEXT', 'status text',  100, 'Interactive', True,  False),
         (7,  'ADDED',       'added',        120, 'Interactive', False, False),
         (8,  'FINISHED',    'finished',     120, 'Interactive', False, False),
