@@ -196,24 +196,18 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         columns = [column[1] for column in cursor.fetchall()]
         
         if 'failed_files' not in columns:
-            log("Adding failed_files column to galleries table...", level="info", category="database")
             conn.execute("ALTER TABLE galleries ADD COLUMN failed_files TEXT")
-            log("+ Added failed_files column", level="info", category="database")
+            log("Added failed_files column", level="info", category="database")
             
         # Migration 2: Add tab_name column if it doesn't exist
         cursor = conn.execute("PRAGMA table_info(galleries)")
         columns = [column[1] for column in cursor.fetchall()]
         
         if 'tab_name' not in columns:
-            log("Adding tab_name column to galleries table...", level="info", category="database")
             conn.execute("ALTER TABLE galleries ADD COLUMN tab_name TEXT DEFAULT 'Main'")
-            log("+ Added tab_name column", level="info", category="database")
-
-            # Add indexes for tab_name after column creation
-            log("Adding tab_name indexes...", level="info", category="database")
             conn.execute("CREATE INDEX IF NOT EXISTS galleries_tab_idx ON galleries(tab_name)")
             conn.execute("CREATE INDEX IF NOT EXISTS galleries_tab_status_idx ON galleries(tab_name, status)")
-            log("+ Added tab_name indexes", level="info", category="database")
+            log("Added tab_name column and indexes", level="info", category="database")
 
         # Migration 3: Move unnamed galleries from config file to database
         _migrate_unnamed_galleries_to_db(conn)
@@ -223,8 +217,6 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         columns = [column[1] for column in cursor.fetchall()]
 
         if 'tab_name' in columns and 'tab_id' not in columns:
-            log("Migrating from tab_name to tab_id for referential integrity...", level="info", category="database")
-
             # Add tab_id column
             conn.execute("ALTER TABLE galleries ADD COLUMN tab_id INTEGER")
 
@@ -252,7 +244,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
 
             # Note: We keep tab_name column for now for backwards compatibility
             # but tab_id becomes the primary reference
-            log("+ Migrated to tab_id-based references", level="info", category="database")
+            log("Migrated to tab_id-based references", level="info", category="database")
 
         # Migration 4: Initialize default tabs
         _initialize_default_tabs(conn)
@@ -270,79 +262,80 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             ('min_width', 'REAL DEFAULT 0.0'),
             ('min_height', 'REAL DEFAULT 0.0')
         ]
+        added_dim_cols = []
         for col_name, col_def in dimension_columns:
             if col_name not in columns:
-                log(f"Adding {col_name} column to galleries table...", level="info", category="database")
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {col_name} {col_def}")
-                log(f"+ Added {col_name} column", level="info", category="database")
+                added_dim_cols.append(col_name)
+        if added_dim_cols:
+            log(f"Added dimension columns: {', '.join(added_dim_cols)}", level="debug", category="database")
 
+        added_custom_cols = []
         for custom_field in ['custom1', 'custom2', 'custom3', 'custom4']:
             if custom_field not in columns:
-                log(f"Adding {custom_field} column to galleries table...", level="info", category="database")
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {custom_field} TEXT")
-                log(f"+ Added {custom_field} column", level="info", category="database")
+                added_custom_cols.append(custom_field)
+        if added_custom_cols:
+            log(f"Added custom fields: {', '.join(added_custom_cols)}", level="debug", category="database")
 
         # Add external program result fields (ext1-4)
+        added_ext_cols = []
         for ext_field in ['ext1', 'ext2', 'ext3', 'ext4']:
             if ext_field not in columns:
-                log(f"Adding {ext_field} column to galleries table...", level="info", category="database")
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {ext_field} TEXT")
-                log(f"+ Added {ext_field} column", level="info", category="database")
+                added_ext_cols.append(ext_field)
+        if added_ext_cols:
+            log(f"Added extension fields: {', '.join(added_ext_cols)}", level="debug", category="database")
 
         # Migration 6: Add IMX status tracking columns
         cursor = conn.execute("PRAGMA table_info(galleries)")
         columns = [column[1] for column in cursor.fetchall()]
 
         if 'image_host_id' not in columns:
-            log("Adding image_host_id column to galleries table...", level="info", category="database")
             conn.execute("ALTER TABLE galleries ADD COLUMN image_host_id TEXT DEFAULT 'imx'")
-            log("+ Added image_host_id column", level="info", category="database")
+            log("Added image_host_id column", level="info", category="database")
 
         if 'imx_status' not in columns:
-            log("Adding imx_status column to galleries table...", level="info", category="database")
             conn.execute("ALTER TABLE galleries ADD COLUMN imx_status TEXT")
-            log("+ Added imx_status column", level="info", category="database")
+            log("Added imx_status column", level="info", category="database")
 
         if 'imx_status_checked' not in columns:
-            log("Adding imx_status_checked column to galleries table...", level="info", category="database")
             conn.execute("ALTER TABLE galleries ADD COLUMN imx_status_checked INTEGER")
-            log("+ Added imx_status_checked column", level="info", category="database")
+            log("Added imx_status_checked column", level="info", category="database")
 
         # Migration: Add cover photo columns
         cursor = conn.execute("PRAGMA table_info(galleries)")
         columns = [column[1] for column in cursor.fetchall()]
 
+        added_cover_cols = []
         for cover_col, cover_def in [
             ('cover_source_path', 'TEXT'),
             ('cover_host_id', 'TEXT'),
             ('cover_result', 'TEXT'),
         ]:
             if cover_col not in columns:
-                log(f"Adding {cover_col} column to galleries table...", level="info", category="database")
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {cover_col} {cover_def}")
-                log(f"+ Added {cover_col} column", level="info", category="database")
+                added_cover_cols.append(cover_col)
+        if added_cover_cols:
+            log("Added cover columns", level="debug", category="database")
 
         # Migration: Add part_number column to file_host_uploads for split archives
         cursor = conn.execute("PRAGMA table_info(file_host_uploads)")
         fh_columns = [column[1] for column in cursor.fetchall()]
 
         if 'part_number' not in fh_columns:
-            log("Adding part_number column to file_host_uploads table...", level="info", category="database")
             conn.execute("ALTER TABLE file_host_uploads ADD COLUMN part_number INTEGER DEFAULT 0")
-            log("+ Added part_number column", level="info", category="database")
-
             # Drop old unique constraint and create new one with part_number
             # SQLite doesn't support DROP CONSTRAINT, so we recreate via index
             # The UNIQUE constraint in CREATE TABLE can't be altered, but INSERT OR REPLACE
             # uses the unique index. We create a new unique index that includes part_number.
             # The old UNIQUE(gallery_fk, host_name) is baked into the table definition,
             # but we can work around it by using INSERT with explicit conflict handling.
-            log("Creating unique index for gallery+host+part...", level="info", category="database")
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS file_host_uploads_gallery_host_part_idx "
                 "ON file_host_uploads(gallery_fk, host_name, part_number)"
             )
-            log("+ Added gallery_host_part unique index", level="info", category="database")
+            log("Added part_number column and gallery_host_part index", level="info", category="database")
 
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
@@ -360,8 +353,6 @@ def _initialize_default_tabs(conn: sqlite3.Connection) -> None:
             # Already initialized
             return
             
-        log("Initializing default system tabs...", level="info", category="database")
-
         # Default system tabs with proper ordering
         default_tabs = [
             ('Main', 'system', 0, None),
@@ -374,7 +365,7 @@ def _initialize_default_tabs(conn: sqlite3.Connection) -> None:
                 (name, tab_type, display_order, color_hint)
             )
 
-        log(f"+ Initialized {len(default_tabs)} default system tabs", level="info", category="database")
+        log(f"Initialized {len(default_tabs)} default system tabs", level="info", category="database")
 
     except Exception as e:
         log(f"Could not initialize default tabs: {e}", level="warning", category="database")
@@ -634,14 +625,13 @@ class QueueStore:
 
     def bulk_upsert(self, items: Iterable[Dict[str, Any]]) -> None:
         items_list = list(items)  # Convert to list to avoid consuming iterator
-        #print(f"DEBUG: bulk_upsert called with {len(items_list)} items")
         try:
             with _ConnectionContext(self.db_path) as conn:
                 _ensure_schema(conn)
+                failures = []
                 try:
                     for it in items_list:
                         try:
-                            #print(f"DEBUG: Processing item: path={it.get('path')}, tab_name={it.get('tab_name', 'Main')}, status={it.get('status')}")
                             self._upsert_gallery_row(conn, it)
                             # Optionally persist per-image resume info when provided
                             uploaded_files = it.get('uploaded_files') or []
@@ -679,9 +669,11 @@ class QueueStore:
                                         ),
                                     )
                         except Exception as item_error:
-                            log(f"Failed to upsert item {it.get('path', 'unknown')}: {item_error}", level="warning", category="database")
+                            failures.append(it.get('path', 'unknown'))
                             # Continue with other items instead of failing completely
                             continue
+                    if failures:
+                        log(f"Bulk upsert: {len(failures)}/{len(items_list)} items failed", level="warning", category="database")
                 except Exception as tx_error:
                     log(f"Transaction failed: {tx_error}", level="error", category="database")
                     raise

@@ -334,16 +334,15 @@ class QueueManager(QObject):
                             log(f"Scan Worker: No cover candidates found for '{gallery_name}'", level="info", category="scan")
 
                     if item.status == QUEUE_STATE_SCANNING:
-                        log(f"Scan Worker: Scan complete, updating status to ready for {path}", level="debug", category="scan")
                         old_status = item.status
                         item.status = QUEUE_STATE_READY
                         self._update_status_count(old_status, QUEUE_STATE_READY)
-                        log(f"Scan Worker: Status changed from {old_status} to {QUEUE_STATE_READY}", level="debug", category="scan")
+                        log(f"Scan complete for {path}: {old_status} -> {QUEUE_STATE_READY}", level="debug", category="scan")
 
                         # Check if auto-start uploads is enabled
                         defaults = load_user_defaults()
                         if defaults.get('auto_start_upload', False):
-                            log(f"Auto-start enabled: queuing {path} for upload", level="debug", category="queue")
+                            log(f"Auto-start enabled: queuing {path} for upload", level="info", category="queue")
 
                             # Auto-start the upload by changing status to queued and adding to queue
                             self._update_status_count(QUEUE_STATE_READY, QUEUE_STATE_QUEUED)
@@ -456,7 +455,7 @@ class QueueManager(QObject):
         if failed_count > 0:
             log(f"Scan Worker: Validation complete for '{gallery_name}': {failed_count}/{len(files)} files failed", level="warning", category="scan")
         else:
-            log(f"Scan Worker: Validation complete for '{gallery_name}': All {len(files)} files valid, total size: {result['total_size'] / 1024 / 1024:.2f} MB", level="debug", category="scan")
+            log(f"Scan Worker: Validation complete for '{gallery_name}': All {len(files)} files valid, total size: {result['total_size'] / 1024 / 1024:.2f} MB", level="info", category="scan")
 
         # Calculate dimensions with sampling
         if not result['failed_files']:
@@ -517,13 +516,11 @@ class QueueManager(QObject):
                 'exclude_patterns_text': settings.value('scanning/exclude_patterns_text', '', type=str),
             }
 
-            log(f"Scan Worker: Dimension sampling: method={enhanced_config['sampling_method']}, fixed={enhanced_config['sampling_fixed_count']}, pct={enhanced_config['sampling_percentage']}% for '{gallery_name}'", level="debug", category="scan")
-
             # Get sample indices using new logic
             sample_indices = get_sample_indices(files, enhanced_config, path)
             samples = [files[i] for i in sample_indices]
 
-            log(f"Scan Worker: Sampling {len(samples)} of {len(files)} files for dimensions for '{gallery_name}'", level="debug", category="scan")
+            log(f"Scan Worker: Dimension sampling {len(samples)}/{len(files)} files for '{gallery_name}' (method={enhanced_config['sampling_method']}, fixed={enhanced_config['sampling_fixed_count']}, pct={enhanced_config['sampling_percentage']}%)", level="debug", category="scan")
 
             # Process samples
             for f in samples:
