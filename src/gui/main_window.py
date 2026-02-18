@@ -1868,6 +1868,8 @@ class BBDropGUI(QMainWindow):
         # Connect worker status widget signals
         self.worker_status_widget.open_settings_tab_requested.connect(self.open_comprehensive_settings)
         self.worker_status_widget.open_host_config_requested.connect(self._open_host_config_from_worker)
+        self.worker_status_widget.image_host_enabled_changed.connect(self._on_image_host_enabled_changed)
+        self.worker_status_widget.file_host_enabled_changed.connect(self._on_file_host_enabled_changed)
 
         # Worker monitoring started in showEvent() to avoid blocking startup
         # with database queries from _populate_initial_metrics()
@@ -2364,6 +2366,21 @@ class BBDropGUI(QMainWindow):
         if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
             self.worker_status_widget.refresh_icons()
 
+
+    def _on_image_host_enabled_changed(self, host_id: str, enabled: bool):
+        """Handle image host enable/disable from worker status right-click menu."""
+        self.refresh_image_host_combo()
+        if hasattr(self, 'worker_signal_handler'):
+            self.worker_signal_handler.register_image_host_workers()
+
+    def _on_file_host_enabled_changed(self, host_id: str, enabled: bool):
+        """Handle file host enable/disable from worker status right-click menu."""
+        if not hasattr(self, 'file_host_manager') or not self.file_host_manager:
+            return
+        if enabled:
+            self.file_host_manager.enable_host(host_id)
+        else:
+            self.file_host_manager.disable_host(host_id)
 
     def show_help_shortcuts_tab(self):
         """Open help dialog and switch to keyboard shortcuts tab"""

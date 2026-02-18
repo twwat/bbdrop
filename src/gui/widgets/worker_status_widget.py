@@ -406,6 +406,8 @@ class WorkerStatusWidget(QWidget):
     worker_selected = pyqtSignal(str, str)  # worker_id, worker_type
     open_host_config_requested = pyqtSignal(str)  # host_id for file host config dialog
     open_settings_tab_requested = pyqtSignal(int)  # tab_index for settings dialog
+    image_host_enabled_changed = pyqtSignal(str, bool)  # host_id, enabled
+    file_host_enabled_changed = pyqtSignal(str, bool)  # host_id, enabled
 
     def __init__(self, parent=None):
         """Initialize worker status widget."""
@@ -2255,14 +2257,28 @@ class WorkerStatusWidget(QWidget):
         menu.exec(self.status_table.viewport().mapToGlobal(position))
 
     def _set_host_enabled(self, host_id: str, enabled: bool):
-        """Enable or disable a file host and refresh the display."""
+        """Enable or disable a file host and update worker status."""
         save_file_host_setting(host_id, "enabled", enabled)
+        # Update worker status field so status text matches the icon
+        worker_id = f"filehost_{host_id.lower().replace(' ', '_')}"
+        with QMutexLocker(self._workers_mutex):
+            worker = self._workers.get(worker_id)
+            if worker and worker.status != "uploading":
+                worker.status = "idle" if enabled else "disabled"
         self._refresh_display()
+        self.file_host_enabled_changed.emit(host_id, enabled)
 
     def _set_image_host_enabled(self, host_id: str, enabled: bool):
-        """Enable or disable an image host and refresh the display."""
+        """Enable or disable an image host and update worker status."""
         save_image_host_enabled(host_id, enabled)
+        # Update worker status field so status text matches the icon
+        worker_id = f"upload_worker_{host_id}"
+        with QMutexLocker(self._workers_mutex):
+            worker = self._workers.get(worker_id)
+            if worker and worker.status != "uploading":
+                worker.status = "idle" if enabled else "disabled"
         self._refresh_display()
+        self.image_host_enabled_changed.emit(host_id, enabled)
 
     def _open_image_host_config(self, host_id: str):
         """Open image host config dialog and refresh on close."""
