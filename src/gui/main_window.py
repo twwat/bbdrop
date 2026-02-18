@@ -1855,6 +1855,12 @@ class BBDropGUI(QMainWindow):
         worker_status_layout = QVBoxLayout(worker_status_group)
         worker_status_layout.setContentsMargins(5, 5, 5, 5)
 
+        # Minimal margins — QGroupBox provides the framing
+        self.worker_status_widget.layout().setContentsMargins(0, 2, 0, 0)
+        self.worker_status_widget.layout().setSpacing(0)
+        # Remove table border so it blends with the group box
+        self.worker_status_widget.status_table.setFrameShape(QFrame.Shape.NoFrame)
+
         # Add the already-created worker status widget to the layout
         worker_status_layout.addWidget(self.worker_status_widget)
 
