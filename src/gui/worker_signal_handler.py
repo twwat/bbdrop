@@ -568,9 +568,9 @@ class WorkerSignalHandler(QObject):
 
             # Dim the text if speed is essentially zero
             if total_mib < 0.001:
-                mw.speed_current_value_label.setStyleSheet("opacity: 0.4;")
+                mw.speed_current_value_label.setStyleSheet("color: rgba(128, 128, 128, 100);")
             else:
-                mw.speed_current_value_label.setStyleSheet("opacity: 1.0;")
+                mw.speed_current_value_label.setStyleSheet("")
 
             mw.speed_current_value_label.setText(speed_str)
 

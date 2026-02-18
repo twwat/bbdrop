@@ -207,7 +207,7 @@ class ProgressTracker(QObject):
             self._bandwidth_samples.clear()
             self._current_transfer_kbps = 0.0
             self._main_window.speed_current_value_label.setText("0.000 MiB/s")
-            self._main_window.speed_current_value_label.setStyleSheet("opacity: 0.4;")
+            self._main_window.speed_current_value_label.setStyleSheet("color: rgba(128, 128, 128, 100);")
 
 
     def _update_unnamed_count_background(self):
