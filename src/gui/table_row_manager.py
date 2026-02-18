@@ -581,13 +581,12 @@ class TableRowManager(QObject):
 
         xfer_item = QTableWidgetItem(transfer_text)
         xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         try:
             if item.status == "uploading" and transfer_text:
                 xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
-            else:
-                if transfer_text:
-                    xfer_item.setForeground(QColor(0, 0, 0, 160))
+            elif item.status in ("completed", "failed") and transfer_text:
+                xfer_item.setForeground(QColor(255, 255, 255, 230) if theme_mode == 'dark' else QColor(0, 0, 0, 190))
         except Exception as e:
             log(f"Exception in table row manager: {e}", level="error", category="ui")
             raise
@@ -853,13 +852,11 @@ class TableRowManager(QObject):
                     self._set_status_cell_icon(row, item.status)
                     self._set_status_text_cell(row, item.status)
 
-                    # Update action column
-                    action_widget = mw.gallery_table.cellWidget(row, _Col.ACTION)
-                    if isinstance(action_widget, ActionButtonWidget):
-                        log(f"Updating action buttons for {item.path}, status: {item.status}", level="debug")
-                        action_widget.update_buttons(item.status)
-                        if item.status == "ready":
-                            action_widget.start_btn.setEnabled(True)
+                    # Update action column — delegate-rendered, trigger repaint
+                    # via dataChanged so the delegate re-reads status
+                    table = getattr(mw.gallery_table, 'table', mw.gallery_table)
+                    action_index = table.model().index(row, _Col.ACTION)
+                    table.model().dataChanged.emit(action_index, action_index)
 
         # Update button counts if any scans completed
         if updated_any:

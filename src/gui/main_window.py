@@ -3377,7 +3377,7 @@ class BBDropGUI(QMainWindow):
             uploaded_text = f"{completed}/{total}" if total > 0 else "0/?"
             uploaded_item = QTableWidgetItem(uploaded_text)
             uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.gallery_table.setItem(matched_row, GalleryTableWidget.COL_UPLOADED, uploaded_item)
             
             # Progress bar (column 3)
@@ -3404,7 +3404,7 @@ class BBDropGUI(QMainWindow):
                 
                 xfer_item = QTableWidgetItem(transfer_text)
                 xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+                xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 # Use live transfer color
                 theme_mode = self._current_theme_mode
                 xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
