@@ -320,11 +320,11 @@ def migrate_from_imxup() -> bool:
         except Exception:
             pass  # Keyring migration is optional
 
-        log(f"Migrated settings from {old_path} to {new_path}", level="info")
+        log(f"Migrated settings from {old_path} to {new_path}", level="info", category="migration")
         return True
 
     except Exception as e:
-        log(f"Migration failed: {e}", level="error")
+        log(f"Migration failed: {e}", level="error", category="migration")
         return False
 
 
@@ -410,7 +410,7 @@ def create_windows_context_menu():
         return True
         
     except Exception as e:
-        log(f"Error creating context menu: {e}", level="error")
+        log(f"Error creating context menu: {e}", level="error", category="ui")
         return False
 
 def remove_windows_context_menu():
@@ -781,7 +781,7 @@ def _migrate_encryption_keys():
         keyring.set_password("bbdrop", "_master_key", new_key)
     except Exception as e:
         log(f"CRITICAL: Failed to store master key in keyring: {e}",
-            level="error", category="auth")
+            level="critical", category="auth")
         raise CredentialDecryptionError(
             f"Cannot store master encryption key in OS keyring: {e}"
         ) from e
@@ -1083,10 +1083,10 @@ def remove_unnamed_gallery(gallery_id):
         store = QueueStore()
         removed = store.remove_unnamed_gallery(gallery_id)
         if removed:
-            log(f"Removed {gallery_id} from unnamed galleries list", level="debug")
+            log(f"Removed {gallery_id} from unnamed galleries list", level="debug", category="renaming")
     except Exception as e:
         # Fallback to config file
-        log(f"Database removal failed, using config file fallback: {e}", level="warning")
+        log(f"Database removal failed, using config file fallback: {e}", level="warning", category="renaming")
         config = configparser.ConfigParser()
         config_file = get_config_path()
         
@@ -1098,8 +1098,6 @@ def remove_unnamed_gallery(gallery_id):
                 
                 with open(config_file, 'w') as f:
                     config.write(f)
-                
-                log(f"Removed {gallery_id} from unnamed galleries list", level="debug", category="renaming")
 
 from src.network.cookies import get_firefox_cookies, load_cookies_from_file
 
@@ -1158,7 +1156,7 @@ custom4: [if custom4]#custom4#[else]no custom4 value set[/if]
                     with open(template_file, 'r', encoding='utf-8') as f:
                         templates[template_name] = f.read()
                 except Exception as e:
-                    log(f"Could not load template '{template_name}': {e}", level="error")
+                    log(f"Could not load template '{template_name}': {e}", level="error", category="template")
     
     return templates
 
@@ -1292,7 +1290,7 @@ def generate_bbcode_from_template(template_name, data):
     templates = load_templates()
     
     if template_name not in templates:
-        log(f" Warning: Template '{template_name}' not found, using default")
+        log(f"Template '{template_name}' not found, using default", level="warning", category="template")
         template_name = "default"
     
     template_content = templates[template_name]
@@ -1638,7 +1636,7 @@ class ImxToUploader(ImageHostClient):
                 self.session.cookies.update(old_cookies)
 
         except Exception as e:
-            log(f"Warning: Failed to refresh session pool: {e}", level="warning")
+            log(f"Failed to refresh session pool: {e}", level="warning", category="network")
 
     def __init__(self):
         # Initialize image host config (ABC parent)
@@ -1916,8 +1914,7 @@ class ImxToUploader(ImageHostClient):
             dict: Contains gallery URL and individual image URLs
         """
         start_time = time.time()
-        log(f"upload_folder({folder_path}) started at {start_time:.6f}", level="debug", category="timing")
-        
+
         if not os.path.exists(folder_path):
             raise FileNotFoundError(f"Folder not found: {folder_path}")
         
@@ -1947,7 +1944,7 @@ class ImxToUploader(ImageHostClient):
                     image_dimensions.append((0, 0))  # Error reading image
         
         scan_duration = time.time() - scan_start
-        log(f" [TIMING] File scanning and PIL processing took {scan_duration:.6f}s for {len(image_files)} files")
+        log(f"File scanning and PIL processing took {scan_duration:.6f}s for {len(image_files)} files", level="debug", category="scan")
         
         if not image_files:
             raise ValueError(f"No image files found in {folder_path}")
@@ -1963,33 +1960,33 @@ class ImxToUploader(ImageHostClient):
         check_start = time.time()
         existing_files = check_if_gallery_exists(gallery_name)
         check_duration = time.time() - check_start
-        log(f" [TIMING] Gallery existence check took {check_duration:.6f}s")
+        log(f"Gallery existence check took {check_duration:.6f}s", level="debug", category="uploads")
         
         if existing_files:
-            log(f" Found existing gallery files for '{gallery_name}':")
+            log(f"Found existing gallery files for '{gallery_name}':", level="debug", category="uploads")
             for file_path in existing_files:
-                log(f"   {file_path}")
+                log(f"   {file_path}", level="debug", category="uploads")
             
             response = input(f"{timestamp()} Gallery appears to already exist. Continue anyway? (y/N): ")
             if response.lower() != 'y':
-                log(f" Skipping {folder_path}")
+                log(f"Skipping {folder_path}", level="info", category="uploads")
                 return None
         
         # Create gallery (skip login since it's already done). If creation fails, fall back to API-only
         create_start = time.time()
         gallery_id = self.create_gallery_with_name(gallery_name, skip_login=True)
         create_duration = time.time() - create_start
-        log(f" [TIMING] Gallery creation took {create_duration:.6f}s")
+        log(f"Gallery creation took {create_duration:.6f}s", level="debug", category="uploads")
         initial_completed = 0
         initial_uploaded_size = 0
         preseed_images = []
         files_to_upload = []
         if not gallery_id:
-            log(f" Failed to create named gallery, falling back to API-only upload...")
+            log(f"Failed to create named gallery, falling back to API-only upload...", level="warning", category="uploads")
             # Upload first image to create gallery
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
-            log(f" Uploading first image: {first_file}")
+            log(f"Uploading first image: {first_file}", level="info", category="uploads")
             first_response = self.upload_image(
                 first_image_path,
                 create_gallery=True,
@@ -2139,14 +2136,13 @@ class ImxToUploader(ImageHostClient):
                                for img_file, _ in uploaded_images])
         avg_width = sum(w for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
         avg_height = sum(h for w, h in successful_dimensions) / len(successful_dimensions) if successful_dimensions else 0
-        log(f" Successful dimensions: {successful_dimensions}")
+        log(f"Successful dimensions: {successful_dimensions}", level="debug", category="uploads")
         max_width = max(w for w, h in successful_dimensions) if successful_dimensions else 0
         max_height = max(h for w, h in successful_dimensions) if successful_dimensions else 0
         min_width = min(w for w, h in successful_dimensions) if successful_dimensions else 0
         min_height = min(h for w, h in successful_dimensions) if successful_dimensions else 0
         
         # Add statistics to results
-        log(f"Returning original_name='{original_name}' as gallery_name, actual upload name was='{gallery_name}'", level="debug")
         results.update({
             'gallery_id': gallery_id,
             'gallery_name': original_name,
@@ -2194,7 +2190,6 @@ class ImxToUploader(ImageHostClient):
         extension = max(set(extensions), key=extensions.count) if extensions else "JPG"
         
         # Prepare template data
-        log(f"Template: original_name='{original_name}', gallery_name='{gallery_name}'", level="debug")
         template_data = {
             'folder_name': original_name,
             'width': int(avg_width),
@@ -2210,7 +2205,6 @@ class ImxToUploader(ImageHostClient):
         # Generate bbcode using specified template and save artifacts centrally
         bbcode_content = generate_bbcode_from_template(template_name, template_data)
         try:
-            log(f"About to save artifacts with original_name='{original_name}', upload_name='{gallery_name}'", level="debug")
             save_gallery_artifacts(
                 folder_path=folder_path,
                 results={
@@ -2238,9 +2232,9 @@ class ImxToUploader(ImageHostClient):
                 },
                 template_name=template_name,
             )
-            log(f" Saved gallery files to central and/or .uploaded as configured")
+            log(f"Saved gallery files to central and/or .uploaded as configured", level="debug", category="fileio")
         except Exception as e:
-            log(f" Error writing artifacts: {e}")
+            log(f"Error writing artifacts: {e}", level="error", category="fileio")
 
         # Compose and save JSON artifact at both locations
         try:
@@ -2382,7 +2376,7 @@ class ImxToUploader(ImageHostClient):
             except Exception:
                 pass
         except Exception as e:
-            log(f" Error writing JSON artifact: {e}")
+            log(f"Error writing JSON artifact: {e}", level="error", category="fileio")
         
         return results
 
@@ -2700,7 +2694,7 @@ def main():
             else:
                 debug_print(f"ERROR: Failed to set gallery {gallery_id} to private")
         else:
-            debug_print("{timestamp()} WARNING: Please specify --public or --private")
+            debug_print(f"{timestamp()} WARNING: Please specify --public or --private")
         return
     
     # Handle unnamed gallery renaming
@@ -2839,7 +2833,7 @@ def main():
                 all_results.append(results)
 
             except KeyboardInterrupt:
-                debug_print("{timestamp()} Upload interrupted by user")
+                debug_print(f"{timestamp()} Upload interrupted by user")
                 # Cleanup RenameWorker on interrupt
                 if rename_worker:
                     rename_worker.stop()
@@ -2908,7 +2902,7 @@ def main():
                 rename_worker.stop()
                 debug_print(f"Background RenameWorker stopped")
                 
-            debug_print("{timestamp()} No galleries were successfully uploaded.")
+            debug_print(f"{timestamp()} No galleries were successfully uploaded.")
             return 1  # No galleries uploaded
             
     except Exception as e:
@@ -2926,7 +2920,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        log("{timestamp()} KeyboardInterrupt: Exiting gracefully...", level="debug", category="ui")
+        log("KeyboardInterrupt: Exiting gracefully...", level="debug", category="ui")
         sys.exit(0)
     except SystemExit:
         # Handle argparse errors gracefully
