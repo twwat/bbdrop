@@ -323,9 +323,8 @@ class BandwidthManager(QObject):
                 total += source.smoothed_value
         locker.unlock()
 
-        # Only emit if there's actual bandwidth (avoid spamming UI with zeros)
-        if total > 0:
-            self.total_bandwidth_updated.emit(total)
+        # Always emit so the UI can reset when bandwidth drops to zero
+        self.total_bandwidth_updated.emit(total)
 
         # Track session peak
         if total > self._session_peak:
