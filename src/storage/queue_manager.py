@@ -169,9 +169,6 @@ class QueueManager(QObject):
                 daemon=True
             )
             self._scan_worker.start()
-            import traceback
-            caller = traceback.extract_stack()[-2]
-            log(f"Scan Worker: thread started (called from {caller.filename}:{caller.lineno} in {caller.name})", level="debug", category="scan")
     
     def _sequential_scan_worker(self):
         """Worker that processes galleries sequentially"""
