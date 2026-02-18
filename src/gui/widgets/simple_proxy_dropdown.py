@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QComboBox
 from PyQt6.QtCore import pyqtSignal, Qt
 
 from src.proxy.storage import ProxyStorage
+from src.utils.logger import log
 
 
 class SimpleProxyDropdown(QComboBox):
@@ -173,7 +174,7 @@ class SimpleProxyDropdown(QComboBox):
 
         except Exception as e:
             # Log error but don't crash
-            print(f"Error saving proxy selection: {e}")
+            log(f"Error saving proxy selection: {e}", level="error")
 
     def refresh(self):
         """Refresh dropdown options from storage.

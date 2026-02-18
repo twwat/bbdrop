@@ -243,7 +243,7 @@ class AppLogger:
             if handler_type in handler_types:
                 # Duplicate handler found - remove it
                 self._logger.removeHandler(handler)
-                print(f"Removed duplicate {handler_type} handler from logger")
+                self._logger.debug(f"Removed duplicate {handler_type} handler from logger")
             else:
                 handler_types[handler_type] = handler
 

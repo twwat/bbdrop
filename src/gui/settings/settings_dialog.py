@@ -556,8 +556,6 @@ class ComprehensiveSettingsDialog(QDialog):
         
         if self.save_current_tab():
             self.mark_tab_clean(current_index)
-            # Show brief success message in status or log
-            #print(f"Applied changes for {tab_name} tab")
     
     def save_current_tab(self):
         """Save only the current tab's settings"""

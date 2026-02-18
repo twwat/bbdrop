@@ -143,11 +143,6 @@ class IconManager:
         #    if key in self.ICON_MAP:
         #        self.ICON_MAP[key] = config
         
-        # Debug: show final config state
-        #print(f"DEBUG: Icon configs after auto-generation:")
-        #for key, config in self.ICON_MAP.items():
-        #    if key.startswith('status_'):
-        #        print(f"  {key}: {type(config)} = {config}")
         
     # Legacy name mapping for backward compatibility
     LEGACY_ICON_MAP = {
@@ -495,19 +490,9 @@ class IconManager:
                 missing.append(f"{icon_key} -> INVALID_CONFIG: {config}")
         
         if report and missing:
-            print("=" * 60)
-            print("ICON VALIDATION REPORT")
-            print("=" * 60)
-            print(f"Assets directory: {self.assets_dir}")
-            print(f"Total icons defined: {len(self.ICON_MAP)}")
-            print(f"Icons found: {len(found)}")
-            print(f"Icons missing: {len(missing)}")
-            
-            if missing:
-                print("\nMissing icons (will use fallbacks):")
-                for item in missing:
-                    print(f"  - {item}")
-            print("=" * 60)
+            missing_list = ', '.join(missing)
+            log(f"Icon validation: {len(found)} found, {len(missing)} missing "
+                f"(assets={self.assets_dir}): {missing_list}", level="warning")
         
         self._validated = True
         return {'missing': missing, 'found': found}
@@ -606,18 +591,11 @@ class IconManager:
         }
 
     def print_cache_stats(self):
-        """Print formatted cache statistics to console."""
+        """Log formatted cache statistics."""
         stats = self.get_cache_stats()
-        print("=" * 60)
-        print("ICON CACHE STATISTICS")
-        print("=" * 60)
-        print(f"Cache hits:        {stats['hits']:,}")
-        print(f"Cache misses:      {stats['misses']:,}")
-        print(f"Disk I/O ops:      {stats['disk_loads']:,}")
-        print(f"Cached icons:      {stats['cached_icons']:,}")
-        print(f"Hit rate:          {stats['hit_rate']:.2f}%")
-        print(f"Disk I/O saved:    {stats['hits']:,} operations")
-        print("=" * 60)
+        log(f"Icon cache stats: hits={stats['hits']:,}, misses={stats['misses']:,}, "
+            f"disk_loads={stats['disk_loads']:,}, cached={stats['cached_icons']:,}, "
+            f"hit_rate={stats['hit_rate']:.2f}%", level="debug")
 
 
 # Global instance (will be initialized by main window)
