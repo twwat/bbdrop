@@ -759,8 +759,7 @@ class BBDropGUI(QMainWindow):
         # Memory monitoring - psutil process handle
         self._process = psutil.Process()
         
-        # Connect tab manager to the tabbed gallery widget  
-        #print(f"Debug: Setting TabManager in TabbedGalleryWidget: {self.tab_manager}")
+        # Connect tab manager to the tabbed gallery widget
         self.gallery_table.set_tab_manager(self.tab_manager)
         
         # Connect tab change signal to refresh filter and update button counts and progress
@@ -990,7 +989,6 @@ class BBDropGUI(QMainWindow):
     
     def on_galleries_moved_to_tab(self, new_tab_name, gallery_paths):
         """Handle galleries being moved to a different tab - DATABASE ALREADY UPDATED BY DRAG-DROP HANDLER"""
-        #print(f"DEBUG: on_galleries_moved_to_tab called with {len(gallery_paths)} paths to '{new_tab_name}' - database already updated", flush=True)
         try:
             # Update the MAIN WINDOW queue manager's in-memory items to match database
             if hasattr(self, 'queue_manager') and hasattr(self, 'tab_manager'):
@@ -1003,7 +1001,6 @@ class BBDropGUI(QMainWindow):
                         old_tab = item.tab_name
                         item.tab_name = new_tab_name
                         item.tab_id = tab_id
-                        #print(f"DEBUG: Drag-drop updated MAIN WINDOW item {path} tab: '{old_tab}' -> '{new_tab_name}'", flush=True)
             
             # Invalidate cache and refresh MAIN WINDOW display
             if hasattr(self, 'tab_manager'):
@@ -3112,7 +3109,6 @@ class BBDropGUI(QMainWindow):
             #log(f"Row {row} is valid, checking update queue", level="debug")
             # Use table update queue for visible rows (includes hidden row filtering)
             if hasattr(self, '_table_update_queue'):
-                #print(f"DEBUG: Using _table_update_queue to update row {row}")
                 self._table_update_queue.queue_update(path, item, 'full')
             else:
                 log(f"No _table_update_queue, using direct update for row {row}", level="debug")
@@ -4166,7 +4162,7 @@ class BBDropGUI(QMainWindow):
         try:
             siblings = self.queue_manager.store.get_galleries_by_parent_folder(old_parent)
         except Exception as e:
-            log(f"Error checking sibling galleries: {e}", level="error", category="gui")
+            log(f"Error checking sibling galleries: {e}", level="error", category="ui")
             return
 
         # Filter to only those that are missing but exist in new location
@@ -5046,33 +5042,19 @@ class BBDropGUI(QMainWindow):
                     self.set_image_host_for_galleries([gallery_path], new_host_id)
 
             except Exception as e:
-                log(f"ERROR: Exception in image host selection: {e}", category="ui", level="error")
+                log(f"Exception in image host selection: {e}", category="ui", level="error")
 
     def update_gallery_template(self, row, gallery_path, new_template, combo_widget):
         """Update template for a gallery and regenerate BBCode if needed."""
-        log(f"DEBUG: update_gallery_template called - row={row}, path={gallery_path}, new_template={new_template}", category="db", level="debug")
         try:
-            
             # Get table reference
             if hasattr(self.gallery_table, 'table'):
                 table = self.gallery_table.table
             else:
                 table = self.gallery_table
-            
-            log(f"DEBUG: About to update database with path: '{gallery_path}' and template: '{new_template}'", level="debug", category="db")
-            
-            # Check what's actually in the database
-            try:
-                all_db_items = self.queue_manager.get_all_items()
-                db_paths = [item.path for item in all_db_items[:5]]  # First 5 paths
-                log(f"DEBUG: Sample database paths: {db_paths}", level="debug", category="db")
-                log(f"DEBUG: Does our path exist in DB? {gallery_path in [item.path for item in all_db_items]}", level="debug", category="db")
-            except Exception as e:
-                log(f"ERROR: Exception checking database: {e}", category="db", level="error")
-            
+
             # Update database
             success = self.queue_manager.store.update_item_template(gallery_path, new_template)
-            log(f"DEBUG: Database update success: {success}", category="db", level="debug")
 
             # Update in-memory item
             with QMutexLocker(self.queue_manager.mutex):
@@ -5105,7 +5087,6 @@ class BBDropGUI(QMainWindow):
                 try:
                     self.artifact_handler.regenerate_gallery_bbcode(gallery_path, new_template)
                     log(f"Template changed to '{new_template}' and BBCode regenerated for {os.path.basename(gallery_path)}", level="info", category="fileio")
-                    #print(f"DEBUG: BBCode regeneration successful")
                 except Exception as e:
                     log(f"WARNING: Template changed to '{new_template}' for {os.path.basename(gallery_path)}, but BBCode regeneration failed: {e}", category="fileio", level="warning")
             else:

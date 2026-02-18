@@ -178,7 +178,6 @@ class QueueManager(QObject):
                 path = self._scan_queue.get(timeout=1.0)
                 if path is None:  # Shutdown signal
                     break
-                #print(f"DEBUG: About to scan path: {path}")
                 self._comprehensive_scan_item(path)
                 #log(f" Scan completed for {path}")
                 log(f"Scan Worker: Scan completed for {path}", category="scan", level="debug")
@@ -336,7 +335,6 @@ class QueueManager(QObject):
 
                     if item.status == QUEUE_STATE_SCANNING:
                         log(f"Scan Worker: Scan complete, updating status to ready for {path}", level="debug", category="scan")
-                        #print(f"DEBUG: Item tab_name is still: '{item.tab_name}'")
                         old_status = item.status
                         item.status = QUEUE_STATE_READY
                         self._update_status_count(old_status, QUEUE_STATE_READY)
@@ -354,22 +352,17 @@ class QueueManager(QObject):
                             log(f"Auto-queued {path} for immediate upload", level="debug", category="queue")
 
                         # Emit signal directly (we're already in mutex lock)
-                        #print(f"DEBUG: EMITTING status_changed signal for {path}")
                         self.status_changed.emit(path, old_status, item.status)
-                        #print(f"DEBUG: status_changed signal emitted")
 
             self._emit_scan_status()
 
             # Save to database immediately now that scan is complete and status is "ready"
             from PyQt6.QtCore import QTimer
-            #print(f"DEBUG: Scheduling IMMEDIATE save for {path} with tab_name='{item.tab_name}'")
             # Capture the path in a closure-safe way
             saved_path = path
             # Save and then refresh the filter to show the item in the correct tab
             def save_and_refresh():
-                #print(f"DEBUG: Executing save_and_refresh for {saved_path}")
                 self.save_persistent_queue([saved_path])
-                #print(f"DEBUG: Saved {saved_path} to database, emitting refresh signal")
                 # Emit a signal to refresh the tab filter after save
                 from PyQt6.QtCore import QTimer as QT2
                 QT2.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
@@ -944,41 +937,31 @@ class QueueManager(QObject):
             self.store.bulk_upsert_async([item_data])
             log(f"_save_single_item saved: {item.path}", level="debug", category="queue")
         except Exception as e:
-            log(f"_save_single_item failed for {item.path}: {e}", level="error", category="queue")
+            log(f"Save failed for {item.path}: {e}", level="error", category="database")
 
     def save_persistent_queue(self, specific_paths: List[str] | None = None):
         """Save queue state to database"""
-        log(f"save_persistent_queue called with {len(specific_paths) if specific_paths else 'all'} items", level="debug", category="queue")
         if self._batch_mode and specific_paths:
-            log(f" In batch mode, adding to batched changes")
             self._batched_changes.update(specific_paths)
             return
-        
-        #print(f"DEBUG: Acquiring mutex for database save")
+
         with QMutexLocker(self.mutex):
-            #print(f"DEBUG: Mutex acquired, preparing items list")
             if specific_paths:
                 items = [self.items[p] for p in specific_paths if p in self.items]
-                log(f"Found {len(items)} items for specific paths", level="debug", category="db")
             else:
                 items = list(self.items.values())
-                #print(f"DEBUG: Saving all {len(items)} items")
-            
+
             queue_data = []
-            log(f"Mutex acquired, building queue data for {len(items)} items", level="debug", category="db")
             for item in items:
                 if item.status in [QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
                                   QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
                                   QUEUE_STATE_SCANNING, QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED]:
                     queue_data.append(self._item_to_dict(item))
-            #print(f"DEBUG: Built queue data with {len(queue_data)} items to save")
-            
+
             try:
-                log(f"DEBUG: About to call store.bulk_upsert_async", level="debug", category="db")
                 self.store.bulk_upsert_async(queue_data)
-                log(f"DEBUG: SQLite: bulk_upsert_async database save completed", level="debug", category="db")
             except Exception as e:
-                log(f"Database save failed: {e}", level="error", category="db")
+                log(f"Database save failed: {e}", level="error", category="database")
                 pass
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
@@ -1144,20 +1127,16 @@ class QueueManager(QObject):
                 tab_name=tab_name,
                 image_host_id=image_host_id
             )
-            log(f"DEBUG: GalleryQueueItem created successfully", level="debug", category="queue")
             self._next_order += 1
             self._next_db_id += 1  # Increment for next gallery
             
             self.items[path] = item
-            log(f"DEBUG: Item added to dict, updating status count...", level="debug", category="queue")
             self._update_status_count("", QUEUE_STATE_VALIDATING)
-            log(f"DEBUG: Scheduling deferred database save...", level="debug", category="database")
             # Use QTimer to defer database save to prevent blocking GUI thread
             from PyQt6.QtCore import QTimer
             self._schedule_debounced_save([path])
             self._inc_version()
         
-        log(f"DEBUG: Adding to scan queue: {path}", category="scanning", level="debug")
         self._scan_queue.put(path)
         self._emit_scan_status()
 
@@ -1216,7 +1195,6 @@ class QueueManager(QObject):
         except Exception as e:
             log(f"Error checking file host triggers on gallery added: {e}", level="error", category="file_hosts")
 
-        #print(f"DEBUG: add_item returning True")
         return True
     
     def start_item(self, path: str) -> bool:

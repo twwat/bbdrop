@@ -475,11 +475,6 @@ class GalleryQueueController(QObject):
         visible in the current tab/filter. Uses batch updates for efficiency.
         """
         mw = self._main_window
-        start_time = time.time()
-        log(f"start_all_uploads() started at {start_time:.6f}",
-            level="debug", category="timing")
-
-        get_items_start = time.time()
 
         # Get items that are currently visible (not filtered out)
         visible_items = []
@@ -501,38 +496,19 @@ class GalleryQueueController(QObject):
                 visible_items.append(item)
 
         items = visible_items
-        get_items_duration = time.time() - get_items_start
-        log(f"Getting visible items took {get_items_duration:.6f}s, "
-            f"found {len(items)} visible items",
-            level="debug", category="timing")
-
         started_count = 0
         started_paths = []
-        item_processing_start = time.time()
 
         # Use batch context to group all database saves into a single transaction
         with mw.queue_manager.batch_updates():
             for item in items:
                 if item.status in ("ready", "paused", "incomplete"):
-                    start_item_begin = time.time()
                     if mw.queue_manager.start_item(item.path):
-                        start_item_duration = time.time() - start_item_begin
-                        log(f"start_item({item.path}) took {start_item_duration:.6f}s",
-                            category="timing", level="debug")
                         started_count += 1
                         started_paths.append(item.path)
-                    else:
-                        start_item_duration = time.time() - start_item_begin
-                        log(f"start_item({item.path}) failed in {start_item_duration:.6f}s",
-                            category="timing", level="debug")
 
-        item_processing_duration = time.time() - item_processing_start
-        log(f"Processing all items took {item_processing_duration:.6f}s",
-            category="timing", level="info")
-
-        ui_update_start = time.time()
         if started_count > 0:
-            log(f"Started {started_count} uploads", level="info")
+            log(f"Started {started_count} uploads", level="info", category="queue")
             # Update all affected items individually instead of rebuilding table
             for path in started_paths:
                 mw._update_specific_gallery_display(path)
@@ -540,13 +516,6 @@ class GalleryQueueController(QObject):
             QTimer.singleShot(0, mw.progress_tracker._update_counts_and_progress)
         else:
             log(f"No items to start", category="queue", level="info")
-
-        ui_update_duration = time.time() - ui_update_start
-        log(f"UI updates took {ui_update_duration:.6f}s", category="timing", level="debug")
-
-        total_duration = time.time() - start_time
-        log(f"start_all_uploads() completed in {total_duration:.6f}s total",
-            category="timing", level="debug")
 
     def pause_all_uploads(self):
         """Reset all queued items back to ready (acts like Cancel for queued).
@@ -644,7 +613,7 @@ class GalleryQueueController(QObject):
                 )
             except Exception as e:
                 log(f"Exception while deleting from database: {e}",
-                    level="error", category="db")
+                    level="error", category="database")
 
             # Update button counts and progress
             QTimer.singleShot(0, mw.progress_tracker._update_counts_and_progress)

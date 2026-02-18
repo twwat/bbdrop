@@ -275,7 +275,7 @@ class RenameWorker(QObject):
                             if self.rename_gallery_with_session(gallery_id, gallery_name):
                                 self._remove_unnamed_gallery(gallery_id)
                 except Exception as e:
-                    log(f"ERROR: Auto-rename error: {e}", level="error", category="renaming")
+                    log(f"Auto-rename error: {e}", level="error", category="renaming")
             else:
                 log("RenameWorker login failed: galleries queued for later renaming", level="debug", category="renaming")
         finally:
@@ -305,7 +305,7 @@ class RenameWorker(QObject):
                             secure=cookie_data.get('secure', False)
                         )
                     except Exception as e:
-                        log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
+                        log(f"Cookie operation failed: {e}", level="debug", category="auth")
 
                 # Test if keyring cookies work
                 test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
@@ -337,7 +337,7 @@ class RenameWorker(QObject):
                                 secure=cookie_data.get('secure', False)  # CRITICAL: Match Firefox cookie's secure flag
                             )
                         except Exception as e:
-                            log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
+                            log(f"Cookie operation failed: {e}", level="debug", category="auth")
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
                         log("RenameWorker authenticated using cookies", category="auth", level="info")
@@ -369,7 +369,7 @@ class RenameWorker(QObject):
                                 secure=cookie_data.get('secure', False)
                             )
                         except Exception as e:
-                            log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
+                            log(f"Cookie operation failed: {e}", level="debug", category="auth")
 
                     # Test if keyring cookies work
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
@@ -401,7 +401,7 @@ class RenameWorker(QObject):
                                 secure=cookie_data.get('secure', False)  # CRITICAL: Match Firefox cookie's secure flag
                             )
                         except Exception as e:
-                            log(f"Cookie operation failed: {e}", level="debug", category="rename_worker")
+                            log(f"Cookie operation failed: {e}", level="debug", category="auth")
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
                         log("RenameWorker authenticated using cookies", category="auth", level="info")
@@ -447,7 +447,7 @@ class RenameWorker(QObject):
                         return False
 
             except Exception as e:
-                log(f"ERROR: RenameWorker login error: {str(e)}", level="error", category="auth")
+                log(f"RenameWorker login error: {e}", level="error", category="auth")
                 if attempt < max_retries - 1:
                     continue
                 else:
@@ -471,7 +471,7 @@ class RenameWorker(QObject):
 
             # Check if we can access the edit page
             if edit_page.status_code == 403:
-                log(f"DEBUG: Authentication expired (HTTP 403)", level="debug", category="renaming")
+                log(f"Authentication expired (HTTP 403)", level="debug", category="renaming")
                 # Try re-auth with rate limiting to prevent auth storms
                 if retry_on_auth_failure and self._attempt_reauth_with_rate_limit():
                     log("Re-authenticated successfully, retrying rename", level="info", category="renaming")
@@ -510,7 +510,7 @@ class RenameWorker(QObject):
                 log(f"Successfully renamed gallery '{gallery_id}' to '{new_name}'", category="renaming", level="info")
                 return True
             else:
-                log(f"DEBUG: Rename failed (HTTP {response.status_code})", level="debug", category="renaming")
+                log(f"Rename failed (HTTP {response.status_code})", level="debug", category="renaming")
                 return False
 
         except Exception as e:

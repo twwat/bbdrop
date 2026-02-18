@@ -379,13 +379,13 @@ class MenuManager(QObject):
             ok = create_windows_context_menu()
             if ok:
                 QMessageBox.information(mw, "Context Menu", "Windows Explorer context menu installed successfully.")
-                log("Installed Windows context menu", category="system", level="debug")
+                log("Installed Windows context menu", category="ui", level="debug")
             else:
                 QMessageBox.warning(mw, "Context Menu", "Failed to install Windows Explorer context menu.")
-                log("Failed to install Windows context menu", category="system", level="debug")
+                log("Failed to install Windows context menu", category="ui", level="debug")
         except Exception as e:
             QMessageBox.warning(mw, "Context Menu", f"Error installing context menu: {e}")
-            log(f"Error installing context menu: {e}", category="system", level="debug")
+            log(f"Error installing context menu: {e}", category="ui", level="debug")
 
     def remove_context_menu(self):
         """Remove Windows Explorer context menu integration."""
@@ -395,14 +395,14 @@ class MenuManager(QObject):
             ok = remove_windows_context_menu()
             if ok:
                 QMessageBox.information(mw, "Context Menu", "Windows Explorer context menu removed successfully.")
-                log("Removed Windows context menu", category="system", level="debug")
+                log("Removed Windows context menu", category="ui", level="debug")
             else:
                 QMessageBox.warning(mw, "Context Menu", "Failed to remove Windows Explorer context menu.")
-                log("Failed to remove Windows context menu", category="system", level="warning")
+                log("Failed to remove Windows context menu", category="ui", level="warning")
         except Exception as e:
             QMessageBox.warning(mw, "Context Menu", f"Error removing context menu: {e}")
             try:
-                log(f"Error removing context menu: {e}", category="system", level="error")
+                log(f"Error removing context menu: {e}", category="ui", level="error")
             except Exception as e:
                 log(f"Exception in menu_manager: {e}", level="error", category="ui")
                 raise

@@ -333,7 +333,7 @@ class TurboImageHostClient(ImageHostClient):
             result['file_size'] = os.path.getsize(image_path)
 
             log(f"Uploaded {filename} to TurboImageHost in {upload_time:.2f}s",
-                level="debug", category="upload")
+                level="debug", category="uploads")
 
             return result
 
@@ -345,10 +345,10 @@ class TurboImageHostClient(ImageHostClient):
             except Exception:
                 pass
             err_code, err_msg = e.args if len(e.args) == 2 else (0, str(e))
-            log(f"TurboImageHost pycurl error {err_code}: {err_msg}", level="error", category="upload")
+            log(f"TurboImageHost pycurl error {err_code}: {err_msg}", level="error", category="uploads")
             raise Exception(f"Upload error (pycurl {err_code}): {err_msg}")
         except Exception as e:
-            log(f"TurboImageHost upload error: {e}", level="error", category="upload")
+            log(f"TurboImageHost upload error: {e}", level="error", category="uploads")
             raise
 
     def _parse_result_page(self, html: str, filename: str) -> Dict[str, Any]:
@@ -472,7 +472,7 @@ class TurboImageHostClient(ImageHostClient):
                 response_code = curl.getinfo(pycurl.RESPONSE_CODE)
                 if response_code != 200:
                     log(f"Batch results fetch attempt {attempt + 1}/{max_retries} failed: status {response_code}",
-                        level="warning", category="upload")
+                        level="warning", category="uploads")
                     if attempt < max_retries - 1:
                         time.sleep(1)
                         continue
@@ -482,19 +482,19 @@ class TurboImageHostClient(ImageHostClient):
                 batch = self._parse_batch_html(html)
 
                 log(f"Batch results: {len(batch['images'])} images, gallery_id={batch['gallery_id']}",
-                    level="debug", category="upload")
+                    level="debug", category="uploads")
                 return batch
 
             except pycurl.error as e:
                 log(f"Batch results fetch attempt {attempt + 1}/{max_retries} failed (pycurl): {e}",
-                    level="warning", category="upload")
+                    level="warning", category="uploads")
                 if attempt < max_retries - 1:
                     time.sleep(1)
                     continue
                 return {'gallery_id': None, 'images': []}
             except Exception as e:
                 log(f"Batch results fetch attempt {attempt + 1}/{max_retries} failed: {e}",
-                    level="warning", category="upload")
+                    level="warning", category="uploads")
                 if attempt < max_retries - 1:
                     time.sleep(1)
                     continue

@@ -104,7 +104,7 @@ class CompletionWorker(QThread):
             except queue.Empty:
                 continue
             except Exception as e:
-                log(f" ERROR: Completion processing error: {e}")
+                log(f"Completion processing error: {e}", level="error", category="fileio")
 
     def _process_completion_background(self, path: str, results: dict, gui_parent):
         """Do the heavy completion processing in background thread"""
@@ -126,9 +126,9 @@ class CompletionWorker(QThread):
                     existing_unnamed = get_unnamed_galleries()  # Returns Dict[str, str]
                     if gallery_id not in existing_unnamed:
                         save_unnamed_gallery(gallery_id, gallery_name)
-                        log(f" [rename] Tracking gallery for auto-rename: {gallery_name}")
+                        log(f"Tracking gallery for auto-rename: {gallery_name}", level="debug", category="renaming")
             except Exception as e:
-                log(f"Exception in main_window: {e}", level="error", category="ui")
+                log(f"Error tracking gallery for rename: {e}", level="error", category="renaming")
                 raise
 
             # Use cached template functions to avoid blocking import
@@ -212,15 +212,14 @@ class CompletionWorker(QThread):
                     if written.get('uploaded'):
                         parts.append(f"folder: {os.path.dirname(list(written['uploaded'].values())[0])}")
                     if parts:
-                        log(f" [fileio] INFO: Saved gallery files to {', '.join(parts)}", category="fileio", level="debug")
+                        log(f"Saved gallery files to {', '.join(parts)}", category="fileio", level="debug")
                 except Exception as e:
-                    log(f"Exception in main_window: {e}", level="error", category="ui")
-                    raise
+                    log(f"Error logging artifact paths: {e}", level="error", category="fileio")
             except Exception as e:
-                log(f" ERROR: Artifact save error: {e}")
+                log(f"Artifact save error: {e}", level="error", category="fileio")
 
         except Exception as e:
-            log(f" ERROR: Background completion processing error: {e}")
+            log(f"Background completion processing error: {e}", level="error", category="fileio")
 
 
 class ArtifactHandler(QObject):
@@ -275,14 +274,11 @@ class ArtifactHandler(QObject):
         Args:
             paths: List of gallery paths to regenerate
         """
-        log(f"DEBUG: regenerate_bbcode_for_gallery_multi called with {len(paths)} paths", category="fileio", level="debug")
-
         # Find the main GUI window
         widget = self._main_window
         while widget and not hasattr(widget, 'queue_manager'):
             widget = widget.parent()
         if not widget:
-            log(f"DEBUG: No widget with queue_manager found", category="fileio", level="debug")
             return
 
         success_count = 0
@@ -290,30 +286,20 @@ class ArtifactHandler(QObject):
 
         for path in paths:
             try:
-                log(f"DEBUG: Processing path: {path}", level="debug", category="fileio")
                 item = widget.queue_manager.get_item(path)
-                if not item:
-                    log(f"DEBUG: No item found for path: {path}", category="fileio", level="debug")
+                if not item or item.status != "completed":
                     continue
 
-                if item.status != "completed":
-                    log(f"DEBUG: Skipping non-completed item: {item.status}", category="fileio", level="debug")
-                    continue
+                # Get template for this gallery
+                template_name = item.template_name if item.template_name else "default"
 
-                # Get template for this gallery (same logic as single version)
-                if item and item.template_name:
-                    template_name = item.template_name
-                else:
-                    template_name = "default"
-
-                # Call the existing regeneration method (force=True since this is explicit user action)
+                # Call the existing regeneration method
                 self.regenerate_gallery_bbcode(path, template_name)
                 success_count += 1
-                log(f"DEBUG: Successfully regenerated BBCode for {path}", category="fileio", level="debug")
 
             except Exception as e:
                 error_count += 1
-                log(f"WARNING: Error regenerating BBCode for {path}: {e}", category="fileio", level="warning")
+                log(f"Error regenerating BBCode for {path}: {e}", category="fileio", level="warning")
 
         # Show summary message
         if success_count > 0 or error_count > 0:
@@ -364,14 +350,13 @@ class ArtifactHandler(QObject):
         avg_width = stats.get('avg_width', 0)
         avg_height = stats.get('avg_height', 0)
         if avg_width == 0 or avg_height == 0:
-            log(f"WARNING: Dimensions are 0 for gallery regeneration. "
+            log(f"Dimensions are 0 for gallery regeneration. "
                 f"JSON path: {json_path}, stats section: {stats}", category="fileio")
 
         # Reuse existing save_gallery_artifacts function with the new template
         # It will handle BBCode generation, file saving, and JSON updates
         # Use current gallery name from database (which could be renamed), not from old JSON
         current_gallery_name = item.name if item.name else json_data['meta']['gallery_name']
-        #print(f"DEBUG regenerate_gallery_bbcode: Using current_gallery_name='{current_gallery_name}' from database, old JSON had='{json_data['meta']['gallery_name']}'")
         results = {
             'gallery_id': json_data['meta']['gallery_id'],
             'gallery_name': current_gallery_name,
