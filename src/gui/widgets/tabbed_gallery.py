@@ -382,10 +382,6 @@ class TabbedGalleryWidget(QWidget):
         if len(self._perf_metrics['tab_switch_times']) > 50:
             self._perf_metrics['tab_switch_times'] = self._perf_metrics['tab_switch_times'][-25:]
 
-        # Log slow tab switches
-        #if switch_time > 16:
-        #    print(f"Slow tab switch from '{old_tab}' to '{tab_name}': {switch_time:.1f}ms")
-
         # Save active tab to settings (excluding "All Tabs")
         # Don't save during tab restoration to prevent overwriting the saved preference
         if self.tab_manager and tab_name != "All Tabs" and not self._restoring_tabs:
@@ -515,55 +511,41 @@ class TabbedGalleryWidget(QWidget):
     
     def _on_galleries_dropped(self, tab_name, gallery_paths):
         """Handle galleries being dropped on a tab"""
-        log(f"_on_galleries_dropped called with tab_name='{tab_name}', {len(gallery_paths)} paths", level="debug")
         if not self.tab_manager or not gallery_paths:
-            log(f"Early return - tab_manager={bool(self.tab_manager)}, gallery_paths={len(gallery_paths) if gallery_paths else 0}", level="debug")
             return
-        
+
         try:
             # Move galleries to the target tab (tab_name is already clean from dropEvent)
             moved_count = self.tab_manager.move_galleries_to_tab(gallery_paths, tab_name)
-            #print(f"DEBUG: move_galleries_to_tab returned moved_count={moved_count}", flush=True)
-            
+
             # Update queue manager's in-memory items to match database
-            #print(f"DEBUG: moved_count={moved_count}, has_queue_manager={hasattr(self, 'queue_manager')}, has_tab_manager={bool(self.tab_manager)}")
             if moved_count > 0 and hasattr(self, 'queue_manager') and self.tab_manager:
                 # Get the tab_id for the target tab (same pattern as right-click path)
                 tab_info = self.tab_manager.get_tab_by_name(tab_name)
                 tab_id = tab_info.id if tab_info else 1
 
-                updated_count = 0
                 for path in gallery_paths:
                     item = self.queue_manager.get_item(path)
                     if item:
-                        old_tab = item.tab_name
                         item.tab_name = tab_name
                         item.tab_id = tab_id
-                        updated_count += 1
-                        # Verify the change stuck
-                        log(f"Drag-drop updated item {path} tab '{old_tab}' -> '{tab_name}' (item.tab_name is now '{item.tab_name}', tab_id={tab_id})", level="debug", category="ui")
-                    else:
-                        log(f" [ui] INFO: No item found for path: {path}")
-                log(f"Updated {updated_count} in-memory items out of {len(gallery_paths)} paths", level="debug")
-                
+
                 # Don't call save_persistent_queue() here - database is already updated
                 # and is the source of truth. QueueManager loads from database on startup.
-            
+
             # Invalidate TabManager's cache for affected tabs
             if moved_count > 0:
                 self.tab_manager.invalidate_tab_cache()  # Invalidate all tabs
-            
+
             # Refresh the current view to reflect changes
             self.refresh_filter()
-            
+
             # Emit signal to notify main GUI about gallery moves
             if moved_count > 0:
                 self.galleries_dropped.emit(tab_name, gallery_paths)
-                
-                # Optional: Show feedback message
                 gallery_word = "gallery" if moved_count == 1 else "galleries"
-                log(f"DRAG-DROP PATH - Moved {moved_count} {gallery_word} to '{tab_name}' tab", level="debug", category="ui")
-                
+                log(f"Moved {moved_count} {gallery_word} to '{tab_name}' tab via drag-drop", level="debug", category="ui")
+
         except Exception as e:
             log(f"Error moving galleries to tab '{tab_name}': {e}", level="error")
             
@@ -580,8 +562,6 @@ class TabbedGalleryWidget(QWidget):
         if not tab_name:
             log(f"No tab name specified for filtering", level="debug")
             return
-        
-        #print(f"Debug: Applying filter for tab: {tab_name}")
         
         start_time = time.time()
         row_count = self.table.rowCount()
@@ -718,7 +698,6 @@ class TabbedGalleryWidget(QWidget):
         try:
             tab_galleries = self.tab_manager.load_tab_galleries(tab_name)
             tab_paths_set = {gallery.get('path') for gallery in tab_galleries if gallery.get('path')}
-            #print(f"Debug: Loaded {len(tab_paths_set)} galleries for tab '{tab_name}' (NO CACHE)")
         except Exception as e:
             log(f"Error loading galleries for tab '{tab_name}': {e}", level="error")
             tab_paths_set = set()
@@ -834,19 +813,15 @@ class TabbedGalleryWidget(QWidget):
         return metrics
     
     def log_performance_summary(self):
-        """Log a performance summary to console"""
+        """Log a performance summary."""
         metrics = self.get_performance_metrics()
-        print("\n=== Tabbed Interface Performance Summary ===")
-        print(f"Uptime: {metrics['uptime_seconds']:.1f}s")
-        print(f"Tab switches: {metrics['tab_switches_total']} ({metrics['tab_switches_per_minute']:.1f}/min)")
-        print(f"Cache hit rate: {metrics['cache_hit_rate']:.1%}")
-        print(f"Avg tab switch time: {metrics['avg_tab_switch_ms']:.1f}ms")
-        print(f"Max tab switch time: {metrics['max_tab_switch_ms']:.1f}ms")
-        print(f"Avg filter time: {metrics['avg_filter_ms']:.1f}ms")
-        print(f"Max filter time: {metrics['max_filter_ms']:.1f}ms")
-        print(f"Emergency fallbacks: {metrics['emergency_fallbacks']}")
-        print(f"Background updates: {metrics['background_updates_processed']}")
-        print("============================================\n")
+        log(f"Tabbed interface performance: uptime={metrics['uptime_seconds']:.1f}s, "
+            f"tab_switches={metrics['tab_switches_total']} ({metrics['tab_switches_per_minute']:.1f}/min), "
+            f"cache_hit_rate={metrics['cache_hit_rate']:.1%}, "
+            f"avg_switch={metrics['avg_tab_switch_ms']:.1f}ms, max_switch={metrics['max_tab_switch_ms']:.1f}ms, "
+            f"avg_filter={metrics['avg_filter_ms']:.1f}ms, max_filter={metrics['max_filter_ms']:.1f}ms, "
+            f"fallbacks={metrics['emergency_fallbacks']}, bg_updates={metrics['background_updates_processed']}",
+            level="debug", category="performance")
     
     def _on_tab_double_clicked(self, index):
         """Handle tab double-click for renaming"""
@@ -1210,12 +1185,12 @@ class TabbedGalleryWidget(QWidget):
         
         # Prevent recursive calls completely - return immediately if called again
         if hasattr(self, '_updating_tooltips') and self._updating_tooltips:
-            log(f"_update_tab_tooltips already running, skipping recursion", level="debug")
+            log(f"_update_tab_tooltips already running, skipping recursion", level="trace")
             return
         
         # Block ALL calls during initialization to prevent infinite loops
         if hasattr(self, '_initializing') and self._initializing:
-            log("Still initializing, skipping _update_tab_tooltips", level="debug")
+            log("Still initializing, skipping _update_tab_tooltips", level="trace")
             return
         
         self._updating_tooltips = True

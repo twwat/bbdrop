@@ -308,8 +308,7 @@ class TableRowManager(QObject):
                     transfer_text = format_binary_rate(current_rate_kib, precision=2)
                 elif final_rate_kib > 0:
                     transfer_text = format_binary_rate(final_rate_kib, precision=2)
-            except Exception as e:
-                log(f"Transfer rate formatting failed: {e}", level="warning", category="ui")
+            except Exception:
                 rate = current_rate_kib if item.status == "uploading" else final_rate_kib
                 transfer_text = mw._format_rate_consistent(rate) if rate > 0 else ""
 
@@ -564,20 +563,16 @@ class TableRowManager(QObject):
         mw.gallery_table.setItem(row, _Col.SIZE, size_item)
 
         # Transfer rate (column 10)
-        if item.status == "uploading" and hasattr(item, 'current_kibps') and item.current_kibps:
-            try:
+        try:
+            if item.status == "uploading" and hasattr(item, 'current_kibps') and item.current_kibps:
                 transfer_text = mw._format_binary_rate(float(item.current_kibps), precision=1)
-            except Exception as e:
-                log(f"Transfer rate formatting failed: {e}", level="warning", category="ui")
-                transfer_text = f"{item.current_kibps:.1f} KiB/s" if item.current_kibps else ""
-        elif hasattr(item, 'final_kibps') and item.final_kibps:
-            try:
+            elif hasattr(item, 'final_kibps') and item.final_kibps:
                 transfer_text = mw._format_binary_rate(float(item.final_kibps), precision=1)
-            except Exception as e:
-                log(f"Final rate formatting failed: {e}", level="warning", category="ui")
-                transfer_text = f"{item.final_kibps:.1f} KiB/s"
-        else:
-            transfer_text = ""
+            else:
+                transfer_text = ""
+        except Exception:
+            rate = float(item.current_kibps or 0) if item.status == "uploading" else float(item.final_kibps or 0)
+            transfer_text = f"{rate:.1f} KiB/s" if rate > 0 else ""
 
         xfer_item = QTableWidgetItem(transfer_text)
         xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -644,8 +639,6 @@ class TableRowManager(QObject):
             progress_callback: Optional callable(current, total) for progress updates
         """
         mw = self._main_window
-        log(f"_initialize_table_from_queue() called", level="debug", category="ui")
-
         # Clear any existing mappings
         mw.path_to_row.clear()
         mw.row_to_path.clear()
@@ -658,8 +651,6 @@ class TableRowManager(QObject):
         # PERFORMANCE OPTIMIZATION: Batch load all file host uploads in ONE query
         try:
             mw._file_host_uploads_cache = mw.queue_manager.store.get_all_file_host_uploads_batch()
-            log(f"Batch loaded file host uploads for {len(mw._file_host_uploads_cache)} galleries",
-                level="debug", category="performance")
         except Exception as e:
             log(f"Failed to batch load file host uploads: {e}", level="warning", category="performance")
             mw._file_host_uploads_cache = {}
@@ -731,7 +722,6 @@ class TableRowManager(QObject):
         actual_rows = min(total_rows, mw.gallery_table.rowCount())
 
         if actual_rows == 0:
-            log("No rows to create widgets for", level="debug", category="ui")
             return
 
         # Get visible rows first for prioritized creation
@@ -747,7 +737,6 @@ class TableRowManager(QObject):
             timer_interval = mw.update_timer.interval()
             if timer_was_active:
                 mw.update_timer.stop()
-                log("Paused update_timer during widget creation", level="debug", category="performance")
 
         # PERFORMANCE: Disable table updates to prevent 1144 repaints
         mw.gallery_table.setUpdatesEnabled(False)
@@ -791,10 +780,6 @@ class TableRowManager(QObject):
             finally:
                 if timer_was_active:
                     mw.update_timer.start(timer_interval)
-                    log("Restored update_timer after widget creation", level="debug", category="performance")
-
-        log(f"Created {actual_rows} deferred widgets ({visible_created} visible + {remaining_created} background)",
-            level="debug", category="ui")
 
     def _create_progress_widget_for_row(self, row: int):
         """Create progress widget for a single row if not already present.
@@ -894,8 +879,6 @@ class TableRowManager(QObject):
         # Batch load file host uploads
         try:
             mw._file_host_uploads_cache = mw.queue_manager.store.get_all_file_host_uploads_batch()
-            log(f"Batch loaded file host uploads for {len(mw._file_host_uploads_cache)} galleries",
-                level="debug", category="performance")
         except Exception as e:
             log(f"Failed to batch load file host uploads: {e}", level="warning", category="performance")
             mw._file_host_uploads_cache = {}
@@ -903,15 +886,12 @@ class TableRowManager(QObject):
         # Disable table updates during bulk insert
         mw.gallery_table.setUpdatesEnabled(False)
         mw.gallery_table.setSortingEnabled(False)
-        log("Table updates disabled for bulk insert", level="debug", category="performance")
 
         # Set row count once
         mw.gallery_table.setRowCount(total_items)
         mw._initializing = True
 
         try:
-            log(f"Processing all {total_items} galleries in single pass...", level="info", category="performance")
-
             for row, item in enumerate(items):
                 mw._set_path_row_mapping(item.path, row)
                 self._populate_table_row_minimal(row, item)
@@ -923,7 +903,6 @@ class TableRowManager(QObject):
         finally:
             mw.gallery_table.setSortingEnabled(True)
             mw.gallery_table.setUpdatesEnabled(True)
-            log("Table updates re-enabled", level="debug", category="performance")
 
         mw._initializing = False
         QTimer.singleShot(50, self._load_galleries_phase2)
@@ -940,16 +919,12 @@ class TableRowManager(QObject):
             return
 
         mw._loading_phase = 2
-        log("Phase 2: Creating widgets for VISIBLE rows only (viewport-based)...", level="info", category="performance")
+        log("Phase 2: Creating widgets for visible rows...", level="info", category="performance")
 
         first_visible, last_visible = self._get_visible_row_range()
         visible_rows = list(range(first_visible, last_visible + 1))
 
-        log(f"Phase 2: Creating widgets for {len(visible_rows)} visible rows (rows {first_visible}-{last_visible})",
-            level="info", category="performance")
-
         mw.gallery_table.setUpdatesEnabled(False)
-        log("Table updates disabled for Phase 2 widget creation", level="debug", category="performance")
 
         total_visible = len(visible_rows)
         batch_size = 10
@@ -971,10 +946,6 @@ class TableRowManager(QObject):
                     row = visible_rows[i]
                     self._create_row_widgets(row)
                     mw._rows_with_widgets.add(row)
-
-                progress_pct = int((end_idx / total_visible) * 100) if total_visible > 0 else 100
-                log(f"Phase 2 progress: {end_idx}/{total_visible} visible rows ({progress_pct}%)",
-                    level="debug", category="performance")
 
                 current_batch += 1
 
@@ -1030,8 +1001,6 @@ class TableRowManager(QObject):
         mw = self._main_window
         if mw._loading_abort:
             return
-
-        log("Finalizing gallery load...", level="info", category="performance")
 
         if hasattr(mw.gallery_table, 'refresh_filter'):
             mw.gallery_table.refresh_filter()
@@ -1138,7 +1107,7 @@ class TableRowManager(QObject):
 
         # Validate row bounds
         if row < 0 or row >= mw.gallery_table.rowCount():
-            log(f"_set_status_cell_icon: Invalid row {row}, table has {mw.gallery_table.rowCount()} rows", level="debug")
+            log(f"_set_status_cell_icon: Invalid row {row}, table has {mw.gallery_table.rowCount()} rows", level="trace")
             return
 
         try:
@@ -1173,7 +1142,7 @@ class TableRowManager(QObject):
 
         # Validate row bounds
         if row < 0 or row >= mw.gallery_table.rowCount():
-            log(f"_set_status_text_cell: Invalid row {row}, table has {mw.gallery_table.rowCount()} rows", level="debug")
+            log(f"_set_status_text_cell: Invalid row {row}, table has {mw.gallery_table.rowCount()} rows", level="trace")
             return
 
         try:

@@ -219,37 +219,27 @@ class GalleryTableWidget(QTableWidget):
                     header_item = self.horizontalHeaderItem(idx)
                     if header_item:
                         header_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        except Exception as e:
-            log(f"Exception in gallery_table: {e}", level="error", category="ui")
-            raise
 
-        # Configure columns from COLUMNS definition
-        header = self.horizontalHeader()
-        header.setStretchLastSection(False)
-        try:
+            # Configure columns from COLUMNS definition
+            header = self.horizontalHeader()
+            header.setStretchLastSection(False)
             # Disable cascading resizes for Excel-like behavior (independent column resizing)
             header.setCascadingSectionResizes(False)
-        except Exception as e:
-            log(f"Exception in gallery_table: {e}", level="error", category="ui")
-            raise
 
-        # Set resize modes from COLUMNS definition
-        for idx, _, _, _, resize_mode, _, _ in self.COLUMNS:
-            mode = getattr(QHeaderView.ResizeMode, resize_mode)
-            header.setSectionResizeMode(idx, mode)
-        try:
+            # Set resize modes from COLUMNS definition
+            for idx, _, _, _, resize_mode, _, _ in self.COLUMNS:
+                mode = getattr(QHeaderView.ResizeMode, resize_mode)
+                header.setSectionResizeMode(idx, mode)
+
             # Allow headers to shrink more
             header.setMinimumSectionSize(24)
-        except Exception as e:
-            log(f"Exception in gallery_table: {e}", level="error", category="ui")
-            raise
-        # Keep widths fixed unless user drags; prevent automatic shuffling
-        try:
+
+            # Keep widths fixed unless user drags; prevent automatic shuffling
             header.setSectionsClickable(True)
             header.setHighlightSections(False)
             header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         except Exception as e:
-            log(f"Exception in gallery_table: {e}", level="error", category="ui")
+            log(f"Exception in gallery_table init (header setup): {e}", level="error", category="ui")
             raise
 
         # Set column widths and visibility from COLUMNS definition
@@ -266,11 +256,6 @@ class GalleryTableWidget(QTableWidget):
         # Apply StatusColorDelegate to Online IMX column to preserve status colors when selected
         status_delegate = StatusColorDelegate(self)
         self.setItemDelegateForColumn(self.COL_ONLINE_IMX, status_delegate)
-
-        # Make Status and Action columns non-resizable
-        header = self.horizontalHeader()
-        #header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Status column
-        #header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)  # Action column
 
         # Enable sorting but start with no sorting (insertion order)
         self.setSortingEnabled(True)
@@ -291,7 +276,7 @@ class GalleryTableWidget(QTableWidget):
             header.setStretchLastSection(False)
             self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         except Exception as e:
-            log(f"Exception in gallery_table: {e}", level="error", category="ui")
+            log(f"Exception in gallery_table init (scroll setup): {e}", level="error", category="ui")
             raise
 
         # Connect vertical scrollbar to refresh icons when scrolling
@@ -604,17 +589,12 @@ class GalleryTableWidget(QTableWidget):
         if tabbed_widget and hasattr(tabbed_widget, 'tab_manager') and tabbed_widget.tab_manager:
             try:
                 moved_count = tabbed_widget.tab_manager.move_galleries_to_tab(gallery_paths, target_tab)
-                log(f"Right-click move_galleries_to_tab returned moved_count={moved_count}", level="debug", category="queue")
 
                 # Update queue manager's in-memory items to match database
-                log(f"Checking conditions - moved_count={moved_count}, has_queue_manager={hasattr(tabbed_widget, 'queue_manager')}, has_tab_manager={bool(tabbed_widget.tab_manager)}", level="debug", category="queue")
-
                 # Find the widget with queue_manager
                 queue_widget = tabbed_widget
                 while queue_widget and not hasattr(queue_widget, 'queue_manager'):
                     queue_widget = queue_widget.parent()
-
-                log(f"Found queue_widget={bool(queue_widget)}, has_queue_manager={hasattr(queue_widget, 'queue_manager') if queue_widget else False}", level="debug", category="queue")
 
                 if moved_count > 0 and queue_widget and hasattr(queue_widget, 'queue_manager') and tabbed_widget.tab_manager:
                     # Get the tab_id for the target tab
@@ -624,32 +604,18 @@ class GalleryTableWidget(QTableWidget):
                     for path in gallery_paths:
                         item = queue_widget.queue_manager.get_item(path)
                         if item:
-                            old_tab = item.tab_name
                             item.tab_name = target_tab
                             item.tab_id = tab_id
-                            log(f"Right-click updated item {path} tab: '{old_tab}' -> '{target_tab}' (item.tab_name is now '{item.tab_name}')", level="debug", category="ui")
 
                 # Invalidate caches and refresh display
                 if moved_count > 0:
-                    #log(f"RIGHT-CLICK calling invalidate_tab_cache() on {type(tabbed_widget).__name__}", level="debug", category="ui")
-
-                    # Check database counts BEFORE cache invalidation
-                    #main_count_before = len(tabbed_widget.tab_manager.load_tab_galleries('Main'))
-                    #target_count_before = len(tabbed_widget.tab_manager.load_tab_galleries(target_tab))
-                    #log(f"RIGHT-CLICK BEFORE invalidate - Main={main_count_before}, {target_tab}={target_count_before}", level="debug", category="ui")
-
                     tabbed_widget.tab_manager.invalidate_tab_cache()
-
-                    # Check database counts AFTER cache invalidation
-                    #main_count_after = len(tabbed_widget.tab_manager.load_tab_galleries('Main'))
-                    #target_count_after = len(tabbed_widget.tab_manager.load_tab_galleries(target_tab))
-
                     tabbed_widget.refresh_filter()
 
                     # Update tab tooltips to reflect new counts
                     if hasattr(tabbed_widget, '_update_tab_tooltips'):
                         tabbed_widget._update_tab_tooltips()
-                    log(f"RIGHT-CLICK PATH - Moved {moved_count} galler{'y' if moved_count == 1 else 'ies'} to '{target_tab}' tab", level="debug", category="ui")
+                    log(f"Moved {moved_count} galler{'y' if moved_count == 1 else 'ies'} to '{target_tab}' tab", level="debug", category="ui")
 
             except Exception as e:
                 log(f"Error moving galleries to tab '{target_tab}': {e}", level="error", category="ui")
@@ -1053,7 +1019,6 @@ class GalleryTableWidget(QTableWidget):
             if not item:
                 log(f"No item found for path: {path}", level="debug")
                 continue
-            #print(f"DEBUG: Item status: {item.status}, gallery_id: {getattr(item, 'gallery_id', 'MISSING')}")
             if item.status != "completed":
                 continue
             # Inline read similar to copy_bbcode_to_clipboard to avoid changing it
@@ -1061,12 +1026,10 @@ class GalleryTableWidget(QTableWidget):
             # Use cached functions or fallbacks
             if hasattr(widget, '_get_central_storage_path'):
                 central_path = widget._get_central_storage_path()
-                #print(f"DEBUG: Using widget._get_central_storage_path: {central_path}")
             else:
                 central_path = os.path.expanduser("~/.bbdrop/galleries")
                 log(f"Using fallback central_path: {central_path}", level="debug")
             if item.gallery_id and (item.name or folder_name):
-                #print(f"DEBUG: Has gallery_id and name, item.name: {getattr(item, 'name', 'MISSING')}")
                 if hasattr(widget, '_build_gallery_filenames'):
                     _, _, bbcode_filename = widget._build_gallery_filenames(item.name or folder_name, item.gallery_id)
                 else:
@@ -1078,18 +1041,13 @@ class GalleryTableWidget(QTableWidget):
             else:
                 central_bbcode = os.path.join(central_path, f"{folder_name}_bbcode.txt")
                 log(f"Using folder_name fallback: {central_bbcode}", level="debug")
-            #print(f"DEBUG: Looking for BBCode file: {central_bbcode}  File exists: {os.path.exists(central_bbcode)}")
-
             # If exact file doesn't exist, try pattern-based lookup
             if not os.path.exists(central_bbcode) and item.gallery_id:
                 import glob
-                #print(f"DEBUG: Exact file not found, trying pattern for gallery_id: {item.gallery_id}")
                 pattern = os.path.join(central_path, f"*_{item.gallery_id}_bbcode.txt")
                 matches = glob.glob(pattern)
-                #print(f"DEBUG: Pattern '{pattern}' found {len(matches)} matches: {matches}")
                 if matches:
                     central_bbcode = matches[0]
-                    #print(f"DEBUG: Using pattern match: {central_bbcode}")
 
             # Move file I/O to background to avoid blocking GUI
             def _read_bbcode_async():

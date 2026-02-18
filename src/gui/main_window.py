@@ -3104,9 +3104,8 @@ class BBDropGUI(QMainWindow):
         
         # Check if row is currently visible for performance optimization
         row = self.path_to_row.get(path)
-        log(f"DEBUG: _update_specific_gallery_display - row={row}, path_to_row has path: {path in self.path_to_row}", level="debug", category="queue")
+        log(f"_update_specific_gallery_display: row={row}, in_mapping={path in self.path_to_row}", level="trace", category="queue")
         if row is not None and 0 <= row < self.gallery_table.rowCount():
-            #log(f"Row {row} is valid, checking update queue", level="debug")
             # Use table update queue for visible rows (includes hidden row filtering)
             if hasattr(self, '_table_update_queue'):
                 self._table_update_queue.queue_update(path, item, 'full')
@@ -3124,14 +3123,9 @@ class BBDropGUI(QMainWindow):
     def _refresh_button_icons(self):
         """Refresh all button icons that use the icon manager for correct theme"""
         try:
-            #import time
-            #t_start = time.time()
-
             icon_mgr = get_icon_manager()
             if not icon_mgr:
                 return
-            #t1 = time.time()
-            #log(f"  get_icon_manager: {(t1-t_start)*1000:.1f}ms", level="debug", category="ui")
 
             # Map of button attributes to their icon keys
             button_icon_map = [
@@ -3150,8 +3144,6 @@ class BBDropGUI(QMainWindow):
                     icon = icon_mgr.get_icon(icon_key)
                     if not icon.isNull():
                         button.setIcon(icon)
-            #t2 = time.time()
-            #log(f"button icons updated: {(t2-t1)*1000:.1f}ms", level="trace", category="ui")
 
             # Refresh renamed column icons - ONLY VISIBLE ROWS for fast theme switching
             table = self.gallery_table
@@ -3165,9 +3157,6 @@ class BBDropGUI(QMainWindow):
             first_visible = table.rowAt(0)
             last_visible = table.rowAt(viewport_height - 1)  # -1 to stay within bounds
 
-            #log(f"  Table has {total_rows} rows, viewport height={viewport_height}px", level="debug", category="ui")
-            #log(f"  rowAt(0)={first_visible}, rowAt({viewport_height-1})={last_visible}", level="debug", category="ui")
-
             # Handle edge cases
             if first_visible == -1:
                 first_visible = 0
@@ -3178,8 +3167,6 @@ class BBDropGUI(QMainWindow):
             # Add buffer rows for smooth scrolling
             first_visible = max(0, first_visible - 5)
             last_visible = min(total_rows - 1, last_visible + 5)
-            #t3 = time.time()
-            #log(f"  Final visible range ({first_visible}-{last_visible}) = {last_visible - first_visible + 1} rows: {(t3-t2)*1000:.1f}ms", level="debug", category="ui")
 
             # Only refresh renamed icons for visible rows (not hidden by tab filtering)
             row_count = 0
@@ -3196,14 +3183,10 @@ class BBDropGUI(QMainWindow):
                     is_renamed = item.toolTip() == "Renamed"
                     self._set_renamed_cell_icon(row, is_renamed)
                     row_count += 1
-            #t4 = time.time()
-            #log(f"  refreshed {row_count} renamed icons: {(t4-t3)*1000:.1f}ms", level="debug", category="ui")
 
             # Set flag so scrolling will refresh newly visible renamed icons
             if hasattr(table, '_needs_full_icon_refresh'):
                 table._needs_full_icon_refresh = True
-
-            #log(f"  TOTAL _refresh_button_icons: {(t4-t_start)*1000:.1f}ms", level="debug", category="ui")
         except Exception as e:
             log(f"ERROR: Exception refreshing button icons: {e}", level="warning", category="ui")
 
@@ -3580,16 +3563,6 @@ class BBDropGUI(QMainWindow):
 
         # Defer only the heavy stats update to avoid blocking
         QTimer.singleShot(50, lambda: self._update_stats_deferred(results))
-    
-    #def _check_and_enable_settings(self):
-    #    """Check if settings should be enabled - deferred to avoid blocking GUI"""
-    #    try:
-    #        remaining = self.queue_manager.get_all_items()
-    #        any_active = any(i.status in ("queued", "uploading") for i in remaining)
-    #        self.settings_group.setEnabled(not any_active)
-    #    except Exception as e:
-    #        log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-    #        raise
     
     def _update_stats_deferred(self, results: dict):
         """Update cumulative stats in background"""
@@ -4977,12 +4950,12 @@ class BBDropGUI(QMainWindow):
         # Get gallery path the same way as context menu - from name column UserRole data
         name_item = table.item(row, GalleryTableWidget.COL_NAME)
         if not name_item:
-            log(f"DEBUG: Mouseclick -> No item found at row {row}, column {GalleryTableWidget.COL_NAME}", category="ui", level="debug")
+            log(f"No item found at row {row}, column {GalleryTableWidget.COL_NAME}", category="ui", level="trace")
             return
 
         gallery_path = name_item.data(Qt.ItemDataRole.UserRole)
         if not gallery_path:
-            log(f"DEBUG: No UserRole data in gallery name column", category="ui", level="debug")
+            log(f"No UserRole data in gallery name column", category="ui", level="trace")
             return
 
         from PyQt6.QtWidgets import QInputDialog
@@ -5074,15 +5047,15 @@ class BBDropGUI(QMainWindow):
             # Get the actual gallery item to check real status
             gallery_item = self.queue_manager.get_item(gallery_path)
             if not gallery_item:
-                log(f"DEBUG: Could not get gallery item from queue manager", category="ui", level="debug")
+                log(f"Could not get gallery item from queue manager", category="ui", level="trace")
                 status = ""
             else:
                 status = gallery_item.status
             
-            log(f"DEBUG: Gallery status from queue manager: '{status}'", category="ui", level="debug")
+            log(f"Gallery status: '{status}'", category="ui", level="trace")
             
             if status == "completed":
-                log(f"DEBUG: Gallery is completed, attempting BBCode regeneration", level="debug", category="fileio")
+                log(f"Gallery is completed, attempting BBCode regeneration", level="trace", category="fileio")
                 # Try to regenerate BBCode from JSON artifact
                 try:
                     self.artifact_handler.regenerate_gallery_bbcode(gallery_path, new_template)
@@ -5090,8 +5063,7 @@ class BBDropGUI(QMainWindow):
                 except Exception as e:
                     log(f"WARNING: Template changed to '{new_template}' for {os.path.basename(gallery_path)}, but BBCode regeneration failed: {e}", category="fileio", level="warning")
             else:
-                log(f"Gallery not completed, skipping BBCode regeneration", category="fileio", level="info")
-                #log(f"Template changed to '{new_template}' for {os.path.basename(gallery_path)}")
+                log(f"Gallery not completed, skipping BBCode regeneration", category="fileio", level="debug")
             
             # Remove combo box and update display
             table.removeCellWidget(row, GalleryTableWidget.COL_TEMPLATE)
@@ -5209,7 +5181,7 @@ class BBDropGUI(QMainWindow):
                 # Get the new value and update the database
                 new_value = item.text() or ''
                 field_type = "ext" if is_ext else "custom"
-                log(f"DEBUG: {field_type.capitalize()} field changed: {field_name}={new_value} for {os.path.basename(path)}", level="debug", category="ui")
+                log(f"{field_type.capitalize()} field changed: {field_name}={new_value} for {os.path.basename(path)}", level="trace", category="ui")
 
                 if self.queue_manager:
                     # Block signals while updating to prevent cascade
@@ -5254,102 +5226,3 @@ def check_single_instance(folder_path=None):
         # Connection failed = no other instance running (expected on first launch)
         return False
 
-
-# ==============================================================================
-# ORPHANED MAIN FUNCTION - COMMENTED OUT
-# ==============================================================================
-# This main() function is never called. The actual application entry is in bbdrop.py.
-# The file host initialization code (lines 7374-7391) has been moved to bbdrop.py
-# around line 2611 where it runs AFTER window.show() but BEFORE app.exec().
-#
-# def main():
-#     """Main function - EMERGENCY PERFORMANCE FIX: Show window first, load in background"""
-#     app = QApplication(sys.argv)
-#     app.setQuitOnLastWindowClosed(True)  # Exit when window closes
-# 
-#     # Show splash screen immediately
-#     print(f"{timestamp()} Loading splash screen")
-#     splash = SplashScreen()
-#     splash.show()
-#     splash.update_status("Initialization sequence")
-# 
-#     # Handle command line arguments
-#     folders_to_add = []
-#     if len(sys.argv) > 1:
-#         # Accept multiple folder args (Explorer passes all selections to %V)
-#         for arg in sys.argv[1:]:
-#             if os.path.isdir(arg):
-#                 folders_to_add.append(arg)
-#         # If another instance is running, forward the first folder (server is single-path)
-#         if folders_to_add and check_single_instance(folders_to_add[0]):
-#             splash.finish_and_hide()
-#             return
-#     else:
-#         # Check for existing instance even when no folders provided
-#         if check_single_instance():
-#             print(f"{timestamp()} WARNING: BBDrop GUI already running, attempting to bring existing instance to front.")
-#             splash.finish_and_hide()
-#             return
-# 
-#     splash.set_status("Qt")
-# 
-#     # Create main window with splash updates
-#     window = BBDropGUI(splash)
-# 
-#     # Add folder from command line if provided
-#     if folders_to_add:
-#         window.add_folders(folders_to_add)
-# 
-#     # EMERGENCY FIX: Hide splash and show main window IMMEDIATELY (< 2 seconds)
-#     splash.finish_and_hide()
-#     window.show()
-#     QApplication.processEvents()  # Force window to render NOW
-# 
-#     print(f"{timestamp()} Window visible - starting background gallery load")
-#     log(f"Window shown, starting background gallery load", level="info", category="performance")
-# 
-#     # EMERGENCY FIX: Load galleries in background with non-blocking progress
-#     # Phase 1: Load critical data (gallery names, status) - batched with yields
-#     # Phase 2: Create expensive widgets in background
-#     QTimer.singleShot(50, lambda: window._load_galleries_phase1())
-# 
-#     # Initialize file host workers AFTER GUI is loaded and displayed
-#     if hasattr(window, "file_host_manager") and window.file_host_manager:
-#         # Count enabled hosts BEFORE starting them (read from INI directly)
-#         enabled_count = 0
-#         for host_id in window.file_host_manager.config_manager.hosts:
-#             if window.file_host_manager.get_file_host_setting(host_id, 'enabled', 'bool', False):
-#                 enabled_count += 1
-# 
-#         window._file_host_startup_expected = enabled_count
-#         if window._file_host_startup_expected == 0:
-#             window._file_host_startup_complete = True
-#             log("No file host workers enabled, skipping startup tracking", level="debug", category="startup")
-#         else:
-#             log(f"Expecting {window._file_host_startup_expected} file host workers to complete spinup",
-#                 level="debug", category="startup")
-# 
-#         # Now start the workers
-#         QTimer.singleShot(100, lambda: window.file_host_manager.init_enabled_hosts())
-# 
-#     try:
-#         sys.exit(app.exec())
-#     except KeyboardInterrupt:
-# 
-#         # Clean shutdown
-#         if hasattr(window, 'worker') and window.worker:
-#             window.worker.stop()
-#         if hasattr(window, 'server') and window.server:
-#             window.server.stop()
-#         if hasattr(window, '_loading_abort'):
-#             window._loading_abort = True  # Stop background loading
-#         app.quit()
-# 
-# 
-# 
-# 
-# 
-# # ComprehensiveSettingsDialog moved to bbdrop_settings.py
-# 
-# # if __name__ == "__main__":
-# #     main()

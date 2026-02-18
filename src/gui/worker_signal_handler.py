@@ -51,11 +51,8 @@ class WorkerSignalHandler(QObject):
 
         mw = self._main_window
         if mw.worker is None or not mw.worker.isRunning():
-            log(f"Creating new UploadWorker (old worker: {id(mw.worker) if mw.worker else 'None'}"
-                f"{(', running: ' and mw.worker.isRunning()) if mw.worker else ''})",
-                level="debug", category="uploads")
             mw.worker = UploadWorker(mw.queue_manager)
-            log(f"New UploadWorker created ({id(mw.worker)})", level="debug", category="uploads")
+            log(f"UploadWorker created ({id(mw.worker)})", level="debug", category="uploads")
             mw.worker.progress_updated.connect(mw.on_progress_updated)
             mw.worker.gallery_started.connect(mw.on_gallery_started)
             mw.worker.gallery_completed.connect(mw.on_gallery_completed)
@@ -75,30 +72,15 @@ class WorkerSignalHandler(QObject):
 
             mw.worker.start()
 
-            pass  # Worker started
-
     def on_queue_item_status_changed(self, path: str, old_status: str, new_status: str):
         """Handle individual queue item status changes."""
         mw = self._main_window
-        item = mw.queue_manager.get_item(path)
-        scan_status = item.scan_complete if item else "NO_ITEM"
-        in_mapping = path in mw.path_to_row
-        log(f"DEBUG: GUI received status change signal: {path} from {old_status} to {new_status}, "
-            f"scan_complete={scan_status}, in_path_to_row={in_mapping}", level="debug", category="ui")
 
         # When an item goes from scanning to ready, just update tab counts
         if old_status == "scanning" and new_status == "ready":
             # Just update the tab counts, don't refresh the filter which hides items
             QTimer.singleShot(150, lambda: mw.gallery_table._update_tab_tooltips()
                              if hasattr(mw.gallery_table, '_update_tab_tooltips') else None)
-
-        # Debug the item data before updating table
-        item = mw.queue_manager.get_item(path)
-        if item:
-            log(f"DEBUG: Item data: total_images={getattr(item, 'total_images', 'NOT SET')}, "
-                f"progress={getattr(item, 'progress', 'NOT SET')}, "
-                f"status={getattr(item, 'status', 'NOT SET')}, "
-                f"added_time={getattr(item, 'added_time', 'NOT SET')}", level="debug", category="ui")
 
         # Update table display for this specific item
         mw._update_specific_gallery_display(path)
@@ -171,8 +153,7 @@ class WorkerSignalHandler(QObject):
 
             status = f"{host_name}: {percent}% ({uploaded_str} / {total_str})"
 
-            # Log detailed progress at debug level
-            log(f"File host upload progress: {status}", level="debug", category="file_hosts")
+            log(f"File host upload progress: {status}", level="trace", category="file_hosts")
 
             # Progress updates are frequent, so we avoid full refresh
             # The file host widgets will poll status and update themselves
@@ -245,12 +226,8 @@ class WorkerSignalHandler(QObject):
             left: Free storage in bytes
         """
         # Storage updates are handled by FileHostsSettingsWidget if settings dialog is open
-        # Main window doesn't need to display storage info
-        log(
-            f"[Main Window] Storage updated for {host_id}: {left}/{total} bytes",
-            level="debug",
-            category="file_hosts"
-        )
+        log(f"Storage updated for {host_id}: {left}/{total} bytes",
+            level="trace", category="file_hosts")
 
     def on_file_host_test_completed(self, host_id: str, results: dict):
         """Handle file host test completion from worker.
