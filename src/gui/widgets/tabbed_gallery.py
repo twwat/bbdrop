@@ -585,7 +585,7 @@ class TabbedGalleryWidget(QWidget):
         
         start_time = time.time()
         row_count = self.table.rowCount()
-        log(f"_apply_filter: rowCount() returned {row_count}", level="trace", category="ui")
+        pass  # Applying filter
         
         if row_count == 0:
             return
@@ -653,7 +653,7 @@ class TabbedGalleryWidget(QWidget):
                                 if item.tab_name == tab_name:
                                     should_show = True
                         else:
-                            log(f"_apply_filter: parent_window has no queue_manager attribute", level="warning")
+                            pass  # queue_manager not ready yet
                     
                 visibility_map[row] = should_show
                 self.table.setRowHidden(row, not should_show)

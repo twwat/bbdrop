@@ -2634,11 +2634,7 @@ class WorkerStatusWidget(QWidget):
         # Load visible column IDs in saved order
         visible_ids = settings.value("worker_status/visible_columns", None, type=list)
 
-        # Debug logging
-        import traceback
-        caller = traceback.extract_stack()[-2]
-        log(f"Loading column settings from QSettings (called from {caller.filename}:{caller.lineno} in {caller.name})", level="debug", category="ui")
-        log(f"Found saved columns: {', '.join(visible_ids) if visible_ids else 'none'}", level="debug", category="ui")
+        pass  # Column settings loaded
 
         # Migrate old settings: if "status" column exists but "status_text" doesn't, add it
         if visible_ids and 'status' in visible_ids and 'status_text' not in visible_ids:
@@ -2652,7 +2648,7 @@ class WorkerStatusWidget(QWidget):
             for col_id in visible_ids:
                 if col_id in AVAILABLE_COLUMNS:
                     self._active_columns.append(AVAILABLE_COLUMNS[col_id])
-            log(f"Restored {len(self._active_columns)} columns from settings", level="debug", category="ui")
+            pass  # Columns restored
         else:
             # Use defaults - include BOTH core and metric columns
             self._active_columns = [col for col in CORE_COLUMNS + METRIC_COLUMNS if col.default_visible]

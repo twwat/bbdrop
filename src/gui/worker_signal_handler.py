@@ -75,7 +75,7 @@ class WorkerSignalHandler(QObject):
 
             mw.worker.start()
 
-            log(f"DEBUG: Worker.isRunning(): {mw.worker.isRunning()}", level="debug")
+            pass  # Worker started
 
     def on_queue_item_status_changed(self, path: str, old_status: str, new_status: str):
         """Handle individual queue item status changes."""
