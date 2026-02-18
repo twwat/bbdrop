@@ -1572,8 +1572,17 @@ class BBDropGUI(QMainWindow):
         qs_grid.setVerticalSpacing(2)
         qs_grid.setColumnStretch(1, 1)
 
-        # Row 0: Thumb Size — combo for fixed-size hosts (IMX), spinbox for variable (Turbo)
-        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Thumb Size</span>:"), 0, 0)
+        # Row 0: Image Host
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Image Host</span>:"), 0, 0)
+        self.image_host_combo = QComboBox()
+        self.image_host_combo.setToolTip("Default image host for new galleries")
+        self._populate_image_host_combo()
+        self.image_host_combo.currentIndexChanged.connect(self.on_setting_changed)
+        self.image_host_combo.currentIndexChanged.connect(self._on_image_host_changed)
+        qs_grid.addWidget(self.image_host_combo, 0, 1)
+
+        # Row 1: Thumb Size — combo for fixed-size hosts (IMX), spinbox for variable (Turbo)
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Thumb Size</span>:"), 1, 0)
         self.thumbnail_size_combo = QComboBox()
         self.thumbnail_size_combo.addItems(["100x100", "180x180", "250x250", "300x300", "150x150"])
         self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
@@ -1591,18 +1600,18 @@ class BBDropGUI(QMainWindow):
         _thumb_lay.setSpacing(0)
         _thumb_lay.addWidget(self.thumbnail_size_combo)
         _thumb_lay.addWidget(self._thumb_size_spinbox)
-        qs_grid.addWidget(_thumb_container, 0, 1)
+        qs_grid.addWidget(_thumb_container, 1, 1)
 
-        # Row 1: Thumb Format
-        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Thumb Format</span>:"), 1, 0)
+        # Row 2: Thumb Format
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Thumb Format</span>:"), 2, 0)
         self.thumbnail_format_combo = QComboBox()
         self.thumbnail_format_combo.addItems(["Fixed width", "Proportional", "Square", "Fixed height"])
         self.thumbnail_format_combo.setCurrentIndex(defaults.get('thumbnail_format', 2) - 1)
         self.thumbnail_format_combo.currentIndexChanged.connect(self.on_setting_changed)
-        qs_grid.addWidget(self.thumbnail_format_combo, 1, 1)
+        qs_grid.addWidget(self.thumbnail_format_combo, 2, 1)
 
-        # Row 2: Template
-        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Template</span>:"), 2, 0)
+        # Row 3: Template
+        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Template</span>:"), 3, 0)
         self.template_combo = QComboBox()
         self.template_combo.setToolTip("Template to use for generating bbcode files")
         from bbdrop import load_templates
@@ -1614,7 +1623,7 @@ class BBDropGUI(QMainWindow):
         if template_index >= 0:
             self.template_combo.setCurrentIndex(template_index)
         self.template_combo.currentIndexChanged.connect(self.on_setting_changed)
-        qs_grid.addWidget(self.template_combo, 2, 1)
+        qs_grid.addWidget(self.template_combo, 3, 1)
 
         # Watch template directory for changes and refresh dropdown automatically
         try:
@@ -1625,15 +1634,6 @@ class BBDropGUI(QMainWindow):
         except Exception as e:
             log(f"Template watcher init failed: {e}", level="warning", category="startup")
             self._template_watcher = None
-
-        # Row 3: Image Host
-        qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Image Host</span>:"), 3, 0)
-        self.image_host_combo = QComboBox()
-        self.image_host_combo.setToolTip("Default image host for new galleries")
-        self._populate_image_host_combo()
-        self.image_host_combo.currentIndexChanged.connect(self.on_setting_changed)
-        self.image_host_combo.currentIndexChanged.connect(self._on_image_host_changed)
-        qs_grid.addWidget(self.image_host_combo, 3, 1)
 
         # Apply initial thumb control state based on default host
         self._on_image_host_changed()
