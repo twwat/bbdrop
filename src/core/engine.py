@@ -248,7 +248,6 @@ class UploadEngine:
 
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
-            log(f"Uploading first image to create gallery: {first_file}", level="info", category="uploads")
             first_upload_start = time.time()
             first_response = self.uploader.upload_image(
                 first_image_path,
@@ -267,15 +266,14 @@ class UploadEngine:
             try:
                 first_url = first_response['data'].get('image_url', '')
                 log(f"Uploaded (in {first_upload_duration:.3f}s): {first_image_path}  ({first_url})", category="uploads:file")
-            except Exception as e:
-                log(f"Failed to log first image URL: {e}", level="warning", category="uploads")
+            except Exception:
+                pass
             # First image uploaded - set counters and files_to_upload
             files_to_upload = image_files[1:]  # Remaining files after first
             initial_completed = 1
             try:
                 initial_uploaded_size = os.path.getsize(first_image_path)
-            except Exception as e:
-                log(f"Failed to get first image size: {e}", level="warning", category="uploads")
+            except Exception:
                 initial_uploaded_size = 0
             # Report the first image upload so GUI resume/merge includes it
             if on_image_uploaded:
@@ -287,8 +285,7 @@ class UploadEngine:
         if self.uploader.supports_gallery_rename() and gallery_name and gallery_id and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
             try:
                 last_method = getattr(self.uploader, 'last_login_method', None)
-            except Exception as e:
-                log(f"Failed to get login method: {e}", level="debug", category="uploads")
+            except Exception:
                 last_method = None
 
             if self.rename_worker:
@@ -381,14 +378,13 @@ class UploadEngine:
                             duration_str = f"{upload_duration:.3f}" if upload_duration is not None else "?.???"
                             url_suffix = f"  ({img_url})" if img_url else ""
                             log(f"Uploaded (in {duration_str}s): {image_path}{url_suffix}", category="uploads:file")
-                        except Exception as e:
-                            log(f"Failed to log upload URL: {e}", level="warning", category="uploads")
+                        except Exception:
+                            pass
                         # Per-image callback for resume-aware consumers
                         if on_image_uploaded:
                             try:
                                 size_bytes = os.path.getsize(os.path.join(folder_path, image_file))
-                            except Exception as e:
-                                log(f"Failed to get file size for {image_file}: {e}", level="warning", category="uploads")
+                            except Exception:
                                 size_bytes = 0
                             on_image_uploaded(image_file, image_data, size_bytes)
                     else:
@@ -426,18 +422,17 @@ class UploadEngine:
                             if on_image_uploaded:
                                 try:
                                     size_bytes = os.path.getsize(os.path.join(folder_path, image_file))
-                                except Exception as e:
-                                    log(f"Failed to get file size for {image_file}: {e}", level="warning", category="uploads")
+                                except Exception:
                                     size_bytes = 0
                                 on_image_uploaded(image_file, image_data, size_bytes)
                             # Per-image success log (retry path)
                             try:
                                 img_url = image_data.get('image_url', '')
                                 duration_str = f"{upload_duration:.3f}" if upload_duration is not None else "?.???"
-                                log(f"Uploaded (in {duration_str}s): {image_path}  ({img_url})", category="uploads:file")
-                            except Exception as e:
-                                log(f"Failed to log retry URL: {e}", level="warning", category="uploads")
-                            log(f"[uploads] Retry successful: {image_file}", level="info", category="uploads")
+                                url_suffix = f"  ({img_url})" if img_url else ""
+                                log(f"[uploads] Retry successful (in {duration_str}s): {image_path}{url_suffix}", level="info", category="uploads:file")
+                            except Exception:
+                                pass
                         else:
                             retry_failed.append((image_file, error or "unknown error"))
                             log(f"[uploads] ✗ Retry failed: {image_file} - {error or 'unknown error'}", level="warning", category="uploads")
@@ -490,8 +485,7 @@ class UploadEngine:
             uploaded_size = initial_uploaded_size + sum(
                 os.path.getsize(os.path.join(folder_path, img_file)) for img_file, _ in uploaded_images
             )
-        except Exception as e:
-            log(f"Failed to calculate uploaded size: {e}", level="warning", category="uploads")
+        except Exception:
             uploaded_size = 0
         transfer_speed = uploaded_size / upload_time if upload_time > 0 else 0
 
@@ -508,7 +502,7 @@ class UploadEngine:
         else:
             # No precalculated dimensions - this should not happen in GUI mode
             # Dimensions should have been calculated during initial scan
-            log("WARNING: No precalculated dimensions provided to upload engine!", level="warning", category="uploads")
+            log("No precalculated dimensions provided to upload engine", level="error", category="uploads")
             avg_width = avg_height = max_width = max_height = min_width = min_height = 0
 
         # Attach filename and optional dims/sizes to each image entry for richer JSON (CLI parity)
@@ -516,15 +510,13 @@ class UploadEngine:
         for idx, (fname, data) in enumerate(uploaded_images):
             try:
                 size_bytes = os.path.getsize(os.path.join(folder_path, fname))
-            except Exception as e:
-                log(f"Failed to get size for {fname}: {e}", level="debug", category="uploads")
+            except Exception:
                 size_bytes = 0
             w, h = dims_by_name.get(fname, (0, 0))
             try:
                 base, ext = os.path.splitext(fname)
                 fname_norm = base + ext.lower()
-            except Exception as e:
-                log(f"Failed to normalize filename {fname}: {e}", level="debug", category="uploads")
+            except Exception:
                 fname_norm = fname
             # Ensure thumb_url if missing — use uploader's get_thumbnail_url
             t = data.get('thumb_url')
@@ -538,8 +530,8 @@ class UploadEngine:
                         _, ext = os.path.splitext(fname_norm)
                         ext_use = (ext.lower() or '.jpg') if ext else '.jpg'
                         t = self.uploader.get_thumbnail_url(img_id, ext_use)
-                except Exception as e:
-                    log(f"Failed to generate thumbnail URL: {e}", level="debug", category="uploads")
+                except Exception:
+                    pass
             data.setdefault('thumb_url', t)
             data.setdefault('original_filename', fname_norm)
             data.setdefault('width', w)
@@ -552,15 +544,13 @@ class UploadEngine:
                 fname = all_image_files[0]
                 try:
                     size_bytes = os.path.getsize(os.path.join(folder_path, fname))
-                except Exception as e:
-                    log(f"Failed to get preseed size: {e}", level="debug", category="uploads")
+                except Exception:
                     size_bytes = 0
                 w, h = dims_by_name.get(fname, (0, 0))
                 try:
                     base, ext = os.path.splitext(fname)
                     fname_norm = base + (ext.lower() if ext else '')
-                except Exception as e:
-                    log(f"Failed to normalize preseed filename: {e}", level="debug", category="uploads")
+                except Exception:
                     fname_norm = fname
                 t = first_data.get('thumb_url')
                 first_image_url = first_data.get('image_url')
@@ -572,15 +562,15 @@ class UploadEngine:
                             _, ext = os.path.splitext(fname_norm)
                             ext_use = (ext.lower() or '.jpg') if ext else '.jpg'
                             t = self.uploader.get_thumbnail_url(img_id, ext_use)
-                    except Exception as e:
-                        log(f"Failed to generate preseed thumbnail URL: {e}", level="debug", category="uploads")
+                    except Exception:
+                        pass
                 first_data.setdefault('thumb_url', t)
                 first_data.setdefault('original_filename', fname_norm)
                 first_data.setdefault('width', w)
                 first_data.setdefault('height', h)
                 first_data.setdefault('size_bytes', size_bytes)
-        except Exception as e:
-            log(f"Failed to enrich preseed image: {e}", level="warning", category="uploads")
+        except Exception:
+            pass
 
         results.update({
             'gallery_id': gallery_id,
@@ -618,8 +608,7 @@ class UploadEngine:
                 # Include gallery name and link for clarity
                 try:
                     gname = results.get('gallery_name') or gallery_name
-                except Exception as e:
-                    log(f"Failed to get gallery name from results: {e}", level="debug", category="uploads")
+                except Exception:
                     gname = gallery_name
 
                 # Calculate metrics
@@ -634,7 +623,7 @@ class UploadEngine:
                     level="info",
                     category="uploads:gallery"
                 )
-        except Exception as e:
-            log(f"Failed to log upload completion: {e}", level="error", category="uploads")
+        except Exception:
+            pass
 
         return results
