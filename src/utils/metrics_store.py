@@ -173,7 +173,6 @@ class MetricsStore:
             # Cap any existing unrealistic peak values from corrupted data
             self._cap_unrealistic_peaks()
 
-            logger.debug(f"MetricsStore initialized with database at {self._db_path}")
 
     def _get_peak_validator(self, host_name: str) -> PeakSpeedValidator:
         """Get or create peak speed validator for a host."""
@@ -262,7 +261,6 @@ class MetricsStore:
                     CREATE INDEX IF NOT EXISTS idx_host_metrics_host_period
                         ON host_metrics(host_name, period_type, period_date);
                 """)
-                logger.debug("Metrics database schema ensured")
 
                 # Migrate: add peak_speed_date column if missing (existing DBs)
                 try:
@@ -789,8 +787,6 @@ class MetricsStore:
 
     def _write_worker(self) -> None:
         """Background worker that processes buffered writes."""
-        logger.debug("Metrics write worker started")
-
         while self._running:
             try:
                 # Wait for items with timeout
@@ -820,7 +816,6 @@ class MetricsStore:
             except Exception as e:
                 logger.error(f"Error processing remaining writes: {e}")
 
-        logger.debug("Metrics write worker stopped")
 
     def _process_write(self, item: Dict[str, Any]) -> None:
         """Process a single write item from the queue."""
@@ -904,9 +899,7 @@ class MetricsStore:
 
         Blocks until all queued writes are processed.
         """
-        logger.debug("Flushing metrics store...")
         self._write_queue.join()
-        logger.debug("Metrics store flushed")
 
     def reset_session(self) -> None:
         """
@@ -919,7 +912,6 @@ class MetricsStore:
             self._today_cache.clear()
             self._all_time_cache.clear()
 
-        logger.debug("Session metrics reset")
 
     def close(self) -> None:
         """
@@ -931,7 +923,6 @@ class MetricsStore:
         if not self._running:
             return
 
-        logger.debug("Closing MetricsStore...")
 
         self._running = False
         self._write_queue.put(None)  # Signal worker to stop
@@ -946,7 +937,6 @@ class MetricsStore:
             except Exception as e:
                 logger.error(f"Error waiting for metrics worker thread: {e}")
 
-        logger.debug("MetricsStore closed")
 
     def get_daily_breakdown(self, host_name: str, days: int = 7) -> list[Dict[str, Any]]:
         """

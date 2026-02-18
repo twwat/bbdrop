@@ -35,8 +35,6 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
 
     try:
         uploads = queue_store.get_file_host_uploads(gallery_path)
-        log(f"Found {len(uploads)} file host upload records for gallery",
-            level="debug", category="template")
 
         config_manager = get_config_manager()
 
@@ -87,9 +85,6 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
                 else:
                     # No format - use raw URL
                     formatted_links.append(download_url)
-
-        log(f"Filtered to {len(formatted_links)} completed uploads with valid URLs",
-            level="debug", category="template")
 
         return "\n".join(formatted_links) if formatted_links else ""
 

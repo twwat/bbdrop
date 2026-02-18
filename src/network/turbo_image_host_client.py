@@ -610,4 +610,4 @@ class TurboImageHostClient(ImageHostClient):
     def clear_api_cookies(self):
         """Clear batch state for new gallery uploads. Preserve session cookie."""
         self._batch_upload_id = None
-        log("TurboImageHost batch state cleared", level="debug", category="network")
+        log("TurboImageHost batch state cleared", level="trace", category="network")

@@ -272,7 +272,6 @@ class PeriodicHealthChecker:
 
         self._running = True
         self._task = asyncio.create_task(self._check_loop())
-        logger.info(f"Started periodic health checker (interval: {self.interval_seconds}s)")
 
     async def stop(self) -> None:
         """Stop periodic health checking."""
@@ -284,7 +283,6 @@ class PeriodicHealthChecker:
             except asyncio.CancelledError:
                 pass
             self._task = None
-        logger.info("Stopped periodic health checker")
 
     @property
     def is_running(self) -> bool:
@@ -297,7 +295,7 @@ class PeriodicHealthChecker:
             try:
                 profiles = self.get_profiles()
                 if profiles:
-                    logger.debug(f"Running periodic health check on {len(profiles)} proxies")
+                    logger.log(5, f"Running periodic health check on {len(profiles)} proxies")
                     await self.monitor.check_all(profiles)
 
             except Exception as e:

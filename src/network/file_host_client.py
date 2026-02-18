@@ -344,7 +344,7 @@ class FileHostClient:
                         else:
                             captcha_code = captcha_raw
                         
-                        if self._log_callback: self._log_callback(f"Successfully solved CAPTCHA: {captcha_raw} -> {captcha_code} (sorted by 'padding-left' CSS position)", "info")
+                        if self._log_callback: self._log_callback(f"Solved CAPTCHA: {captcha_raw} -> {captcha_code}", "info")
                     else:
                         if self._log_callback: self._log_callback(f"WARNING: Unable to solve matched CAPTCHA, upload may fail...", "warning")
                 else:
@@ -959,8 +959,6 @@ class FileHostClient:
         init_url = self.config.upload_init_url
         if not init_url:
             raise ValueError("upload_init_url not configured for multi-step upload")
-
-        if self._log_callback: self._log_callback(f"Initializing upload of {file_path.name}...", "debug")
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)

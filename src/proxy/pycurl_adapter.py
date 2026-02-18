@@ -69,10 +69,6 @@ class PyCurlProxyAdapter:
 
             if proxy.username and password:
                 curl.setopt(pycurl.PROXYUSERPWD, f"{proxy.username}:{password}")
-                log(f"Proxy auth configured", level="debug", category="proxy")
-
-            log(f"Proxy configured: {proxy.proxy_type.value}://{proxy.host}:{proxy.port}",
-                level="debug", category="proxy")
 
         except pycurl.error as e:
             log(f"Failed to configure proxy: {e}", level="error", category="proxy")
