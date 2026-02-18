@@ -47,10 +47,8 @@ class HooksExecutor:
         for attempt in range(max_retries):
             try:
                 os.remove(file_path)
-                if attempt > 0:
-                    log(f"Successfully removed temporary file on attempt {attempt + 1}: {file_path}", level="debug", category="hooks")
-                else:
-                    log(f"Removed temporary file: {file_path}", level="debug", category="hooks")
+                suffix = f" (after {attempt + 1} attempts)" if attempt > 0 else ""
+                log(f"Removed temporary file: {file_path}{suffix}", level="debug", category="hooks")
                 return True
             except PermissionError as e:
                 # File is locked by another process
@@ -351,7 +349,6 @@ class HooksExecutor:
             for ext_field, json_key in hook_key_mapping.items():
                 if ext_field not in merged_key_mapping and json_key.strip():
                     merged_key_mapping[ext_field] = json_key.strip()
-                    log(f"Added key mapping from {hook_type}: {json_key} -> {ext_field}", level="debug", category="hooks")
 
         # Check if any mappings use positional placeholders (URL[n], PATH[n])
         needs_detection = any(
@@ -363,24 +360,21 @@ class HooksExecutor:
         if needs_detection and raw_stdouts:
             combined_stdout = '\n'.join(raw_stdouts)
             detected_values = detect_stdout_values(combined_stdout)
-            log(f"Detected {len(detected_values)} values from plain-text stdout", level="debug", category="hooks")
 
         # Map keys to ext1-4
         for ext_field, mapping_key in merged_key_mapping.items():
             # Try 1: JSON key lookup (existing behavior)
             if mapping_key in results:
                 ext_fields[ext_field] = str(results[mapping_key])
-                log(f"Mapped JSON key '{mapping_key}' -> {ext_field}: {results[mapping_key]}", level="debug", category="hooks")
             # Try 2: Positional placeholder resolution (URL[1], PATH[-1], etc.)
             elif detected_values is not None:
                 resolved = resolve_placeholder(mapping_key, detected_values)
                 if resolved:
                     ext_fields[ext_field] = resolved
-                    log(f"Resolved placeholder '{mapping_key}' -> {ext_field}: {resolved}", level="debug", category="hooks")
-                else:
-                    log(f"Placeholder '{mapping_key}' could not be resolved for {ext_field}", level="debug", category="hooks")
-            else:
-                log(f"Key '{mapping_key}' not found in hook results for {ext_field}", level="debug", category="hooks")
+            # else: key not found in results or placeholders
+
+        if ext_fields:
+            log(f"Extracted {len(ext_fields)} fields from hook output: {list(ext_fields.keys())}", level="debug", category="hooks")
 
         # Pass through cover_path and cover_url from raw JSON results
         # These are handled specially by upload_workers (not via key mapping)
@@ -389,7 +383,6 @@ class HooksExecutor:
                 ext_fields[cover_key] = str(results[cover_key])
                 log(f"Hook returned {cover_key}: {results[cover_key]}", level="info", category="hooks")
 
-        log(f"Hooks execution complete. Extracted fields: {ext_fields}", level="debug", category="hooks")
         return ext_fields
 
 

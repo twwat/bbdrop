@@ -364,7 +364,7 @@ class FileHostWorker(QThread):
 
         for pattern in auth_error_patterns:
             if pattern in error_lower:
-                self._log(f"Auth error detected (no retry): '{pattern}' in '{error_msg}'", level="debug")
+                self._log(f"Error classified as auth (no retry): {error_msg[:100]}", level="debug")
                 return False
 
         # Check for pycurl error codes (network errors)
@@ -373,7 +373,7 @@ class FileHostWorker(QThread):
 
         for code in network_pycurl_codes:
             if f"pycurl error {code}" in error_lower or f"({code})" in error_msg:
-                self._log(f"Network pycurl code {code} detected (retry allowed)", level="debug")
+                self._log(f"Error classified as network/pycurl code {code} (retry allowed): {error_msg[:100]}", level="debug")
                 return True
 
         # Network error string patterns - RETRY
@@ -394,11 +394,11 @@ class FileHostWorker(QThread):
 
         for pattern in network_error_patterns:
             if pattern in error_lower:
-                self._log(f"Network error detected (retry allowed): '{pattern}' in '{error_msg}'", level="debug")
+                self._log(f"Error classified as network (retry allowed): {error_msg[:100]}", level="debug")
                 return True
 
         # Default: fail fast on unknown errors to avoid masking new auth error patterns
-        self._log(f"Unknown spinup error type, failing fast (no retry): {error_msg[:100]}", level="warning")
+        self._log(f"Error classified as unknown (no retry): {error_msg[:100]}", level="warning")
         return False
 
     def _get_spinup_retry_delay(self, retry_num: int) -> int:
@@ -586,7 +586,7 @@ class FileHostWorker(QThread):
                     if str(gallery_path) != str(folder_path):
                         error_msg += f" (tried WSL2 path: {folder_path})"
 
-                    self._log(f"FAIL FAST: {error_msg}", level="error")
+                    self._log(f"FAIL FAST: {error_msg}", level="warning")
                     # CRITICAL: Emit signal FIRST before DB write (fail-fast path)
                     self.upload_failed.emit(db_id, host_name, error_msg)
                     self.queue_store.update_file_host_upload(
@@ -599,7 +599,7 @@ class FileHostWorker(QThread):
 
                 if not folder_path.is_dir():
                     error_msg = f"Path is not a directory: {gallery_path}"
-                    self._log(f"FAIL FAST: {error_msg}", level="error")
+                    self._log(f"FAIL FAST: {error_msg}", level="warning")
                     # CRITICAL: Emit signal FIRST before DB write (fail-fast path)
                     self.upload_failed.emit(db_id, host_name, error_msg)
                     self.queue_store.update_file_host_upload(
@@ -1064,27 +1064,27 @@ class FileHostWorker(QThread):
             # Check if storage was cached during login (saves an API call!)
             cached_storage = client.get_cached_storage_from_login()
             if cached_storage and cached_storage.get('storage_total') and cached_storage.get('storage_left'):
-                self._log(f"Cached storage from login: {json.dumps(cached_storage, indent=2).replace(chr(10), '\n')}", level="debug")
+                self._log(f"Cached storage from login: {json.dumps(cached_storage, indent=2).replace(chr(10), '\n')}", level="trace")
 
                 total = int(cached_storage.get('storage_total') or 0)
                 left = int(cached_storage.get('storage_left') or 0)
                 self._log(
                     f"Got storage from login response for {self.host_id} (no /info call needed!)",
-                    level="debug"
+                    level="trace"
                 )
             else:
                 # No storage in login - make separate /info call
                 user_info = client.get_user_info()
 
                 user_info_formatted = json.dumps(user_info, indent=2).replace(chr(10), '\n') if user_info else "None"
-                self._log(f"Fetched from /info call: {user_info_formatted}", level="debug")
+                self._log(f"Fetched from /info call: {user_info_formatted}", level="trace")
 
                 total_raw = user_info.get('storage_total')
                 left_raw = user_info.get('storage_left')
 
                 self._log(
                     f"Extracted storage_total={total_raw}, storage_left={left_raw}",
-                    level="debug"
+                    level="trace"
                 )
 
                 # Validate before emitting - DO NOT overwrite good data with bad data
@@ -1185,7 +1185,7 @@ class FileHostWorker(QThread):
                         left = int(storage_left or 0)
                         self._save_storage_cache(total, left)
                         self.storage_updated.emit(self.host_id, total, left)
-                        self._log(f"Cached storage during test: {left}/{total} bytes", level="debug")
+                        self._log(f"Cached storage during test: {left}/{total} bytes", level="trace")
                     except (ValueError, TypeError) as e:
                         self._log(f"Failed to parse storage during test: {e}", level="error")
                 else:

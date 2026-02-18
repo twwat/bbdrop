@@ -112,7 +112,7 @@ class FileHostWorkerManager(QObject):
         """
         if host_id in self.workers:
             log(
-                f"[File Host Manager] {host_id} Worker already running",
+                f"{host_id} Worker already running",
                 level="debug",
                 category="file_hosts"
             )
@@ -121,7 +121,7 @@ class FileHostWorkerManager(QObject):
         with self._pending_lock:
             if host_id in self.pending_workers:
                 log(
-                    f"[File Host Manager] {host_id} Worker already spinning up",
+                    f"{host_id} Worker already spinning up",
                     level="debug",
                     category="file_hosts"
                 )
@@ -148,14 +148,14 @@ class FileHostWorkerManager(QObject):
         worker = self.workers.pop(host_id, None)
         if not worker:
             log(
-                f"[File Host Manager] Worker not found: No worker found for {host_id}",
+                f"Worker not found: No worker found for {host_id}",
                 level="debug",
                 category="file_hosts"
             )
             return
 
         log(
-            f"[File Host Manager] Stopping {host_id} Worker...",
+            f"Stopping {host_id} Worker...",
             level="debug",
             category="file_hosts"
         )
@@ -165,7 +165,7 @@ class FileHostWorkerManager(QObject):
         worker.stop()
         # Don't wait() - let it finish in background
 
-        log(f"[File Host Manager] {host_id} Worker stopped (remaining workers: {len(self.workers)})",
+        log(f"{host_id} Worker stopped (remaining workers: {len(self.workers)})",
             level="info",
             category="file_hosts"
         )
@@ -204,17 +204,16 @@ class FileHostWorkerManager(QObject):
         Called at application shutdown.
         """
         if not self.workers:
-            log("[File Host Manager] No workers to shutdown", level="debug", category="file_hosts")
             return
 
-        log(f"[File Host Manager] Shutting down all file host workers ({len(self.workers)} total)...",
+        host_ids = list(self.workers.keys())
+        log(f"Shutting down {len(self.workers)} file host workers: {', '.join(host_ids)}",
             level="info",
             category="file_hosts"
         )
 
         # Stop all workers
-        for host_id, worker in self.workers.items():
-            log(f"[File Host Manager] Stopping worker: {host_id}", level="debug", category="file_hosts")
+        for worker in self.workers.values():
             worker.stop()
 
         # Wait for all threads to finish
@@ -223,7 +222,7 @@ class FileHostWorkerManager(QObject):
 
         self.workers.clear()
 
-        log("[File Host Manager] All file host workers shutdown complete", level="info", category="file_hosts")
+        log("All file host workers shutdown complete", level="info", category="file_hosts")
 
     def _on_spinup_complete(self, host_id: str, error: str) -> None:
         """Handle worker spinup result (success or failure).
@@ -240,7 +239,7 @@ class FileHostWorkerManager(QObject):
 
         if not worker:
             log(
-                f"[File Host Manager] Received spinup_complete for unknown worker: {host_id}",
+                f"Received spinup_complete for unknown worker: {host_id}",
                 level="warning",
                 category="file_hosts"
             )
@@ -294,14 +293,16 @@ class FileHostWorkerManager(QObject):
 
     def pause_all(self):
         """Pause all workers (stop processing new uploads)."""
-        for host_id, worker in self.workers.items():
-            log(f"[File Host Manager] Pausing worker: {host_id}", level="debug", category="file_hosts")
+        if self.workers:
+            log(f"Pausing {len(self.workers)} workers", level="debug", category="file_hosts")
+        for worker in self.workers.values():
             worker.pause()
 
     def resume_all(self):
         """Resume all workers (continue processing uploads)."""
-        for host_id, worker in self.workers.items():
-            log(f"[File Host Manager] Resuming worker: {host_id}", level="debug", category="file_hosts")
+        if self.workers:
+            log(f"Resuming {len(self.workers)} workers", level="debug", category="file_hosts")
+        for worker in self.workers.values():
             worker.resume()
 
     def get_worker_count(self) -> int:
@@ -335,14 +336,14 @@ class FileHostWorkerManager(QObject):
             save_file_host_setting(host_id, "enabled", enabled)
 
             log(
-                f"[File Host Manager] Persisted enabled state for {host_id}: {enabled}",
-                level="debug",
+                f"Persisted enabled state for {host_id}: {enabled}",
+                level="trace",
                 category="file_hosts"
             )
 
         except Exception as e:
             log(
-                f"[File Host Manager] Failed to persist enabled state for {host_id}: {e}",
+                f"Failed to persist enabled state for {host_id}: {e}",
                 level="error",
                 category="file_hosts"
             )
