@@ -2580,7 +2580,7 @@ def main():
             gallery_count = len(window.queue_manager.get_all_items())
 
             # Load saved galleries with progress dialog (window exists but not shown yet)
-            debug_print(f"{timestamp()} Loading {gallery_count} galleries with progress dialog")
+            debug_print(f"Loading {gallery_count} galleries with progress dialog")
             progress = QProgressDialog("Loading saved galleries...", None, 0, gallery_count, None)
             progress.setWindowTitle("BBDrop")
             progress.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -2661,25 +2661,25 @@ def main():
     # Handle secure setup
     if args.setup_secure:
             if setup_secure_password():
-                debug_print(f"{timestamp()} Setup complete! You can now use the script without storing passwords in plaintext.")
+                debug_print(f"Setup complete! You can now use the script without storing passwords in plaintext.")
             else:
-                debug_print(f"{timestamp()} ERROR: Setup failed. Please try again.")
+                debug_print(f"ERROR: Setup failed. Please try again.")
             return
     
     # Handle context menu installation
     if args.install_context_menu:
         if create_windows_context_menu():
-            debug_print(f"{timestamp()} Context Menu: Installed successfully")
+            debug_print(f"Context Menu: Installed successfully")
         else:
-            debug_print(f"{timestamp()} Context Menu: ERROR: Failed to install context menu.")
+            debug_print(f"Context Menu: ERROR: Failed to install context menu.")
         return
     
     # Handle context menu removal
     if args.remove_context_menu:
         if remove_windows_context_menu():
-            debug_print(f"{timestamp()} Context Menu: Removed successfully")
+            debug_print(f"Context Menu: Removed successfully")
         else:
-            debug_print(f"{timestamp()} Context Menu: Failed to removeFailed to remove context menu.")
+            debug_print(f"Context Menu: Failed to removeFailed to remove context menu.")
         return
     
     # Handle gallery visibility changes
@@ -2691,14 +2691,14 @@ def main():
         
         if args.public:
             if uploader.set_gallery_visibility(gallery_id, 1):
-                debug_print(f"{timestamp()} Gallery {gallery_id} set to public")
+                debug_print(f"Gallery {gallery_id} set to public")
             else:
-                debug_print(f"{timestamp()} ERROR: Failed to set gallery {gallery_id} to public")
+                debug_print(f"ERROR: Failed to set gallery {gallery_id} to public")
         elif args.private:
             if uploader.set_gallery_visibility(gallery_id, 0):
-                debug_print(f"{timestamp()} Gallery {gallery_id} set to private")
+                debug_print(f"Gallery {gallery_id} set to private")
             else:
-                debug_print(f"{timestamp()} ERROR: Failed to set gallery {gallery_id} to private")
+                debug_print(f"ERROR: Failed to set gallery {gallery_id} to private")
         else:
             debug_print("{timestamp()} WARNING: Please specify --public or --private")
         return
@@ -2711,7 +2711,7 @@ def main():
             #log(f" No unnamed galleries found to rename")
             return
 
-        debug_print(f"{timestamp()} Found {len(unnamed_galleries)} unnamed galleries to rename:")
+        debug_print(f"Found {len(unnamed_galleries)} unnamed galleries to rename:")
         for gallery_id, intended_name in unnamed_galleries.items():
             debug_print(f"   {gallery_id} -> '{intended_name}'")
 
@@ -2745,7 +2745,7 @@ def main():
                 rename_worker.queue_rename(gallery_id, intended_name)
 
             # Wait for all renames to complete
-            debug_print(f"{timestamp()} Processing {len(unnamed_galleries)} rename requests...")
+            debug_print(f"Processing {len(unnamed_galleries)} rename requests...")
             while rename_worker.queue_size() > 0:
                 time.sleep(0.1)
 
@@ -2753,7 +2753,7 @@ def main():
             remaining_unnamed = get_unnamed_galleries()
             success_count = len(unnamed_galleries) - len(remaining_unnamed)
 
-            debug_print(f"{timestamp()} Successfully renamed {success_count}/{len(unnamed_galleries)} galleries")
+            debug_print(f"Successfully renamed {success_count}/{len(unnamed_galleries)} galleries")
 
             # Cleanup
             rename_worker.stop()
@@ -2761,7 +2761,7 @@ def main():
             return 0 if success_count == len(unnamed_galleries) else 1
 
         except Exception as e:
-            debug_print(f"{timestamp()} Failed to initialize RenameWorker: {e}")
+            debug_print(f"Failed to initialize RenameWorker: {e}")
             return 1
     
     # Check if folder paths are provided (required for upload)
@@ -2776,13 +2776,13 @@ def main():
             # Expand wildcards
             expanded = glob.glob(path)
             if not expanded:
-                debug_print(f"{timestamp()} Warning: No folders found matching pattern: {path}")
+                debug_print(f"Warning: No folders found matching pattern: {path}")
             expanded_paths.extend(expanded)
         else:
             expanded_paths.append(path)
     
     if not expanded_paths:
-        debug_print(f"{timestamp()} No valid folders found to upload.")
+        debug_print(f"No valid folders found to upload.")
         return 1  # No valid folders
     
     # Determine public gallery setting
@@ -2804,9 +2804,9 @@ def main():
         try:
             from src.processing.rename_worker import RenameWorker
             rename_worker = RenameWorker()
-            debug_print(f"{timestamp()} Rename Worker: Background worker initialized")
+            debug_print(f"Rename Worker: Background worker initialized")
         except Exception as e:
-            debug_print(f"{timestamp()} Rename Worker: Error trying to initialize RenameWorker: {e}")
+            debug_print(f"Rename Worker: Error trying to initialize RenameWorker: {e}")
             
         engine = UploadEngine(uploader, rename_worker)
 
@@ -2815,7 +2815,7 @@ def main():
             gallery_name = args.name if args.name else None
 
             try:
-                debug_print(f"{timestamp()} Starting upload: {os.path.basename(folder_path)}")
+                debug_print(f"Starting upload: {os.path.basename(folder_path)}")
                 results = engine.run(
                     folder_path=folder_path,
                     gallery_name=gallery_name,
@@ -2834,7 +2834,7 @@ def main():
                         template_name=args.template or "default",
                     )
                 except Exception as e:
-                    debug_print(f"{timestamp()} WARNING: Artifact save error: {e}")
+                    debug_print(f"WARNING: Artifact save error: {e}")
 
                 all_results.append(results)
 
@@ -2843,10 +2843,10 @@ def main():
                 # Cleanup RenameWorker on interrupt
                 if rename_worker:
                     rename_worker.stop()
-                    debug_print(f"{timestamp()} Background RenameWorker stopped")
+                    debug_print(f"Background RenameWorker stopped")
                 break
             except Exception as e:
-                debug_print(f"{timestamp()} Error uploading {folder_path}: {str(e)}")
+                debug_print(f"Error uploading {folder_path}: {str(e)}")
                 continue
         
         # Display summary for all galleries
@@ -2899,14 +2899,14 @@ def main():
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                debug_print(f"{timestamp()} Rename Worker: Background worker stopped")
+                debug_print(f"Rename Worker: Background worker stopped")
                 
             return 0  # Success
         else:
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                debug_print(f"{timestamp()} Background RenameWorker stopped")
+                debug_print(f"Background RenameWorker stopped")
                 
             debug_print("{timestamp()} No galleries were successfully uploaded.")
             return 1  # No galleries uploaded
@@ -2916,10 +2916,10 @@ def main():
         try:
             if 'rename_worker' in locals() and rename_worker:
                 rename_worker.stop()
-                debug_print(f"{timestamp()} ERROR: Rename Worker: Error: Background worker stopped on exception: {e}")
+                debug_print(f"ERROR: Rename Worker: Error: Background worker stopped on exception: {e}")
         except Exception:
             pass  # Ignore cleanup errors
-        debug_print(f"{timestamp()} ERROR: Rename Worker: Error: {str(e)}")
+        debug_print(f"ERROR: Rename Worker: Error: {str(e)}")
         return 1  # Error occurred
 
 if __name__ == "__main__":
