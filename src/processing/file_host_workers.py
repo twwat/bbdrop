@@ -221,9 +221,7 @@ class FileHostWorker(QThread):
             self._session_token = session_state['token']
             self._session_timestamp = session_state['timestamp']
 
-        if session_state['timestamp']:
-            age = time.time() - session_state['timestamp']
-            self._log(f"Session state persisted (age: {age:.0f}s, cookies: {len(session_state['cookies'])})", level="debug")
+        pass  # Session state persisted
 
     def queue_test_request(self, credentials: str) -> None:
         """Queue a test request to be processed in the worker thread.
@@ -1289,7 +1287,7 @@ class FileHostWorker(QThread):
         self.settings.setValue(f"FileHosts/{self.host_id}/storage_ts", int(time.time()))
         self.settings.setValue(f"FileHosts/{self.host_id}/storage_total", str(total))
         self.settings.setValue(f"FileHosts/{self.host_id}/storage_left", str(left))
-        self._log(f"Storage cache updated: {format_binary_size(left)}/{format_binary_size(total)} bytes", level="debug")
+        pass  # Storage cache saved
         self.settings.sync()
 
     def _save_test_results(self, results: Dict[str, Any]) -> None:
