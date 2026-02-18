@@ -264,6 +264,28 @@ class WorkerSignalHandler(QObject):
     # Worker Status Widget Signal Handlers
     # =========================================================================
 
+    def register_image_host_workers(self):
+        """Create worker entries for all image hosts so metrics populate immediately.
+
+        File hosts get registered via startup spinup signals, but image hosts
+        had no equivalent — their rows were display-only placeholders that
+        weren't stored in _workers, so update_queue_columns() could never
+        find them.
+        """
+        mw = self._main_window
+        if not hasattr(mw, 'worker_status_widget'):
+            return
+        from src.core.image_host_config import get_all_hosts, is_image_host_enabled
+        for host_id, host_config in get_all_hosts().items():
+            mw.worker_status_widget.update_worker_status(
+                worker_id=f"upload_worker_{host_id}",
+                worker_type="imagehost",
+                hostname=host_config.name,
+                speed_bps=0.0,
+                status="idle" if is_image_host_enabled(host_id) else "disabled",
+                host_id=host_id,
+            )
+
     def _get_upload_worker_host_info(self):
         """Get host_id and display name from the current upload worker."""
         mw = self._main_window
@@ -466,8 +488,8 @@ class WorkerSignalHandler(QObject):
     def _update_worker_queue_stats(self):
         """Poll queue manager and update worker status widget with queue statistics.
 
-        Calculates total files and bytes remaining across all galleries in queue
-        and updates the worker status widget's Files Left and Remaining columns.
+        Groups items by image_host_id and updates each host's worker row
+        independently so all hosts show accurate queue columns.
 
         Called by QTimer every 2 seconds.
         """
@@ -476,29 +498,35 @@ class WorkerSignalHandler(QObject):
             return
 
         try:
-            # Get host_id from current upload worker
-            host_id, _ = self._get_upload_worker_host_info()
+            from collections import defaultdict
+            from src.core.constants import QUEUE_STATE_UPLOADING, QUEUE_STATE_QUEUED
 
-            # Calculate totals from queue
-            total_files_remaining = 0
-            total_bytes_remaining = 0
+            # Accumulate per-host totals
+            host_files: dict[str, int] = defaultdict(int)
+            host_bytes: dict[str, int] = defaultdict(int)
 
             for item in mw.queue_manager.get_all_items():
-                # Count files/bytes for galleries that are uploading or queued
-                from src.core.constants import QUEUE_STATE_UPLOADING, QUEUE_STATE_QUEUED
                 if item.status in (QUEUE_STATE_UPLOADING, QUEUE_STATE_QUEUED):
-                    # Files remaining = total - uploaded
+                    host_id = getattr(item, 'image_host_id', 'imx')
+
                     files_remaining = item.total_images - item.uploaded_images
                     if files_remaining > 0:
-                        total_files_remaining += files_remaining
+                        host_files[host_id] += files_remaining
 
-                    # Bytes remaining = total - uploaded
                     bytes_remaining = item.total_size - item.uploaded_bytes
                     if bytes_remaining > 0:
-                        total_bytes_remaining += bytes_remaining
+                        host_bytes[host_id] += bytes_remaining
 
-            # Update worker status widget with host_id as first parameter
-            mw.worker_status_widget.update_queue_columns(host_id, total_files_remaining, total_bytes_remaining)
+            # Update each host that has queued work
+            for host_id in host_files:
+                mw.worker_status_widget.update_queue_columns(
+                    host_id, host_files[host_id], host_bytes[host_id])
+
+            # Zero out hosts that no longer have queued work
+            from src.core.image_host_config import get_all_hosts
+            for host_id in get_all_hosts():
+                if host_id not in host_files:
+                    mw.worker_status_widget.update_queue_columns(host_id, 0, 0)
 
         except Exception as e:
             log(f"Error updating worker queue stats: {e}", level="error", category="ui")

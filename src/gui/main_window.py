@@ -576,6 +576,7 @@ class BBDropGUI(QMainWindow):
 
         # Initialize worker signal handler for worker lifecycle management
         self.worker_signal_handler = WorkerSignalHandler(self)
+        self.worker_signal_handler.register_image_host_workers()
 
         # Initialize gallery queue controller for queue operations
         self.gallery_queue_controller = GalleryQueueController(self)
