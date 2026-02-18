@@ -261,15 +261,15 @@ class ImageStatusDialog(QDialog):
         gal_layout.setContentsMargins(10, 8, 10, 8)
 
         # Galleries: Checked row
-        gal_layout.addWidget(QLabel("Checked:"), 0, 0)
+        gal_layout.addWidget(QLabel("Galleries Checked:"), 0, 0)
         self.val_checked_galleries = QLabel("—")
-        self.val_checked_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_checked_galleries.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         gal_layout.addWidget(self.val_checked_galleries, 0, 1)
 
         # Galleries: Online row
-        gal_layout.addWidget(QLabel("Online:"), 1, 0)
+        gal_layout.addWidget(QLabel("Galleries Online:"), 1, 0)
         self.val_online_galleries = QLabel("—")
-        self.val_online_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_online_galleries.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.val_online_galleries.setProperty("online-status", "online")
         self.pct_online_galleries = QLabel("")
         self.pct_online_galleries.setProperty("online-status", "online")
@@ -277,9 +277,9 @@ class ImageStatusDialog(QDialog):
         gal_layout.addWidget(self.pct_online_galleries, 1, 2)
 
         # Galleries: Partially Offline row
-        gal_layout.addWidget(QLabel("Partially Offline:"), 2, 0)
+        gal_layout.addWidget(QLabel("Galleries Partially Offline:"), 2, 0)
         self.val_partial_galleries = QLabel("—")
-        self.val_partial_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_partial_galleries.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.val_partial_galleries.setProperty("online-status", "partial")
         self.pct_partial_galleries = QLabel("")
         self.pct_partial_galleries.setProperty("online-status", "partial")
@@ -287,9 +287,9 @@ class ImageStatusDialog(QDialog):
         gal_layout.addWidget(self.pct_partial_galleries, 2, 2)
 
         # Galleries: Offline row
-        gal_layout.addWidget(QLabel("Offline:"), 3, 0)
+        gal_layout.addWidget(QLabel("Galleries Offline:"), 3, 0)
         self.val_offline_galleries = QLabel("—")
-        self.val_offline_galleries.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_offline_galleries.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.val_offline_galleries.setProperty("online-status", "offline")
         self.pct_offline_galleries = QLabel("")
         self.pct_offline_galleries.setProperty("online-status", "offline")
@@ -305,15 +305,15 @@ class ImageStatusDialog(QDialog):
         img_layout.setContentsMargins(10, 8, 10, 8)
 
         # Images: Checked row
-        img_layout.addWidget(QLabel("Checked:"), 0, 0)
+        img_layout.addWidget(QLabel("Images Checked:"), 0, 0)
         self.val_checked_images = QLabel("—")
-        self.val_checked_images.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_checked_images.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         img_layout.addWidget(self.val_checked_images, 0, 1)
 
         # Images: Online row
-        img_layout.addWidget(QLabel("Online:"), 1, 0)
+        img_layout.addWidget(QLabel("Images Online:"), 1, 0)
         self.val_online_images = QLabel("—")
-        self.val_online_images.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_online_images.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.val_online_images.setProperty("online-status", "online")
         self.pct_online_images = QLabel("")
         self.pct_online_images.setProperty("online-status", "online")
@@ -321,9 +321,9 @@ class ImageStatusDialog(QDialog):
         img_layout.addWidget(self.pct_online_images, 1, 2)
 
         # Images: Offline row
-        img_layout.addWidget(QLabel("Offline:"), 2, 0)
+        img_layout.addWidget(QLabel("Images Offline:"), 2, 0)
         self.val_offline_images = QLabel("—")
-        self.val_offline_images.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.val_offline_images.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.val_offline_images.setProperty("online-status", "offline")
         self.pct_offline_images = QLabel("")
         self.pct_offline_images.setProperty("online-status", "offline")
