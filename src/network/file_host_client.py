@@ -98,7 +98,7 @@ class FileHostClient:
             if self.config.auth_type == "api_key":
                 # Use credentials directly as permanent API key (no login needed)
                 self.auth_token = credentials
-                if self._log_callback: self._log_callback(f"Using permanent API key for {self.config.name}", "debug")
+                pass  # API key auth needs no login
             elif self.config.auth_type == "token_login":
                 # Try to use cached token first
                 if host_id:
@@ -106,7 +106,6 @@ class FileHostClient:
                     token_cache = get_token_cache()
                     cached_token = token_cache.get_token(host_id)
                     if cached_token:
-                        if self._log_callback: self._log_callback(f"Using cached token for {self.config.name}", "debug")
                         self.auth_token = cached_token
                     else:
                         # Login and cache the token
@@ -123,12 +122,7 @@ class FileHostClient:
                     self.cookie_jar = session_cookies.copy()
                     self.auth_token = session_token
                     self._session_token_timestamp = session_timestamp
-                    if self._log_callback:
-                        age = time.time() - (session_timestamp or 0) if session_timestamp else 0
-                        self._log_callback(
-                            f"Reusing existing session for {self.config.name} (age: {age:.0f}s)",
-                            "debug"
-                        )
+                    pass  # Session injected from worker
                 else:
                     # Fresh login (first time only)
                     self._login_session_based(credentials)
@@ -192,8 +186,6 @@ class FileHostClient:
             params = "&".join(f"{k}={quote(str(v))}" for k, v in login_data.items())
             login_url = f"{login_url}?{params}"
 
-        if self._log_callback: self._log_callback(f"Logging in to {self.config.name}...", "debug")
-
         # Perform login request
         curl = pycurl.Curl()
         self._configure_ssl(curl)
@@ -253,13 +245,6 @@ class FileHostClient:
             # Store for potential access by caller
             if storage_info:
                 self._cached_storage_from_login = storage_info
-
-                storage_formatted = json.dumps(storage_info, indent=2).replace(chr(10), '\\n')
-                if self._log_callback: self._log_callback(
-                    f"Opportunistically cached storage from login: {storage_formatted}",
-                    "debug" )
-
-            if self._log_callback: self._log_callback(f"Successfully logged in to {self.config.name}", "debug")
             return token
 
         finally:
@@ -278,8 +263,6 @@ class FileHostClient:
             raise ValueError(f"{self.config.name} requires credentials in format 'username:password'")
 
         username, password = credentials.split(':', 1)
-
-        if self._log_callback: self._log_callback(f"Logging in to {self.config.name} (session-based)...", "debug")
 
         # Step 1: GET login page first (establishes initial cookies, extracts CSRF tokens)
         get_curl = pycurl.Curl()
@@ -319,7 +302,7 @@ class FileHostClient:
                     field_value = value_match.group(1) if value_match else ''
                     hidden_fields[field_name] = field_value
             
-            if self._log_callback: self._log_callback(f"Extracted hidden fields: {list(hidden_fields.keys())}", "debug")
+            pass  # hidden fields extracted
             
             # Extract captcha if configured 
             captcha_code = None
@@ -365,7 +348,7 @@ class FileHostClient:
                     else:
                         if self._log_callback: self._log_callback(f"WARNING: Unable to solve matched CAPTCHA, upload may fail...", "warning")
                 else:
-                    if self._log_callback: self._log_callback(f"No CAPTCHA found, all good", "debug")
+                    pass  # No CAPTCHA on this host
 
         finally:
             get_curl.close()
@@ -427,7 +410,7 @@ class FileHostClient:
             if not self.cookie_jar:
                 raise ValueError("Login failed: No session cookies received")
 
-            if self._log_callback: self._log_callback("Logged in", "debug")
+            pass  # Login complete
 
         finally:
             post_curl.close()
@@ -497,8 +480,7 @@ class FileHostClient:
             if self.host_id:
                 token_cache.clear_token(self.host_id)
 
-            if self._log_callback:
-                self._log_callback(f"Refreshing authentication token for {self.config.name}...", "debug")
+            pass  # Refresh token
 
             new_token = self._login_token_based(self.credentials)
 
@@ -527,23 +509,7 @@ class FileHostClient:
             with self._token_lock:
                 old_timestamp = self._session_token_timestamp
 
-            if old_timestamp:
-                age = time.time() - old_timestamp
-                if self._log_callback:
-                    self._log_callback(
-                        f"Refreshing session token for {self.config.name} (token age: {age:.0f}s)",
-                        "debug"
-                    )
-                    # Suggest TTL if not configured
-                    if not self.config.session_token_ttl:
-                        self._log_callback(
-                            f"Session token age: {age:.0f}s when stale detected - "
-                            f"consider setting session_token_ttl to {int(age * 0.9)}s",
-                            "info"
-                        )
-            else:
-                if self._log_callback:
-                    self._log_callback(f"Refreshing session token for {self.config.name}...", "debug")
+            pass  # Refresh session token
 
             upload_page_url = self.config.upload_page_url
             if not upload_page_url:
@@ -584,9 +550,7 @@ class FileHostClient:
                         self.auth_token = new_token
                         self._session_token_timestamp = new_timestamp
 
-                    if self._log_callback:
-                        token_preview = new_token[:20] if new_token else "None"
-                        self._log_callback(f"Refreshed session token: {token_preview}...", "debug")
+                    pass  # Session token refreshed
                 else:
                     if self._log_callback:
                         self._log_callback(f"Failed to extract session token from upload page", "warning")
@@ -631,16 +595,12 @@ class FileHostClient:
         """
         # HTTP status codes indicating auth failure
         if response_code in [401, 403]:
-            if self._log_callback:
-                self._log_callback(f"Stale token detected: HTTP {response_code}", "debug")
             return True
 
         # Pattern matching (e.g., "Anti-CSRF check failed" on HTTP 200)
         if self.config.stale_token_patterns and response_text:
             for pattern in self.config.stale_token_patterns:
                 if re.search(pattern, response_text, re.IGNORECASE | re.DOTALL):
-                    if self._log_callback:
-                        self._log_callback(f"Stale token detected: matched pattern '{pattern}'", "debug")
                     return True
 
         return False
@@ -673,8 +633,6 @@ class FileHostClient:
 
         # Layer 1: Proactive TTL check
         if self._is_token_stale():
-            if self._log_callback:
-                self._log_callback(f"Token TTL expired, refreshing proactively before operation", "debug")
             try:
                 self._refresh_auth_token()
             except (pycurl.error, ConnectionError) as e:
@@ -712,8 +670,7 @@ class FileHostClient:
             # Check if this is a stale token error
             if self._detect_stale_token_error(error_text, response_code):
                 if self._log_callback:
-                    self._log_callback(f"Stale token detected in error response, refreshing and retrying...", "debug")
-
+                    self._log_callback(f"Token expired, re-authenticating", "debug")
                 # Refresh token
                 try:
                     self._refresh_auth_token()
@@ -725,8 +682,6 @@ class FileHostClient:
                 # Any other exception (AttributeError, TypeError, etc.) propagates immediately
 
                 # Retry operation ONCE (mark as retried to prevent infinite loop)
-                if self._log_callback:
-                    self._log_callback(f"Retrying operation with refreshed token...", "debug")
                 kwargs['_retry_attempted'] = True
                 return operation_func(*args, **kwargs)
             else:
@@ -1597,8 +1552,7 @@ class FileHostClient:
         if not self.config.user_info_url:
             raise ValueError(f"{self.config.name} does not support user info retrieval")
 
-        if self._log_callback:
-            self._log_callback(f"Retrieving user info from {self.config.name}...", "debug")
+        pass  # Retrieve user info
 
         def _get_user_info_impl(**kwargs) -> Dict[str, Any]:
             """Core user info implementation (wrapped for retry)."""
@@ -1688,7 +1642,7 @@ class FileHostClient:
                     # HTML response - extract storage using regex
                     result: Dict[str, Any] = {"raw_response": "HTML response (not logged)"}
 
-                    if self._log_callback: self._log_callback(f"Parsing HTML for storage (response length: {len(response_text)} bytes)", "debug")
+                    pass  # Parse HTML for storage
 
                     match = re.search(self.config.storage_regex, response_text, re.DOTALL)
                     if match:
@@ -1706,10 +1660,7 @@ class FileHostClient:
                         result['storage_used'] = used_bytes
                         result['storage_left'] = left_bytes
 
-                        if self._log_callback: self._log_callback(
-                            f"Extracted storage from HTML: {used_gb} of {total_gb} GB (left: {(left_bytes / 1024 / 1024 / 1024):.2f} GB)",
-                            "debug"
-                        )
+                        pass  # Storage extracted from HTML
                     else:
                         # Regex didn't match - log entire HTML response for debugging
                         # Escape newlines for log viewer auto-expand (replace \n with literal \\n)
@@ -1725,15 +1676,9 @@ class FileHostClient:
 
                     if self.config.storage_total_path:
                         result['storage_total'] = self._extract_from_json(data, self.config.storage_total_path)
-                        if self._log_callback: self._log_callback(
-                            f"Extracted storage_total={result.get('storage_total')} using path {self.config.storage_total_path}",
-                            "debug" )
 
                     if self.config.storage_left_path:
                         result['storage_left'] = self._extract_from_json(data, self.config.storage_left_path)
-                        if self._log_callback: self._log_callback(
-                            f"Extracted storage_left={result.get('storage_left')} using path {self.config.storage_left_path}",
-                            "debug" )
 
                     if self.config.storage_used_path:
                         result['storage_used'] = self._extract_from_json(data, self.config.storage_used_path)
@@ -1745,22 +1690,13 @@ class FileHostClient:
                         if storage_left is not None and storage_used is not None:
                             try:
                                 result['storage_total'] = int(storage_left) + int(storage_used)
-                                if self._log_callback:
-                                    self._log_callback(
-                                        f"Calculated storage_total={result['storage_total']} from storage_left ({storage_left}) + storage_used ({storage_used})",
-                                        "debug"
-                                    )
-                            except (ValueError, TypeError) as e:
-                                if self._log_callback:
-                                    self._log_callback(
-                                        f"Failed to calculate storage_total: {e}",
-                                        "warning"
-                                    )
+                            except (ValueError, TypeError):
+                                pass
 
                     if self.config.premium_status_path:
                         result['is_premium'] = self._extract_from_json(data, self.config.premium_status_path)
 
-                if self._log_callback: self._log_callback(f"Successfully retrieved user info from {self.config.name}", "debug")
+                pass  # User info retrieved
 
                 return result
 
