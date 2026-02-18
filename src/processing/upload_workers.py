@@ -468,7 +468,8 @@ class UploadWorker(QThread):
                 bytes_uploaded=item.uploaded_bytes or 0,
                 transfer_time=transfer_time,
                 success=True,
-                observed_peak_kbps=getattr(item, 'observed_peak_kbps', None)
+                observed_peak_kbps=getattr(item, 'observed_peak_kbps', None),
+                files_count=results.get('successful_count', 1)
             )
 
         # Check for incomplete upload due to soft stop

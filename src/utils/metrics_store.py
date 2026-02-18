@@ -282,7 +282,8 @@ class MetricsStore:
 
     def record_transfer(self, host_name: str, bytes_uploaded: int,
                        transfer_time: float, success: bool,
-                       observed_peak_kbps: Optional[float] = None) -> None:
+                       observed_peak_kbps: Optional[float] = None,
+                       files_count: int = 1) -> None:
         """
         Record a completed transfer.
 
@@ -297,6 +298,8 @@ class MetricsStore:
             observed_peak_kbps: Optional observed peak speed in KB/s from bandwidth tracking.
                                If provided, this is validated and used instead of calculating
                                average speed from bytes/time.
+            files_count: Number of files in this transfer (default 1). For image hosts,
+                        this should be the number of images uploaded in the gallery.
         """
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
@@ -335,9 +338,9 @@ class MetricsStore:
             cache['total_transfer_time'] += transfer_time
 
             if success:
-                cache['files_uploaded'] += 1
+                cache['files_uploaded'] += files_count
             else:
-                cache['files_failed'] += 1
+                cache['files_failed'] += files_count
 
             # Track peak speed (using validated observed peak or calculated average)
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -389,9 +392,9 @@ class MetricsStore:
             today_cache['bytes_uploaded'] += bytes_uploaded
             today_cache['total_transfer_time'] += transfer_time
             if success:
-                today_cache['files_uploaded'] += 1
+                today_cache['files_uploaded'] += files_count
             else:
-                today_cache['files_failed'] += 1
+                today_cache['files_failed'] += files_count
             if speed > today_cache['peak_speed']:
                 today_cache['peak_speed'] = speed
                 today_cache['peak_speed_date'] = now_str
@@ -435,9 +438,9 @@ class MetricsStore:
             all_time_cache['bytes_uploaded'] += bytes_uploaded
             all_time_cache['total_transfer_time'] += transfer_time
             if success:
-                all_time_cache['files_uploaded'] += 1
+                all_time_cache['files_uploaded'] += files_count
             else:
-                all_time_cache['files_failed'] += 1
+                all_time_cache['files_failed'] += files_count
             if speed > all_time_cache['peak_speed']:
                 all_time_cache['peak_speed'] = speed
                 all_time_cache['peak_speed_date'] = now_str
