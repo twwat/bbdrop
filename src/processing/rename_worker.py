@@ -120,7 +120,7 @@ class RenameWorker(QObject):
     # Constants for status check streaming
     STATUS_CHECK_CHUNK_SIZE = 4096  # Bytes per chunk when streaming response
     STATUS_CHECK_MAX_SCAN_SIZE = 100 * 1024  # 100KB - scan limit for finding count
-    STATUS_CHECK_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB memory threshold
+
 
     def __init__(self):
         """Initialize RenameWorker with own web session.
@@ -983,7 +983,6 @@ class RenameWorker(QObject):
             accumulated_bytes = bytearray()
             found_count = 0
             early_exit = False
-            memory_warning_logged = False
 
             # Create iterator ONCE - calling iter_content() again doesn't restart,
             # chunks already consumed are gone
@@ -1054,13 +1053,6 @@ class RenameWorker(QObject):
                         # Negative values indicate download progress (in MB) vs URL progress
                         self.status_check_progress.emit(-current_mb, -1)
                         last_progress_mb = current_mb
-
-                    # Check memory threshold
-                    if len(accumulated_bytes) > self.STATUS_CHECK_MAX_MEMORY_SIZE and not memory_warning_logged:
-                        log(f"Warning: Response size exceeds {self.STATUS_CHECK_MAX_MEMORY_SIZE // (1024*1024)}MB memory threshold "
-                            f"(current: {len(accumulated_bytes) // (1024*1024)}MB). Consider reducing gallery size.",
-                            level="warning", category="status_check")
-                        memory_warning_logged = True
 
                 try:
                     response_text = accumulated_bytes.decode('utf-8', errors='ignore')
