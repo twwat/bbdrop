@@ -76,15 +76,15 @@ class ImageStatusChecker:
             return  # Already checking
 
         _preprocess_start = time.perf_counter()
-        log(f"DEBUG TIMING: check_galleries started with {len(paths)} paths",
-            level="debug", category="status_check")
+        log(f"Timing: check_galleries started with {len(paths)} paths",
+            level="trace", category="status_check")
 
         # Batch pre-processing: Get all items first (O(n) total instead of O(n) per path)
         _t_items_start = time.perf_counter()
         items = {path: self.queue_manager.get_item(path) for path in paths}
         _t_items_end = time.perf_counter()
-        log(f"DEBUG TIMING: Get items took {(_t_items_end - _t_items_start)*1000:.1f}ms",
-            level="debug", category="status_check")
+        log(f"Timing: Get items took {(_t_items_end - _t_items_start)*1000:.1f}ms",
+            level="trace", category="status_check")
 
         # Filter to completed galleries only
         completed_paths = [path for path, item in items.items()
@@ -101,8 +101,8 @@ class ImageStatusChecker:
         _t_urls_start = time.perf_counter()
         all_image_urls = self.queue_manager.store.get_image_urls_for_galleries(completed_paths)
         _t_urls_end = time.perf_counter()
-        log(f"DEBUG TIMING: get_image_urls_for_galleries took {(_t_urls_end - _t_urls_start)*1000:.1f}ms for {len(completed_paths)} paths",
-            level="debug", category="status_check")
+        log(f"Timing: get_image_urls_for_galleries took {(_t_urls_end - _t_urls_start)*1000:.1f}ms for {len(completed_paths)} paths",
+            level="trace", category="status_check")
 
         # Build galleries_data from batch results
         _t_build_start = time.perf_counter()
@@ -120,11 +120,11 @@ class ImageStatusChecker:
                 })
 
         _t_build_end = time.perf_counter()
-        log(f"DEBUG TIMING: Build galleries_data took {(_t_build_end - _t_build_start)*1000:.1f}ms",
-            level="debug", category="status_check")
+        log(f"Timing: Build galleries_data took {(_t_build_end - _t_build_start)*1000:.1f}ms",
+            level="trace", category="status_check")
         _preprocess_end = time.perf_counter()
-        log(f"DEBUG TIMING: Total preprocessing took {(_preprocess_end - _preprocess_start)*1000:.1f}ms",
-            level="debug", category="status_check")
+        log(f"Timing: Total preprocessing took {(_preprocess_end - _preprocess_start)*1000:.1f}ms",
+            level="trace", category="status_check")
 
         if not galleries_data:
             QMessageBox.information(
@@ -258,8 +258,8 @@ class ImageStatusChecker:
             self._check_in_progress = False
 
         _t0 = time.perf_counter()
-        log(f"DEBUG TIMING: _on_completed started, received {len(results)} gallery results",
-            level="debug", category="status_check")
+        log(f"Timing: _on_completed started, received {len(results)} gallery results",
+            level="trace", category="status_check")
 
         # Calculate aggregates for logging
         total_images = 0
@@ -284,8 +284,8 @@ class ImageStatusChecker:
                     galleries_partial += 1
 
         _t1 = time.perf_counter()
-        log(f"DEBUG TIMING: Aggregate calculation took {(_t1 - _t0)*1000:.1f}ms",
-            level="debug", category="status_check")
+        log(f"Timing: Aggregate calculation took {(_t1 - _t0)*1000:.1f}ms",
+            level="trace", category="status_check")
 
         # Log detailed completion message
         img_pct = (total_online * 100 // total_images) if total_images > 0 else 0
@@ -311,8 +311,8 @@ class ImageStatusChecker:
             _t2 = time.perf_counter()
             self.dialog.set_results(results, elapsed)
             _t3 = time.perf_counter()
-            log(f"DEBUG TIMING: dialog.set_results took {(_t3 - _t2)*1000:.1f}ms",
-                level="debug", category="status_check")
+            log(f"Timing: dialog.set_results took {(_t3 - _t2)*1000:.1f}ms",
+                level="trace", category="status_check")
 
         # ALWAYS update database and table (even if dialog was closed)
         check_timestamp = int(time.time())
@@ -330,8 +330,8 @@ class ImageStatusChecker:
             if item:
                 path_to_row[item.data(Qt.ItemDataRole.UserRole)] = row
         _t5 = time.perf_counter()
-        log(f"DEBUG TIMING: Build path_to_row index took {(_t5 - _t4)*1000:.1f}ms for {self.gallery_table.rowCount()} rows",
-            level="debug", category="status_check")
+        log(f"Timing: Build path_to_row index took {(_t5 - _t4)*1000:.1f}ms for {self.gallery_table.rowCount()} rows",
+            level="trace", category="status_check")
 
         # Collect all database updates for batch write
         _t6 = time.perf_counter()
@@ -358,8 +358,8 @@ class ImageStatusChecker:
                 self.gallery_table.set_online_imx_status(row, online, total, check_datetime)
 
         _t7 = time.perf_counter()
-        log(f"DEBUG TIMING: Process results + table updates took {(_t7 - _t6)*1000:.1f}ms for {len(results)} galleries",
-            level="debug", category="status_check")
+        log(f"Timing: Process results + table updates took {(_t7 - _t6)*1000:.1f}ms for {len(results)} galleries",
+            level="trace", category="status_check")
 
         # Single batch database write (much more efficient than N individual writes)
         if db_updates:
@@ -370,12 +370,12 @@ class ImageStatusChecker:
                 log(f"Failed to update imx status in database: {e}",
                     level="error", category="status_check")
             _t9 = time.perf_counter()
-            log(f"DEBUG TIMING: Bulk DB update took {(_t9 - _t8)*1000:.1f}ms for {len(db_updates)} updates",
-                level="debug", category="status_check")
+            log(f"Timing: Bulk DB update took {(_t9 - _t8)*1000:.1f}ms for {len(db_updates)} updates",
+                level="trace", category="status_check")
 
         _t10 = time.perf_counter()
-        log(f"DEBUG TIMING: Total _on_completed processing took {(_t10 - _t0)*1000:.1f}ms",
-            level="debug", category="status_check")
+        log(f"Timing: Total _on_completed processing took {(_t10 - _t0)*1000:.1f}ms",
+            level="trace", category="status_check")
 
         # Cleanup signal connections at the very end
         self._cleanup_connections()

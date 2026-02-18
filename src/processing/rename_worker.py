@@ -848,11 +848,11 @@ class RenameWorker(QObject):
 
         _t1 = time.perf_counter()
         if early_exit:
-            log(f"DEBUG TIMING: Streaming early exit took {_t1 - _t0:.2f}s (avoided full download)",
-                level="info", category="status_check")
+            log(f"Timing: Streaming early exit took {_t1 - _t0:.2f}s (avoided full download)",
+                level="trace", category="status_check")
         else:
-            log(f"DEBUG TIMING: Full response download took {_t1 - _t0:.2f}s, response size: {len(response_text)} bytes",
-                level="info", category="status_check")
+            log(f"Timing: Full response download took {_t1 - _t0:.2f}s, response size: {len(response_text)} bytes",
+                level="trace", category="status_check")
 
         log(f"Response shows {found_count} images found out of {total_urls} submitted",
             level="debug", category="status_check")
@@ -878,8 +878,8 @@ class RenameWorker(QObject):
                     'offline_urls': []
                 }
             _t5 = time.perf_counter()
-            log(f"DEBUG TIMING: Fast path result building took {(_t5 - _t4)*1000:.1f}ms for {len(gallery_info)} galleries",
-                level="info", category="status_check")
+            log(f"Timing: Fast path result building took {(_t5 - _t4)*1000:.1f}ms for {len(gallery_info)} galleries",
+                level="trace", category="status_check")
         else:
             # SLOW PATH: Need to determine which are offline
             online_ids = self._parse_online_image_ids(response_text)
