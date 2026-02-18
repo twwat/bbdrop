@@ -251,12 +251,12 @@ class FileHostWorkerManager(QObject):
 
         if error:
             # Spinup failed - log and cleanup
-            log(f"{host_id}: failed ({error})", level="warning", category="file_hosts")
+            log(f"{worker.log_prefix}: failed ({error})", level="warning", category="file_hosts")
             worker.wait()  # Clean up thread
             # Do NOT persist state - keep previous INI value on failure
         else:
             # Spinup succeeded - move to enabled workers
-            log(f"{host_id}: ready", level="info", category="file_hosts")
+            log(f"{worker.log_prefix}: ready", level="info", category="file_hosts")
             self.workers[host_id] = worker
 
             # Only persist if requested (skip during startup to avoid redundant writes)
