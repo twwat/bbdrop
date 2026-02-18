@@ -97,6 +97,9 @@ class GalleryQueueItem:
     # Multi-host support
     image_host_id: str = "imx"  # Default to IMX for backward compatibility
 
+    # Per-file metadata from scanning: {filename: (width, height)}
+    file_dimensions: dict = field(default_factory=dict)
+
     # Cover photo support
     cover_source_path: Optional[str] = None   # Absolute path to cover image file
     cover_host_id: Optional[str] = None        # Which host uploads the cover
@@ -253,9 +256,13 @@ class QueueManager(QObject):
                     item.min_width = scan_result['min_width']
                     item.min_height = scan_result['min_height']
                     item.scan_complete = True
+                    item.file_dimensions = scan_result.get('file_dimensions', {})
 
                     # Detect cover photo
                     cover_config = self._get_cover_detection_config()
+                    gallery_name = os.path.basename(path)
+                    if not cover_config:
+                        log(f"Scan Worker: Cover detection disabled for '{gallery_name}'", level="debug", category="scan")
                     if cover_config:
                         from src.core.cover_detector import (
                             detect_covers_by_filename, detect_cover_by_dimensions,
@@ -263,13 +270,16 @@ class QueueManager(QObject):
                             apply_max_covers,
                         )
 
+                        log(f"Scan Worker: Cover detection running for '{gallery_name}' ({len(files)} files)", level="info", category="scan")
                         candidates: list[str] = []
 
                         # Filename-based detection
                         if cover_config.get('filename_enabled', True) and cover_config.get('patterns'):
-                            candidates.extend(
-                                detect_covers_by_filename(files, patterns=cover_config['patterns'])
-                            )
+                            fn_matches = detect_covers_by_filename(files, patterns=cover_config['patterns'])
+                            log(f"Scan Worker: Filename detection: pattern='{cover_config['patterns']}', matched={fn_matches}", level="debug", category="scan")
+                            candidates.extend(fn_matches)
+                        elif cover_config.get('filename_enabled', True):
+                            log(f"Scan Worker: Filename detection enabled but no patterns configured", level="debug", category="scan")
 
                         # Dimension-based detection (only if scan_result has dimension data)
                         if cover_config.get('dimension_enabled', False):
@@ -319,10 +329,13 @@ class QueueManager(QObject):
                             cover_file = candidates[0]
                             item.cover_source_path = os.path.join(path, cover_file)
                             item.cover_host_id = cover_config.get('host_id') or None
-                            log(f"Scan Worker: Detected cover photo: {cover_file}", level="debug", category="scan")
-                            if not cover_config.get('also_upload', False):
+                            also_upload = cover_config.get('also_upload', False)
+                            log(f"Scan Worker: Cover detected: '{cover_file}' for '{gallery_name}' (also_upload={also_upload})", level="info", category="scan")
+                            if not also_upload:
                                 # Cover-only: exclude from gallery image count
                                 item.total_images = max(0, item.total_images - 1)
+                        else:
+                            log(f"Scan Worker: No cover candidates found for '{gallery_name}'", level="info", category="scan")
 
                     if item.status == QUEUE_STATE_SCANNING:
                         log(f"Scan Worker: Scan complete, updating status to ready for {path}", level="debug", category="scan")
@@ -1017,6 +1030,7 @@ class QueueManager(QObject):
             'imx_status': item.imx_status,
             'imx_status_checked': item.imx_status_checked,
             'image_host_id': item.image_host_id,
+            'file_dimensions': item.file_dimensions,
             'cover_source_path': item.cover_source_path,
             'cover_host_id': item.cover_host_id,
             'cover_result': item.cover_result,
@@ -1099,6 +1113,7 @@ class QueueManager(QObject):
                      'uploaded_bytes', 'final_kibps', 'error_message',
                      'source_archive_path', 'is_from_archive',
                      'imx_status', 'imx_status_checked', 'tab_id', 'image_host_id',
+                     'file_dimensions',
                      'cover_source_path', 'cover_host_id', 'cover_result']:
             if field in data:
                 setattr(item, field, data[field])

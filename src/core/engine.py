@@ -202,9 +202,10 @@ class UploadEngine:
 
         original_total_images = len(all_image_files)
 
-        # Fast pre-scan: only compute total size to avoid startup delay
-        # Dimension sampling (if needed) is deferred until after uploads complete
-        image_dimensions_map: Dict[str, Tuple[int, int]] = {}
+        # Use per-file dimensions from scan if available on the item
+        image_dimensions_map: Dict[str, Tuple[int, int]] = getattr(
+            precalculated_dimensions, 'file_dimensions', {}
+        ) or {}
         total_size = 0
         for f in all_image_files:
             fp = os.path.join(folder_path, f)
