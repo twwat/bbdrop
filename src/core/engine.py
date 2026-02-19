@@ -601,7 +601,15 @@ class UploadEngine:
         try:
             total_attempted = len(all_image_files)
             if failed_images:
-                log(f"[uploads] ✗ Gallery '{gallery_id}' completed with failures in {upload_time:.1f}s ({results['successful_count']}/{total_attempted} images)", level="warning", category="uploads:gallery")
+                log(
+                    f"[uploads] ✗ Gallery '{gallery_id}'"
+                    f" completed with failures in"
+                    f" {upload_time:.1f}s"
+                    f" ({results['successful_count']}"
+                    f"/{total_attempted} images)",
+                    level="warning",
+                    category="uploads:gallery"
+                )
                 for fname, reason in failed_images:
                     log(f"[uploads] ✗ {fname}: {reason}", level="warning", category="uploads")
             else:
@@ -619,7 +627,12 @@ class UploadEngine:
                 time_per_file = upload_time / results['successful_count'] if results['successful_count'] > 0 else 0
 
                 log(
-                    f"[uploads:gallery] ✓ Gallery '{gname}' uploaded in {upload_time:.3f}s ({results['successful_count']} images, {size_str}) [{rate_str}, {time_per_file:.3f}s/file]",
+                    f"[uploads:gallery] ✓ Gallery '{gname}'"
+                    f" uploaded in {upload_time:.3f}s"
+                    f" ({results['successful_count']} images,"
+                    f" {size_str})"
+                    f" [{rate_str},"
+                    f" {time_per_file:.3f}s/file]",
                     level="info",
                     category="uploads:gallery"
                 )

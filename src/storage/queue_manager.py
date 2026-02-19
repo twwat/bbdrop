@@ -404,7 +404,12 @@ class QueueManager(QObject):
         use_fast = config.get('fast_scan', True)
         sampling = config.get('pil_sampling', 2)
 
-        log(f"Scan Worker: Starting scan of {len(files)} files for '{gallery_name}' (fast_scan={use_fast}, sampling={sampling})", level="debug", category="scan")
+        log(
+            f"Scan Worker: Starting scan of {len(files)} files for"
+            f" '{gallery_name}' (fast_scan={use_fast},"
+            f" sampling={sampling})",
+            level="debug", category="scan"
+        )
         
         # Scan files
         if use_fast:
@@ -455,7 +460,13 @@ class QueueManager(QObject):
         if failed_count > 0:
             log(f"Scan Worker: Validation complete for '{gallery_name}': {failed_count}/{len(files)} files failed", level="warning", category="scan")
         else:
-            log(f"Scan Worker: Validation complete for '{gallery_name}': All {len(files)} files valid, total size: {result['total_size'] / 1024 / 1024:.2f} MB", level="info", category="scan")
+            log(
+                f"Scan Worker: Validation complete for"
+                f" '{gallery_name}': All {len(files)} files valid,"
+                f" total size:"
+                f" {result['total_size'] / 1024 / 1024:.2f} MB",
+                level="info", category="scan"
+            )
 
         # Calculate dimensions with sampling
         if not result['failed_files']:
@@ -520,7 +531,15 @@ class QueueManager(QObject):
             sample_indices = get_sample_indices(files, enhanced_config, path)
             samples = [files[i] for i in sample_indices]
 
-            log(f"Scan Worker: Dimension sampling {len(samples)}/{len(files)} files for '{gallery_name}' (method={enhanced_config['sampling_method']}, fixed={enhanced_config['sampling_fixed_count']}, pct={enhanced_config['sampling_percentage']}%)", level="debug", category="scan")
+            log(
+                f"Scan Worker: Dimension sampling"
+                f" {len(samples)}/{len(files)} files for"
+                f" '{gallery_name}'"
+                f" (method={enhanced_config['sampling_method']},"
+                f" fixed={enhanced_config['sampling_fixed_count']},"
+                f" pct={enhanced_config['sampling_percentage']}%)",
+                level="debug", category="scan"
+            )
 
             # Process samples
             for f in samples:
@@ -531,7 +550,12 @@ class QueueManager(QObject):
                 except (OSError, IOError):
                     continue
 
-            log(f"Scan Worker: Successfully read dimensions from {len(dims)}/{len(samples)} sampled files for '{gallery_name}'", level="debug", category="scan")
+            log(
+                f"Scan Worker: Successfully read dimensions from"
+                f" {len(dims)}/{len(samples)} sampled files"
+                f" for '{gallery_name}'",
+                level="debug", category="scan"
+            )
 
         except ImportError as e:
             log(f"Scan Worker: Import error in dimension calculation for '{gallery_name}': {e}", level="error", category="scan")
@@ -617,7 +641,14 @@ class QueueManager(QObject):
                         len(item.failed_files) if hasattr(item, 'failed_files') and item.failed_files else 0
                         remaining_images = (item.total_images or 0) - (item.uploaded_images or 0)
                         
-                        log(f"Retrying {item.name or os.path.basename(path)}: {remaining_images} images ({item.uploaded_images} already uploaded)", category="queue")
+                        name = item.name or os.path.basename(path)
+                        log(
+                            f"Retrying {name}:"
+                            f" {remaining_images} images"
+                            f" ({item.uploaded_images}"
+                            f" already uploaded)",
+                            category="queue"
+                        )
                         
                         # Clear failed files list so they can be retried
                         item.failed_files = []
@@ -671,7 +702,15 @@ class QueueManager(QObject):
                         item.error_message = ""
                         
                         uploaded = item.uploaded_images or 0
-                        log(f"Rescan of {item.name or os.path.basename(path)}: Found {new_images} new images ({uploaded} uploaded, {current_count - uploaded} remaining)", category="scan")
+                        name = item.name or os.path.basename(path)
+                        remaining = current_count - uploaded
+                        log(
+                            f"Rescan of {name}: Found"
+                            f" {new_images} new images"
+                            f" ({uploaded} uploaded,"
+                            f" {remaining} remaining)",
+                            category="scan"
+                        )
                         
                     elif current_count < previous_count:
                         # Images were removed
