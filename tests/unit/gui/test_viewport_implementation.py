@@ -192,7 +192,13 @@ class TestPhase2ViewportImplementation:
             f"This indicates scroll-based widget creation is not working"
         )
 
-        print(f"✅ PASS: Widgets increased/stayed same ({first_widget_count} to {second_widget_count}) after scroll to rows {second_visible}-{second_last_visible}")
+        print(
+            f"PASS: Widgets increased/stayed same"
+            f" ({first_widget_count} to"
+            f" {second_widget_count}) after scroll to"
+            f" rows {second_visible}"
+            f"-{second_last_visible}"
+        )
 
     def test_viewport_methods_exist(self, window):
         """Verify required methods were implemented"""

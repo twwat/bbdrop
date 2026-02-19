@@ -36,8 +36,19 @@ class TestDragDropLoggingFix:
             mime_data.setUrls([QUrl.fromLocalFile("/test/path")])
 
             # Simulate dragEnterEvent logging pattern
-            mock_log("drag_drop", f"dragEnterEvent: hasUrls={mime_data.hasUrls()}, hasText={mime_data.hasText()}, formats={mime_data.formats()}", level="trace")
-            mock_log("drag_drop", f"dragEnterEvent: Accepting drag with {len(mime_data.urls())} URLs", level="trace")
+            mock_log(
+                "drag_drop",
+                f"dragEnterEvent: hasUrls={mime_data.hasUrls()},"
+                f" hasText={mime_data.hasText()},"
+                f" formats={mime_data.formats()}",
+                level="trace"
+            )
+            mock_log(
+                "drag_drop",
+                f"dragEnterEvent: Accepting drag with"
+                f" {len(mime_data.urls())} URLs",
+                level="trace"
+            )
 
             # Verify all calls use level="trace"
             for call_args in mock_log.call_args_list:
@@ -105,8 +116,19 @@ class TestDragDropLoggingFix:
             mime_data.setUrls(urls)
 
             # Simulate logging
-            mock_log("drag_drop", f"dragEnterEvent: hasUrls={mime_data.hasUrls()}, hasText={mime_data.hasText()}, formats={mime_data.formats()}", level="trace")
-            mock_log("drag_drop", f"dragEnterEvent: Accepting drag with {len(mime_data.urls())} URLs", level="trace")
+            mock_log(
+                "drag_drop",
+                f"dragEnterEvent: hasUrls={mime_data.hasUrls()},"
+                f" hasText={mime_data.hasText()},"
+                f" formats={mime_data.formats()}",
+                level="trace"
+            )
+            mock_log(
+                "drag_drop",
+                f"dragEnterEvent: Accepting drag with"
+                f" {len(mime_data.urls())} URLs",
+                level="trace"
+            )
 
             # Verify specific messages
             assert mock_log.call_count == 2
@@ -121,8 +143,18 @@ class TestDragDropLoggingFix:
             mime_data.setText("C:\\Windows\\Path\\Test")
 
             # Simulate logging
-            mock_log("drag_drop", f"dragEnterEvent: hasUrls={mime_data.hasUrls()}, hasText={mime_data.hasText()}, formats={mime_data.formats()}", level="trace")
-            mock_log("drag_drop", "dragEnterEvent: Accepting text-based drag", level="trace")
+            mock_log(
+                "drag_drop",
+                f"dragEnterEvent: hasUrls={mime_data.hasUrls()},"
+                f" hasText={mime_data.hasText()},"
+                f" formats={mime_data.formats()}",
+                level="trace"
+            )
+            mock_log(
+                "drag_drop",
+                "dragEnterEvent: Accepting text-based drag",
+                level="trace"
+            )
 
             # Verify specific messages
             assert mock_log.call_count == 2
@@ -137,8 +169,19 @@ class TestDragDropLoggingFix:
             # Empty mime data (no URLs, no text)
 
             # Simulate logging
-            mock_log("drag_drop", f"dragEnterEvent: hasUrls={mime_data.hasUrls()}, hasText={mime_data.hasText()}, formats={mime_data.formats()}", level="trace")
-            mock_log("drag_drop", "dragEnterEvent: Rejecting drag - no valid data", level="trace")
+            mock_log(
+                "drag_drop",
+                f"dragEnterEvent: hasUrls={mime_data.hasUrls()},"
+                f" hasText={mime_data.hasText()},"
+                f" formats={mime_data.formats()}",
+                level="trace"
+            )
+            mock_log(
+                "drag_drop",
+                "dragEnterEvent: Rejecting drag"
+                " - no valid data",
+                level="trace"
+            )
 
             # Verify specific messages
             assert mock_log.call_count == 2

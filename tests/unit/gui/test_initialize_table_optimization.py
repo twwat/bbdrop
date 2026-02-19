@@ -441,8 +441,13 @@ class TestPerformanceImprovement:
             item_scaling = test_sizes[-1] / test_sizes[0]
 
             # Allow 2x overhead for linear scaling (50x items should take <100x time)
-            assert scaling_factor < (item_scaling * 2), \
-                f"Performance should scale linearly, but {test_sizes[-1]} items took {scaling_factor:.1f}x longer than {test_sizes[0]} items (expected <{item_scaling * 2}x)"
+            assert scaling_factor < (item_scaling * 2), (
+                f"Performance should scale linearly, but"
+                f" {test_sizes[-1]} items took"
+                f" {scaling_factor:.1f}x longer than"
+                f" {test_sizes[0]} items"
+                f" (expected <{item_scaling * 2}x)"
+            )
 
             print(f"✓ Linear scaling verified: {test_sizes[-1]} items took {scaling_factor:.1f}x longer than {test_sizes[0]} items")
 
