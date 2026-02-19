@@ -592,10 +592,10 @@ class TurboImageHostClient(ImageHostClient):
         return f"https://s8d8.turboimg.net/t1/{img_id}{ext}"
 
     def sanitize_gallery_name(self, name: str) -> str:
-        """TurboImageHost gallery name rules: max 20 chars, spaces to underscores."""
+        """TurboImageHost gallery name rules: max 20 chars, letters/digits/spaces/hyphens/underscores only."""
         if not name:
             return 'untitled'
-        sanitized = re.sub(r'[^\w\s\-.]', '', name)
+        sanitized = re.sub(r'[^\w\s\-]', '', name)
         sanitized = sanitized.strip()[:20]
         return sanitized or 'untitled'
 
