@@ -93,6 +93,9 @@ _HARDCODED_DEFAULTS = {
     "thumbnail_size": 3,
     "thumbnail_format": 2,
     "auto_rename": True,
+    "cover_gallery": "",
+    "cover_thumbnail_format": 2,
+    "cover_thumbnail_size": 600,
 }
 
 

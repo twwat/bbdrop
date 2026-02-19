@@ -26,6 +26,9 @@
         "upload_connect_timeout": 30,
         "upload_read_timeout": 120,
         "thumbnail_size": 300,
-        "content_type": "all"
+        "content_type": "all",
+        "cover_gallery": "",
+        "cover_thumbnail_format": 2,
+        "cover_thumbnail_size": 600
     }
 }
