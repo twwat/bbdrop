@@ -41,10 +41,9 @@ import io
 import json
 import argparse
 import sys
-from pathlib import Path
 from typing import Optional, Any
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import time
 import threading
@@ -63,6 +62,7 @@ try:
 except ImportError:
     winreg = None  # Not available on Linux/Mac
 import mimetypes
+from src.network.cookies import get_firefox_cookies, load_cookies_from_file  # noqa: F401  # re-exported
 
 __version__ = "0.8.3"  # Application version number
 
@@ -359,14 +359,13 @@ def create_windows_context_menu():
             script_dir = os.path.dirname(os.path.abspath(sys.executable))
             exe_path = sys.executable
             # For frozen exe, both CLI and GUI use the same exe with different flags
-            cli_script = f'"{exe_path}"'
             gui_script = f'"{exe_path}" --gui'
             python_exe = None  # Not needed for .exe
             pythonw_exe = None
         else:
             # Running as Python script - use .py files with python.exe
             script_dir = get_project_root()
-            cli_script = os.path.join(script_dir, 'bbdrop.py')
+            os.path.join(script_dir, 'bbdrop.py')
             gui_script = os.path.join(script_dir, 'bbdrop.py')  # Use bbdrop.py --gui for consistency
             # Prefer python.exe for CLI and pythonw.exe for GUI
             python_exe = sys.executable or 'python.exe'
@@ -460,7 +459,6 @@ def remove_windows_context_menu():
 
 import base64
 from cryptography.fernet import Fernet
-import hashlib
 
 class NestedProgressBar:
     """Custom progress bar with nested levels for better upload tracking"""
@@ -1099,7 +1097,6 @@ def remove_unnamed_gallery(gallery_id):
                 with open(config_file, 'w') as f:
                     config.write(f)
 
-from src.network.cookies import get_firefox_cookies, load_cookies_from_file
 
 def get_template_path():
     """Get the template directory path (uses configured central store location)."""
@@ -1296,7 +1293,6 @@ def generate_bbcode_from_template(template_name, data):
     template_content = templates[template_name]
     return apply_template(template_content, data)
 
-from typing import Optional
 
 def save_gallery_artifacts(
     folder_path: str,
@@ -1659,7 +1655,7 @@ class ImxToUploader(ImageHostClient):
         has_credentials = (self.username and self.password) or self.api_key
 
         if not has_credentials:
-            log(f"Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.", level="warning", category="auth")
+            log("Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.", level="warning", category="auth")
             # Don't exit in GUI mode - let the user set credentials through the dialog
             # Only exit if running in CLI mode (when there's no way to set credentials interactively)
             is_gui_mode = os.environ.get('BBDROP_GUI_MODE') == '1'
@@ -1783,7 +1779,6 @@ class ImxToUploader(ImageHostClient):
             raise FileNotFoundError(f"Image file not found: {image_path}")
 
         # Use thread-local session if provided, otherwise use shared session
-        session = thread_session if thread_session else self.session
 
         # Read file into memory BEFORE POST to enable true concurrent uploads
         # Keeping file handles open during network I/O causes Python's file I/O to serialize
@@ -1982,7 +1977,7 @@ class ImxToUploader(ImageHostClient):
         preseed_images = []
         files_to_upload = []
         if not gallery_id:
-            log(f"Failed to create named gallery, falling back to API-only upload...", level="warning", category="uploads")
+            log("Failed to create named gallery, falling back to API-only upload...", level="warning", category="uploads")
             # Upload first image to create gallery
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
@@ -2232,7 +2227,7 @@ class ImxToUploader(ImageHostClient):
                 },
                 template_name=template_name,
             )
-            log(f"Saved gallery files to central and/or .uploaded as configured", level="debug", category="fileio")
+            log("Saved gallery files to central and/or .uploaded as configured", level="debug", category="fileio")
         except Exception as e:
             log(f"Error writing artifacts: {e}", level="error", category="fileio")
 
@@ -2500,7 +2495,7 @@ def main():
                 tb_lines = tb_module.format_exception(exctype, value, traceback_obj)
                 tb_text = ''.join(tb_lines)
                 print(f"\n{'='*60}")
-                print(f"UNCAUGHT EXCEPTION IN QT EVENT LOOP:")
+                print("UNCAUGHT EXCEPTION IN QT EVENT LOOP:")
                 print(f"{'='*60}")
                 print(tb_text)
                 print(f"{'='*60}\n")
@@ -2655,25 +2650,25 @@ def main():
     # Handle secure setup
     if args.setup_secure:
             if setup_secure_password():
-                debug_print(f"Setup complete! You can now use the script without storing passwords in plaintext.")
+                debug_print("Setup complete! You can now use the script without storing passwords in plaintext.")
             else:
-                debug_print(f"ERROR: Setup failed. Please try again.")
+                debug_print("ERROR: Setup failed. Please try again.")
             return
     
     # Handle context menu installation
     if args.install_context_menu:
         if create_windows_context_menu():
-            debug_print(f"Context Menu: Installed successfully")
+            debug_print("Context Menu: Installed successfully")
         else:
-            debug_print(f"Context Menu: ERROR: Failed to install context menu.")
+            debug_print("Context Menu: ERROR: Failed to install context menu.")
         return
     
     # Handle context menu removal
     if args.remove_context_menu:
         if remove_windows_context_menu():
-            debug_print(f"Context Menu: Removed successfully")
+            debug_print("Context Menu: Removed successfully")
         else:
-            debug_print(f"Context Menu: Failed to removeFailed to remove context menu.")
+            debug_print("Context Menu: Failed to removeFailed to remove context menu.")
         return
     
     # Handle gallery visibility changes
@@ -2717,20 +2712,20 @@ def main():
             # Wait for initial login (RenameWorker logs in automatically on init)
             import time
             if not rename_worker.login_complete.wait(timeout=30):
-                debug_print(f"RenameWorker: Login timeout")
-                debug_print(f" To rename galleries manually:")
-                debug_print(f" 1. Log in to https://imx.to in your browser")
-                debug_print(f" 2. Navigate to each gallery and rename it manually")
+                debug_print("RenameWorker: Login timeout")
+                debug_print(" To rename galleries manually:")
+                debug_print(" 1. Log in to https://imx.to in your browser")
+                debug_print(" 2. Navigate to each gallery and rename it manually")
                 debug_print(f" Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
                 return 1
 
             if not rename_worker.login_successful:
-                debug_print(f"RenameWorker: Login failed")
-                debug_print(f" DDoS-Guard protection may be blocking automated login.")
-                debug_print(f" To rename galleries manually:")
-                debug_print(f" 1. Log in to https://imx.to in your browser")
-                debug_print(f" 2. Navigate to each gallery and rename it manually")
-                debug_print(f" 3. Or export cookies from browser and place in cookies.txt file")
+                debug_print("RenameWorker: Login failed")
+                debug_print(" DDoS-Guard protection may be blocking automated login.")
+                debug_print(" To rename galleries manually:")
+                debug_print(" 1. Log in to https://imx.to in your browser")
+                debug_print(" 2. Navigate to each gallery and rename it manually")
+                debug_print(" 3. Or export cookies from browser and place in cookies.txt file")
                 debug_print(f" Gallery IDs to rename: {', '.join(unnamed_galleries.keys())}")
                 return 1
 
@@ -2776,7 +2771,7 @@ def main():
             expanded_paths.append(path)
     
     if not expanded_paths:
-        debug_print(f"No valid folders found to upload.")
+        debug_print("No valid folders found to upload.")
         return 1  # No valid folders
     
     # Determine public gallery setting
@@ -2798,7 +2793,7 @@ def main():
         try:
             from src.processing.rename_worker import RenameWorker
             rename_worker = RenameWorker()
-            debug_print(f"Rename Worker: Background worker initialized")
+            debug_print("Rename Worker: Background worker initialized")
         except Exception as e:
             debug_print(f"Rename Worker: Error trying to initialize RenameWorker: {e}")
             
@@ -2837,7 +2832,7 @@ def main():
                 # Cleanup RenameWorker on interrupt
                 if rename_worker:
                     rename_worker.stop()
-                    debug_print(f"Background RenameWorker stopped")
+                    debug_print("Background RenameWorker stopped")
                 break
             except Exception as e:
                 debug_print(f"Error uploading {folder_path}: {str(e)}")
@@ -2893,14 +2888,14 @@ def main():
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                debug_print(f"Rename Worker: Background worker stopped")
+                debug_print("Rename Worker: Background worker stopped")
                 
             return 0  # Success
         else:
             # Cleanup RenameWorker
             if rename_worker:
                 rename_worker.stop()
-                debug_print(f"Background RenameWorker stopped")
+                debug_print("Background RenameWorker stopped")
                 
             debug_print(f"{timestamp()} No galleries were successfully uploaded.")
             return 1  # No galleries uploaded
@@ -2930,7 +2925,7 @@ if __name__ == "__main__":
         try:
             import traceback
             with open('bbdrop_crash.log', 'w') as f:
-                f.write(f"BBDrop crashed:\n")
+                f.write("BBDrop crashed:\n")
                 f.write(f"{traceback.format_exc()}\n")
         except (OSError, IOError):
             pass
