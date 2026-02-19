@@ -16,6 +16,7 @@ from bbdrop import (
     get_central_store_base_path, get_default_central_store_base_path,
     get_project_root, get_base_path,
 )
+from src.gui.widgets.info_button import InfoButton
 from src.utils.logger import log
 
 
@@ -65,12 +66,22 @@ class GeneralTab(QWidget):
         self.confirm_delete_check.setToolTip("Show confirmation dialog before removing a gallery")
         general_layout.addWidget(self.confirm_delete_check, 0, 0)
 
+        regen_row = QHBoxLayout()
         self.auto_regenerate_bbcode_check = QCheckBox("Auto-regenerate artifacts when data changes")
         self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
         self.auto_regenerate_bbcode_check.setToolTip(
             "Automatically regenerate BBCode when template, gallery name, or custom fields change"
         )
-        general_layout.addWidget(self.auto_regenerate_bbcode_check, 1, 0)
+        regen_row.addWidget(self.auto_regenerate_bbcode_check)
+        regen_row.addWidget(InfoButton(
+            "<b>Artifacts</b> are the JSON and BBCode files generated after "
+            "a gallery finishes uploading. They contain image URLs, thumbnail "
+            "URLs, and formatted BBCode.<br><br>"
+            "When enabled, these files are automatically regenerated whenever "
+            "you change the template, gallery name, or custom field values."
+        ))
+        regen_row.addStretch()
+        general_layout.addLayout(regen_row, 1, 0)
 
         self.auto_start_upload_check = QCheckBox("Start uploads automatically")
         self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
@@ -163,10 +174,21 @@ class GeneralTab(QWidget):
         # --- Gallery Artifacts group ---
         artifacts_group = QGroupBox("Gallery Artifacts")
         artifacts_layout = QVBoxLayout(artifacts_group)
+        artifacts_info_row = QHBoxLayout()
         artifacts_info = QLabel("JSON / BBcode files containing uploaded gallery details.")
         artifacts_info.setWordWrap(True)
         artifacts_info.setStyleSheet("color: #666; font-style: italic;")
-        artifacts_layout.addWidget(artifacts_info)
+        artifacts_info_row.addWidget(artifacts_info)
+        artifacts_info_row.addWidget(InfoButton(
+            "<b>Gallery subfolder:</b> Creates a <code>.uploaded</code> folder "
+            "inside each gallery's directory with that gallery's artifacts. "
+            "Useful if you organize by folder and want results alongside source images.<br><br>"
+            "<b>Central storage:</b> Saves all artifacts in one location "
+            "(your chosen data directory). Useful for browsing all upload "
+            "results in one place.<br><br>"
+            "You can enable both &mdash; artifacts are saved to each location independently."
+        ))
+        artifacts_layout.addLayout(artifacts_info_row)
 
         self.store_in_uploaded_check = QCheckBox(
             "Save artifacts in '.uploaded' subfolder within the gallery"
@@ -218,6 +240,7 @@ class GeneralTab(QWidget):
         theme_layout.addWidget(self.font_size_spin, 1, 1)
 
         # Icons-only mode for quick settings buttons
+        qs_row = QHBoxLayout()
         self.quick_settings_icons_only_check = QCheckBox(
             "Show icons only on quick settings buttons"
         )
@@ -232,7 +255,15 @@ class GeneralTab(QWidget):
             )
             self.quick_settings_icons_only_check.setChecked(icons_only)
 
-        theme_layout.addWidget(self.quick_settings_icons_only_check, 2, 0, 1, 2)
+        qs_row.addWidget(self.quick_settings_icons_only_check)
+        qs_row.addWidget(InfoButton(
+            "Quick settings are the buttons in the toolbar area of the main "
+            "window (pause, bandwidth limit, theme toggle, etc.). By default "
+            "they show text labels when space allows. This forces them to "
+            "always show just icons."
+        ))
+        qs_row.addStretch()
+        theme_layout.addLayout(qs_row, 2, 0, 1, 2)
 
         # Show file host logos in worker table
         self.show_worker_logos_check = QCheckBox(
