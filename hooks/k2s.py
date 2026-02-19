@@ -230,9 +230,9 @@ def main():
     print(json.dumps(upload_response, indent=2))
 
     # Debug info to stderr (won't interfere with JSON output)
-    print(f"\n===== Upload Complete! =====", file=sys.stderr)
+    print("\n===== Upload Complete! =====", file=sys.stderr)
     print(f"Service: {service_name}", file=sys.stderr)
-    print(f"Available JSON fields for imxup mapping:", file=sys.stderr)
+    print("Available JSON fields for imxup mapping:", file=sys.stderr)
     for key in upload_response.keys():
         value = upload_response[key]
         # Truncate long values for display

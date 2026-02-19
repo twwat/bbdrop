@@ -923,7 +923,7 @@ class MultiHostUploader:
 
         # Calculate hash if required
         if self.config.require_file_hash:
-            print(f"Calculating file hash...", file=sys.stderr)
+            print("Calculating file hash...", file=sys.stderr)
             replacements["hash"] = self._calculate_file_hash(file_path)
 
         # Replace placeholders
@@ -931,7 +931,7 @@ class MultiHostUploader:
             init_url = init_url.replace(f"{{{key}}}", value)
 
         # Step 2: Call init API
-        print(f"Initializing upload...", file=sys.stderr)
+        print("Initializing upload...", file=sys.stderr)
         init_resp = self.session.get(init_url, timeout=30)
         init_resp.raise_for_status()
         init_data = init_resp.json()
@@ -958,8 +958,8 @@ class MultiHostUploader:
             # File already exists, get the existing file URL
             existing_url = self._extract_from_json(init_data, ["response", "upload", "file", "url"])
             if existing_url:
-                print(f"File already exists on server (hash match)", file=sys.stderr)
-                print(f"Using existing file URL", file=sys.stderr)
+                print("File already exists on server (hash match)", file=sys.stderr)
+                print("Using existing file URL", file=sys.stderr)
                 return {
                     "host": self.config.name,
                     "status": "success",
@@ -984,7 +984,7 @@ class MultiHostUploader:
         print(f"Got upload ID: {upload_id}", file=sys.stderr)
 
         # Step 3: Upload file
-        print(f"Uploading file...", file=sys.stderr)
+        print("Uploading file...", file=sys.stderr)
         with open(file_path, 'rb') as f:
             files = {self.config.file_field: (file_path.name, f, self.get_mime_type(file_path))}
             upload_resp = self.session.post(upload_url, files=files, timeout=300)
@@ -992,7 +992,7 @@ class MultiHostUploader:
 
         # Step 4: Poll for completion
         if self.config.upload_poll_url and self.config.link_path:
-            print(f"Waiting for upload to process...", file=sys.stderr)
+            print("Waiting for upload to process...", file=sys.stderr)
             time.sleep(self.config.upload_poll_delay)
 
             poll_url = self.config.upload_poll_url.replace("{upload_id}", upload_id).replace("{token}", self.api_key or "")
@@ -1005,7 +1005,7 @@ class MultiHostUploader:
                 # Check if we got the final URL
                 final_url = self._extract_from_json(poll_data, self.config.link_path)
                 if final_url:
-                    print(f"Upload complete!", file=sys.stderr)
+                    print("Upload complete!", file=sys.stderr)
                     return {
                         "host": self.config.name,
                         "status": "success",
@@ -1161,7 +1161,7 @@ def main():
 
         # Summary to stderr
         if result.get("success"):
-            print(f"\n✓ Upload successful!", file=sys.stderr)
+            print("\n✓ Upload successful!", file=sys.stderr)
             print(f"URL: {result.get('url')}", file=sys.stderr)
         else:
             print(f"\n✗ Upload failed: {result.get('error')}", file=sys.stderr)
