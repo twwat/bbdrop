@@ -28,6 +28,7 @@ from bbdrop import (
     set_credential,
     remove_credential
 )
+from src.gui.widgets.info_button import InfoButton
 
 
 class ImageHostConfigPanel(QWidget):
@@ -177,6 +178,15 @@ class ImageHostConfigPanel(QWidget):
         if needs_cookies:
             cookies_row = QHBoxLayout()
             cookies_row.addWidget(QLabel("<b>Firefox Cookies</b>: "))
+            cookies_row.addWidget(InfoButton(
+                "When enabled, BBDrop reads your Firefox browser cookies for "
+                "imx.to. This lets it use your existing login session instead "
+                "of API key authentication.<br><br>"
+                "Useful if your API key has issues or if you want to use "
+                "account features that require a browser session.<br><br>"
+                "Requires Firefox to be installed and you must be logged into "
+                "imx.to in Firefox."
+            ))
             self.cookies_status_label = QLabel("Unknown")
             self.cookies_status_label.setProperty("class", "status-muted")
             cookies_row.addWidget(self.cookies_status_label)
@@ -250,7 +260,16 @@ class ImageHostConfigPanel(QWidget):
         layout.addWidget(self.max_retries_value, 0, 2)
 
         # Concurrent Uploads
-        layout.addWidget(QLabel("<b>Concurrent Uploads</b>:"), 1, 0)
+        concurrent_label_row = QHBoxLayout()
+        concurrent_label_row.addWidget(QLabel("<b>Concurrent Uploads</b>:"))
+        concurrent_label_row.addWidget(InfoButton(
+            "Number of images uploaded simultaneously within a single gallery. "
+            "Higher = faster but uses more bandwidth and connections.<br><br>"
+            "Most hosts handle 3&ndash;4 well. Going above 5 may trigger "
+            "rate limiting."
+        ))
+        concurrent_label_row.addStretch()
+        layout.addLayout(concurrent_label_row, 1, 0)
         self.batch_size_slider = QSlider(Qt.Orientation.Horizontal)
         self.batch_size_slider.setMinimum(1)
         self.batch_size_slider.setMaximum(8)
@@ -267,7 +286,20 @@ class ImageHostConfigPanel(QWidget):
         layout.addWidget(self.batch_size_value, 1, 2)
 
         # Connect Timeout
-        layout.addWidget(QLabel("<b>Connect Timeout (s)</b>:"), 2, 0)
+        timeout_label_row = QHBoxLayout()
+        timeout_label_row.addWidget(QLabel("<b>Connect Timeout (s)</b>:"))
+        timeout_label_row.addWidget(InfoButton(
+            "<b>Connect timeout:</b> How long to wait for the initial TCP "
+            "connection to the server. If the server doesn't respond within "
+            "this time, the upload fails.<br><br>"
+            "<b>Read timeout:</b> How long to wait for the server to process "
+            "and respond after the upload data is sent. Large images on slow "
+            "hosts may need higher values.<br><br>"
+            "If you get frequent timeout errors, increase read timeout first "
+            "(it's the more common bottleneck)."
+        ))
+        timeout_label_row.addStretch()
+        layout.addLayout(timeout_label_row, 2, 0)
         self.connect_timeout_slider = QSlider(Qt.Orientation.Horizontal)
         self.connect_timeout_slider.setMinimum(10)
         self.connect_timeout_slider.setMaximum(180)
@@ -430,8 +462,6 @@ class ImageHostConfigPanel(QWidget):
 
         # Anonymous warning for Turbo
         if self.host_id == "turbo":
-            from src.gui.widgets.info_button import InfoButton
-
             self.cover_anon_widget = QWidget()
             anon_row = QHBoxLayout(self.cover_anon_widget)
             anon_row.setContentsMargins(0, 0, 0, 0)
