@@ -827,7 +827,12 @@ class MultiHostUploader:
         # For session-based auth with sess_id, fetch it before upload
         sess_id = None
         if self.config.auth_type == "session" and self.config.session_id_regex:
-            upload_page_url = f"{self.config.upload_endpoint.split('/cgi-bin')[0] if '/cgi-bin' in self.config.upload_endpoint else self.config.upload_endpoint.rstrip('/')}/upload"
+            endpoint = self.config.upload_endpoint
+            if '/cgi-bin' in endpoint:
+                base = endpoint.split('/cgi-bin')[0]
+            else:
+                base = endpoint.rstrip('/')
+            upload_page_url = f"{base}/upload"
             # Extract base URL properly
             if self.host == "filedot":
                 upload_page_url = "https://filedot.to/upload"

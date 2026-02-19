@@ -1759,7 +1759,12 @@ class ImxToUploader(ImageHostClient):
         sanitized = re.sub(r'\s+', ' ', sanitized).strip()
         return sanitized or 'untitled'
 
-    def upload_image(self, image_path, create_gallery=False, gallery_id=None, thumbnail_size=3, thumbnail_format=2, thread_session=None, progress_callback=None, gallery_name=None):
+    def upload_image(
+        self, image_path, create_gallery=False,
+        gallery_id=None, thumbnail_size=3,
+        thumbnail_format=2, thread_session=None,
+        progress_callback=None, gallery_name=None
+    ):
         """
         Upload a single image to imx.to
 
@@ -1894,10 +1899,20 @@ class ImxToUploader(ImageHostClient):
             else:
                 raise Exception(f"Network error during upload (code {error_code}): {error_msg}")
     
-    def upload_folder(self, folder_path, gallery_name=None, thumbnail_size=3, thumbnail_format=2, max_retries=3, parallel_batch_size=4, template_name="default", queue_store=None):
+    def upload_folder(
+        self, folder_path, gallery_name=None,
+        thumbnail_size=3, thumbnail_format=2,
+        max_retries=3, parallel_batch_size=4,
+        template_name="default", queue_store=None
+    ):
         """
         Upload all images in a folder as a gallery
-    def upload_folder(self, folder_path, gallery_name=None, thumbnail_size=3, thumbnail_format=2, max_retries=3, parallel_batch_size=4, template_name="default"):
+    def upload_folder(
+        self, folder_path, gallery_name=None,
+        thumbnail_size=3, thumbnail_format=2,
+        max_retries=3, parallel_batch_size=4,
+        template_name="default"
+    ):
         Args:
             folder_path (str): Path to folder containing images
             gallery_name (str): Name for the gallery (optional)
