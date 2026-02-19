@@ -15,6 +15,7 @@ from src.utils.format_utils import format_binary_size
 from src.utils.logger import log
 from src.core.file_host_config import get_config_manager, HostConfig
 from src.gui.icon_manager import get_icon_manager
+from src.gui.widgets.info_button import InfoButton
 
 
 class FileHostsSettingsWidget(QWidget):
@@ -63,6 +64,19 @@ class FileHostsSettingsWidget(QWidget):
         # Connection Limits Group
         limits_group = QGroupBox("Connection Limits")
         limits_layout = QFormLayout(limits_group)
+
+        limits_info_row = QHBoxLayout()
+        limits_info_row.addWidget(InfoButton(
+            "<b>Global limit:</b> Total concurrent uploads across ALL file "
+            "hosts combined. Prevents saturating your upload bandwidth.<br><br>"
+            "<b>Per-host limit:</b> Max concurrent uploads to a single host. "
+            "Some hosts rate-limit or ban accounts that open too many "
+            "connections.<br><br>"
+            "<b>Example:</b> global=3, per-host=2 means at most 3 uploads "
+            "total, but no single host gets more than 2 at once."
+        ))
+        limits_info_row.addStretch()
+        limits_layout.addRow(limits_info_row)
 
         self.global_limit_spin = QSpinBox()
         self.global_limit_spin.setMinimum(1)
