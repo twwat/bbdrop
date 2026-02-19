@@ -8,7 +8,7 @@ without duplication.
 
 from __future__ import annotations
 
-import os, shutil
+import os
 import time
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
@@ -18,7 +18,7 @@ import sys
 import threading
 from functools import cmp_to_key
 import ctypes
-from typing import Callable, Iterable, Optional, Tuple, List, Dict, Any, Set
+from typing import Callable, Optional, Tuple, List, Dict, Any, Set
 
 from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.utils.logger import log

@@ -255,7 +255,6 @@ def get_file_host_setting(host_id: str, key: str, value_type: str = "str") -> An
     """
     from bbdrop import get_config_path
     import configparser
-    import os
 
     # 1. Check INI first (user override)
     ini_path = get_config_path()
@@ -317,7 +316,6 @@ def save_file_host_setting(host_id: str, key: str, value: Any) -> None:
     """
     from bbdrop import get_config_path
     import configparser
-    import os
 
     # Validate host exists
     config_manager = get_config_manager()
