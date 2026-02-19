@@ -10,8 +10,8 @@ from typing import Optional, Tuple
 import hashlib
 
 from PyQt6.QtWidgets import QWidget, QApplication
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage, QPainter
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QImage
 
 
 def pytest_addoption(parser):

@@ -8,14 +8,11 @@ Tests verify that:
 4. Large datasets (100+ galleries) load quickly
 """
 
-import os
 import pytest
 import time
-from unittest.mock import Mock, patch, MagicMock
 from PyQt6.QtWidgets import QApplication
 
 from src.storage.database import QueueStore
-from src.storage.queue_manager import QueueManager
 from src.gui.icon_manager import IconManager
 
 
@@ -165,7 +162,7 @@ class TestTableLoadIconCaching:
         hit_rate = stats_after_second['hit_rate']
         assert hit_rate > 50, f"Cache hit rate should be >50% after two passes, got {hit_rate:.1f}%"
 
-        print(f"\nIcon cache performance:")
+        print("\nIcon cache performance:")
         print(f"  Total icon requests: {stats_after_second['hits'] + stats_after_second['misses']}")
         print(f"  Cache hits: {stats_after_second['hits']}")
         print(f"  Cache misses: {stats_after_second['misses']}")
@@ -194,7 +191,7 @@ class TestTableLoadIconCaching:
 
         assert hit_rate > 95, f"Cache hit rate should be >95% with realistic usage, got {hit_rate:.1f}%"
 
-        print(f"\nRealistic usage (10 table loads):")
+        print("\nRealistic usage (10 table loads):")
         print(f"  Hit rate: {hit_rate:.1f}%")
         print(f"  Disk I/O saved: {stats['hits']:,} operations")
 
@@ -231,9 +228,9 @@ class TestTableLoadBatchQueries:
         # Verify batch query returned same data with just 1 call
         assert len(batch_uploads) == 50, "Batch query should return uploads for 50 galleries"
 
-        print(f"\nBatch query comparison:")
+        print("\nBatch query comparison:")
         print(f"  Individual queries: {individual_calls} calls")
-        print(f"  Batch query: 1 call")
+        print("  Batch query: 1 call")
         print(f"  Reduction: {individual_calls}x fewer database calls")
 
         assert individual_calls == 100, "Individual approach should make 100 calls"
@@ -253,12 +250,12 @@ class TestTableLoadBatchQueries:
 
         # Time batch query
         start = time.time()
-        batch_uploads = populated_db.get_all_file_host_uploads_batch()
+        populated_db.get_all_file_host_uploads_batch()
         batch_time = time.time() - start
 
         speedup = individual_time / batch_time if batch_time > 0 else float('inf')
 
-        print(f"\nDatabase query performance:")
+        print("\nDatabase query performance:")
         print(f"  Individual queries: {individual_time*1000:.2f}ms")
         print(f"  Batch query:        {batch_time*1000:.2f}ms")
         print(f"  Speedup:            {speedup:.1f}x")
@@ -303,7 +300,7 @@ class TestCombinedOptimizations:
         start = time.time()
 
         # Batch query (new way)
-        batch_uploads = populated_db.get_all_file_host_uploads_batch()
+        populated_db.get_all_file_host_uploads_batch()
 
         # Load icons with cache
         for item in all_items:
@@ -313,7 +310,7 @@ class TestCombinedOptimizations:
 
         speedup = unoptimized_time / optimized_time if optimized_time > 0 else float('inf')
 
-        print(f"\nCombined optimization performance:")
+        print("\nCombined optimization performance:")
         print(f"  Unoptimized: {unoptimized_time*1000:.2f}ms")
         print(f"  Optimized:   {optimized_time*1000:.2f}ms")
         print(f"  Speedup:     {speedup:.1f}x")
@@ -357,7 +354,7 @@ class TestCombinedOptimizations:
             start = time.time()
 
             all_items = store.load_all_items()
-            batch_uploads = store.get_all_file_host_uploads_batch()
+            store.get_all_file_host_uploads_batch()
 
             for item in all_items:
                 icon_manager.get_status_icon(item['status'], 'light')
@@ -365,7 +362,7 @@ class TestCombinedOptimizations:
             elapsed = time.time() - start
             timings[gallery_count] = elapsed
 
-        print(f"\nScaling with dataset size (optimized):")
+        print("\nScaling with dataset size (optimized):")
         for count, elapsed in timings.items():
             print(f"  {count} galleries: {elapsed*1000:.2f}ms")
 
@@ -420,7 +417,7 @@ class TestLargeDatasetPerformance:
         all_items = store.load_all_items()
 
         # Batch query for uploads
-        batch_uploads = store.get_all_file_host_uploads_batch()
+        store.get_all_file_host_uploads_batch()
 
         # Load icons with cache
         for item in all_items:
@@ -428,13 +425,13 @@ class TestLargeDatasetPerformance:
 
         total_time = time.time() - start
 
-        print(f"\nLarge dataset performance (500 galleries):")
+        print("\nLarge dataset performance (500 galleries):")
         print(f"  Total load time: {total_time*1000:.2f}ms")
         print(f"  Time per gallery: {total_time/500*1000:.3f}ms")
 
         # Get icon cache stats
         stats = icon_manager.get_cache_stats()
-        print(f"\n  Icon cache stats:")
+        print("\n  Icon cache stats:")
         print(f"    Hit rate: {stats['hit_rate']:.1f}%")
         print(f"    Disk I/O saved: {stats['hits']:,} operations")
 
@@ -464,7 +461,7 @@ class TestMemoryEfficiency:
         assert stats['cached_icons'] <= 10, \
             f"Icon cache should only store unique icons, got {stats['cached_icons']}"
 
-        print(f"\nMemory efficiency:")
+        print("\nMemory efficiency:")
         print(f"  Galleries loaded: {len(all_items)}")
         print(f"  Unique icons cached: {stats['cached_icons']}")
         print(f"  Memory efficiency: {len(all_items) / stats['cached_icons']:.1f}x reuse")

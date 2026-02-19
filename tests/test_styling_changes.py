@@ -18,9 +18,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.gui.widgets.worker_status_widget import (
-    MultiLineHeaderView, CORE_COLUMNS, METRIC_COLUMNS, AVAILABLE_COLUMNS
+    CORE_COLUMNS, METRIC_COLUMNS, AVAILABLE_COLUMNS
 )
-from PyQt6.QtGui import QFont
 
 
 class TestHeaderFontSizing:

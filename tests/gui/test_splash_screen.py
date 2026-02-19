@@ -5,10 +5,7 @@ Tests splash screen initialization, status updates, and visual elements
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QColor
+from unittest.mock import patch
 
 from src.gui.splash_screen import SplashScreen
 

@@ -7,7 +7,6 @@ Tests help documentation dialog functionality
 import pytest
 from unittest.mock import patch
 from PyQt6.QtWidgets import QDialog
-from PyQt6.QtCore import Qt
 
 from src.gui.dialogs.help_dialog import HelpDialog
 

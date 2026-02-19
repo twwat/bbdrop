@@ -8,9 +8,8 @@ Tests verify that:
 """
 
 import pytest
-from unittest.mock import Mock, patch, call
-from PyQt6.QtCore import QMimeData, QUrl, Qt, QEvent
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from unittest.mock import patch
+from PyQt6.QtCore import QMimeData, QUrl
 from PyQt6.QtWidgets import QApplication
 import sys
 

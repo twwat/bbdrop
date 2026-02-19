@@ -81,7 +81,7 @@ def test_concurrent_initialization():
 
     # Verify first thread took longer (did initialization) and others returned quickly
     sorted_results = sorted(results, key=lambda x: x['elapsed'])
-    first_elapsed = sorted_results[0]['elapsed']
+    sorted_results[0]['elapsed']
 
     # First thread should have done initialization (takes >0.01s)
     # Subsequent threads should return almost immediately (<0.01s typical)

@@ -18,8 +18,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QProgressBar, QLabel, QPushButton, QMainWindow
-from PyQt6.QtCore import Qt
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock
 
 from conftest import ScreenshotComparator, BASELINES_DIR
 
@@ -214,7 +213,7 @@ def main():
     args = parser.parse_args()
 
     # Create app
-    app = QApplication.instance() or QApplication(sys.argv)
+    QApplication.instance() or QApplication(sys.argv)
 
     # Create mock main window and theme manager
     mock_window = MockMainWindow()

@@ -5,11 +5,8 @@ Tests icon loading, caching, theme handling, and fallback mechanisms
 """
 
 import pytest
-import os
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QStyle, QApplication
+from PyQt6.QtWidgets import QApplication
 
 from src.gui.icon_manager import IconManager, get_icon_manager, init_icon_manager
 
@@ -155,8 +152,8 @@ class TestIconCaching:
         manager = IconManager(str(temp_assets_dir))
 
         # Use status_uploading which has theme-aware config (list of [light, dark])
-        icon_light = manager.get_icon('status_uploading', theme_mode='light')
-        icon_dark = manager.get_icon('status_uploading', theme_mode='dark')
+        manager.get_icon('status_uploading', theme_mode='light')
+        manager.get_icon('status_uploading', theme_mode='dark')
 
         # Should be different cache entries
         cache_keys = list(manager._icon_cache.keys())

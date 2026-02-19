@@ -5,10 +5,8 @@ Tests TableProgressWidget, ActionButtonWidget, and OverallProgressWidget
 """
 
 import pytest
-from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt
 
-from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget, OverallProgressWidget
+from src.gui.widgets.custom_widgets import TableProgressWidget, OverallProgressWidget
 
 
 class TestTableProgressWidget:

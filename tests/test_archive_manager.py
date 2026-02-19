@@ -9,10 +9,9 @@ to catch actual API breakage (e.g., splitfile API changes).
 
 import pytest
 import zipfile
-import tempfile
 from pathlib import Path
 from PIL import Image
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.utils.archive_manager import (
     ArchiveManager,
@@ -38,7 +37,7 @@ def gallery_folder(tmp_path):
 
     # Create test images with PIL
     for i in range(3):
-        img = Image.new('RGB', (100, 100), color=f'red' if i == 0 else ('green' if i == 1 else 'blue'))
+        img = Image.new('RGB', (100, 100), color='red' if i == 0 else ('green' if i == 1 else 'blue'))
         img.save(folder / f"image{i:03d}.jpg")
 
     # Also test with PNG and other formats
@@ -84,7 +83,7 @@ class TestArchiveManagerInit:
         """Test initialization creates temp directory if missing."""
         archive_dir = tmp_path / "new_archives"
         assert not archive_dir.exists()
-        manager = ArchiveManager(temp_dir=archive_dir)
+        ArchiveManager(temp_dir=archive_dir)
         assert archive_dir.exists()
 
     def test_cache_initialized_empty(self, temp_archive_dir):

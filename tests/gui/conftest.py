@@ -9,15 +9,13 @@ import sys
 
 # Ensure Qt uses offscreen platform for headless testing - must be set before QApplication import
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-import tempfile
-import shutil
 from pathlib import Path
-from typing import Generator, Any
-from unittest.mock import Mock, MagicMock, patch
+from typing import Generator
+from unittest.mock import Mock
 
 import pytest
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QSettings, Qt, QThread
+from PyQt6.QtCore import QThread
 from PyQt6.QtGui import QIcon
 
 # Add src to path for imports
@@ -56,10 +54,6 @@ def mock_qmessagebox_for_tests(monkeypatch):
     from PyQt6.QtWidgets import QMessageBox
 
     # Store original methods
-    original_warning = QMessageBox.warning
-    original_question = QMessageBox.question
-    original_information = QMessageBox.information
-    original_critical = QMessageBox.critical
 
     # Create mock that returns Discard (to skip saving) or Yes (to proceed)
     def mock_warning(*args, **kwargs):
@@ -109,7 +103,7 @@ def cleanup_qthreads():
         return
 
     # Close all dialogs first (they may have timers/threads)
-    from PyQt6.QtWidgets import QDialog, QWidget
+    from PyQt6.QtWidgets import QDialog
     for dialog in app.topLevelWidgets():
         if isinstance(dialog, QDialog) and dialog.isVisible():
             # Stop any timers in the dialog
@@ -344,7 +338,6 @@ def mock_queue_manager() -> Mock:
     Mock QueueManager for testing upload-related functionality.
     Returns a mock with queue management operations.
     """
-    from src.storage.queue_manager import QueueManager
 
     # Use Mock without spec to allow any attribute access
     queue_manager = Mock()

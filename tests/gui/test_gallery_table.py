@@ -5,9 +5,7 @@ Tests gallery queue table functionality
 """
 
 import pytest
-from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import QTableWidget
-from PyQt6.QtCore import Qt
 
 from src.gui.widgets.gallery_table import GalleryTableWidget, NumericColumnDelegate
 

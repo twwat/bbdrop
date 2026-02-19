@@ -8,7 +8,7 @@ import json
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 import sqlite3
 from datetime import datetime
 import os
@@ -178,7 +178,6 @@ def cleanup_qt_resources():
 
     # Step 3: Close all database connections
     try:
-        import sqlite3
         # Close any open sqlite3 connections in the current thread
         # This is important for tests that create database connections
         gc.collect()  # Trigger garbage collection to close unreferenced connections
@@ -249,7 +248,6 @@ def cleanup_qt_resources():
     # (Qt should handle this automatically, but we'll force cleanup)
     try:
         from PyQt6.QtWidgets import QApplication
-        from PyQt6.QtCore import QObject
 
         app = QApplication.instance()
         if app is not None:

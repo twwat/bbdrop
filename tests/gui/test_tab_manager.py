@@ -5,10 +5,8 @@ Tests tab management, preferences, and database coordination
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from PyQt6.QtCore import QSettings
 
-from src.gui.tab_manager import TabManager, TabInfo, TabPreferences
+from src.gui.tab_manager import TabManager, TabPreferences
 
 
 class TestTabManagerInit:

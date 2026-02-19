@@ -322,7 +322,7 @@ def run_all_tests(num_rows: int = 1144):
         try:
             result = test_func(num_rows)
             results.append((name, result))
-            print(f"  [OK] Complete")
+            print("  [OK] Complete")
         except Exception as e:
             print(f"  [ERROR] {e}")
             results.append((name, {'error': str(e)}))
@@ -363,7 +363,7 @@ def run_all_tests(num_rows: int = 1144):
     # Viewport benefit
     for name, result in results:
         if 'user_perceived_improvement_pct' in result:
-            print(f"\nViewport-first approach:")
+            print("\nViewport-first approach:")
             print(f"  Visible rows ({result['visible_rows']}): {result['visible_rows_ms']:.1f} ms")
             print(f"  Remaining rows: {result['remaining_rows_ms']:.1f} ms")
             print(f"  Perceived improvement: {result['user_perceived_improvement_pct']:.1f}%")
@@ -371,7 +371,7 @@ def run_all_tests(num_rows: int = 1144):
     # setUpdatesEnabled benefit
     for name, result in results:
         if 'speedup_factor' in result:
-            print(f"\nsetUpdatesEnabled(False) benefit:")
+            print("\nsetUpdatesEnabled(False) benefit:")
             print(f"  Speedup factor: {result['speedup_factor']:.1f}x")
 
 

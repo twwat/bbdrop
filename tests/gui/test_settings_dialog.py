@@ -5,8 +5,8 @@ Tests settings dialog functionality and configuration management
 """
 
 import pytest
-from unittest.mock import patch, Mock, MagicMock
-from PyQt6.QtWidgets import QDialog, QTabWidget
+from unittest.mock import patch
+from PyQt6.QtWidgets import QDialog
 
 from src.gui.settings import ComprehensiveSettingsDialog
 

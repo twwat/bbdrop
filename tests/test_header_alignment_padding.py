@@ -11,10 +11,7 @@ Verifies:
 import pytest
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QTableWidget, QTableWidgetItem, QHeaderView
-from PyQt6.QtGui import QPixmap
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -244,11 +241,11 @@ class TestStatusIconPadding:
         assert layout.count() >= 3, f"Layout has {layout.count()} items, expected >= 3"
 
         # Layout should not have excessive spacing
-        spacing = layout.spacing()
+        layout.spacing()
         # Default spacing is -1 (uses platform default, typically 5-6)
         # But we can verify it's not causing overlap
 
-        print(f"✓ Test 2.4 passed: Layout spacing properly configured")
+        print("✓ Test 2.4 passed: Layout spacing properly configured")
 
 
 class TestVisualConsistency:
@@ -379,7 +376,6 @@ class TestRegression:
 
     def test_progress_column_unaffected(self, table_widget):
         """Test 4.1: Verify Progress column (5) still functions properly"""
-        from src.gui.widgets.custom_widgets import TableProgressWidget
 
         # Add a row first
         table_widget.insertRow(0)

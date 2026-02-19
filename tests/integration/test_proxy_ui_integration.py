@@ -5,7 +5,7 @@ ProxySettingsWidget, InheritableProxyControl, and ProxyStorage.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QSettings
 

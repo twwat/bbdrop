@@ -12,17 +12,17 @@ Tests verify the implementation of:
 import sys
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtWidgets import QApplication, QMenu
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QPoint
 
 from src.gui.widgets.worker_status_widget import (
-    WorkerStatusWidget, WorkerStatus, ColumnConfig, ColumnType
+    WorkerStatusWidget, WorkerStatus
 )
 
 
@@ -188,7 +188,7 @@ class TestSetHostEnabled:
     def test_set_host_enabled_calls_save_file_host_setting(self, worker_status_widget):
         """Verify _set_host_enabled calls save_file_host_setting with correct params"""
         with patch('src.gui.widgets.worker_status_widget.save_file_host_setting') as mock_save, \
-             patch.object(worker_status_widget, '_refresh_display') as mock_refresh:
+             patch.object(worker_status_widget, '_refresh_display'):
 
             worker_status_widget._set_host_enabled('test-host', True)
 
@@ -280,7 +280,7 @@ class TestSetHostTrigger:
     def test_set_host_trigger_calls_save_file_host_setting(self, worker_status_widget):
         """Verify _set_host_trigger calls save_file_host_setting with correct params"""
         with patch('src.gui.widgets.worker_status_widget.save_file_host_setting') as mock_save, \
-             patch.object(worker_status_widget, '_refresh_display') as mock_refresh:
+             patch.object(worker_status_widget, '_refresh_display'):
 
             worker_status_widget._set_host_trigger('test-host', 'on_added')
 

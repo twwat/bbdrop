@@ -11,18 +11,14 @@ Tests verify:
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from PyQt6.QtWidgets import QApplication, QTableWidgetItem
-from PyQt6.QtCore import Qt, QSettings
+from unittest.mock import Mock, patch
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import Qt
 from datetime import datetime
 
 from src.gui.widgets.worker_status_widget import (
     WorkerStatusWidget,
     WorkerStatus,
-    ColumnType,
-    ColumnConfig,
-    CORE_COLUMNS,
-    METRIC_COLUMNS,
     format_bytes,
     format_percent,
     format_count,

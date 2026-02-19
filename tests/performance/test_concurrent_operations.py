@@ -149,7 +149,7 @@ class TestMemoryOperationLatency:
 
         # Calculate statistics
         avg_latency = sum(latencies) / len(latencies)
-        max_latency = max(latencies)
+        max(latencies)
         p95_latency = sorted(latencies)[int(len(latencies) * 0.95)]
 
         # Assertions
@@ -175,7 +175,7 @@ class TestMemoryOperationLatency:
 
         # Calculate statistics
         avg_latency = sum(latencies) / len(latencies)
-        max_latency = max(latencies)
+        max(latencies)
         p95_latency = sorted(latencies)[int(len(latencies) * 0.95)]
 
         # Assertions
@@ -237,7 +237,7 @@ class TestHookExecutionOverhead:
             latencies.append(latency)
 
         avg_latency = sum(latencies) / len(latencies)
-        max_latency = max(latencies)
+        max(latencies)
 
         # Assertion
         assert avg_latency < 100, \

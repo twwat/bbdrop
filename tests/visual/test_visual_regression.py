@@ -21,13 +21,12 @@ pytestmark = pytest.mark.skipif(
 )
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-from PyQt6.QtWidgets import QApplication, QDialog, QMainWindow, QTableWidget, QTextEdit
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidget, QTextEdit
 
 
 @pytest.fixture(scope="session")

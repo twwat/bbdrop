@@ -5,8 +5,8 @@ Tests credential management dialog functionality
 """
 
 import pytest
-from unittest.mock import patch, Mock
-from PyQt6.QtWidgets import QDialog, QLineEdit, QPushButton
+from unittest.mock import patch
+from PyQt6.QtWidgets import QDialog, QPushButton
 
 from src.gui.dialogs.credential_setup import CredentialSetupDialog
 

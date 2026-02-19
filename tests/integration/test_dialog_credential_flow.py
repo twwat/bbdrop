@@ -2,11 +2,11 @@
 """Integration test for dialog credential flow - minimal mocking."""
 
 import pytest
-from unittest.mock import Mock, patch
-from PyQt6.QtWidgets import QApplication, QLineEdit
+from unittest.mock import Mock
+from PyQt6.QtWidgets import QLineEdit
 from PyQt6.QtGui import QIcon
 
-from bbdrop import get_credential, set_credential, encrypt_password, decrypt_password, remove_credential
+from bbdrop import encrypt_password, remove_credential
 from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog, AsteriskPasswordEdit
 from src.core.file_host_config import HostConfig
 

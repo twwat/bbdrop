@@ -21,11 +21,10 @@ These bugs are in the source code. Tests monkey-patch QHeaderView to work around
 import os
 import sys
 from pathlib import Path
-from unittest.mock import Mock, MagicMock
 
 import pytest
-from PyQt6.QtWidgets import QTableWidget, QHeaderView, QMenu
-from PyQt6.QtCore import QSettings, Qt, QPoint, pyqtSignal
+from PyQt6.QtWidgets import QHeaderView
+from PyQt6.QtCore import QSettings, Qt, pyqtSignal
 from PyQt6.QtTest import QTest
 
 # Ensure Qt uses offscreen platform for headless testing
@@ -47,9 +46,7 @@ from src.gui.widgets.worker_status_widget import (
     WorkerStatusWidget,
     CORE_COLUMNS,
     METRIC_COLUMNS,
-    AVAILABLE_COLUMNS,
-    ColumnConfig,
-    ColumnType
+    AVAILABLE_COLUMNS
 )
 
 
@@ -114,7 +111,7 @@ class TestColumnReordering:
 
     def test_column_moved_signal_connected(self, widget):
         """Verify column moved signal is connected."""
-        header = widget.status_table.horizontalHeader()
+        widget.status_table.horizontalHeader()
         # Can't check receivers() due to Qt protection, but we can verify the handler exists
         assert hasattr(widget, '_on_column_moved'), \
             "Widget should have _on_column_moved handler"

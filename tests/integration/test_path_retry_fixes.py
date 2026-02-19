@@ -11,11 +11,8 @@ Tests the following scenarios:
 
 import os
 import pytest
-import tempfile
-import shutil
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any
+from unittest.mock import Mock, patch
 
 # Import modules under test
 from src.processing.file_host_workers import FileHostWorker
@@ -78,7 +75,7 @@ class TestPathResolution:
 
         for input_path, expected in test_cases:
             # Normalize path to forward slashes
-            normalized = str(Path(input_path)).replace("\\", "/")
+            str(Path(input_path)).replace("\\", "/")
             # On Windows, this should match expected
             # On Linux/WSL, Path won't recognize C: drive
 
@@ -212,7 +209,6 @@ class TestRetryLogic:
 
     def test_max_retry_attempts(self):
         """Test maximum retry attempts is enforced."""
-        max_retries = 3
         attempt_count = 0
 
         def failing_upload(*args, **kwargs):
@@ -229,7 +225,6 @@ class TestErrorMessages:
 
     def test_missing_folder_error_message(self):
         """Test clear error message for missing folder."""
-        missing_path = "/this/does/not/exist"
 
         # Expected error message should include:
         # - Clear indication folder doesn't exist
@@ -243,7 +238,6 @@ class TestErrorMessages:
     def test_windows_path_format_suggestion(self):
         """Test suggestion for Windows path format."""
         # If user provides backslashes on Linux/WSL
-        windows_path = "C:\\Users\\Test\\folder"
 
         # Expected message:
         # "Detected Windows-style path: C:\Users\Test\folder
@@ -253,7 +247,6 @@ class TestErrorMessages:
     def test_wsl2_path_format_suggestion(self):
         """Test suggestion for WSL2 path format."""
         # If user provides Windows path on WSL2
-        windows_path = "C:/Data/uploads"
 
         # Expected message:
         # "Windows path detected: C:/Data/uploads
@@ -261,7 +254,6 @@ class TestErrorMessages:
 
     def test_relative_path_warning(self):
         """Test warning for relative paths."""
-        relative_path = "./uploads"
 
         # Expected message:
         # "Relative path detected: ./uploads
@@ -305,7 +297,7 @@ class TestRegressionCases:
 
     def test_zip_creation_cleanup(self, temp_upload_dir):
         """Test ZIP creation and cleanup works correctly."""
-        zip_manager = get_zip_manager()
+        get_zip_manager()
 
         # Create a ZIP file
         # (Mock or use actual zip_manager after implementation)
@@ -389,7 +381,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     # Count test outcomes
     for item in session.items:
-        outcome = session._setupstate.stack  # This needs proper implementation
+        pass  # This needs proper implementation
         # Count outcomes...
 
     # Save to file

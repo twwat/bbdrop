@@ -6,7 +6,7 @@ allowing updates even when total_images starts at 0.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import QTableWidgetItem, QApplication
 from PyQt6.QtCore import Qt
 import sys
@@ -170,7 +170,7 @@ class TestUploadedColumnIntegration:
             total_images = 0
             uploaded_images = 0
             uploaded_text = f"{uploaded_images}/{total_images}" if total_images > 0 else ""
-            uploaded_item = QTableWidgetItem(uploaded_text)
+            QTableWidgetItem(uploaded_text)
 
             # Verify no debug log was called
             mock_log.assert_not_called()

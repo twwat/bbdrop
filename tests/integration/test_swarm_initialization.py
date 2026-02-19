@@ -5,7 +5,6 @@ Tests complete swarm setup, agent spawning, and coordination.
 
 import pytest
 import json
-from pathlib import Path
 from datetime import datetime
 
 
@@ -58,7 +57,7 @@ class TestSwarmInitializationWorkflow:
                                                sample_swarm_config, write_json_file):
         """Test initialization workflow includes memory setup."""
         # Write configuration
-        config_path = write_json_file("swarm/config/swarm-init.json", sample_swarm_config)
+        write_json_file("swarm/config/swarm-init.json", sample_swarm_config)
 
         # Initialize memory with swarm config
         temp_memory_db.execute(
@@ -177,7 +176,7 @@ class TestAgentSpawningCoordination:
                 futures.append(future)
 
             # Wait for all to complete
-            agent_ids = [f.result() for f in concurrent.futures.as_completed(futures)]
+            [f.result() for f in concurrent.futures.as_completed(futures)]
 
         # Verify all agents spawned
         cursor = temp_memory_db.execute(
@@ -422,9 +421,9 @@ class TestEndToEndInitialization:
         """Test complete initialization scenario from start to finish."""
         # Step 1: Setup - Write all configuration files
         config_path = write_json_file("swarm/config/swarm-init.json", sample_swarm_config)
-        instructions_path = write_json_file("swarm/tasks/agent-instructions.json",
+        write_json_file("swarm/tasks/agent-instructions.json",
                                             sample_agent_instructions)
-        objective_path = write_json_file("swarm/memory/objective.json", sample_objective)
+        write_json_file("swarm/memory/objective.json", sample_objective)
 
         # Step 2: Initialize swarm in memory
         temp_memory_db.execute(

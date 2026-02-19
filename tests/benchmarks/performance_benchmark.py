@@ -142,7 +142,7 @@ def benchmark_icon_caching(icon_manager, all_items):
     io_saved = len(all_items) - stats['disk_loads']
     io_reduction = (io_saved / len(all_items) * 100) if len(all_items) > 0 else 0
 
-    print(f"\n✓ IMPROVEMENT:")
+    print("\n✓ IMPROVEMENT:")
     print(f"  Speedup: {speedup:.1f}x faster")
     print(f"  Disk I/O saved: {io_saved} operations ({io_reduction:.1f}% reduction)")
 
@@ -180,14 +180,14 @@ def benchmark_batch_queries(store, all_items):
     batch_uploads = store.get_all_file_host_uploads_batch()
     with_batch_time = time.time() - start
     print(f"  Time: {with_batch_time*1000:.2f}ms")
-    print(f"  Database queries: 1")
+    print("  Database queries: 1")
     print(f"  Uploads found: {len(batch_uploads)}")
 
     # Calculate improvement
     speedup = without_batch_time / with_batch_time if with_batch_time > 0 else 0
     queries_saved = len(all_items) - 1
 
-    print(f"\n✓ IMPROVEMENT:")
+    print("\n✓ IMPROVEMENT:")
     print(f"  Speedup: {speedup:.1f}x faster")
     print(f"  Queries saved: {queries_saved} ({queries_saved / len(all_items) * 100:.1f}% reduction)")
 
@@ -232,7 +232,7 @@ def benchmark_combined(icon_manager, store, all_items):
     start = time.time()
 
     # Batch query
-    batch_uploads = store.get_all_file_host_uploads_batch()
+    store.get_all_file_host_uploads_batch()
 
     # Cached icons
     for item in all_items:
@@ -244,7 +244,7 @@ def benchmark_combined(icon_manager, store, all_items):
     # Calculate improvement
     speedup = unoptimized_time / optimized_time if optimized_time > 0 else 0
 
-    print(f"\n✓ OVERALL IMPROVEMENT:")
+    print("\n✓ OVERALL IMPROVEMENT:")
     print(f"  Speedup: {speedup:.1f}x faster")
     print(f"  Time saved: {(unoptimized_time - optimized_time)*1000:.2f}ms")
 
@@ -282,13 +282,13 @@ def main():
     print("BENCHMARK SUMMARY")
     print("="*60)
     print(f"\nDataset: {len(all_items)} galleries")
-    print(f"\nIcon Caching:")
+    print("\nIcon Caching:")
     print(f"  Speedup: {icon_results['speedup']:.1f}x faster")
     print(f"  Disk I/O reduction: {icon_results['io_reduction']:.1f}%")
-    print(f"\nBatch Queries:")
+    print("\nBatch Queries:")
     print(f"  Speedup: {batch_results['speedup']:.1f}x faster")
     print(f"  Queries saved: {batch_results['queries_saved']}")
-    print(f"\nCombined:")
+    print("\nCombined:")
     print(f"  Overall speedup: {combined_results['speedup']:.1f}x faster")
     print(f"  Time saved: {(combined_results['unoptimized_time'] - combined_results['optimized_time'])*1000:.2f}ms")
 
