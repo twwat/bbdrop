@@ -10,15 +10,13 @@ Target: High coverage with thorough testing of all menu operations.
 
 import sys
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, MagicMock, patch
 
 import pytest
 from PyQt6.QtWidgets import (
-    QApplication, QMenu, QTableWidget, QTableWidgetItem,
-    QWidget, QMainWindow
+    QMenu, QTableWidget, QTableWidgetItem
 )
-from PyQt6.QtCore import Qt, QPoint, QModelIndex
-from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, QPoint
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))

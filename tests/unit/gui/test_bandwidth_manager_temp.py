@@ -15,19 +15,8 @@ This test suite provides thorough coverage including:
 Uses pytest-qt fixtures for proper Qt integration testing.
 """
 
-import os
-import sys
-import time
-import pytest
-from pathlib import Path
-from typing import List
-from unittest.mock import Mock, patch, MagicMock
 
-from PyQt6.QtCore import QSettings, QTimer
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtTest import QSignalSpy
 
-from src.gui.bandwidth_manager import BandwidthManager, BandwidthSource
 
 
 # Test file content continues...

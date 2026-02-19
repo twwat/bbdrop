@@ -15,10 +15,8 @@ Target: 95%+ coverage with 20+ comprehensive tests
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 from PyQt6.QtWidgets import QLineEdit, QPushButton, QLabel, QWidget, QHBoxLayout, QVBoxLayout
 from PyQt6.QtCore import Qt
-from PyQt6.QtTest import QTest
 
 
 # ============================================================================

@@ -18,13 +18,10 @@ Environment: pytest-qt, PyQt6, venv ~/bbdrop-venv
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import patch
 from PyQt6.QtWidgets import (
-    QWidget, QPushButton, QApplication, QVBoxLayout, QHBoxLayout,
-    QSizePolicy
+    QPushButton, QApplication, QVBoxLayout, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QIcon, QResizeEvent
 
 from src.gui.widgets.adaptive_settings_panel import AdaptiveQuickSettingsPanel
 
@@ -398,7 +395,6 @@ class TestLayoutModes:
         # Set initial mode
         panel.resize(200, 120)
         panel._update_layout(force=True)
-        old_container = panel.button_container
 
         # Force rebuild
         panel._update_layout(force=True)
@@ -640,7 +636,6 @@ class TestResizeEvent:
         qtbot.waitExposed(panel)
 
         # Count initial calls
-        initial_text_calls = 0
 
         with patch.object(panel, '_update_button_text', wraps=panel._update_button_text) as mock_update:
             panel.resize(200, 120)

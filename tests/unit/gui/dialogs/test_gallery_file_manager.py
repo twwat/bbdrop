@@ -4,14 +4,9 @@ pytest-qt tests for GalleryFileManagerDialog
 Tests file operations, gallery management, and dialog interactions
 """
 
-import os
 import sys
-import json
-import tempfile
-import shutil
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
-from typing import Dict, Any
+from unittest.mock import Mock, patch
 
 import pytest
 from PyQt6.QtWidgets import QDialog, QListWidgetItem, QMessageBox, QFileDialog
@@ -25,7 +20,6 @@ from src.gui.dialogs.gallery_file_manager import (
     GalleryFileManagerDialog,
     FileScanner
 )
-from src.core.constants import IMAGE_EXTENSIONS
 
 
 # Test Fixtures

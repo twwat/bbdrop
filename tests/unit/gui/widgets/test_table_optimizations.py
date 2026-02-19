@@ -11,7 +11,7 @@ Target: Ensure optimizations don't break existing functionality
 import pytest
 import sys
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import QTableWidgetItem
 from PyQt6.QtCore import Qt
 

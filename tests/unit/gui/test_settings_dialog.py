@@ -18,16 +18,12 @@ Tests cover:
 """
 
 import pytest
-import os
 import configparser
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import (
-    QDialog, QTabWidget, QMessageBox, QPushButton,
-    QCheckBox, QSpinBox, QComboBox, QLineEdit, QSlider
+    QDialog, QMessageBox, QCheckBox, QComboBox
 )
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal
-from PyQt6.QtTest import QTest
+from PyQt6.QtCore import QSettings
 
 from src.gui.settings import (
     ComprehensiveSettingsDialog,
@@ -596,7 +592,7 @@ class TestSettingsDialogValidation:
 
         # Test sampling spinbox
         if hasattr(dialog, 'scanning_tab'):
-            min_val = dialog.scanning_tab.sampling_fixed_spin.minimum()
+            dialog.scanning_tab.sampling_fixed_spin.minimum()
             max_val = dialog.scanning_tab.sampling_fixed_spin.maximum()
             dialog.scanning_tab.sampling_fixed_spin.setValue(max_val + 10)  # Try to exceed max
             assert dialog.scanning_tab.sampling_fixed_spin.value() <= max_val
@@ -636,7 +632,7 @@ class TestSettingsDialogBehavior:
         qtbot.addWidget(dialog)
 
         with patch.object(dialog, 'save_current_tab', return_value=True):
-            with patch.object(dialog, 'accept') as mock_accept:
+            with patch.object(dialog, 'accept'):
                 dialog.save_and_close()
                 # Should eventually call accept (might be delayed due to message boxes)
 
@@ -652,7 +648,7 @@ class TestSettingsDialogBehavior:
 
         # Mock the message box to auto-decline
         with patch('src.gui.settings.settings_dialog.QMessageBox.exec', return_value=QMessageBox.StandardButton.No):
-            with patch.object(dialog, 'reject') as mock_reject:
+            with patch.object(dialog, 'reject'):
                 dialog.on_cancel_clicked()
                 # Will call reject if no unsaved changes
 
@@ -973,7 +969,7 @@ class TestSettingsDialogSaveFunctions:
     @patch('src.gui.settings.settings_dialog.get_config_path')
     def test_save_settings_with_parent(self, mock_get_path, mock_load, qtbot, tmp_path):
         """Test save_settings when dialog has parent"""
-        from PyQt6.QtWidgets import QWidget, QCheckBox, QComboBox
+        from PyQt6.QtWidgets import QWidget
         from PyQt6.QtCore import QSettings
 
         mock_load.return_value = {}
@@ -1014,7 +1010,7 @@ class TestSettingsDialogSaveFunctions:
         qtbot.addWidget(dialog)
 
         # Should not raise, should return False
-        with patch('src.gui.settings.settings_dialog.QMessageBox') as mock_msgbox:
+        with patch('src.gui.settings.settings_dialog.QMessageBox'):
             result = dialog.save_settings()
             assert result is False
 

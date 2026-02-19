@@ -9,7 +9,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from typing import List
 
 import pytest
@@ -17,8 +17,8 @@ import pytest
 # Ensure Qt uses offscreen platform for headless testing
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import Qt, QTimer, QEventLoop
-from PyQt6.QtWidgets import QApplication, QTableWidgetItem, QWidget
+from PyQt6.QtCore import QTimer, QEventLoop
+from PyQt6.QtWidgets import QApplication, QWidget
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))

@@ -12,10 +12,9 @@ import pytest
 import sys
 import time
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
-from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QApplication
-from PyQt6.QtCore import Qt, QRect, QTimer
-from PyQt6.QtTest import QTest
+from unittest.mock import Mock, patch
+from PyQt6.QtWidgets import QTableWidgetItem
+from PyQt6.QtCore import Qt
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -511,7 +510,6 @@ class TestPerformance:
 
     def test_phase2_completes_under_5_seconds_997_galleries(self, qtbot, mock_queue_manager):
         """Test Phase 2 loads 997 galleries in <5 seconds"""
-        import time
 
         table = GalleryTableWidget()
         table.queue_manager = mock_queue_manager
@@ -563,7 +561,6 @@ class TestPerformance:
 
     def test_scroll_latency_under_100ms(self, populated_table, qtbot, mock_main_window):
         """Test scroll event processing completes in <100ms"""
-        import time
 
         # Initially only 30 rows have widgets
         rows_with_widgets = mock_main_window._rows_with_widgets
@@ -612,7 +609,6 @@ class TestPerformance:
         assert table.rowCount() == 1500
 
         # Simulate user interaction (selection should be fast)
-        import time
         start_time = time.time()
         table.selectRow(500)
         elapsed = time.time() - start_time

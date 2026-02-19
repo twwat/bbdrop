@@ -5,14 +5,12 @@ Tests main window initialization, UI components, menus, signals, and basic inter
 """
 import pytest
 import sys
-import os
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QPushButton,
-    QTableWidget, QTextEdit, QLabel, QSystemTrayIcon, QMenu
+    QMainWindow, QMessageBox
 )
-from PyQt6.QtCore import Qt, QSettings, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
 # Add src to path
@@ -883,7 +881,7 @@ class TestBBDropGUIConfirmation:
                             qtbot.addWidget(window)
 
                             paths = [f'/path/{i}' for i in range(60)]
-                            result = window._confirm_removal(paths)
+                            window._confirm_removal(paths)
                                 # Should show confirmation for >50 galleries
                             mock_msg.assert_called_once()
 

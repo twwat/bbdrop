@@ -14,14 +14,12 @@ Test patterns:
 """
 
 import os
-import sys
 
 # Ensure Qt uses offscreen platform for headless testing
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from typing import Dict, List, Tuple
+from unittest.mock import Mock, patch
 
 from PyQt6.QtCore import Qt, QRect, QSize, QModelIndex, QPoint, QEvent
 from PyQt6.QtGui import QIcon, QPixmap, QPainter

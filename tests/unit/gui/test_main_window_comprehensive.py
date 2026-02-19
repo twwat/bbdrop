@@ -17,18 +17,13 @@ Tests cover:
 - Edge cases and error handling
 """
 
-import pytest
 import sys
-import os
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, PropertyMock, call
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QPushButton,
-    QTableWidget, QTextEdit, QLabel, QSystemTrayIcon, QMenu,
-    QProgressBar, QComboBox, QSplitter, QTabWidget, QHeaderView,
-    QTableWidgetItem, QFileDialog
+    QMainWindow, QMessageBox, QSystemTrayIcon
 )
-from PyQt6.QtCore import Qt, QSettings, QTimer, pyqtSignal, QMimeData, QUrl, QPoint
+from PyQt6.QtCore import QMimeData, QUrl, QPoint
 from PyQt6.QtGui import QIcon, QDropEvent, QDragEnterEvent, QAction
 
 # Add src to path
@@ -36,10 +31,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.gui.main_window import (
     BBDropGUI, CompletionWorker, SingleInstanceServer,
-    LogTextEdit, NumericTableWidgetItem, get_icon,
-    check_stored_credentials, api_key_is_set, format_timestamp_for_display
+    NumericTableWidgetItem, format_timestamp_for_display
 )
-from src.gui.menu_manager import MenuManager
 
 
 # ============================================================================
@@ -176,7 +169,6 @@ def create_minimal_window(qtbot, comprehensive_mock_dependencies):
     windows = []
 
     def _create(**kwargs):
-        from PyQt6.QtWidgets import QMainWindow
 
         # Completely replace __init__ - no real timers, threads, or Qt objects
         def fake_init(self, splash=None):

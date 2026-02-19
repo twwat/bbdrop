@@ -13,8 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'src'))
 
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer, Qt
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 # Import from src.gui.main_window instead of gui.main_window
 import importlib.util

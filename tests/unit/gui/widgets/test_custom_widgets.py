@@ -20,15 +20,13 @@ Environment: pytest-qt, PyQt6, venv ~/bbdrop-venv
 """
 
 import pytest
-import os
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
+from unittest.mock import MagicMock, patch, call
 from PyQt6.QtWidgets import (
-    QWidget, QApplication, QStyle, QMenu, QMessageBox
+    QApplication, QMenu
 )
 from PyQt6.QtCore import Qt, QMimeData, QPoint, QSize, QEvent
-from PyQt6.QtGui import QIcon, QPixmap, QColor, QDragEnterEvent, QDropEvent, QKeyEvent
-from PyQt6.QtTest import QSignalSpy, QTest
+from PyQt6.QtGui import QIcon, QDragEnterEvent, QDropEvent, QKeyEvent
+from PyQt6.QtTest import QSignalSpy
 
 from src.gui.widgets.custom_widgets import (
     OverallProgressWidget,
@@ -116,8 +114,8 @@ class TestOverallProgressWidget:
         qtbot.waitExposed(widget)
 
         # Initial geometry
-        initial_width = widget.progress_bar.width()
-        initial_height = widget.progress_bar.height()
+        widget.progress_bar.width()
+        widget.progress_bar.height()
 
         # Resize widget
         widget.resize(400, 50)

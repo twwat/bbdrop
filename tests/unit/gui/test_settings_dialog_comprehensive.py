@@ -20,18 +20,13 @@ Target: High coverage of all ComprehensiveSettingsDialog functionality
 """
 
 import pytest
-import os
 import configparser
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import (
-    QDialog, QTabWidget, QMessageBox, QPushButton,
-    QCheckBox, QSpinBox, QComboBox, QLineEdit, QSlider,
-    QRadioButton, QLabel, QGroupBox, QTableWidget, QWidget
+    QMessageBox, QWidget
 )
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QMimeData, QUrl
-from PyQt6.QtTest import QTest
-from PyQt6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
+from PyQt6.QtCore import QSettings
+from PyQt6.QtGui import QCloseEvent
 
 # Import the classes we're testing
 from src.gui.settings import (
@@ -780,7 +775,7 @@ class TestSettingsDialogResetExtended:
         qtbot.addWidget(dialog)
 
         # Change values from defaults
-        original_retries = dialog.max_retries_slider.value()
+        dialog.max_retries_slider.value()
         dialog.max_retries_slider.setValue(5)
         dialog.batch_size_slider.setValue(8)
 
@@ -1022,7 +1017,7 @@ class TestSettingsDialogWorkflows:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        original_value = dialog.max_retries_slider.value()
+        dialog.max_retries_slider.value()
 
         # Modify
         dialog.max_retries_slider.setValue(5)

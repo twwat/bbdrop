@@ -11,7 +11,6 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-from unittest.mock import Mock, patch, MagicMock
 from typing import List
 
 import pytest
@@ -20,8 +19,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt, QTimer, QEventLoop
-from PyQt6.QtWidgets import QApplication, QTableWidgetItem, QWidget
-from PyQt6.QtGui import QColor, QCloseEvent
+from PyQt6.QtWidgets import QApplication, QWidget
 
 from src.gui.theme_manager import get_online_status_colors
 

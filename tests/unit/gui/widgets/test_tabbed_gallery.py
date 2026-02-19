@@ -16,10 +16,9 @@ Tests cover:
 
 import pytest
 import time
-from unittest.mock import Mock, MagicMock, patch, call
-from PyQt6.QtCore import Qt, QMimeData, QPoint, QSettings
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QApplication, QWidget, QMessageBox, QInputDialog, QTableWidgetItem
+from unittest.mock import MagicMock, patch
+from PyQt6.QtCore import Qt, QMimeData, QPoint
+from PyQt6.QtWidgets import QMessageBox, QInputDialog, QTableWidgetItem
 from PyQt6.QtTest import QSignalSpy
 
 from src.gui.widgets.tabbed_gallery import (

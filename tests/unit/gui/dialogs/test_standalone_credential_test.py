@@ -8,8 +8,6 @@ a running worker. This enables users to test credentials before enabling the hos
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch
-from PyQt6.QtWidgets import QLineEdit
-from PyQt6.QtCore import QSettings
 from PyQt6.QtGui import QIcon
 
 from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog

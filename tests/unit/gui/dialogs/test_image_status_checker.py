@@ -10,9 +10,9 @@ Target: 25-40 tests covering all major functionality.
 import pytest
 import threading
 import time
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import pyqtSignal, QObject, Qt
+from PyQt6.QtCore import pyqtSignal, QObject
 
 
 class MockRenameWorker(QObject):

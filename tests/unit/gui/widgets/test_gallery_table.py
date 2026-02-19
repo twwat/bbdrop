@@ -5,26 +5,22 @@ Tests table model/view, row operations, selection handling, context menus, and c
 Target: 70%+ coverage with 40-60 tests
 """
 
-import os
 import sys
-import json
-import tempfile
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, MagicMock, patch
 
 import pytest
 from PyQt6.QtWidgets import (
-    QTableWidget, QTableWidgetItem, QApplication, QMenu,
-    QHeaderView, QMessageBox, QInputDialog, QDialog, QMainWindow
+    QTableWidget, QTableWidgetItem, QMenu,
+    QMessageBox, QDialog, QMainWindow
 )
-from PyQt6.QtCore import Qt, QPoint, QUrl, QMimeData, QTimer
-from PyQt6.QtGui import QIcon, QFont, QDragEnterEvent, QDropEvent, QKeyEvent
+from PyQt6.QtCore import Qt, QPoint, QUrl, QMimeData
+from PyQt6.QtGui import QIcon, QKeyEvent
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from src.gui.widgets.gallery_table import GalleryTableWidget, NumericColumnDelegate
-from src.core.constants import IMAGE_EXTENSIONS
 
 
 # ============================================================================

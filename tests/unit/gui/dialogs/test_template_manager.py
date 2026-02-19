@@ -4,16 +4,14 @@ pytest-qt tests for Template Manager Dialog
 Tests template CRUD operations, validation, and dialog interactions
 """
 
-import os
 import sys
 import pytest
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock, mock_open, call
+from unittest.mock import patch, Mock, mock_open
 from PyQt6.QtWidgets import (
-    QDialog, QMessageBox, QInputDialog, QApplication
+    QDialog, QMessageBox
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QTextCursor
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
@@ -80,7 +78,7 @@ class TestPlaceholderHighlighter:
         from PyQt6.QtGui import QTextDocument
 
         doc = QTextDocument()
-        highlighter = PlaceholderHighlighter(doc)
+        PlaceholderHighlighter(doc)
         doc.setPlainText("Template with #folderName# placeholder")
 
         # highlightBlock is called automatically by QSyntaxHighlighter
@@ -91,7 +89,7 @@ class TestPlaceholderHighlighter:
         from PyQt6.QtGui import QTextDocument
 
         doc = QTextDocument()
-        highlighter = PlaceholderHighlighter(doc)
+        PlaceholderHighlighter(doc)
         doc.setPlainText("[if folderName]Content[/if]")
 
         # highlightBlock is called automatically

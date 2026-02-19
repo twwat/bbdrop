@@ -1,6 +1,5 @@
 """Tests for cover photo context menu actions."""
-import pytest
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import MagicMock
 
 
 class TestCoverContextMenu:

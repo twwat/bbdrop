@@ -14,22 +14,18 @@ Uses pytest-qt fixtures for proper Qt integration testing.
 """
 
 import os
-import sys
 import time
 import pytest
 from pathlib import Path
-from typing import List
-from unittest.mock import Mock, patch, MagicMock, PropertyMock
+from unittest.mock import Mock, patch
 
-from PyQt6.QtGui import QIcon, QPixmap, QColor, QPalette
-from PyQt6.QtWidgets import QApplication, QStyle
-from PyQt6.QtCore import QSize
+from PyQt6.QtGui import QIcon, QPalette
+from PyQt6.QtWidgets import QApplication
 
 from src.gui.icon_manager import (
     IconManager,
     get_icon_manager,
-    init_icon_manager,
-    _icon_manager
+    init_icon_manager
 )
 
 
@@ -416,7 +412,6 @@ class TestCacheBehavior:
     def test_refresh_cache_clears_missing_icons_set(self, qtbot, icon_manager, temp_assets_dir):
         """Verify refresh_cache clears the missing icons tracking."""
         # Remove an icon file that's defined in ICON_MAP to trigger missing tracking
-        import os
         light_icon = os.path.join(temp_assets_dir, 'status_validating-light.png')
         dark_icon = os.path.join(temp_assets_dir, 'status_validating-dark.png')
         if os.path.exists(light_icon):
@@ -919,7 +914,7 @@ class TestAutoThemeDetection:
 
         with patch('PyQt6.QtWidgets.QApplication.instance', return_value=mock_app):
             # Use a light/dark pair icon to ensure theme is in cache key
-            icon = icon_manager.get_icon('status_uploading', theme_mode=None)
+            icon_manager.get_icon('status_uploading', theme_mode=None)
 
         # Check cache key contains 'light'
         cache_keys = list(icon_manager._icon_cache.keys())
@@ -938,7 +933,7 @@ class TestAutoThemeDetection:
 
         with patch('PyQt6.QtWidgets.QApplication.instance', return_value=mock_app):
             # Use a light/dark pair icon to ensure theme is in cache key
-            icon = icon_manager.get_icon('status_uploading', theme_mode=None)
+            icon_manager.get_icon('status_uploading', theme_mode=None)
 
         # Check cache key contains 'dark'
         cache_keys = list(icon_manager._icon_cache.keys())

@@ -1,5 +1,4 @@
 """Tests for cover indicator column in gallery queue table."""
-import pytest
 
 
 class TestCoverColumn:

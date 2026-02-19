@@ -8,19 +8,15 @@ GUI unit tests in this directory.
 
 import os
 import sys
-import tempfile
 import configparser
 from pathlib import Path
 from typing import Generator
-from unittest.mock import Mock, patch
 
 import pytest
 
 # Ensure Qt uses offscreen platform for headless testing
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QSettings
 
 
 # Add src to path for imports

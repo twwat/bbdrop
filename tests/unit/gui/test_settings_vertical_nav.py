@@ -1,6 +1,5 @@
 """Tests for vertical navigation settings dialog layout."""
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 class TestVerticalNavLayout:
@@ -11,7 +10,7 @@ class TestVerticalNavLayout:
     def test_has_nav_list_and_stack(self, mock_config, mock_defaults):
         """Dialog has nav_list (QListWidget) and stack_widget (QStackedWidget)."""
         from PyQt6.QtWidgets import QApplication, QListWidget, QStackedWidget
-        app = QApplication.instance() or QApplication([])
+        QApplication.instance() or QApplication([])
 
         from src.gui.settings import ComprehensiveSettingsDialog
         with patch.object(ComprehensiveSettingsDialog, 'load_settings'):
@@ -27,7 +26,7 @@ class TestVerticalNavLayout:
     def test_nav_list_count_matches_stack(self, mock_config, mock_defaults):
         """Nav list item count matches stack widget page count."""
         from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
+        QApplication.instance() or QApplication([])
 
         from src.gui.settings import ComprehensiveSettingsDialog
         with patch.object(ComprehensiveSettingsDialog, 'load_settings'):
@@ -41,7 +40,7 @@ class TestVerticalNavLayout:
     def test_no_tab_widget(self, mock_config, mock_defaults):
         """Dialog should NOT have a tab_widget anymore."""
         from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
+        QApplication.instance() or QApplication([])
 
         from src.gui.settings import ComprehensiveSettingsDialog
         with patch.object(ComprehensiveSettingsDialog, 'load_settings'):
@@ -54,7 +53,7 @@ class TestVerticalNavLayout:
     def test_selecting_nav_item_changes_stack(self, mock_config, mock_defaults):
         """Clicking a nav list item switches the stack page."""
         from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
+        QApplication.instance() or QApplication([])
 
         from src.gui.settings import ComprehensiveSettingsDialog
         with patch.object(ComprehensiveSettingsDialog, 'load_settings'):
@@ -69,7 +68,7 @@ class TestVerticalNavLayout:
     def test_nav_list_has_expected_labels(self, mock_config, mock_defaults):
         """Nav list contains expected page labels."""
         from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
+        QApplication.instance() or QApplication([])
 
         from src.gui.settings import ComprehensiveSettingsDialog
         with patch.object(ComprehensiveSettingsDialog, 'load_settings'):

@@ -12,9 +12,8 @@ Tests the actual _populate_table_row method with:
 import pytest
 import sys
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import QTableWidgetItem
-from PyQt6.QtCore import Qt
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -245,7 +244,7 @@ class TestFileHostLazyLoadingIntegration:
 
         if should_create_widgets:
             # This should NOT execute during initialization
-            uploads = window.queue_manager.store.get_file_host_uploads(sample_gallery_item.path)
+            window.queue_manager.store.get_file_host_uploads(sample_gallery_item.path)
             # Widget creation would happen here
             mock_status_widget.assert_called()  # This should NOT happen
 

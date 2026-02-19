@@ -11,11 +11,11 @@ Tests cover:
 """
 
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
-from PyQt6.QtCore import QSettings, QTimer
+from PyQt6.QtCore import QSettings
 
 
 class TestBandwidthSource:
@@ -690,7 +690,6 @@ class TestBandwidthManagerThreadSafety:
         import threading
 
         errors = []
-        results = {"hosts_created": 0}
 
         def add_host_bandwidth(host_name, value):
             try:

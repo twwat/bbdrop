@@ -16,9 +16,8 @@ import pytest
 import sys
 import time
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
-from PyQt6.QtWidgets import QApplication, QTableWidgetItem
-from PyQt6.QtCore import Qt
+from unittest.mock import Mock, patch
+from PyQt6.QtWidgets import QApplication
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -498,7 +497,7 @@ class TestFullOptimizationIntegration:
         # 4. Performance optimization
         assert elapsed_time < 5.0, f"Should complete quickly, took {elapsed_time:.2f}s"
 
-        print(f"\n✓ All optimizations verified:")
+        print("\n✓ All optimizations verified:")
         print(f"  - setUpdatesEnabled: {len(updates_enabled_calls)} calls")
         print(f"  - progress_callback: {len(progress_calls)} calls")
         print(f"  - processEvents: {len(process_events_calls)} calls")

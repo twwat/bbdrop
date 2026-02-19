@@ -158,17 +158,17 @@ class TestMemoryOptimization:
         percent = (savings / without_viewport) * 100
 
         print(f"\n{'='*70}")
-        print(f"VIEWPORT LAZY LOADING VALIDATION COMPLETE")
+        print("VIEWPORT LAZY LOADING VALIDATION COMPLETE")
         print(f"{'='*70}")
-        print(f"Implementation Status: ✅ VIEWPORT LAZY LOADING IMPLEMENTED")
-        print(f"\nMemory Optimization:")
+        print("Implementation Status: ✅ VIEWPORT LAZY LOADING IMPLEMENTED")
+        print("\nMemory Optimization:")
         print(f"  Before: {without_viewport:,} widgets (all galleries)")
         print(f"  After:  {with_viewport:,} widgets (visible only)")
         print(f"  Savings: {savings:,} widgets ({percent:.1f}% reduction)")
-        print(f"\nPerformance Impact:")
-        print(f"  Before: ~140 seconds to create all widgets")
-        print(f"  After:  <5 seconds to create visible widgets")
-        print(f"  Improvement: ~28x faster initial load")
+        print("\nPerformance Impact:")
+        print("  Before: ~140 seconds to create all widgets")
+        print("  After:  <5 seconds to create visible widgets")
+        print("  Improvement: ~28x faster initial load")
         print(f"{'='*70}\n")
 
         assert percent > 95, "Expected >95% memory reduction"

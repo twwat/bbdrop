@@ -14,18 +14,15 @@ Coverage targets:
 - Theme-aware styling
 """
 
-import os
 import sys
 import pytest
-import tempfile
 import configparser
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock, call
+from unittest.mock import patch
 
 from PyQt6.QtWidgets import (
     QDialog, QLineEdit, QPushButton, QLabel, QMessageBox, QGroupBox
 )
-from PyQt6.QtCore import Qt
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
@@ -745,7 +742,6 @@ class TestThemeStyling:
 
     def test_no_parent_uses_defaults(self, dialog_with_mocks):
         """Test default colors when no parent"""
-        dialog = dialog_with_mocks
 
         # Color attributes not implemented in dialog
         # Should use light theme defaults

@@ -8,10 +8,7 @@ Tests verify that:
 4. Cache hit rate improves with repeated icon requests
 """
 
-import os
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from src.gui.icon_manager import IconManager

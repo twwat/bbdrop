@@ -4,8 +4,7 @@ Unit tests for TableRowManager - specifically IMX status handling.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import Mock
 
 from src.gui.table_row_manager import TableRowManager
 from src.storage.queue_manager import GalleryQueueItem

@@ -6,9 +6,7 @@ viewport-based lazy loading, NOT creating widgets for all 997 galleries.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 from PyQt6.QtWidgets import QApplication, QTableWidget, QTableWidgetItem, QProgressBar, QPushButton
-from PyQt6.QtCore import Qt, QTimer
 import sys
 
 # Test constants
@@ -230,7 +228,7 @@ class TestPhase2ViewportImplementation:
             f"Invalid visible range: ({first_visible}, {last_visible})"
         )
 
-        print(f"✅ PASS: All required methods exist and return correct types")
+        print("✅ PASS: All required methods exist and return correct types")
         print(f"   Visible range: rows {first_visible}-{last_visible}")
 
     def test_no_duplicate_widgets_on_scroll(self, window):

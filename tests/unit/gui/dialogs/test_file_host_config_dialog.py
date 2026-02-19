@@ -8,14 +8,12 @@ Environment: pytest-qt, PyQt6, venv ~/imxup-venv-314
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import Mock, MagicMock, patch
 from PyQt6.QtWidgets import (
-    QDialog, QLineEdit, QPushButton, QComboBox, QCheckBox,
-    QSpinBox, QProgressBar, QLabel, QListWidget, QMessageBox
+    QDialog, QLineEdit, QComboBox, QProgressBar, QListWidget, QMessageBox
 )
-from PyQt6.QtCore import QSettings, Qt, pyqtSignal, QObject
+from PyQt6.QtCore import QSettings
 from PyQt6.QtGui import QIcon
-from PyQt6.QtTest import QTest
 
 from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog
 from src.core.file_host_config import HostConfig

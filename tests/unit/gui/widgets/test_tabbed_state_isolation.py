@@ -13,9 +13,9 @@ These tests address critical UX bugs in the tabbed gallery system.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from PyQt6.QtCore import Qt, QPoint, QModelIndex
-from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QApplication
+from unittest.mock import MagicMock, patch
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem
 from PyQt6.QtTest import QTest
 
 from src.gui.widgets.tabbed_gallery import TabbedGalleryWidget, GalleryTableWidget
@@ -64,7 +64,7 @@ class TestScrollPositionIsolation:
         qtbot.wait(10)
 
         # Verify Tab2 starts at top (scroll position 0 or near it)
-        tab2_scroll_pos_initial = widget_with_data.table.verticalScrollBar().value()
+        widget_with_data.table.verticalScrollBar().value()
 
         # Scroll to row 20 in Tab2
         widget_with_data.table.scrollToItem(
@@ -78,7 +78,7 @@ class TestScrollPositionIsolation:
         qtbot.wait(10)
 
         # Verify Tab1 scroll position is NOT affected by Tab2's scrolling
-        tab1_scroll_pos_after = widget_with_data.table.verticalScrollBar().value()
+        widget_with_data.table.verticalScrollBar().value()
 
         # Tab1 should preserve its own scroll position
         # Note: Currently tabs share scroll position (not yet isolated)
@@ -120,7 +120,7 @@ class TestScrollPositionIsolation:
         for tab_name, expected_pos in positions.items():
             widget_with_data.switch_to_tab(tab_name)
             qtbot.wait(10)
-            actual_pos = widget_with_data.table.verticalScrollBar().value()
+            widget_with_data.table.verticalScrollBar().value()
 
             # TODO: Currently FAILS - scroll positions not preserved per tab
 
@@ -171,7 +171,7 @@ class TestSelectionStateIsolation:
         widget_with_tabs.table.selectRow(0)
         widget_with_tabs.table.selectRow(1)
         widget_with_tabs.table.selectRow(2)
-        tab1_selected = len(widget_with_tabs.table.selectedItems())
+        len(widget_with_tabs.table.selectedItems())
 
         # Switch to Tab2 and select rows 5, 6
         widget_with_tabs.switch_to_tab("Tab2")
@@ -180,14 +180,14 @@ class TestSelectionStateIsolation:
         widget_with_tabs.table.clearSelection()
         widget_with_tabs.table.selectRow(5)
         widget_with_tabs.table.selectRow(6)
-        tab2_selected = len(widget_with_tabs.table.selectedItems())
+        len(widget_with_tabs.table.selectedItems())
 
         # Switch back to Tab1
         widget_with_tabs.switch_to_tab("Tab1")
         qtbot.wait(10)
 
         # Verify Tab1's selection is restored
-        tab1_selected_after = len(widget_with_tabs.table.selectedItems())
+        len(widget_with_tabs.table.selectedItems())
 
         # Currently FAILS - selection is lost when switching tabs
         # Expected: tab1_selected_after == tab1_selected (3 rows * columns)
@@ -214,11 +214,11 @@ class TestSelectionStateIsolation:
         # Verify Main and Tab2 still have selections
         widget_with_tabs.switch_to_tab("Main")
         qtbot.wait(10)
-        main_selected = len(widget_with_tabs.table.selectedItems())
+        len(widget_with_tabs.table.selectedItems())
 
         widget_with_tabs.switch_to_tab("Tab2")
         qtbot.wait(10)
-        tab2_selected = len(widget_with_tabs.table.selectedItems())
+        len(widget_with_tabs.table.selectedItems())
 
         # TODO: Currently FAILS - clearing in one tab clears all tabs
         # Expected: Main and Tab2 retain their selections
@@ -258,7 +258,7 @@ class TestKeyboardNavigationScope:
         widget_keyboard_test.table.scrollToItem(
             widget_keyboard_test.table.item(25, 0)
         )
-        main_scroll_mid = widget_keyboard_test.table.verticalScrollBar().value()
+        widget_keyboard_test.table.verticalScrollBar().value()
 
         # Switch to Tab1, scroll to bottom
         widget_keyboard_test.switch_to_tab("Tab1")
@@ -277,7 +277,7 @@ class TestKeyboardNavigationScope:
         # Switch back to Main and verify it wasn't affected
         widget_keyboard_test.switch_to_tab("Main")
         qtbot.wait(10)
-        main_scroll_after = widget_keyboard_test.table.verticalScrollBar().value()
+        widget_keyboard_test.table.verticalScrollBar().value()
 
         # Tab1 should be at top
         assert tab1_scroll_after_home < 10, "Home key should scroll Tab1 to top"
@@ -367,13 +367,13 @@ class TestStartButtonDeselection:
 
             # Simulate start without losing focus
             # This is what should happen
-            current_selection = widget_with_start_action.table.selectedItems()
+            widget_with_start_action.table.selectedItems()
 
             # Start the item
             qm.start_item(path)
 
             # Selection should still be active after Start
-            selected_after = widget_with_start_action.table.selectedItems()
+            widget_with_start_action.table.selectedItems()
 
             # Critical assertion - currently FAILS
             # Start button click causes focus loss and deselection
@@ -393,7 +393,7 @@ class TestStartButtonDeselection:
 
         # Start all selected (batch operation)
         # This simulates right-click -> Start Selected
-        paths = [f"/path/gallery{i}" for i in [0, 1, 2]]
+        [f"/path/gallery{i}" for i in [0, 1, 2]]
 
         # After batch start, selection should remain
         # TODO: Currently FAILS - batch start clears selection
@@ -435,17 +435,17 @@ class TestTabSwitchingStatePreservation:
         widget_full_state.table.scrollToItem(
             widget_full_state.table.item(30, 0)
         )
-        tab1_scroll = widget_full_state.table.verticalScrollBar().value()
+        widget_full_state.table.verticalScrollBar().value()
 
         # Set selection
         widget_full_state.table.selectRow(30)
         widget_full_state.table.selectRow(31)
         widget_full_state.table.selectRow(32)
-        tab1_selected_rows = {item.row() for item in widget_full_state.table.selectedItems()}
+        {item.row() for item in widget_full_state.table.selectedItems()}
 
         # Set current item (keyboard focus)
         widget_full_state.table.setCurrentCell(31, 1)
-        tab1_current_row = widget_full_state.table.currentRow()
+        widget_full_state.table.currentRow()
 
         # Switch to Tab2 and set different state
         widget_full_state.switch_to_tab("Tab2")
@@ -462,9 +462,9 @@ class TestTabSwitchingStatePreservation:
         qtbot.wait(10)
 
         # Verify ALL state is restored
-        scroll_restored = widget_full_state.table.verticalScrollBar().value()
-        selected_rows_restored = {item.row() for item in widget_full_state.table.selectedItems()}
-        current_row_restored = widget_full_state.table.currentRow()
+        widget_full_state.table.verticalScrollBar().value()
+        {item.row() for item in widget_full_state.table.selectedItems()}
+        widget_full_state.table.currentRow()
 
         # All assertions currently FAIL - state not preserved per tab
         # TODO: Implement comprehensive per-tab state caching
@@ -509,9 +509,9 @@ class TestTabSwitchingStatePreservation:
             widget_full_state.switch_to_tab(tab_name)
             qtbot.wait(10)
 
-            actual_scroll = widget_full_state.table.verticalScrollBar().value()
-            actual_selected = len(widget_full_state.table.selectedItems())
-            actual_current = widget_full_state.table.currentRow()
+            widget_full_state.table.verticalScrollBar().value()
+            len(widget_full_state.table.selectedItems())
+            widget_full_state.table.currentRow()
 
             # TODO: All assertions FAIL - state not isolated per tab
 

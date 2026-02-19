@@ -8,12 +8,9 @@ Target: 25-40 tests covering all major functionality.
 """
 
 import pytest
-import os
 import gzip
-from datetime import datetime
 from unittest.mock import Mock, patch, MagicMock
-from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtWidgets import QTableWidgetItem
+from PyQt6.QtCore import QSettings
 
 # Mock logger before importing LogViewerDialog
 mock_logger = MagicMock()
@@ -238,7 +235,7 @@ class TestLogFiltering:
 
     def test_category_filter_unchecked_hides_entries(self, dialog_with_logs, qtbot):
         """Test unchecking category filter removes those entries"""
-        initial_rows = dialog_with_logs.log_view.rowCount()
+        dialog_with_logs.log_view.rowCount()
 
         # Uncheck "uploads" category
         dialog_with_logs._filters_row["uploads"].setChecked(False)
@@ -452,7 +449,7 @@ class TestClearAndRefreshActions:
 
     def test_file_select_triggers_refresh(self, dialog, qtbot):
         """Test changing file selection triggers refresh"""
-        with patch.object(dialog, 'btn_refresh') as mock_btn:
+        with patch.object(dialog, 'btn_refresh'):
             # Simulate file selection change
             dialog.cmb_file_select.setCurrentIndex(0)
             qtbot.wait(50)
@@ -684,7 +681,7 @@ class TestTextFormatting:
         qtbot.wait(100)
 
         # Get the message before selection
-        message_before = dialog_with_logs.log_view.item(0, 3).text()
+        dialog_with_logs.log_view.item(0, 3).text()
 
         # Select the row
         dialog_with_logs.log_view.selectRow(0)
