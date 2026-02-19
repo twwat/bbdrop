@@ -345,10 +345,11 @@ class GalleryContextMenuHelper(QObject):
 
         if file_path:
             item.cover_source_path = file_path
-            qm._schedule_debounced_save()
+            qm._schedule_debounced_save([gallery_path])
             # Refresh the table row
-            if hasattr(self.main_window, 'table_row_manager'):
-                self.main_window.table_row_manager.update_row_for_path(gallery_path)
+            row = self.main_window._get_row_for_path(gallery_path)
+            if row is not None:
+                self.main_window._populate_table_row(row, item)
 
     def _clear_cover(self, gallery_path):
         """Remove cover from gallery item."""
@@ -359,10 +360,11 @@ class GalleryContextMenuHelper(QObject):
 
         item.cover_source_path = None
         item.cover_result = None
-        qm._schedule_debounced_save()
+        qm._schedule_debounced_save([gallery_path])
         # Refresh the table row
-        if hasattr(self.main_window, 'table_row_manager'):
-            self.main_window.table_row_manager.update_row_for_path(gallery_path)
+        row = self.main_window._get_row_for_path(gallery_path)
+        if row is not None:
+            self.main_window._populate_table_row(row, item)
 
     def _add_template_submenu(self, menu: QMenu, selected_paths: list):
         """Add 'Set template to...' submenu to the context menu"""
