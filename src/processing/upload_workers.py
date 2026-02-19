@@ -399,14 +399,19 @@ class UploadWorker(QThread):
             cover_host_id = (item.cover_host_id
                              or settings.value('cover/host_id', '', type=str)
                              or item.image_host_id or "imx")
-            thumbnail_format = settings.value('cover/thumbnail_format', 2, type=int)
-            cover_gallery = settings.value('cover/gallery', '', type=str)
+
+            # Per-host cover settings from INI
+            cover_gallery = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ''
+            cover_thumbnail_format = get_image_host_setting(cover_host_id, 'cover_thumbnail_format', 'int') or 2
+            cover_thumbnail_size = get_image_host_setting(cover_host_id, 'cover_thumbnail_size', 'int') or 600
 
             # Determine gallery attachment
-            if item.image_host_id == cover_host_id:
-                cover_gallery_id = gallery_id
+            if cover_gallery:
+                cover_gallery_id = cover_gallery  # explicit cover gallery set
+            elif item.image_host_id == cover_host_id:
+                cover_gallery_id = gallery_id  # same host, no explicit: use current gallery
             else:
-                cover_gallery_id = cover_gallery
+                cover_gallery_id = ''  # different host, no explicit: no gallery
 
             # Route to appropriate upload method
             if cover_host_id == "imx":
@@ -416,12 +421,28 @@ class UploadWorker(QThread):
                 result = self.rename_worker.upload_cover(
                     image_path=item.cover_source_path,
                     gallery_id=cover_gallery_id,
-                    thumbnail_format=thumbnail_format,
+                    thumbnail_format=cover_thumbnail_format,
                 )
             else:
                 cover_client = create_image_host_client(cover_host_id)
-                raw_result = cover_client.upload_image(item.cover_source_path)
-                result = cover_client.normalize_response(raw_result) if raw_result else None
+                # upload_image() already returns a normalized response dict
+                normalized = cover_client.upload_image(
+                    item.cover_source_path,
+                    gallery_id=cover_gallery_id if cover_gallery_id else None,
+                    thumbnail_size=cover_thumbnail_size,
+                )
+                # Flatten so cover_result has bbcode/image_url/thumb_url at top
+                # level (matching the flat shape IMX's upload_cover returns)
+                if normalized and normalized.get('status') == 'success':
+                    data = normalized.get('data', {})
+                    result = {
+                        'status': 'success',
+                        'bbcode': data.get('bbcode', ''),
+                        'image_url': data.get('image_url', ''),
+                        'thumb_url': data.get('thumb_url', ''),
+                    }
+                else:
+                    result = None
 
             if result:
                 item.cover_result = result
