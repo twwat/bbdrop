@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 import sqlite3
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -668,7 +667,7 @@ class QueueStore:
                                             d.get('thumb_url') or "",
                                         ),
                                     )
-                        except Exception as item_error:
+                        except Exception:
                             failures.append(it.get('path', 'unknown'))
                             # Continue with other items instead of failing completely
                             continue

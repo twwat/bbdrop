@@ -8,14 +8,14 @@ import time
 import threading
 import queue
 from queue import Queue
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 
 from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, QSettings, QTimer
 
 from src.storage.database import QueueStore
-from bbdrop import sanitize_gallery_name, load_user_defaults, timestamp
+from bbdrop import load_user_defaults
 from src.utils.logger import log
 from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
@@ -275,7 +275,7 @@ class QueueManager(QObject):
                             log(f"Scan Worker: Filename detection: pattern='{cover_config['patterns']}', matched={fn_matches}", level="debug", category="scan")
                             candidates.extend(fn_matches)
                         elif cover_config.get('filename_enabled', True):
-                            log(f"Scan Worker: Filename detection enabled but no patterns configured", level="debug", category="scan")
+                            log("Scan Worker: Filename detection enabled but no patterns configured", level="debug", category="scan")
 
                         # Dimension-based detection (only if scan_result has dimension data)
                         if cover_config.get('dimension_enabled', False):
@@ -500,7 +500,7 @@ class QueueManager(QObject):
             from PIL import Image
 
             # Use new sampling utility
-            from src.utils.sampling_utils import get_sample_indices, calculate_dimensions_with_outlier_exclusion
+            from src.utils.sampling_utils import get_sample_indices
 
             # Get enhanced config from settings (use same location as main GUI)
             settings = QSettings("BBDropUploader", "BBDropGUI")
@@ -569,7 +569,6 @@ class QueueManager(QObject):
                 item.scan_complete = True
 
                 # Log scan failure
-                from bbdrop import timestamp
                 log(f"Scan failed - {item.name or os.path.basename(path)}: {error}", level="warning", category="scan")
 
 
@@ -615,10 +614,9 @@ class QueueManager(QObject):
                         # Keep uploaded_images count
                         # Only clear error message and failed_files for retry
                         item.error_message = ""
-                        failed_count = len(item.failed_files) if hasattr(item, 'failed_files') and item.failed_files else 0
+                        len(item.failed_files) if hasattr(item, 'failed_files') and item.failed_files else 0
                         remaining_images = (item.total_images or 0) - (item.uploaded_images or 0)
                         
-                        from bbdrop import timestamp
                         log(f"Retrying {item.name or os.path.basename(path)}: {remaining_images} images ({item.uploaded_images} already uploaded)", category="queue")
                         
                         # Clear failed files list so they can be retried
@@ -632,7 +630,6 @@ class QueueManager(QObject):
                         item.uploaded_images = 0
                         item.progress = 0
                         
-                        from bbdrop import timestamp
                         log(f"Full retry for {item.name or os.path.basename(path)}", level="debug", category="queue")
                     
                     # Emit status change signal
@@ -673,7 +670,6 @@ class QueueManager(QObject):
                         item.scan_complete = True
                         item.error_message = ""
                         
-                        from bbdrop import timestamp
                         uploaded = item.uploaded_images or 0
                         log(f"Rescan of {item.name or os.path.basename(path)}: Found {new_images} new images ({uploaded} uploaded, {current_count - uploaded} remaining)", category="scan")
                         
@@ -690,7 +686,6 @@ class QueueManager(QObject):
                         if item.total_images > 0:
                             item.progress = int((item.uploaded_images or 0) / item.total_images * 100)
                         
-                        from bbdrop import timestamp
                         log(f"{item.name or os.path.basename(path)}: {removed} images removed, {current_count} total", category="scan")
                     else:
                         # Same count - just clear error if any, but preserve completed status
@@ -701,7 +696,6 @@ class QueueManager(QObject):
                             pass  # Don't change completed status when no files changed
                         item.error_message = ""
                         
-                        from bbdrop import timestamp
                         log(f"{item.name or os.path.basename(path)}: No changes detected, cleared errors", category="scan")
                     
                     # Emit status change if changed
@@ -709,7 +703,6 @@ class QueueManager(QObject):
                         QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, item.status))
                     
                 except Exception as e:
-                    from bbdrop import timestamp
                     self.mark_scan_failed(path, f"Additive rescan error: {e}")
                     log(f"Additive rescan error: {e}", level="error", category="scan")
         
@@ -739,7 +732,6 @@ class QueueManager(QObject):
                 item.uploaded_images_data = []  # Clear uploaded image metadata
                 item.uploaded_bytes = 0  # Clear uploaded bytes counter
                 
-                from bbdrop import timestamp
                 log(f"{item.name or os.path.basename(path)}: Complete reset, starting fresh scan", category="scan")
                 
                 # Emit status change signal
@@ -788,7 +780,6 @@ class QueueManager(QObject):
                         item = self.items[path]
                         item.status = QUEUE_STATE_READY
                         item.scan_complete = True
-                        from bbdrop import timestamp
                         log(f"{item.name or os.path.basename(path)}: Marked ready for validation", level="debug", category="scan")
                 
                 self._schedule_debounced_save([path])
@@ -1130,7 +1121,6 @@ class QueueManager(QObject):
             self.items[path] = item
             self._update_status_count("", QUEUE_STATE_VALIDATING)
             # Use QTimer to defer database save to prevent blocking GUI thread
-            from PyQt6.QtCore import QTimer
             self._schedule_debounced_save([path])
             self._inc_version()
         
@@ -1228,7 +1218,7 @@ class QueueManager(QObject):
         with QMutexLocker(self.mutex):
             if path in self.items and field_name in ['custom1', 'custom2', 'custom3', 'custom4']:
                 # Update in-memory item
-                old_value = getattr(self.items[path], field_name, '')
+                getattr(self.items[path], field_name, '')
                 setattr(self.items[path], field_name, value)
 
                 # Update in database
@@ -1303,7 +1293,7 @@ class QueueManager(QObject):
             if path not in self.items:
                 return False
 
-            old_name = self.items[path].name
+            self.items[path].name
             self.items[path].name = new_name
             self._schedule_debounced_save([path])
 
