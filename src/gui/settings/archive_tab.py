@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QSettings
 from PyQt6.QtGui import QFont
+from src.gui.widgets.info_button import InfoButton
 import logging
 
 logger = logging.getLogger(__name__)
@@ -99,12 +100,23 @@ class ArchiveSettingsWidget(QWidget):
         split_layout = QVBoxLayout(split_group)
 
         # Enable split checkbox
+        split_enable_row = QHBoxLayout()
         self.split_enabled_checkbox = QCheckBox("Enable split archives")
         self.split_enabled_checkbox.setToolTip(
             "Split large archives into multiple parts for easier upload/download"
         )
         self.split_enabled_checkbox.toggled.connect(self._on_split_enabled_changed)
-        split_layout.addWidget(self.split_enabled_checkbox)
+        split_enable_row.addWidget(self.split_enabled_checkbox)
+        split_enable_row.addWidget(InfoButton(
+            "Splits large archives into multiple parts (e.g. 500 MiB each). "
+            "Useful when file hosts have per-file size limits.<br><br>"
+            "ZIP splits use pure Python and work everywhere. 7Z splits require "
+            "the 7-Zip CLI tool installed on your system.<br><br>"
+            "Each part can be uploaded independently. The recipient reassembles "
+            "them with any archive tool."
+        ))
+        split_enable_row.addStretch()
+        split_layout.addLayout(split_enable_row)
 
         # 7z CLI warning — only needed for 7z format splits, not ZIP
         from src.utils.archive_manager import HAS_7Z_CLI
