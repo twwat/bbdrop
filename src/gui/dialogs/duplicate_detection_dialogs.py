@@ -7,7 +7,7 @@ import os
 from typing import List, Dict, Tuple, Any
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCheckBox, QScrollArea, QWidget, QFrame, QMessageBox, QApplication
+    QCheckBox, QScrollArea, QWidget, QFrame, QApplication
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -196,7 +196,7 @@ class PreviouslyUploadedDialog(QDialog):
         selected_count = sum(1 for cb in self.checkboxes.values() if cb.isChecked())
         total_count = len(self.checkboxes)
         
-        yes_btn = self.findChild(QPushButton, "")  # Find the Yes button
+        self.findChild(QPushButton, "")  # Find the Yes button
         # Update button text in all Yes buttons found
         for button in self.findChildren(QPushButton):
             if "Upload" in button.text():

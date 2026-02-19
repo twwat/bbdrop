@@ -4,21 +4,20 @@ Provides specialized UI components.
 """
 
 import os
-from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QProgressBar,
     QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QStyle, QMenu, QMessageBox, QTabBar, QListWidget, QApplication,
+    QHeaderView, QStyle, QMenu, QTabBar, QListWidget, QApplication,
     QAbstractItemView
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMimeData, QPoint, QSize
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QDragEnterEvent, QDropEvent, QKeyEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QSize
+from PyQt6.QtGui import QIcon, QPainter, QColor, QPen, QDragEnterEvent, QDropEvent, QKeyEvent
 
 from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
     QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED, QUEUE_STATE_PAUSED,
-    QUEUE_STATE_INCOMPLETE, ICON_SIZE, TABLE_UPDATE_INTERVAL
+    QUEUE_STATE_INCOMPLETE, ICON_SIZE
 )
 from src.utils.logger import log
 

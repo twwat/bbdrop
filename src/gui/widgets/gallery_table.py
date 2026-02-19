@@ -7,7 +7,6 @@ Displays gallery queue with sortable columns, progress tracking, and interactive
 import os
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,24 +16,20 @@ if TYPE_CHECKING:
 
 from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QStyledItemDelegate, QStyleOptionViewItem, QMessageBox, QFileDialog,
-    QDialog, QApplication, QInputDialog
+    QStyledItemDelegate, QStyleOptionViewItem, QMessageBox, QDialog, QApplication, QInputDialog
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QUrl, QMimeData, QTimer, QModelIndex
+from PyQt6.QtCore import Qt, QSize, QUrl, QMimeData, QTimer, QModelIndex
 from PyQt6.QtGui import (
-    QDragEnterEvent, QDropEvent, QIcon, QFont, QColor, QBrush,
-    QPainter, QDrag, QPen, QPixmap, QFontMetrics, QDesktopServices, QPalette
+    QIcon, QFont, QColor, QBrush,
+    QPainter, QDrag, QPixmap, QFontMetrics, QDesktopServices, QPalette
 )
 
 # Import existing utilities
 from src.core.constants import IMAGE_EXTENSIONS
 from src.utils.logger import log
-from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget
-from src.gui.icon_manager import get_icon_manager
 
 # Import dialogs
 from src.gui.dialogs.gallery_file_manager import GalleryFileManagerDialog
-from src.gui.dialogs.message_factory import show_warning
 
 
 class NumericColumnDelegate(QStyledItemDelegate):
@@ -289,7 +284,7 @@ class GalleryTableWidget(QTableWidget):
         """Refresh icons for newly visible rows when scrolling (only if needed after theme change)"""
         if self._needs_full_icon_refresh:
             # Find parent BBDropGUI to call refresh
-            from PyQt6.QtWidgets import QWidget, QMainWindow
+            from PyQt6.QtWidgets import QMainWindow
             parent = self.parent()
             while parent and not isinstance(parent, QMainWindow):
                 parent = parent.parent()
@@ -449,7 +444,7 @@ class GalleryTableWidget(QTableWidget):
 
         # Execute drag
         self._is_dragging = True
-        drop_action = drag.exec(Qt.DropAction.MoveAction)
+        drag.exec(Qt.DropAction.MoveAction)
         self._is_dragging = False
 
     def _create_drag_pixmap(self, gallery_names):
@@ -563,7 +558,6 @@ class GalleryTableWidget(QTableWidget):
         # Use context menu helper to create the menu
         if hasattr(self, 'context_menu_helper'):
             # Find the main window reference
-            from PyQt6.QtWidgets import QMainWindow
             widget = self
             while widget and not hasattr(widget, 'queue_manager'):
                 widget = widget.parent()
@@ -1010,7 +1004,7 @@ class GalleryTableWidget(QTableWidget):
         while widget and not hasattr(widget, 'queue_manager'):
             widget = widget.parent()
         if not widget:
-            log(f"No widget with queue_manager found", level="warning", category="fileio")
+            log("No widget with queue_manager found", level="warning", category="fileio")
             return
         # Aggregate BBCode contents; reuse copy function to centralize path lookup
         contents = []

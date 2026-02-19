@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QDragEnterEvent, QDropEvent
 
-from src.utils.format_utils import timestamp
 from src.utils.logger import log
 from src.gui.dialogs.message_factory import MessageBoxFactory, show_info, show_error, show_warning
 
@@ -257,7 +256,6 @@ class IconManagerDialog(QDialog):
 
     def populate_icon_list(self):
         """Populate the icon list with all available icons"""
-        from src.gui.icon_manager import IconManager
 
         # Get icon categories from the icon manager
         icon_categories = {
@@ -451,7 +449,6 @@ class IconManagerDialog(QDialog):
     def _update_reset_button_states(self, icon_key, icon_config):
         """Update reset button states"""
         from src.gui.icon_manager import get_icon_manager
-        import os
 
         icon_manager = get_icon_manager()
         if not icon_manager:

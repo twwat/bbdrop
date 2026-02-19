@@ -8,20 +8,17 @@ Shows active workers with icons, hostnames, speed, and status in a table view.
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from enum import Enum
 import os
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QLabel, QComboBox, QPushButton, QFrame, QSizePolicy,
-    QMenu, QStyle, QStyleOptionHeader, QProgressBar, QAbstractItemView, QToolTip,
+    QHeaderView, QLabel, QPushButton, QMenu, QStyle, QStyleOptionHeader, QAbstractItemView, QToolTip,
     QToolButton
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QSettings, QTimer, pyqtProperty, QSize, QRect, QEvent, QMutex, QMutexLocker, QObject
 from PyQt6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor, QFontMetrics
 
-from src.utils.format_utils import format_binary_rate
 from src.utils.logger import log
 from src.gui.icon_manager import get_icon_manager
 from src.core.file_host_config import get_config_manager, get_file_host_setting, save_file_host_setting
@@ -719,7 +716,6 @@ class WorkerStatusWidget(QWidget):
         Returns:
             QLabel with logo pixmap, or None if not found
         """
-        from PyQt6.QtGui import QPixmap
 
         icon_mgr = get_icon_manager()
         if not icon_mgr:
@@ -1369,7 +1365,7 @@ class WorkerStatusWidget(QWidget):
         """
         col_idx = self._get_column_index('files_remaining')
         if col_idx >= 0:
-            text = format_count(files_remaining) if files_remaining > 0 else "—"
+            format_count(files_remaining) if files_remaining > 0 else "—"
             self._update_worker_cell(worker_id, col_idx, files_remaining, lambda v: format_count(v) if v > 0 else "—")
 
     def _update_bytes_remaining(self, worker_id: str, bytes_remaining: int):
@@ -1933,7 +1929,7 @@ class WorkerStatusWidget(QWidget):
 
     def _create_filehost_placeholder(self, host_id: str, host_config) -> 'WorkerStatus':
         """Create a placeholder WorkerStatus for a file host not yet active."""
-        is_enabled = get_file_host_setting(host_id, "enabled", "bool")
+        get_file_host_setting(host_id, "enabled", "bool")
         settings = QSettings("BBDropUploader", "BBDropGUI")
         total_str = settings.value(f"FileHosts/{host_id}/storage_total", "0")
         left_str = settings.value(f"FileHosts/{host_id}/storage_left", "0")
@@ -2727,8 +2723,7 @@ class WorkerStatusWidget(QWidget):
         Args:
             element: Either a QWidget (QLabel) or QTableWidgetItem to style as disabled
         """
-        from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QLabel
-        from PyQt6.QtGui import QColor
+        from PyQt6.QtWidgets import QTableWidgetItem, QLabel
 
         if isinstance(element, QLabel):
             # QLabel widget path - use stylesheet and italic font

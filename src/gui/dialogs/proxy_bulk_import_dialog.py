@@ -1,19 +1,18 @@
 """Bulk Proxy Import Dialog - Import proxies from text, CSV, or JSON."""
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QGroupBox,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox,
     QPushButton, QPlainTextEdit, QComboBox, QCheckBox, QTableWidget,
     QTableWidgetItem, QDialogButtonBox, QHeaderView, QFileDialog,
-    QMessageBox, QTabWidget, QWidget, QProgressBar
+    QMessageBox, QTabWidget, QWidget
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont
-from typing import List, Optional, Tuple
+from typing import List
 
-from src.proxy.models import ProxyProfile, ProxyType
+from src.proxy.models import ProxyType
 from src.proxy.bulk import (
-    BulkProxyParser, ParseResult, ParseFormat,
-    parse_csv_proxies, parse_json_proxies
+    BulkProxyParser, ParseResult, parse_csv_proxies, parse_json_proxies
 )
 from src.proxy.storage import ProxyStorage
 from src.proxy.credentials import set_proxy_password
@@ -361,7 +360,7 @@ class ProxyBulkImportDialog(QDialog):
                 existing_hosts.add((profile.host, profile.port))
                 imported_count += 1
 
-            except Exception as e:
+            except Exception:
                 error_count += 1
 
         # Show result message

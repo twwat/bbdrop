@@ -1,7 +1,7 @@
 """Inheritable Proxy Control Widget - Hierarchical proxy settings with override support."""
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QComboBox, QLabel, QCheckBox
+    QWidget, QHBoxLayout, QComboBox, QLabel, QCheckBox
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from typing import Optional, List, Literal

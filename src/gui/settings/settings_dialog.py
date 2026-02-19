@@ -345,7 +345,7 @@ class ComprehensiveSettingsDialog(QDialog):
         try:
             if hasattr(self, 'tabs_tab'):
                 self.tabs_tab.load_settings()
-        except Exception as e:
+        except Exception:
             # Silently skip any errors since tabs functionality may be hidden
             pass
 
@@ -476,11 +476,11 @@ class ComprehensiveSettingsDialog(QDialog):
             msg_box.setInformativeText("Do you want to save all changes before closing?")
 
             save_all_btn = msg_box.addButton("Save All", QMessageBox.ButtonRole.AcceptRole)
-            discard_btn = msg_box.addButton("Discard All", QMessageBox.ButtonRole.DestructiveRole)
+            msg_box.addButton("Discard All", QMessageBox.ButtonRole.DestructiveRole)
             cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
 
             msg_box.setDefaultButton(save_all_btn)
-            result = msg_box.exec()
+            msg_box.exec()
 
             if msg_box.clickedButton() == save_all_btn:
                 # Save all dirty tabs
@@ -558,7 +558,7 @@ class ComprehensiveSettingsDialog(QDialog):
     def apply_current_tab(self):
         """Apply changes for the current tab only"""
         current_index = self.stack_widget.currentIndex()
-        tab_name = self.nav_list.item(current_index).text()
+        self.nav_list.item(current_index).text()
         
         if self.save_current_tab():
             self.mark_tab_clean(current_index)
@@ -731,12 +731,12 @@ class ComprehensiveSettingsDialog(QDialog):
         
         save_btn = msg_box.addButton("Save", QMessageBox.ButtonRole.AcceptRole)
         discard_btn = msg_box.addButton("Discard", QMessageBox.ButtonRole.DestructiveRole)
-        cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
         
         msg_box.setDefaultButton(save_btn)
         
         # Use exec() for blocking dialog instead of open() with signals
-        result = msg_box.exec()
+        msg_box.exec()
         clicked_button = msg_box.clickedButton()
         
         if clicked_button == save_btn:

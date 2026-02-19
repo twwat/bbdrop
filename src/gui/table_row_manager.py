@@ -16,7 +16,7 @@ import os
 import re
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, Any, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Tuple
 
 from PyQt6.QtCore import QObject, QTimer, Qt
 from PyQt6.QtGui import QColor, QIcon, QPixmap
@@ -32,7 +32,6 @@ from bbdrop import check_gallery_renamed
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI
-    from src.gui.widgets.gallery_table import GalleryTableWidget
 
 
 # Column index constants (mirrors GalleryTableWidget.COL_*)
@@ -1204,7 +1203,7 @@ class TableRowManager(QObject):
                     item.setText("")
                 else:
                     item.setText("OK")
-                    log(f"Using fallback text for renamed_true", level="debug")
+                    log("Using fallback text for renamed_true", level="debug")
             elif is_renamed is False:
                 icon = get_icon('renamed_false')
                 tooltip = "Pending rename"
@@ -1213,7 +1212,7 @@ class TableRowManager(QObject):
                     item.setText("")
                 else:
                     item.setText("...")
-                    log(f"Using fallback text for renamed_false", level="debug")
+                    log("Using fallback text for renamed_false", level="debug")
             else:
                 item.setIcon(QIcon())
                 item.setText("")
@@ -1222,7 +1221,7 @@ class TableRowManager(QObject):
             item.setToolTip(tooltip)
             mw.gallery_table.setItem(row, col, item)
 
-        except Exception as e:
+        except Exception:
             try:
                 item = QTableWidgetItem("")
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)

@@ -5,17 +5,14 @@ Allows users to add/remove files from galleries and view file details
 
 import os
 import shutil
-from pathlib import Path
 from typing import List, Optional, Set
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
-    QListWidgetItem, QLabel, QMessageBox, QFileDialog, QCheckBox,
-    QGroupBox, QSplitter, QTextEdit, QTextBrowser, QProgressDialog, QDialogButtonBox
+    QListWidgetItem, QLabel, QMessageBox, QFileDialog, QGroupBox, QSplitter, QTextBrowser, QProgressDialog, QDialogButtonBox
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QThread, QTimer, QUrl
-from PyQt6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent, QImage
-from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
+from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
 from src.core.constants import IMAGE_EXTENSIONS
 from src.utils.logger import log
@@ -208,7 +205,7 @@ class GalleryFileManagerDialog(QDialog):
 
             # Use different formatting for failed galleries
             if status == "failed":
-                info = f"<b><span style='color: red;'>Status: FAILED</span></b> | "
+                info = "<b><span style='color: red;'>Status: FAILED</span></b> | "
                 info += f"<b>Total:</b> {total} | "
                 info += f"<b>Valid:</b> {valid} | "
                 info += f"<b><span style='color: red;'>Invalid:</span> {invalid}</b>"

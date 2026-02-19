@@ -3,12 +3,11 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton,
-    QLineEdit, QCheckBox, QFrame, QProgressBar, QScrollArea, QGroupBox,
-    QSpinBox, QMessageBox, QFileDialog, QDialog
+    QFrame, QProgressBar, QScrollArea, QGroupBox,
+    QSpinBox, QMessageBox, QDialog
 )
 from PyQt6.QtCore import pyqtSignal, QSettings, Qt
-from PyQt6.QtGui import QFont, QPixmap
-from datetime import datetime
+from PyQt6.QtGui import QPixmap
 from typing import Dict, Any, Optional
 
 from src.utils.format_utils import format_binary_size
@@ -148,7 +147,6 @@ class FileHostsSettingsWidget(QWidget):
             host_config: HostConfig instance
         """
         from PyQt6.QtWidgets import QSizePolicy
-        from src.core.file_host_config import get_file_host_setting
 
         # Container frame
         host_frame = QFrame()
@@ -346,7 +344,7 @@ class FileHostsSettingsWidget(QWidget):
 
         if is_auto:
             map = {"on_added": "Add", "on_started": "Start", "on_completed": "Done"}
-            automsg = trigger.replace("on_","").capitalize()
+            trigger.replace("on_","").capitalize()
             return f"Ready (AUTO: On-{map[trigger]})"
         else:
             return "Ready (Manual)"

@@ -449,7 +449,7 @@ class GeneralTab(QWidget):
                     conflict_msg.setInformativeText("How would you like to handle this?")
 
                     keep_btn = conflict_msg.addButton("Keep Existing", QMessageBox.ButtonRole.YesRole)
-                    overwrite_btn = conflict_msg.addButton("Overwrite with Current", QMessageBox.ButtonRole.NoRole)
+                    conflict_msg.addButton("Overwrite with Current", QMessageBox.ButtonRole.NoRole)
                     cancel_btn = conflict_msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
 
                     conflict_msg.setDefaultButton(keep_btn)
@@ -485,7 +485,7 @@ class GeneralTab(QWidget):
                     )
 
                     yes_btn = msg_box.addButton("Yes - Migrate & Restart", QMessageBox.ButtonRole.YesRole)
-                    no_btn = msg_box.addButton("No - Fresh Start", QMessageBox.ButtonRole.NoRole)
+                    msg_box.addButton("No - Fresh Start", QMessageBox.ButtonRole.NoRole)
                     cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
 
                     msg_box.setDefaultButton(yes_btn)

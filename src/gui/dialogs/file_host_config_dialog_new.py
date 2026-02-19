@@ -4,16 +4,9 @@ File Host Configuration Dialog
 Provides credential setup, testing, and configuration for file host uploads
 """
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QGroupBox,
-    QPushButton, QLineEdit, QCheckBox, QProgressBar, QComboBox, QWidget, QListWidget, QSplitter, QSpinBox
+    QLineEdit
 )
-from PyQt6.QtCore import QSettings, QTimer, Qt
-from PyQt6.QtGui import QPixmap
-from datetime import datetime
-from typing import Optional
-import time
 
-from src.utils.format_utils import format_binary_size
 
 
 class AsteriskPasswordEdit(QLineEdit):

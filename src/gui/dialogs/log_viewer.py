@@ -8,13 +8,12 @@ import os
 from typing import Any, Dict
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout, QCheckBox,
-    QComboBox, QSpinBox, QLabel, QPushButton, QTabWidget, QWidget,
+    QDialog, QVBoxLayout, QHBoxLayout, QCheckBox,
+    QComboBox, QLabel, QPushButton, QWidget,
     QTableWidget, QTableWidgetItem, QLineEdit, QDialogButtonBox, QHeaderView, QAbstractItemView, QApplication
 )
 from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QFont
-from src.gui.widgets.custom_widgets import CopyableLogTableWidget
 from src.utils.logger import log
 
 

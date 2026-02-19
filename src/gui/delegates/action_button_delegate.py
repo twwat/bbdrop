@@ -1,6 +1,5 @@
 """Action button delegate for table cell rendering."""
 
-from typing import Dict
 from PyQt6.QtCore import Qt, QRect, QSize, QModelIndex, QEvent, pyqtSignal, QObject
 from PyQt6.QtGui import QPainter
 from PyQt6.QtWidgets import (

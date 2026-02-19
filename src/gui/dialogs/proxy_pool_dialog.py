@@ -1,8 +1,8 @@
 """Proxy Pool Dialog - Create and edit proxy pools with direct proxy entry."""
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QGroupBox,
-    QPushButton, QLineEdit, QCheckBox, QComboBox, QSpinBox,
+    QDialog, QVBoxLayout, QFormLayout, QLabel, QGroupBox,
+    QLineEdit, QCheckBox, QComboBox, QSpinBox,
     QPlainTextEdit, QDialogButtonBox, QMessageBox
 )
 from PyQt6.QtCore import Qt

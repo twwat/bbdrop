@@ -307,7 +307,7 @@ class TabsTab(QWidget):
 
         try:
             # Create tab using TabManager
-            tab_info = self.tab_manager.create_tab(name)
+            self.tab_manager.create_tab(name)
 
             # Refresh the display
             self.load_settings()
