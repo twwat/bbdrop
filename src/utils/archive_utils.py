@@ -6,7 +6,6 @@ Handles archive detection, validation, and path inspection
 
 import os
 from pathlib import Path
-from typing import Optional
 
 
 # Supported archive extensions (multiple formats)

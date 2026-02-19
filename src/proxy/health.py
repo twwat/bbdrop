@@ -6,7 +6,7 @@ import logging
 from typing import Optional, Dict, List, Callable, Awaitable
 from dataclasses import dataclass
 
-from src.proxy.models import ProxyProfile, ProxyHealth, ProxyType
+from src.proxy.models import ProxyProfile, ProxyHealth
 from src.proxy.credentials import get_proxy_password
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class HealthMonitor:
         # Get or create health record
         health = self._health_cache.get(profile.id) or ProxyHealth(profile_id=profile.id)
 
-        start_time = time.time()
+        time.time()
         success = False
         latency = 0.0
 

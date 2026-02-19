@@ -4,7 +4,7 @@ import re
 import csv
 import json
 import io
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass
 from enum import Enum, auto
 

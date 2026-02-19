@@ -15,13 +15,11 @@ import os
 import sqlite3
 import threading
 import time
-import warnings
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from queue import Queue, Empty
 from typing import Any, Dict, Optional
 
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal
 
 # Access central data dir path from shared helper
 from bbdrop import get_central_store_base_path
@@ -359,7 +357,7 @@ class MetricsStore:
                 cache['avg_speed'] = 0.0
 
             # Update today_cache (initialize empty if not present)
-            today = datetime.now().strftime('%Y-%m-%d')
+            datetime.now().strftime('%Y-%m-%d')
             if host_name not in self._today_cache:
                 # Load existing metrics from DB to avoid overwriting historical data
                 db_metrics = self.get_aggregated_metrics(host_name, 'today')

@@ -1,9 +1,9 @@
 """Proxy resolution engine."""
 
 import os
-from typing import Optional, Union
+from typing import Optional
 
-from src.proxy.models import ProxyEntry, ProxyContext, ProxyPool, ProxyType
+from src.proxy.models import ProxyEntry, ProxyContext, ProxyType
 from src.proxy.storage import ProxyStorage
 from src.proxy.pool import PoolRotator
 

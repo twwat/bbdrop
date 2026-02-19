@@ -49,7 +49,7 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
         has_multi_part = any(len(parts) > 1 for parts in uploads_by_host.values())
 
         # Count total parts across all hosts (for #partCount# placeholder)
-        max_parts = max((len(parts) for parts in uploads_by_host.values()), default=0)
+        max((len(parts) for parts in uploads_by_host.values()), default=0)
 
         formatted_links = []
         for host_id, host_uploads in uploads_by_host.items():

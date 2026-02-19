@@ -10,7 +10,7 @@ import sys
 import platform
 import tempfile
 import shutil
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from pathlib import Path
 import subprocess
 
