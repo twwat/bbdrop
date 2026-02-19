@@ -21,6 +21,7 @@ from bbdrop import get_credential, get_project_root
 class ImageHostsSettingsWidget(QWidget):
     """Widget for configuring image host settings - displays list of hosts with config dialogs"""
     settings_changed = pyqtSignal()
+    cover_gallery_changed = pyqtSignal(str, str)  # host_id, gallery_id
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -223,6 +224,8 @@ class ImageHostsSettingsWidget(QWidget):
         dialog = ImageHostConfigDialog(self, host_id, config)
         # Connect live enable/disable signal so settings widget stays in sync
         dialog.host_enabled_changed.connect(self._on_dialog_host_enabled_changed)
+        # Relay cover gallery changes to Covers tab
+        dialog.panel.cover_gallery_changed.connect(self.cover_gallery_changed)
         dialog.exec()
 
         # Always sync state after dialog closes (enable button takes effect immediately)
