@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QFontDatabase, QSyntaxHighlighter, QTextCharFormat, QColor
 
 from bbdrop import get_config_path
+from src.gui.widgets.info_button import InfoButton
 from src.utils.logger import log
 
 
@@ -43,13 +44,29 @@ class HooksTab(QWidget):
         layout = QVBoxLayout(self)
 
         # Intro text
+        intro_row = QHBoxLayout()
         intro_label = QLabel(
             "Run external programs at different stages of gallery processing. "
             "Programs can output JSON to populate ext1-4 fields for use in templates."
         )
         intro_label.setWordWrap(True)
         intro_label.setProperty("class", "tab-description")
-        layout.addWidget(intro_label)
+        intro_row.addWidget(intro_label)
+        intro_row.addWidget(InfoButton(
+            "<b>How hooks work:</b><br><br>"
+            "A hook runs a command-line program at a specific stage of gallery "
+            "processing. The command can include <code>%variables</code> that "
+            "get replaced with gallery data (path, name, image count, etc.).<br><br>"
+            "The program's stdout can output JSON &mdash; you map JSON keys to "
+            "<code>ext1</code>&ndash;<code>ext4</code> fields, which then become "
+            "available in your BBCode templates as <code>%ext1</code> through "
+            "<code>%ext4</code>.<br><br>"
+            "<b>Common use case:</b> Run a script that uploads the gallery ZIP "
+            "to a filehost and outputs "
+            "<code>{\"download_url\": \"https://...\"}</code>. Map that to ext1, "
+            "then use <code>%ext1</code> in your BBCode template."
+        ))
+        layout.addLayout(intro_row)
 
         # Execution mode
         exec_mode_group = QGroupBox("Execution Mode")
