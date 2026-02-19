@@ -159,7 +159,12 @@ class CredentialSetupDialog(QDialog):
 
         # Credential storage note
         encryption_note = QLabel(
-            "<small>Credentials are encrypted with Fernet (AES-128-CBC + HMAC-SHA256) using a CSPRNG master key stored in your OS keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service).<br><br>They are tied to your user account and won't transfer to other computers.</small>"
+            "<small>Credentials are encrypted with Fernet"
+            " (AES-128-CBC + HMAC-SHA256) using a CSPRNG master key"
+            " stored in your OS keyring (Windows Credential Manager /"
+            " macOS Keychain / Linux Secret Service).<br><br>They are"
+            " tied to your user account and won't transfer to other"
+            " computers.</small>"
         )
         encryption_note.setWordWrap(True)
         encryption_note.setProperty("class", "label-credential-note")
@@ -578,7 +583,11 @@ class CredentialSetupDialog(QDialog):
         reply = QMessageBox.question(
             self,
             "Remove All Credentials",
-            "This will remove your username, password, and API key.\n\n- Without username/password, all galleries will be titled 'untitled gallery'.\n- Without an API key, uploads are not possible.\n\nProceed?",
+            "This will remove your username, password, and API key."
+            "\n\n- Without username/password, all galleries will be"
+            " titled 'untitled gallery'."
+            "\n- Without an API key, uploads are not possible."
+            "\n\nProceed?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )

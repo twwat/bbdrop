@@ -640,7 +640,11 @@ class ImageStatusDialog(QDialog):
                 elif online == total:
                     self._set_centered_status(row, None, get_icon('status_online'), colors['online'], 'Online')
                 else:
-                    self._set_centered_status(row, None, get_icon('status_failed'), colors['offline'] if online == 0 else colors['partial'], 'Offline' if online == 0 else 'Partial')
+                    color = colors['offline'] if online == 0 else colors['partial']
+                    label = 'Offline' if online == 0 else 'Partial'
+                    self._set_centered_status(
+                        row, None, get_icon('status_failed'), color, label,
+                    )
 
             # Update galleries bar
             self.galleries_bar.set_segments([

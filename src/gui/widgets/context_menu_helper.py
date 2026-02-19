@@ -261,7 +261,13 @@ class GalleryContextMenuHelper(QObject):
                 # Allow rescan all for stuck scanning galleries (0 images counted)
                 is_stuck_scanning = (item.status == "scanning" and total_images == 0)
                 
-                if not is_100_percent_complete and (item.status in ["scan_failed", "completed", "incomplete", "upload_failed", "failed", "ready"] or is_stuck_scanning):
+                rescannable = [
+                    "scan_failed", "completed", "incomplete",
+                    "upload_failed", "failed", "ready",
+                ]
+                if not is_100_percent_complete and (
+                    item.status in rescannable or is_stuck_scanning
+                ):
                     rescan_all_paths.append(path)
         
         return rescan_all_paths

@@ -291,7 +291,11 @@ class IconManager:
             log(f"Invalid icon configuration: {config}", level="warning", category="ui")
             return None
     
-    def get_status_icon(self, status: str, theme_mode: Optional[str] = None, is_selected: bool = False, requested_size: int = 32, animation_frame: int = 0) -> QIcon:
+    def get_status_icon(
+        self, status: str, theme_mode: Optional[str] = None,
+        is_selected: bool = False, requested_size: int = 32,
+        animation_frame: int = 0,
+    ) -> QIcon:
         """
         Get icon for a specific status with theme/selection awareness.
 

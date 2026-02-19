@@ -285,40 +285,132 @@ class ColumnConfig:
 
 
 # Core columns (always available)
+_ALIGN_CENTER = (
+    Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+)
+_ALIGN_RIGHT = (
+    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+)
+_ALIGN_LEFT = (
+    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+)
+
 CORE_COLUMNS = [
-    ColumnConfig('icon', '', 30, ColumnType.ICON, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig(
+        'icon', '', 30, ColumnType.ICON,
+        resizable=False, hideable=False, alignment=_ALIGN_CENTER,
+    ),
     ColumnConfig('hostname', 'host', 120, ColumnType.TEXT),
-    ColumnConfig('speed', 'speed', 90, ColumnType.SPEED, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('status', '', 34, ColumnType.ICON, default_visible=True, resizable=False, hideable=False, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('status_text', 'status text', 100, ColumnType.TEXT, default_visible=True, alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('files_remaining', 'queue (files)', 90, ColumnType.COUNT, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('bytes_remaining', 'queue (bytes)', 110, ColumnType.BYTES, default_visible=True, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('storage', 'storage', 140, ColumnType.WIDGET, default_visible=True, alignment=Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig(
+        'speed', 'speed', 90, ColumnType.SPEED,
+        alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'status', '', 34, ColumnType.ICON,
+        default_visible=True, resizable=False,
+        hideable=False, alignment=_ALIGN_CENTER,
+    ),
+    ColumnConfig(
+        'status_text', 'status text', 100, ColumnType.TEXT,
+        default_visible=True, alignment=_ALIGN_LEFT,
+    ),
+    ColumnConfig(
+        'files_remaining', 'queue (files)', 90, ColumnType.COUNT,
+        default_visible=True, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'bytes_remaining', 'queue (bytes)', 110, ColumnType.BYTES,
+        default_visible=True, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'storage', 'storage', 140, ColumnType.WIDGET,
+        default_visible=True, alignment=_ALIGN_CENTER,
+    ),
 ]
 
 # Metric columns (optional, from MetricsStore)
 # Organized by metric type, each available for session/today/all_time periods
 METRIC_COLUMNS = [
     # Bytes Uploaded - all periods
-    ColumnConfig('bytes_session', 'uploaded (session)', 110, ColumnType.BYTES, 'bytes_uploaded', 'session', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('bytes_today', 'uploaded (today)', 110, ColumnType.BYTES, 'bytes_uploaded', 'today', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('bytes_alltime', 'uploaded (all time)', 110, ColumnType.BYTES, 'bytes_uploaded', 'all_time', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig(
+        'bytes_session', 'uploaded (session)', 110,
+        ColumnType.BYTES, 'bytes_uploaded', 'session',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'bytes_today', 'uploaded (today)', 110,
+        ColumnType.BYTES, 'bytes_uploaded', 'today',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'bytes_alltime', 'uploaded (all time)', 110,
+        ColumnType.BYTES, 'bytes_uploaded', 'all_time',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
     # Files Uploaded - all periods
-    ColumnConfig('files_session', 'files (session)', 90, ColumnType.COUNT, 'files_uploaded', 'session', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('files_today', 'files (today)', 90, ColumnType.COUNT, 'files_uploaded', 'today', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('files_alltime', 'files (all time)', 90, ColumnType.COUNT, 'files_uploaded', 'all_time', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig(
+        'files_session', 'files (session)', 90,
+        ColumnType.COUNT, 'files_uploaded', 'session',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'files_today', 'files (today)', 90,
+        ColumnType.COUNT, 'files_uploaded', 'today',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'files_alltime', 'files (all time)', 90,
+        ColumnType.COUNT, 'files_uploaded', 'all_time',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
     # Average Speed - all periods
-    ColumnConfig('avg_speed_session', 'avg speed (session)', 120, ColumnType.SPEED, 'avg_speed', 'session', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('avg_speed_today', 'avg speed (today)', 120, ColumnType.SPEED, 'avg_speed', 'today', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('avg_speed_alltime', 'avg speed (all time)', 120, ColumnType.SPEED, 'avg_speed', 'all_time', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig(
+        'avg_speed_session', 'avg speed (session)', 120,
+        ColumnType.SPEED, 'avg_speed', 'session',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'avg_speed_today', 'avg speed (today)', 120,
+        ColumnType.SPEED, 'avg_speed', 'today',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'avg_speed_alltime', 'avg speed (all time)', 120,
+        ColumnType.SPEED, 'avg_speed', 'all_time',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
     # Peak Speed - all periods
-    ColumnConfig('peak_speed_session', 'peak (session)', 100, ColumnType.SPEED, 'peak_speed', 'session', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('peak_speed_today', 'peak (today)', 100, ColumnType.SPEED, 'peak_speed', 'today', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('peak_speed_alltime', 'peak (all time)', 100, ColumnType.SPEED, 'peak_speed', 'all_time', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig(
+        'peak_speed_session', 'peak (session)', 100,
+        ColumnType.SPEED, 'peak_speed', 'session',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'peak_speed_today', 'peak (today)', 100,
+        ColumnType.SPEED, 'peak_speed', 'today',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'peak_speed_alltime', 'peak (all time)', 100,
+        ColumnType.SPEED, 'peak_speed', 'all_time',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
     # Success Rate - all periods
-    ColumnConfig('success_rate_session', 'success % (session)', 110, ColumnType.PERCENT, 'success_rate', 'session', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('success_rate_today', 'success % (today)', 110, ColumnType.PERCENT, 'success_rate', 'today', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-    ColumnConfig('success_rate_alltime', 'success % (all time)', 110, ColumnType.PERCENT, 'success_rate', 'all_time', default_visible=False, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+    ColumnConfig(
+        'success_rate_session', 'success % (session)', 110,
+        ColumnType.PERCENT, 'success_rate', 'session',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'success_rate_today', 'success % (today)', 110,
+        ColumnType.PERCENT, 'success_rate', 'today',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
+    ColumnConfig(
+        'success_rate_alltime', 'success % (all time)', 110,
+        ColumnType.PERCENT, 'success_rate', 'all_time',
+        default_visible=False, alignment=_ALIGN_RIGHT,
+    ),
 ]
 
 # Combined list
@@ -1498,7 +1590,11 @@ class WorkerStatusWidget(QWidget):
                     icon_btn.setFixedSize(26, 26)
                     icon_btn.setIconSize(QSize(20, 20))
                     icon_btn.setFlat(True)
-                    icon_btn.setStyleSheet("QPushButton { border: none; padding: 2px; } QPushButton:hover { background-color: rgba(128,128,128,0.3); border-radius: 4px; }")
+                    icon_btn.setStyleSheet(
+                        "QPushButton { border: none; padding: 2px; }"
+                        " QPushButton:hover { background-color:"
+                        " rgba(128,128,128,0.3); border-radius: 4px; }"
+                    )
                     icon_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                     icon_btn.setToolTip(f"Configure {worker.display_name}")
                     icon_btn.setProperty("worker_id", worker.worker_id)

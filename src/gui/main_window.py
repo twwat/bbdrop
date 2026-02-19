@@ -1439,7 +1439,11 @@ class BBDropGUI(QMainWindow):
             raise
         
         # Add keyboard shortcut hint
-        shortcut_hint = QLabel("💡 Tips: <b>Ctrl-C</b>: Copy BBCode | <b>F2</b>: Rename | <b>Ctrl</b>+<b>Tab</b>: Next Tab | <b>Drag-and-drop</b>: Add folders")
+        shortcut_hint = QLabel(
+            "💡 Tips: <b>Ctrl-C</b>: Copy BBCode | <b>F2</b>: Rename"
+            " | <b>Ctrl</b>+<b>Tab</b>: Next Tab"
+            " | <b>Drag-and-drop</b>: Add folders"
+        )
         shortcut_hint.setProperty("class", "status-muted")
         shortcut_hint.setStyleSheet("font-size: 11px; color: #999999; font-style: italic;")
         #shortcut_hint.style().polish(shortcut_hint)
@@ -3609,7 +3613,12 @@ class BBDropGUI(QMainWindow):
 
                         log(f"Updated ext fields in GUI for {item.name}: {ext_fields}", level="info", category="hooks")
                         # Trigger artifact regeneration for ext field changes if enabled
-                        QTimer.singleShot(100, lambda p=path: self.artifact_handler.regenerate_bbcode_for_gallery(p, force=False) if self.artifact_handler.should_auto_regenerate_bbcode(p) else None)
+                        def _maybe_regen(p=path):
+                            if self.artifact_handler.should_auto_regenerate_bbcode(p):
+                                self.artifact_handler.regenerate_bbcode_for_gallery(
+                                    p, force=False
+                                )
+                        QTimer.singleShot(100, _maybe_regen)
                     elif not actual_table:
                         log("WARNING: Table is None!", level="debug", category="hooks")
                 else:
@@ -4631,7 +4640,12 @@ class BBDropGUI(QMainWindow):
         mime_data = event.mimeData()
 
         # Log mime data for debugging
-        log(f"dragEnterEvent: hasUrls={mime_data.hasUrls()}, hasText={mime_data.hasText()}, formats={mime_data.formats()}", level="trace", category="drag_drop")
+        log(
+            f"dragEnterEvent: hasUrls={mime_data.hasUrls()},"
+            f" hasText={mime_data.hasText()},"
+            f" formats={mime_data.formats()}",
+            level="trace", category="drag_drop",
+        )
 
         # Accept if there are URLs
         if mime_data.hasUrls():
@@ -5004,7 +5018,12 @@ class BBDropGUI(QMainWindow):
                     self.artifact_handler.regenerate_gallery_bbcode(gallery_path, new_template)
                     log(f"Template changed to '{new_template}' and BBCode regenerated for {os.path.basename(gallery_path)}", level="info", category="fileio")
                 except Exception as e:
-                    log(f"WARNING: Template changed to '{new_template}' for {os.path.basename(gallery_path)}, but BBCode regeneration failed: {e}", category="fileio", level="warning")
+                    log(
+                        f"WARNING: Template changed to '{new_template}'"
+                        f" for {os.path.basename(gallery_path)},"
+                        f" but BBCode regeneration failed: {e}",
+                        category="fileio", level="warning",
+                    )
             else:
                 log("Gallery not completed, skipping BBCode regeneration", category="fileio", level="debug")
             

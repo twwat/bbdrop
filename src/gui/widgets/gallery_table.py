@@ -245,7 +245,14 @@ class GalleryTableWidget(QTableWidget):
 
         # Apply numeric column delegate for smaller font and right alignment
         numeric_delegate = NumericColumnDelegate(self)
-        for col in [self.COL_UPLOADED, self.COL_ADDED, self.COL_FINISHED, self.COL_SIZE, self.COL_TRANSFER, self.COL_STATUS_TEXT, self.COL_GALLERY_ID, self.COL_CUSTOM1, self.COL_CUSTOM2, self.COL_CUSTOM3, self.COL_CUSTOM4, self.COL_EXT1, self.COL_EXT2, self.COL_EXT3, self.COL_EXT4]:
+        numeric_cols = [
+            self.COL_UPLOADED, self.COL_ADDED, self.COL_FINISHED,
+            self.COL_SIZE, self.COL_TRANSFER, self.COL_STATUS_TEXT,
+            self.COL_GALLERY_ID, self.COL_CUSTOM1, self.COL_CUSTOM2,
+            self.COL_CUSTOM3, self.COL_CUSTOM4, self.COL_EXT1,
+            self.COL_EXT2, self.COL_EXT3, self.COL_EXT4,
+        ]
+        for col in numeric_cols:
             self.setItemDelegateForColumn(col, numeric_delegate)
 
         # Apply StatusColorDelegate to Online IMX column to preserve status colors when selected
