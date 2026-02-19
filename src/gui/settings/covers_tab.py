@@ -2,7 +2,7 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
-    QComboBox, QSpinBox, QLineEdit, QFrame, QLabel,
+    QComboBox, QSpinBox, QLineEdit, QFrame, QLabel, QPushButton,
 )
 from PyQt6.QtCore import pyqtSignal
 
@@ -26,6 +26,7 @@ class CoversTab(QWidget):
     """
 
     dirty = pyqtSignal()
+    cover_gallery_changed = pyqtSignal(str, str)  # host_id, gallery_id
 
     # ------------------------------------------------------------------
     # Construction
@@ -264,34 +265,74 @@ class CoversTab(QWidget):
         host_row.addStretch()
         upload_layout.addLayout(host_row)
 
-        # Thumbnail format combo
+        # Thumbnail controls — two variants, only one visible at a time
         thumb_row = QHBoxLayout()
-        thumb_row.addWidget(QLabel("Thumbnail format:"))
+
+        self.covers_thumb_format_label = QLabel("Thumbnail format:")
+        thumb_row.addWidget(self.covers_thumb_format_label)
 
         self.covers_thumb_combo = QComboBox()
         self.covers_thumb_combo.setToolTip("Thumbnail format for cover photo uploads")
         for fmt_id, fmt_label in COVER_THUMBNAIL_FORMATS.items():
             self.covers_thumb_combo.addItem(fmt_label, fmt_id)
-        # Set default to Proportional (id=2)
         default_idx = self.covers_thumb_combo.findData(DEFAULT_COVER_THUMBNAIL_FORMAT)
         if default_idx >= 0:
             self.covers_thumb_combo.setCurrentIndex(default_idx)
         thumb_row.addWidget(self.covers_thumb_combo)
+
+        self.covers_thumb_size_label = QLabel("Thumbnail size:")
+        self.covers_thumb_size_label.setVisible(False)
+        thumb_row.addWidget(self.covers_thumb_size_label)
+
+        self.covers_thumb_size_spin = QSpinBox()
+        self.covers_thumb_size_spin.setRange(150, 600)
+        self.covers_thumb_size_spin.setValue(600)
+        self.covers_thumb_size_spin.setSuffix(" px")
+        self.covers_thumb_size_spin.setToolTip("Cover thumbnail size in pixels")
+        self.covers_thumb_size_spin.setVisible(False)
+        thumb_row.addWidget(self.covers_thumb_size_spin)
+
         thumb_row.addStretch()
         upload_layout.addLayout(thumb_row)
 
-        # Cover gallery name
+        # Cover gallery ID (per-host)
         gallery_row = QHBoxLayout()
         gallery_row.addWidget(QLabel("Cover gallery:"))
 
         self.covers_gallery_edit = QLineEdit()
-        self.covers_gallery_edit.setPlaceholderText("Optional gallery name for cover uploads")
+        self.covers_gallery_edit.setPlaceholderText("Gallery ID for cover uploads")
         self.covers_gallery_edit.setToolTip(
-            "If set, cover photos are uploaded to this specific gallery.\n"
-            "Leave empty to use the same gallery as the main upload."
+            "Gallery ID where cover photos are uploaded.\n"
+            "You can paste a gallery URL and the ID will be extracted automatically.\n"
+            "Leave empty to create a new gallery each time."
         )
+        self.covers_gallery_edit.textChanged.connect(self._on_gallery_text_changed)
         gallery_row.addWidget(self.covers_gallery_edit)
+
+        self.covers_create_gallery_btn = QPushButton("Create")
+        self.covers_create_gallery_btn.setToolTip("Create a new gallery on the selected host")
+        self.covers_create_gallery_btn.clicked.connect(self._on_create_gallery)
+        gallery_row.addWidget(self.covers_create_gallery_btn)
+
         upload_layout.addLayout(gallery_row)
+
+        # Anonymous mode warning (hidden by default)
+        self.covers_anon_widget = QWidget()
+        anon_layout = QHBoxLayout(self.covers_anon_widget)
+        anon_layout.setContentsMargins(0, 0, 0, 0)
+        anon_label = QLabel("Requires account")
+        anon_label.setProperty("class", "status-muted")
+        anon_layout.addWidget(anon_label)
+        anon_layout.addWidget(InfoButton(
+            "<b>Cover gallery requires a TurboImageHost account.</b><br><br>"
+            "Anonymous uploads cannot target a specific gallery. "
+            "Each upload creates a new gallery automatically.<br><br>"
+            "Set your TurboImageHost username and password in the host "
+            "configuration to use this feature."
+        ))
+        anon_layout.addStretch()
+        self.covers_anon_widget.setVisible(False)
+        upload_layout.addWidget(self.covers_anon_widget)
 
         # Also upload as gallery image
         self.covers_also_upload_check = QCheckBox("Also upload cover as gallery image")
@@ -329,9 +370,9 @@ class CoversTab(QWidget):
         self.covers_fs_max_spin.valueChanged.connect(dirty)
         self.covers_max_spin.valueChanged.connect(dirty)
         self.covers_skip_duplicates_check.toggled.connect(dirty)
-        self.covers_host_combo.currentIndexChanged.connect(dirty)
+        self.covers_host_combo.currentIndexChanged.connect(self._on_cover_host_changed)
         self.covers_thumb_combo.currentIndexChanged.connect(dirty)
-        self.covers_gallery_edit.textChanged.connect(dirty)
+        self.covers_thumb_size_spin.valueChanged.connect(dirty)
         self.covers_also_upload_check.toggled.connect(dirty)
 
     # ------------------------------------------------------------------
@@ -341,6 +382,19 @@ class CoversTab(QWidget):
     def load_settings(self):
         """Load cover settings from QSettings."""
         try:
+            # One-time migration: move global cover/gallery to per-host INI key
+            migrated = self.settings.value('cover/_migrated_to_per_host', False, type=bool)
+            if not migrated:
+                from src.core.image_host_config import save_image_host_setting
+                old_gallery = self.settings.value('cover/gallery', '', type=str)
+                old_thumb_fmt = self.settings.value('cover/thumbnail_format', 2, type=int)
+                old_host = self.settings.value('cover/host_id', 'imx', type=str)
+                if old_gallery:
+                    save_image_host_setting(old_host, 'cover_gallery', old_gallery)
+                if old_thumb_fmt:
+                    save_image_host_setting(old_host, 'cover_thumbnail_format', old_thumb_fmt)
+                self.settings.setValue('cover/_migrated_to_per_host', True)
+
             # Block ALL signals during loading to prevent marking tab as dirty
             controls_to_block = [
                 self.covers_enabled_check,
@@ -354,6 +408,7 @@ class CoversTab(QWidget):
                 self.covers_fs_max_check, self.covers_fs_max_spin,
                 self.covers_max_spin, self.covers_skip_duplicates_check,
                 self.covers_host_combo, self.covers_thumb_combo,
+                self.covers_thumb_size_spin, self.covers_create_gallery_btn,
                 self.covers_gallery_edit, self.covers_also_upload_check,
             ]
             for control in controls_to_block:
@@ -425,20 +480,17 @@ class CoversTab(QWidget):
                 self.settings.value('cover/skip_duplicates', DEFAULT_COVER_SKIP_DUPLICATES, type=bool)
             )
 
-            # Upload settings
+            # Upload settings — host selection
             host_id = self.settings.value('cover/host_id', 'imx', type=str)
             host_idx = self.covers_host_combo.findData(host_id)
             if host_idx >= 0:
                 self.covers_host_combo.setCurrentIndex(host_idx)
 
-            thumb_fmt = self.settings.value('cover/thumbnail_format', DEFAULT_COVER_THUMBNAIL_FORMAT, type=int)
-            thumb_idx = self.covers_thumb_combo.findData(thumb_fmt)
-            if thumb_idx >= 0:
-                self.covers_thumb_combo.setCurrentIndex(thumb_idx)
+            # Per-host cover settings loaded by host
+            self._load_host_cover_settings(host_id)
+            self._update_thumbnail_controls(host_id)
+            self._update_anon_state(host_id)
 
-            self.covers_gallery_edit.setText(
-                self.settings.value('cover/gallery', '', type=str)
-            )
             self.covers_also_upload_check.setChecked(
                 self.settings.value('cover/also_upload_as_gallery', False, type=bool)
             )
@@ -473,9 +525,16 @@ class CoversTab(QWidget):
             self.settings.setValue('cover/filesize_max_kb', self.covers_fs_max_spin.value())
             self.settings.setValue('cover/max_per_gallery', self.covers_max_spin.value())
             self.settings.setValue('cover/skip_duplicates', self.covers_skip_duplicates_check.isChecked())
-            self.settings.setValue('cover/host_id', self.covers_host_combo.currentData())
-            self.settings.setValue('cover/thumbnail_format', self.covers_thumb_combo.currentData())
-            self.settings.setValue('cover/gallery', self.covers_gallery_edit.text())
+            host_id = self.covers_host_combo.currentData()
+            self.settings.setValue('cover/host_id', host_id)
+
+            # Save per-host cover settings to INI
+            from src.core.image_host_config import save_image_host_setting
+            save_image_host_setting(host_id, 'cover_gallery', self.covers_gallery_edit.text())
+            save_image_host_setting(host_id, 'cover_thumbnail_format', self.covers_thumb_combo.currentData())
+            save_image_host_setting(host_id, 'cover_thumbnail_size', self.covers_thumb_size_spin.value())
+
+            self.cover_gallery_changed.emit(host_id, self.covers_gallery_edit.text())
             self.settings.setValue('cover/also_upload_as_gallery', self.covers_also_upload_check.isChecked())
             return True
         except Exception as e:
@@ -493,6 +552,129 @@ class CoversTab(QWidget):
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _on_cover_host_changed(self, index: int):
+        """Reload per-host cover settings when cover host dropdown changes."""
+        self.dirty.emit()
+        host_id = self.covers_host_combo.currentData()
+        if not host_id:
+            return
+        self._load_host_cover_settings(host_id)
+        self._update_anon_state(host_id)
+        self._update_thumbnail_controls(host_id)
+
+    def _load_host_cover_settings(self, host_id: str):
+        """Load the cover gallery setting for the given host from INI."""
+        from src.core.image_host_config import get_image_host_setting
+        self.covers_gallery_edit.blockSignals(True)
+        gallery = get_image_host_setting(host_id, 'cover_gallery', 'str') or ''
+        self.covers_gallery_edit.setText(gallery)
+        self.covers_gallery_edit.blockSignals(False)
+        self.covers_create_gallery_btn.setEnabled(not bool(gallery.strip()))
+
+    def _update_anon_state(self, host_id: str):
+        """Show/hide anonymous warning and disable gallery for Turbo without credentials."""
+        if host_id != "turbo":
+            self.covers_anon_widget.setVisible(False)
+            self.covers_gallery_edit.setEnabled(True)
+            self.covers_create_gallery_btn.setEnabled(
+                not bool(self.covers_gallery_edit.text().strip())
+            )
+            return
+        from bbdrop import get_credential
+        has_creds = bool(get_credential('username', 'turbo') and get_credential('password', 'turbo'))
+        self.covers_anon_widget.setVisible(not has_creds)
+        self.covers_gallery_edit.setEnabled(has_creds)
+        self.covers_create_gallery_btn.setEnabled(
+            has_creds and not bool(self.covers_gallery_edit.text().strip())
+        )
+
+    def _update_thumbnail_controls(self, host_id: str):
+        """Swap thumbnail control between format dropdown (IMX) and size spinbox (Turbo)."""
+        from src.core.image_host_config import get_image_host_setting, get_image_host_config_manager
+        manager = get_image_host_config_manager()
+        host_config = manager.get_host(host_id)
+
+        self.covers_thumb_combo.setVisible(False)
+        self.covers_thumb_size_spin.setVisible(False)
+        self.covers_thumb_size_label.setVisible(False)
+        self.covers_thumb_format_label.setVisible(False)
+
+        if host_config and host_config.thumbnail_mode == "variable" and host_config.thumbnail_range:
+            # Turbo: show size spinbox
+            self.covers_thumb_size_label.setVisible(True)
+            self.covers_thumb_size_spin.setVisible(True)
+            thumb_range = host_config.thumbnail_range
+            self.covers_thumb_size_spin.setRange(
+                thumb_range.get('min', 150), thumb_range.get('max', 600)
+            )
+            saved = get_image_host_setting(host_id, 'cover_thumbnail_size', 'int')
+            self.covers_thumb_size_spin.blockSignals(True)
+            self.covers_thumb_size_spin.setValue(saved or 600)
+            self.covers_thumb_size_spin.blockSignals(False)
+        else:
+            # IMX: show format dropdown
+            self.covers_thumb_format_label.setVisible(True)
+            self.covers_thumb_combo.setVisible(True)
+            saved_fmt = get_image_host_setting(host_id, 'cover_thumbnail_format', 'int')
+            if saved_fmt:
+                idx = self.covers_thumb_combo.findData(saved_fmt)
+                if idx >= 0:
+                    self.covers_thumb_combo.blockSignals(True)
+                    self.covers_thumb_combo.setCurrentIndex(idx)
+                    self.covers_thumb_combo.blockSignals(False)
+
+    def _on_gallery_text_changed(self, text: str):
+        """Extract gallery ID from pasted URL if detected."""
+        self.dirty.emit()
+        if not text:
+            self.covers_create_gallery_btn.setEnabled(True)
+            return
+        import re
+        extracted = text
+        turbo_match = re.search(r'turboimagehost\.com/album/(\d+)', text)
+        if turbo_match:
+            extracted = turbo_match.group(1)
+        else:
+            imx_match = re.search(r'imx\.to/g/(\w+)', text)
+            if imx_match:
+                extracted = imx_match.group(1)
+        if extracted != text:
+            self.covers_gallery_edit.blockSignals(True)
+            self.covers_gallery_edit.setText(extracted)
+            self.covers_gallery_edit.blockSignals(False)
+        self.covers_create_gallery_btn.setEnabled(not bool(self.covers_gallery_edit.text().strip()))
+
+    def _on_create_gallery(self):
+        """Create a new gallery on the selected cover host."""
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        host_id = self.covers_host_combo.currentData()
+        name, ok = QInputDialog.getText(self, "Create Cover Gallery", "Gallery name:")
+        if not ok or not name.strip():
+            return
+        try:
+            from src.network.image_host_factory import create_image_host_client
+            client = create_image_host_client(host_id)
+            if hasattr(client, 'create_gallery'):
+                gallery_id = client.create_gallery(name.strip())
+                self.covers_gallery_edit.setText(gallery_id)
+            else:
+                QMessageBox.information(
+                    self, "Not Supported",
+                    f"Gallery creation is not yet supported for this host.\n"
+                    f"Please create the gallery on the website and paste the URL here."
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to create gallery: {e}")
+
+    def on_external_cover_gallery_change(self, host_id: str, gallery_id: str):
+        """Called when per-host dialog changes the cover gallery."""
+        current_host = self.covers_host_combo.currentData()
+        if host_id == current_host:
+            self.covers_gallery_edit.blockSignals(True)
+            self.covers_gallery_edit.setText(gallery_id)
+            self.covers_gallery_edit.blockSignals(False)
+            self.covers_create_gallery_btn.setEnabled(not bool(gallery_id.strip()))
 
     def _update_covers_ui_state(self, enabled=None):
         """Enable/disable and dim/undim covers container based on master checkbox."""
