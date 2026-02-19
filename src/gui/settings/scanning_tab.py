@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 
 from bbdrop import get_config_path
+from src.gui.widgets.info_button import InfoButton
 from src.utils.logger import log
 
 
@@ -68,8 +69,18 @@ class ScanningTab(QWidget):
         strategy_layout.addWidget(separator)
 
         # PIL Sampling Section
+        sampling_row = QHBoxLayout()
         sampling_label = QLabel("<b>Dimension Calculation Sampling</b>")
-        strategy_layout.addWidget(sampling_label)
+        sampling_row.addWidget(sampling_label)
+        sampling_row.addWidget(InfoButton(
+            "Opening every image to read its pixel dimensions is slow "
+            "(requires decoding the image header with PIL). Sampling checks "
+            "a subset and estimates the gallery's typical dimensions from that.<br><br>"
+            "For most galleries where images are similar sizes, a small sample "
+            "gives accurate results much faster."
+        ))
+        sampling_row.addStretch()
+        strategy_layout.addLayout(sampling_row)
 
         # Sampling Method
         method_layout = QHBoxLayout()
@@ -134,6 +145,13 @@ class ScanningTab(QWidget):
         self.exclude_last_check = QCheckBox("Skip last image")
         self.exclude_last_check.setToolTip("Often credits/logo image")
         position_layout.addWidget(self.exclude_last_check)
+        position_layout.addWidget(InfoButton(
+            "Many galleries follow a pattern: the first image is a cover or "
+            "poster (different dimensions than the content), and the last "
+            "image is a credits or watermark page.<br><br>"
+            "Excluding these from dimension sampling gives a more accurate "
+            "average for the actual content images."
+        ))
         position_layout.addStretch()
         strategy_layout.addLayout(position_layout)
 
@@ -202,6 +220,14 @@ class ScanningTab(QWidget):
             "Remove images with dimensions outside 1.5x interquartile range"
         )
         stats_layout.addWidget(self.stats_exclude_outliers_check)
+        stats_layout.addWidget(InfoButton(
+            "<b>IQR</b> (Interquartile Range) is a statistical method to "
+            "detect unusual values. With this enabled, images whose dimensions "
+            "fall far outside the middle 50% of the sample are ignored.<br><br>"
+            "<b>Practical effect:</b> if 24 out of 25 sampled images are "
+            "1920&times;1080 but one is 100&times;100, the outlier is dropped "
+            "before calculating the average."
+        ))
         stats_layout.addStretch()
         strategy_layout.addLayout(stats_layout)
 
@@ -220,6 +246,13 @@ class ScanningTab(QWidget):
         )
         self.avg_median_radio.setChecked(True)
         avg_layout.addWidget(self.avg_median_radio)
+        avg_layout.addWidget(InfoButton(
+            "<b>Mean:</b> Adds all values and divides by count. Affected by "
+            "extreme values (one huge image pulls the average up).<br><br>"
+            "<b>Median:</b> Takes the middle value when sorted. Ignores extremes.<br><br>"
+            "For galleries with consistent image sizes, both give similar results. "
+            "For mixed galleries, median is more robust. <b>Recommended: Median.</b>"
+        ))
         avg_layout.addStretch()
         strategy_layout.addLayout(avg_layout)
 
