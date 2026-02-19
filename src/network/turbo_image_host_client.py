@@ -587,6 +587,87 @@ class TurboImageHostClient(ImageHostClient):
         else:
             return f"{self.base_url}/album/{gallery_id}"
 
+    def create_gallery(self, name: str) -> str:
+        """Create a new gallery on TurboImageHost.
+
+        Requires authenticated session (username + password).
+
+        Args:
+            name: Gallery name (will be sanitized).
+
+        Returns:
+            Gallery ID string (numeric).
+
+        Raises:
+            ValueError: If name is empty.
+            RuntimeError: If creation fails or no gallery ID found in response.
+        """
+        if not name or not name.strip():
+            raise ValueError("Gallery name cannot be empty")
+
+        sanitized = self.sanitize_gallery_name(name)
+
+        curl = self._get_thread_curl()
+        response_buffer = BytesIO()
+
+        try:
+            curl.setopt(pycurl.URL, f"{self.base_url}/index.tu?")
+            curl.setopt(pycurl.WRITEDATA, response_buffer)
+            curl.setopt(pycurl.POST, 1)
+
+            post_data = f"addalbum={sanitized}&newalbum=Create+a+new+gallery"
+            curl.setopt(pycurl.POSTFIELDS, post_data)
+
+            curl.setopt(pycurl.HTTPHEADER, [
+                'Content-Type: application/x-www-form-urlencoded',
+                f'Origin: {self.base_url}',
+                f'Referer: {self.base_url}/g.tu',
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            ])
+
+            self._set_cookies(curl)
+            curl.perform()
+
+            response_code = curl.getinfo(pycurl.RESPONSE_CODE)
+            if response_code != 200:
+                raise RuntimeError(f"Gallery creation failed with status {response_code}")
+
+            html = response_buffer.getvalue().decode('utf-8', errors='replace')
+            return self._parse_create_gallery_response(html)
+
+        finally:
+            curl.close()
+
+    def _parse_create_gallery_response(self, html: str) -> str:
+        """Parse the gallery creation response HTML for the new gallery ID.
+
+        Looks for the selected option in the #album dropdown, falling back
+        to the last numeric option if no selected attribute is present.
+
+        Args:
+            html: Response HTML from the gallery creation POST.
+
+        Returns:
+            Gallery ID string (numeric).
+
+        Raises:
+            RuntimeError: If no gallery ID found in response.
+        """
+        # Look for selected option in #album dropdown
+        match = re.search(
+            r'<option\s+value="(\d+)"\s+selected[^>]*>',
+            html, re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+
+        # Fallback: find the last option with a numeric value
+        options = re.findall(r'<option\s+value="(\d+)"', html, re.IGNORECASE)
+        if options:
+            return options[-1]
+
+        raise RuntimeError("Could not find gallery ID in response")
+
     def get_thumbnail_url(self, img_id: str, ext: str = "") -> str:
         """Get the thumbnail URL for a given image ID."""
         return f"https://s8d8.turboimg.net/t1/{img_id}{ext}"
