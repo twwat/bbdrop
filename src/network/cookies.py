@@ -137,7 +137,14 @@ def get_firefox_cookies(domain: str = "imx.to", cookie_names: list[str] | None =
             _firefox_cache_time = current_time
 
         elapsed = time.time() - start_time
-        log(f"Loaded {len(cookies)} Firefox cookies for {domain} in {elapsed:.3f}s (SQLite: {sqlite_connect_time:.3f}s, query: {query_time:.3f}s)", level="trace", category="cookies")
+        log(
+            f"Loaded {len(cookies)} Firefox cookies for {domain}"
+            f" in {elapsed:.3f}s"
+            f" (SQLite: {sqlite_connect_time:.3f}s,"
+            f" query: {query_time:.3f}s)",
+            level="trace",
+            category="cookies",
+        )
         return cookies
     except Exception as e:
         elapsed = time.time() - start_time

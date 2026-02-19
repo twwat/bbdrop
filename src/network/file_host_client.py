@@ -21,6 +21,12 @@ from src.core.engine import AtomicCounter
 from src.proxy.pycurl_adapter import PyCurlProxyAdapter
 from src.proxy.models import ProxyEntry
 
+_CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
 
 class FileHostClient:
     """pycurl-based file host uploader with bandwidth tracking."""
@@ -274,7 +280,7 @@ class FileHostClient:
             get_curl.setopt(pycurl.WRITEDATA, get_buffer)
             get_curl.setopt(pycurl.HEADERFUNCTION, get_headers.write)
             get_curl.setopt(pycurl.TIMEOUT, 30)
-            get_curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            get_curl.setopt(pycurl.USERAGENT, _CHROME_UA)
             get_curl.perform()
 
             # Extract cookies from GET request
@@ -525,7 +531,7 @@ class FileHostClient:
                 curl.setopt(pycurl.URL, upload_page_url)
                 curl.setopt(pycurl.WRITEDATA, buffer)
                 curl.setopt(pycurl.TIMEOUT, 30)
-                curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                curl.setopt(pycurl.USERAGENT, _CHROME_UA)
                 curl.setopt(pycurl.FOLLOWLOCATION, True)
 
                 # Send session cookies for authentication
@@ -871,7 +877,7 @@ class FileHostClient:
                         page_curl.setopt(pycurl.URL, upload_page_url)
                         page_curl.setopt(pycurl.WRITEDATA, page_buffer)
                         page_curl.setopt(pycurl.TIMEOUT, 30)
-                        page_curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        page_curl.setopt(pycurl.USERAGENT, _CHROME_UA)
                         page_curl.setopt(pycurl.FOLLOWLOCATION, True)
 
                         # Use session cookies
@@ -1150,7 +1156,13 @@ class FileHostClient:
 
                     poll_data = json.loads(response_buffer.getvalue().decode('utf-8'))
 
-                    if self._log_callback: self._log_callback(f"{file_path.name}: Poll attempt {attempt + 1}/{self.config.upload_poll_retries}, response: {json.dumps(poll_data)[:200]}", "debug")
+                    if self._log_callback:
+                        self._log_callback(
+                            f"{file_path.name}: Poll attempt "
+                            f"{attempt + 1}/{self.config.upload_poll_retries}"
+                            f", response: {json.dumps(poll_data)[:200]}",
+                            "debug",
+                        )
 
                     # Check for final URL
                     final_url = self._extract_from_json(poll_data, self.config.link_path)
@@ -1193,7 +1205,17 @@ class FileHostClient:
                     curl.close()
 
             # If we got here, polling timed out - log the last response
-            if self._log_callback: self._log_callback(f"{file_path.name}: Upload polling timeout. Last response: {json.dumps(poll_data) if 'poll_data' in locals() else 'No response'}", "warning")
+            if self._log_callback:
+                last = (
+                    json.dumps(poll_data)
+                    if 'poll_data' in locals()
+                    else 'No response'
+                )
+                self._log_callback(
+                    f"{file_path.name}: Upload polling timeout."
+                    f" Last response: {last}",
+                    "warning",
+                )
             raise Exception(f"{file_path.name}: Upload processing timeout - file may still be uploading (got upload_id: {upload_id})")
 
         # No polling configured - parse upload response directly (K2S-style)
@@ -1238,7 +1260,7 @@ class FileHostClient:
             curl.setopt(pycurl.URL, get_server_url)
             curl.setopt(pycurl.WRITEDATA, response_buffer)
             curl.setopt(pycurl.TIMEOUT, 10)
-            curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            curl.setopt(pycurl.USERAGENT, _CHROME_UA)
 
             # Add auth headers if needed
             headers = self._prepare_headers()
@@ -1420,7 +1442,7 @@ class FileHostClient:
                 delete_url = self.config.delete_url or ""
 
                 # Common curl options
-                curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                curl.setopt(pycurl.USERAGENT, _CHROME_UA)
                 curl.setopt(pycurl.FOLLOWLOCATION, True)
 
                 # Check if we need POST with JSON body (K2S-style)
@@ -1588,7 +1610,7 @@ class FileHostClient:
                 curl.setopt(pycurl.URL, info_url)
                 curl.setopt(pycurl.WRITEDATA, response_buffer)
                 curl.setopt(pycurl.TIMEOUT, 30)
-                curl.setopt(pycurl.USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                curl.setopt(pycurl.USERAGENT, _CHROME_UA)
                 curl.setopt(pycurl.FOLLOWLOCATION, True)
 
                 # Check if we need POST with JSON body (K2S-style)
