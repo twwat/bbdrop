@@ -116,7 +116,7 @@ jobs:
           export PYCURL_SSL_LIBRARY=openssl
           pip install --no-cache-dir pycurl
           # Install other deps, skipping Windows-only packages
-          pip install requests PyQt6 PyQt6-Qt6 PyQt6_sip pillow tqdm cryptography standard-imghdr certifi keyring markdown colorama
+          pip install requests PyQt6 PyQt6-Qt6 PyQt6_sip pillow tqdm cryptography standard-imghdr certifi keyring markdown colorama psutil py7zr rarfile splitzip
 
       - name: Install Python dependencies (macOS)
         if: runner.os == 'macOS'
@@ -129,7 +129,7 @@ jobs:
           CPPFLAGS="-I$(brew --prefix openssl@3)/include -I$(brew --prefix curl)/include" \
           pip install --no-cache-dir pycurl
           # Install other deps, skipping Windows-only packages
-          pip install requests PyQt6 PyQt6-Qt6 PyQt6_sip pillow tqdm cryptography standard-imghdr certifi keyring markdown colorama
+          pip install requests PyQt6 PyQt6-Qt6 PyQt6_sip pillow tqdm cryptography standard-imghdr certifi keyring markdown colorama psutil py7zr rarfile splitzip
 
       # Windows build
       - name: Build (Windows)
