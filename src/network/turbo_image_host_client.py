@@ -295,6 +295,10 @@ class TurboImageHostClient(ImageHostClient):
                 ('imcontent', content_type),
             ]
 
+            # Upload to existing gallery by ID
+            if gallery_id and not create_gallery:
+                form_fields.append(('album', str(gallery_id)))
+
             if self._batch_upload_id and gallery_name:
                 form_fields.append(('galleryAN', '1'))
                 form_fields.append(('galleryN', gallery_name))
