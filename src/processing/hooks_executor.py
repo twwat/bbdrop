@@ -50,7 +50,7 @@ class HooksExecutor:
                 suffix = f" (after {attempt + 1} attempts)" if attempt > 0 else ""
                 log(f"Removed temporary file: {file_path}{suffix}", level="debug", category="hooks")
                 return True
-            except PermissionError as e:
+            except PermissionError:
                 # File is locked by another process
                 if attempt < max_retries - 1:
                     log(f"File locked (attempt {attempt + 1}/{max_retries}), waiting {delay:.2f}s: {file_path}", level="debug", category="hooks")

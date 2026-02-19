@@ -3,8 +3,6 @@ Archive extraction worker for non-blocking ZIP/CBZ processing.
 Handles archive extraction in background thread to keep GUI responsive.
 """
 
-from pathlib import Path
-from typing import Optional, List
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
 
 

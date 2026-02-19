@@ -6,8 +6,6 @@ Handles async operations, progress batching, and table updates.
 import time
 import weakref
 from weakref import ReferenceType
-import configparser
-import os
 from typing import Callable, Optional, Dict, Any, Set
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal, QTimer, QMutex, QMutexLocker, Qt
 from PyQt6.QtWidgets import QTableWidgetItem

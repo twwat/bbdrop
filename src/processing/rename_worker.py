@@ -10,9 +10,8 @@ import queue
 import time
 import re
 import requests
-import configparser
 import os
-from typing import List, Dict, Callable, Optional, Any
+from typing import List, Dict, Optional, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.utils.logger import log
 
@@ -471,7 +470,7 @@ class RenameWorker(QObject):
 
             # Check if we can access the edit page
             if edit_page.status_code == 403:
-                log(f"Authentication expired (HTTP 403)", level="debug", category="renaming")
+                log("Authentication expired (HTTP 403)", level="debug", category="renaming")
                 # Try re-auth with rate limiting to prevent auth storms
                 if retry_on_auth_failure and self._attempt_reauth_with_rate_limit():
                     log("Re-authenticated successfully, retrying rename", level="info", category="renaming")

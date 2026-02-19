@@ -18,13 +18,12 @@ import json
 import queue
 from queue import Queue
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 from PyQt6.QtWidgets import QMessageBox
 
 from src.utils.logger import log
-from src.utils.format_utils import format_binary_size
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI
@@ -132,36 +131,35 @@ class CompletionWorker(QThread):
                 raise
 
             # Use cached template functions to avoid blocking import
-            generate_bbcode_from_template = getattr(self, '_generate_bbcode_from_template', lambda *args, **kwargs: "")
+            getattr(self, '_generate_bbcode_from_template', lambda *args, **kwargs: "")
 
             # Prepare template data (include successes; failed shown separately)
             all_images_bbcode = ""
             for image_data in results.get('images', []):
                 all_images_bbcode += (image_data.get('bbcode') or '') + "  "
             failed_details = results.get('failed_details', [])
-            failed_summary = ""
             if failed_details:
                 failed_summary_lines = [f"[b]Failed ({len(failed_details)}):[/b]"]
                 for fname, reason in failed_details[:20]:
                     failed_summary_lines.append(f"- {fname}: {reason}")
                 if len(failed_details) > 20:
                     failed_summary_lines.append(f"... and {len(failed_details) - 20} more")
-                failed_summary = "\n" + "\n".join(failed_summary_lines)
+                "\n" + "\n".join(failed_summary_lines)
 
             # Calculate statistics (always, not only when failures exist)
             queue_item = gui_parent.queue_manager.get_item(path)
             total_size = results.get('total_size', 0) or (queue_item.total_size if queue_item and getattr(queue_item, 'total_size', 0) else 0)
             try:
                 format_binary_size = getattr(self, '_format_binary_size', lambda size, precision=2: f"{size} B" if size else "")
-                folder_size = format_binary_size(total_size, precision=1)
+                format_binary_size(total_size, precision=1)
             except Exception:
-                folder_size = f"{total_size} B"
-            avg_width = (queue_item.avg_width if queue_item and getattr(queue_item, 'avg_width', 0) else 0) or results.get('avg_width', 0)
-            avg_height = (queue_item.avg_height if queue_item and getattr(queue_item, 'avg_height', 0) else 0) or results.get('avg_height', 0)
-            max_width = (queue_item.max_width if queue_item and getattr(queue_item, 'max_width', 0) else 0) or results.get('max_width', 0)
-            max_height = (queue_item.max_height if queue_item and getattr(queue_item, 'max_height', 0) else 0) or results.get('max_height', 0)
-            min_width = (queue_item.min_width if queue_item and getattr(queue_item, 'min_width', 0) else 0) or results.get('min_width', 0)
-            min_height = (queue_item.min_height if queue_item and getattr(queue_item, 'min_height', 0) else 0) or results.get('min_height', 0)
+                pass
+            (queue_item.avg_width if queue_item and getattr(queue_item, 'avg_width', 0) else 0) or results.get('avg_width', 0)
+            (queue_item.avg_height if queue_item and getattr(queue_item, 'avg_height', 0) else 0) or results.get('avg_height', 0)
+            (queue_item.max_width if queue_item and getattr(queue_item, 'max_width', 0) else 0) or results.get('max_width', 0)
+            (queue_item.max_height if queue_item and getattr(queue_item, 'max_height', 0) else 0) or results.get('max_height', 0)
+            (queue_item.min_width if queue_item and getattr(queue_item, 'min_width', 0) else 0) or results.get('min_width', 0)
+            (queue_item.min_height if queue_item and getattr(queue_item, 'min_height', 0) else 0) or results.get('min_height', 0)
 
             # Get most common extension from uploaded images
             extensions = []
@@ -172,7 +170,7 @@ class CompletionWorker(QThread):
                         ext = url.split('.')[-1].upper()
                         if ext in ['JPG', 'PNG', 'GIF', 'BMP', 'WEBP']:
                             extensions.append(ext)
-            extension = max(set(extensions), key=extensions.count) if extensions else "JPG"
+            max(set(extensions), key=extensions.count) if extensions else "JPG"
 
             # Get template name and custom fields from the item
             item = gui_parent.queue_manager.get_item(path)
@@ -320,10 +318,7 @@ class ArtifactHandler(QObject):
         Raises:
             Exception: If gallery not found, no JSON artifact, or regeneration fails
         """
-        from bbdrop import get_central_storage_path, build_gallery_filenames, save_gallery_artifacts
-        import json
-        import glob
-        import os
+        from bbdrop import save_gallery_artifacts
 
         # Get gallery info
         item = self._main_window.queue_manager.get_item(gallery_path)

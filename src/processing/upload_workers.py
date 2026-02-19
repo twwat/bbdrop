@@ -12,13 +12,12 @@ from typing import Optional, Dict, Any
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QSettings
 
 from bbdrop import (
-    timestamp, load_user_defaults, rename_all_unnamed_with_session,
-    save_gallery_artifacts, get_unnamed_galleries
+    save_gallery_artifacts
 )
 from src.network.image_host_factory import create_image_host_client
 from src.utils.logger import log
 from src.storage.queue_manager import GalleryQueueItem
-from src.core.engine import UploadEngine, AtomicCounter, ByteCountingCallback
+from src.core.engine import UploadEngine, AtomicCounter
 from src.core.image_host_config import get_image_host_setting, get_image_host_config_manager, is_image_host_enabled, get_enabled_hosts
 from src.processing.hooks_executor import execute_gallery_hooks
 
@@ -119,7 +118,7 @@ class UploadWorker(QThread):
                     self._emit_queue_stats()
                     time.sleep(0.1)
 
-        except Exception as e:
+        except Exception:
             import traceback
             error_trace = traceback.format_exc()
             log(f"CRITICAL: Worker thread crashed: {error_trace}", level="critical", category="uploads")
@@ -309,7 +308,7 @@ class UploadWorker(QThread):
             # Process results
             self._process_upload_results(item, results)
 
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             error_msg = f"Gallery folder not found: {item.path}\nThe folder may have been moved or deleted."
             log(error_msg, level="error", category="uploads")
             item.error_message = error_msg
@@ -502,7 +501,7 @@ class UploadWorker(QThread):
             return
 
         # Upload cover photo if configured (after gallery exists)
-        cover_result = self._upload_cover(item, gallery_id=results.get('gallery_id', ''))
+        self._upload_cover(item, gallery_id=results.get('gallery_id', ''))
 
         # Save artifacts
         artifact_paths = self._save_artifacts_for_result(item, results)

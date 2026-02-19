@@ -9,10 +9,9 @@ import time
 import json
 import threading
 import traceback
-from pathlib import Path
 from typing import Optional, Dict, Any
 
-from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings, Qt
+from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings
 
 from bbdrop import get_credential, decrypt_password
 from src.core.engine import AtomicCounter
@@ -24,7 +23,6 @@ from src.proxy.models import ProxyContext
 from src.storage.database import QueueStore
 from src.utils.logger import log
 from src.utils.archive_manager import get_archive_manager
-from src.utils.format_utils import format_binary_size
 
 
 class FileHostWorker(QThread):
@@ -682,7 +680,6 @@ class FileHostWorker(QThread):
 
         # Initialize timing and size tracking for metrics
         upload_start_time = time.time()
-        zip_size = 0
         observed_peak_kbps = 0.0  # Track peak speed during this upload
 
         self._log(
@@ -1049,7 +1046,7 @@ class FileHostWorker(QThread):
 
         # Step 2: Cache invalid/missing - fetch from server
         self._log(
-            f"Fetching storage from server",
+            "Fetching storage from server",
             level="debug"
         )
 
