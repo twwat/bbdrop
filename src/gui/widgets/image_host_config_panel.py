@@ -34,6 +34,7 @@ class ImageHostConfigPanel(QWidget):
     """Configuration panel for a single image host."""
 
     settings_changed = pyqtSignal()
+    cover_gallery_changed = pyqtSignal(str, str)  # host_id, gallery_id
 
     def __init__(self, host_id: str, config: ImageHostConfig, parent=None):
         """
@@ -72,6 +73,10 @@ class ImageHostConfigPanel(QWidget):
         if self.host_id == "imx":
             options_group = self._create_options_group()
             main_layout.addWidget(options_group)
+
+        # Section 5: Cover Gallery (all hosts)
+        cover_group = self._create_cover_group()
+        main_layout.addWidget(cover_group)
 
     def _create_credentials_group(self) -> QGroupBox:
         """Create the credentials configuration group.
@@ -399,6 +404,112 @@ class ImageHostConfigPanel(QWidget):
 
         return group
 
+    def _create_cover_group(self) -> QGroupBox:
+        """Create cover gallery configuration group."""
+        group = QGroupBox("Cover Gallery")
+        layout = QVBoxLayout(group)
+
+        gallery_row = QHBoxLayout()
+        gallery_row.addWidget(QLabel("<b>Cover Gallery ID</b>:"))
+
+        self.cover_gallery_edit = QLineEdit()
+        self.cover_gallery_edit.setPlaceholderText("Gallery ID for cover uploads")
+        self.cover_gallery_edit.setToolTip(
+            "Gallery ID where cover photos are uploaded.\n"
+            "Paste a gallery URL and the ID will be extracted."
+        )
+        self.cover_gallery_edit.textChanged.connect(self._on_cover_gallery_text_changed)
+        gallery_row.addWidget(self.cover_gallery_edit)
+
+        self.cover_create_btn = QPushButton("Create")
+        self.cover_create_btn.setToolTip("Create a new gallery on this host")
+        self.cover_create_btn.clicked.connect(self._on_cover_create_gallery)
+        gallery_row.addWidget(self.cover_create_btn)
+
+        layout.addLayout(gallery_row)
+
+        # Anonymous warning for Turbo
+        if self.host_id == "turbo":
+            from src.gui.widgets.info_button import InfoButton
+
+            self.cover_anon_widget = QWidget()
+            anon_row = QHBoxLayout(self.cover_anon_widget)
+            anon_row.setContentsMargins(0, 0, 0, 0)
+            anon_label = QLabel("Requires account")
+            anon_label.setProperty("class", "status-muted")
+            anon_row.addWidget(anon_label)
+            anon_row.addWidget(InfoButton(
+                "<b>Cover gallery requires a TurboImageHost account.</b><br><br>"
+                "Anonymous uploads cannot target a specific gallery."
+            ))
+            anon_row.addStretch()
+            layout.addWidget(self.cover_anon_widget)
+
+            has_creds = bool(get_credential('username', 'turbo') and get_credential('password', 'turbo'))
+            self.cover_anon_widget.setVisible(not has_creds)
+            self.cover_gallery_edit.setEnabled(has_creds)
+            self.cover_create_btn.setEnabled(
+                has_creds and not bool(self.cover_gallery_edit.text().strip())
+            )
+        else:
+            self.cover_anon_widget = None
+
+        # Load saved value
+        saved = get_image_host_setting(self.host_id, 'cover_gallery', 'str') or ''
+        self.cover_gallery_edit.setText(saved)
+        self.cover_create_btn.setEnabled(not bool(saved.strip()))
+
+        return group
+
+    def _on_cover_gallery_text_changed(self, text: str):
+        """Smart URL paste for cover gallery field."""
+        import re
+        self._mark_modified()
+
+        extracted = text
+        turbo_match = re.search(r'turboimagehost\.com/album/(\d+)', text)
+        if turbo_match:
+            extracted = turbo_match.group(1)
+        else:
+            imx_match = re.search(r'imx\.to/g/(\w+)', text)
+            if imx_match:
+                extracted = imx_match.group(1)
+
+        if extracted != text:
+            self.cover_gallery_edit.blockSignals(True)
+            self.cover_gallery_edit.setText(extracted)
+            self.cover_gallery_edit.blockSignals(False)
+
+        self.cover_create_btn.setEnabled(not bool(self.cover_gallery_edit.text().strip()))
+
+    def _on_cover_create_gallery(self):
+        """Create a new cover gallery on this host."""
+        from PyQt6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Create Cover Gallery", "Gallery name:")
+        if not ok or not name.strip():
+            return
+        try:
+            from src.network.image_host_factory import create_image_host_client
+            client = create_image_host_client(self.host_id)
+            if hasattr(client, 'create_gallery'):
+                gallery_id = client.create_gallery(name.strip())
+                self.cover_gallery_edit.setText(gallery_id)
+            else:
+                QMessageBox.information(
+                    self, "Not Supported",
+                    "Create the gallery on the website and paste the URL here."
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to create gallery: {e}")
+
+    def on_external_cover_gallery_change(self, host_id: str, gallery_id: str):
+        """Update cover gallery field when changed externally."""
+        if host_id == self.host_id:
+            self.cover_gallery_edit.blockSignals(True)
+            self.cover_gallery_edit.setText(gallery_id)
+            self.cover_gallery_edit.blockSignals(False)
+            self.cover_create_btn.setEnabled(not bool(gallery_id.strip()))
+
     def _mark_modified(self):
         """Mark panel as modified and emit signal."""
         self._modified = True
@@ -440,6 +551,9 @@ class ImageHostConfigPanel(QWidget):
 
         if self.host_id == "imx":
             save_image_host_setting(self.host_id, 'auto_rename', self.auto_rename_check.isChecked())
+
+        save_image_host_setting(self.host_id, 'cover_gallery', self.cover_gallery_edit.text())
+        self.cover_gallery_changed.emit(self.host_id, self.cover_gallery_edit.text())
 
         self._modified = False
         return (old_batch, self.batch_size_slider.value())
