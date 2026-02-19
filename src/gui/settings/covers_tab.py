@@ -119,6 +119,14 @@ class CoversTab(QWidget):
         self.covers_dim_differs_check = QCheckBox("Differs from gallery average by more than")
         self.covers_dim_differs_check.setToolTip("Flag images whose dimensions differ significantly from the gallery average")
         differs_row.addWidget(self.covers_dim_differs_check)
+        differs_row.addWidget(InfoButton(
+            "Compares each image's dimensions to the gallery's average "
+            "(calculated during scanning). Images that differ by more than "
+            "the threshold percentage are flagged as potential covers.<br><br>"
+            "<b>Example:</b> if the gallery average is 1920&times;1080 and an "
+            "image is 600&times;900, that's a ~67% difference &mdash; well "
+            "above a 30% threshold."
+        ))
 
         self.covers_dim_differs_spin = QSpinBox()
         self.covers_dim_differs_spin.setRange(5, 100)
@@ -335,13 +343,24 @@ class CoversTab(QWidget):
         upload_layout.addWidget(self.covers_anon_widget)
 
         # Also upload as gallery image
+        also_upload_row = QHBoxLayout()
         self.covers_also_upload_check = QCheckBox("Also upload cover as gallery image")
         self.covers_also_upload_check.setToolTip(
             "When checked, the cover file is uploaded both as a cover photo\n"
             "AND as a normal gallery image. When unchecked, it only goes\n"
             "through the cover endpoint."
         )
-        upload_layout.addWidget(self.covers_also_upload_check)
+        also_upload_row.addWidget(self.covers_also_upload_check)
+        also_upload_row.addWidget(InfoButton(
+            "When enabled, the cover file is uploaded twice: once through the "
+            "cover endpoint (for the cover thumbnail) and once as a regular "
+            "gallery image.<br><br>"
+            "When disabled, the cover is only uploaded through the cover "
+            "endpoint and won't appear in the main gallery image list. "
+            "Use this if your cover image is separate from the gallery content."
+        ))
+        also_upload_row.addStretch()
+        upload_layout.addLayout(also_upload_row)
 
         container_layout.addWidget(upload_group)
         container_layout.addStretch()
