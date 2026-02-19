@@ -3,12 +3,10 @@ Comprehensive test suite for src/processing/upload_workers.py
 Tests upload workers, completion workers, and bandwidth tracking with threading.
 """
 
-import pytest
 import time
-import threading
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
+from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import QThread, QMutex
+from PyQt6.QtCore import QMutex
 
 from src.processing.upload_workers import (
     UploadWorker,

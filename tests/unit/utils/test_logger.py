@@ -5,9 +5,8 @@ Testing unified logging interface and message routing
 """
 
 import pytest
-import sys
 import logging
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from src.utils.logger import (
     timestamp,
     set_main_window,
@@ -150,7 +149,6 @@ class TestLogViewerManagement:
 
     def test_unregister_nonexistent_viewer(self):
         """Test unregistering viewer not in list doesn't error"""
-        from src.utils import logger
 
         mock_viewer = Mock()
         unregister_log_viewer(mock_viewer)  # Should not raise
@@ -440,7 +438,6 @@ class TestDebugMode:
     @patch('sys.stdout')
     def test_debug_mode_prints_all(self, mock_stdout):
         """Test debug mode prints all messages to console"""
-        from src.utils import logger
 
         with patch('src.utils.logger._get_app_logger') as mock_get_logger:
             mock_logger = Mock()

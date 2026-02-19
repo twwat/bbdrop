@@ -1,5 +1,4 @@
 """Tests for cover photo data model fields on GalleryQueueItem."""
-import pytest
 from src.storage.queue_manager import GalleryQueueItem, QueueManager
 
 
@@ -54,7 +53,7 @@ class TestCoverPersistence:
             assert d["cover_result"]["bbcode"] == "[img]x[/img]"
 
     def test_dict_to_item_restores_cover_fields(self):
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         with patch('src.storage.queue_manager.QueueStore'), \
              patch('src.storage.queue_manager.QSettings'), \
              patch('src.storage.queue_manager.QObject.__init__'):
@@ -74,7 +73,7 @@ class TestCoverPersistence:
             assert item.cover_result == {"bbcode": "[img]x[/img]"}
 
     def test_dict_to_item_cover_defaults_none(self):
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         with patch('src.storage.queue_manager.QueueStore'), \
              patch('src.storage.queue_manager.QSettings'), \
              patch('src.storage.queue_manager.QObject.__init__'):

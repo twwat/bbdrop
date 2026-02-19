@@ -7,17 +7,11 @@ with proper mocking and edge case coverage.
 
 import pytest
 import sqlite3
-import tempfile
-import time
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
 
 from src.network.cookies import (
     get_firefox_cookies,
     load_cookies_from_file,
-    _firefox_cookie_cache,
-    _firefox_cache_time
+    _firefox_cookie_cache
 )
 
 

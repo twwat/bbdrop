@@ -1,7 +1,4 @@
 """Tests for cover photo detection during gallery scanning."""
-import os
-import pytest
-from unittest.mock import patch
 
 
 class TestCoverDetector:

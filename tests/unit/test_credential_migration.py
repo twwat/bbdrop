@@ -251,7 +251,7 @@ class TestMigrateEncryptionKeys:
             MockQSettings.return_value = mock_qs
 
             # Should not raise
-            new_key = _result = __import__('bbdrop')._migrate_encryption_keys()
+            _result = __import__('bbdrop')._migrate_encryption_keys()
 
         # Value should be stored as-is (corrupted, but not lost)
         password_calls = [c for c in mock_set.call_args_list

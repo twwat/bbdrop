@@ -13,7 +13,7 @@ import os
 import pytest
 import tempfile
 import shutil
-from unittest.mock import Mock, patch, MagicMock, call
+from unittest.mock import Mock, patch
 
 from src.processing.upload_workers import UploadWorker
 from src.storage.queue_manager import GalleryQueueItem

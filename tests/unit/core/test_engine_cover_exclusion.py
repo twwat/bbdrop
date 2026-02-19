@@ -1,7 +1,6 @@
 """Tests that the engine excludes cover-only files from the gallery upload."""
 import os
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from src.core.engine import UploadEngine
 
@@ -39,7 +38,7 @@ class TestEngineCoverExclusion:
 
         mock_uploader = self._make_mock_uploader()
         engine = UploadEngine(mock_uploader)
-        results = engine.run(
+        engine.run(
             folder_path=str(tmp_path),
             gallery_name="test",
             thumbnail_size=3,
@@ -68,7 +67,7 @@ class TestEngineCoverExclusion:
 
         mock_uploader = self._make_mock_uploader()
         engine = UploadEngine(mock_uploader)
-        results = engine.run(
+        engine.run(
             folder_path=str(tmp_path),
             gallery_name="test",
             thumbnail_size=3,
@@ -88,7 +87,7 @@ class TestEngineCoverExclusion:
 
         mock_uploader = self._make_mock_uploader()
         engine = UploadEngine(mock_uploader)
-        results = engine.run(
+        engine.run(
             folder_path=str(tmp_path),
             gallery_name="test",
             thumbnail_size=3,
@@ -109,7 +108,7 @@ class TestEngineCoverExclusion:
 
         mock_uploader = self._make_mock_uploader()
         engine = UploadEngine(mock_uploader)
-        results = engine.run(
+        engine.run(
             folder_path=str(tmp_path),
             gallery_name="test",
             thumbnail_size=3,
@@ -162,7 +161,7 @@ class TestEngineCoverExclusion:
 
         mock_uploader = self._make_mock_uploader()
         engine = UploadEngine(mock_uploader)
-        results = engine.run(
+        engine.run(
             folder_path=str(tmp_path),
             gallery_name="test",
             thumbnail_size=3,

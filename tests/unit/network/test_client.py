@@ -39,7 +39,7 @@ class TestGUIImxToUploaderInitialization:
     @patch('src.network.client.ImxToUploader.__init__', return_value=None)
     def test_parent_init_called(self, mock_parent_init):
         """Test that parent __init__ is called."""
-        uploader = GUIImxToUploader()
+        GUIImxToUploader()
         mock_parent_init.assert_called_once()
 
 
@@ -95,7 +95,7 @@ class TestUploadFolderBasic:
         mock_engine_class.return_value = mock_engine_instance
 
         uploader = GUIImxToUploader(worker_thread=None)
-        results = uploader.upload_folder(
+        uploader.upload_folder(
             folder_path=temp_folder_with_images,
             gallery_name="test_gallery",
             thumbnail_size=5,
@@ -337,7 +337,7 @@ class TestSingleInstanceServerErrorHandling:
             mock_socket_class.return_value = mock_socket
             mock_socket.accept.side_effect = Exception("Error")
 
-            with patch('src.network.client.log') as mock_log:
+            with patch('src.network.client.log'):
                 server.run()
 
 

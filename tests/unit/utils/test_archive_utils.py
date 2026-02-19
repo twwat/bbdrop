@@ -5,8 +5,6 @@ Testing archive detection, validation, and path utilities
 """
 
 import pytest
-import tempfile
-import shutil
 from pathlib import Path
 from src.utils.archive_utils import (
     SUPPORTED_ARCHIVE_EXTENSIONS,

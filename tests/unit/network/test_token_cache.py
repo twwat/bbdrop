@@ -7,7 +7,7 @@ with QSettings mocking and proper encryption handling.
 
 import pytest
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from PyQt6.QtCore import QSettings
 
 from src.network.token_cache import TokenCache, get_token_cache

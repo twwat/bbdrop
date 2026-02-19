@@ -6,7 +6,7 @@ for the application update checker.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from PyQt6.QtCore import QThread
 
 from src.network.update_checker import UpdateChecker
@@ -240,7 +240,7 @@ class TestUpdateCheckerCompareVersionsWithPackaging:
     def test_compare_versions_uses_packaging(self, checker):
         """Test that packaging.version is used when available."""
         # This test verifies the packaging path is taken
-        with patch('src.network.update_checker.UpdateChecker._compare_versions_fallback') as mock_fallback:
+        with patch('src.network.update_checker.UpdateChecker._compare_versions_fallback'):
             # If packaging is available, fallback should not be called
             result = checker._compare_versions("0.6.13", "0.6.14")
             assert result == 1
@@ -249,9 +249,8 @@ class TestUpdateCheckerCompareVersionsWithPackaging:
     def test_compare_versions_fallback_on_import_error(self, checker):
         """Test fallback is used when packaging module unavailable."""
         with patch.dict('sys.modules', {'packaging': None, 'packaging.version': None}):
-            with patch.object(checker, '_compare_versions_fallback', return_value=1) as mock_fallback:
+            with patch.object(checker, '_compare_versions_fallback', return_value=1):
                 # Force ImportError by patching the import inside the method
-                original_compare = checker._compare_versions
 
                 def patched_compare(current, latest):
                     try:

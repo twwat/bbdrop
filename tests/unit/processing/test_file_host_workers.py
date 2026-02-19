@@ -3,13 +3,9 @@ Comprehensive test suite for src/processing/file_host_workers.py
 Tests file host upload workers with threading, signals, and session management.
 """
 
-import pytest
 import time
-import threading
-from unittest.mock import Mock, MagicMock, patch, call
-from pathlib import Path
+from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.processing.file_host_workers import FileHostWorker
 
@@ -194,7 +190,7 @@ class TestFileHostWorkerSessionManagement:
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        client = worker._create_client(mock_config)
+        worker._create_client(mock_config)
 
         mock_client_class.assert_called_once()
         call_kwargs = mock_client_class.call_args[1]

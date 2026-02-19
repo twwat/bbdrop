@@ -9,10 +9,8 @@ Tests verify that:
 5. Large datasets are processed efficiently
 """
 
-import os
 import pytest
 import time
-from typing import Dict, List, Any
 
 from src.storage.database import QueueStore
 
@@ -233,7 +231,7 @@ class TestBatchQueryPerformance:
 
         # Time batch query
         start = time.time()
-        batch_uploads = temp_db.get_all_file_host_uploads_batch()
+        temp_db.get_all_file_host_uploads_batch()
         batch_time = time.time() - start
 
         # Time individual queries
@@ -250,7 +248,7 @@ class TestBatchQueryPerformance:
         # In production it's 100x faster, but tests may have overhead
         speedup = individual_time / batch_time if batch_time > 0 else float('inf')
 
-        print(f"\nPerformance comparison (100 galleries, 200 uploads):")
+        print("\nPerformance comparison (100 galleries, 200 uploads):")
         print(f"  Batch query:      {batch_time*1000:.2f}ms")
         print(f"  Individual query: {individual_time*1000:.2f}ms")
         print(f"  Speedup:          {speedup:.1f}x")
@@ -295,7 +293,7 @@ class TestBatchQueryPerformance:
             # Clean up for next iteration
             temp_db.clear_all()
 
-        print(f"\nBatch query scaling:")
+        print("\nBatch query scaling:")
         for count, elapsed in timings.items():
             print(f"  {count} galleries: {elapsed*1000:.2f}ms")
 

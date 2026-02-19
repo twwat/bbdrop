@@ -6,7 +6,6 @@ Tests FileHostCoordinator with threading, semaphore management, and coordination
 import pytest
 import time
 import threading
-from unittest.mock import Mock, patch
 
 from src.processing.file_host_coordinator import FileHostCoordinator, get_coordinator
 

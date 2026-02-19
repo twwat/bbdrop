@@ -1,14 +1,14 @@
 # tests/unit/processing/test_cover_upload.py
 """Tests for cover photo upload through RenameWorker."""
 import pytest
-from unittest.mock import patch, MagicMock, mock_open, ANY
+from unittest.mock import patch, MagicMock, mock_open
 
 
 @pytest.fixture
 def worker():
     """Create a RenameWorker with mocked dependencies."""
     with patch('threading.Thread'), \
-         patch('requests.Session') as mock_session_class, \
+         patch('requests.Session'), \
          patch('bbdrop.get_credential', return_value=None):
         from src.processing.rename_worker import RenameWorker
         w = RenameWorker()

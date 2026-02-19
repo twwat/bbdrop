@@ -5,7 +5,6 @@ Tests the initialization system's configuration loading and validation logic.
 
 import pytest
 import json
-from pathlib import Path
 
 
 @pytest.mark.unit
@@ -146,7 +145,6 @@ class TestAgentInstructionsValidation:
 
     def test_all_agent_types_present(self, sample_agent_instructions):
         """Test all required agent types have instructions."""
-        required_agents = ["researcher", "system-architect", "planner", "code-analyzer", "tester"]
 
         # For this test, we only check the provided ones
         for agent_type in sample_agent_instructions.keys():

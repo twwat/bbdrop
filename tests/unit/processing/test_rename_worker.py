@@ -3,11 +3,10 @@ Comprehensive test suite for src/processing/rename_worker.py
 Tests background rename worker with threading, queue management, and session handling.
 """
 
-import pytest
 import threading
 import queue
 import time
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock, ANY
+from unittest.mock import Mock, patch, ANY
 
 from src.processing.rename_worker import RenameWorker
 
@@ -61,7 +60,7 @@ class TestRenameWorkerInit:
         mock_session = Mock()
         mock_session_class.return_value = mock_session
 
-        worker = RenameWorker()
+        RenameWorker()
 
         mock_session.mount.assert_any_call("http://", ANY)
         mock_session.mount.assert_any_call("https://", ANY)

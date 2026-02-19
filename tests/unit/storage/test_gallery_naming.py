@@ -13,9 +13,6 @@ Tests cover:
 import pytest
 import re
 import time
-from pathlib import Path
-from datetime import datetime
-from unittest.mock import patch, MagicMock
 
 from src.storage.gallery_naming import (
     GalleryNamingError,
@@ -542,7 +539,7 @@ class TestGalleryNameRegistry:
     def test_get_unique_name_large_number(self, registry):
         """Test get_unique_name with many collisions."""
         for i in range(10):
-            registry.register(f"Popular" if i == 0 else f"Popular ({i})")
+            registry.register("Popular" if i == 0 else f"Popular ({i})")
         unique_name = registry.get_unique_name("Popular")
         assert unique_name == "Popular (10)"
 
@@ -550,7 +547,7 @@ class TestGalleryNameRegistry:
         """Test get_unique_name raises error when max attempts exceeded."""
         # Register all possible names up to max_attempts
         for i in range(10):
-            registry.register(f"Gallery" if i == 0 else f"Gallery ({i})")
+            registry.register("Gallery" if i == 0 else f"Gallery ({i})")
 
         with pytest.raises(GalleryNamingError) as exc_info:
             registry.get_unique_name("Gallery", max_attempts=10)

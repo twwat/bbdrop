@@ -3,12 +3,9 @@ Comprehensive test suite for src/processing/hooks_executor.py
 Tests external program hook execution with subprocess mocking and error handling.
 """
 
-import pytest
-import os
 import subprocess
 import json
-import time
-from unittest.mock import Mock, MagicMock, patch, call, mock_open
+from unittest.mock import Mock, patch
 
 from src.processing.hooks_executor import (
     HooksExecutor,
@@ -460,7 +457,7 @@ class TestHooksExecutorParallelExecution:
             }
 
             context = {'gallery_name': 'Test'}
-            results = executor.execute_hooks(['added', 'started'], context)
+            executor.execute_hooks(['added', 'started'], context)
 
         # Both hooks should be executed
         assert mock_run.call_count == 2
@@ -494,7 +491,7 @@ class TestHooksExecutorParallelExecution:
             }
 
             context = {'gallery_name': 'Test'}
-            results = executor.execute_hooks(['added', 'started'], context)
+            executor.execute_hooks(['added', 'started'], context)
 
         # Both hooks should be executed sequentially
         assert mock_run.call_count == 2
@@ -638,7 +635,7 @@ class TestGlobalFunctions:
         mock_executor.execute_hooks.return_value = {}
         mock_get_executor.return_value = mock_executor
 
-        results = execute_gallery_hooks(
+        execute_gallery_hooks(
             event_type='added',
             gallery_path='/path/to/my_gallery'
         )

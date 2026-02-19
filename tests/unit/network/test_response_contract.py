@@ -8,13 +8,10 @@ Verifies that:
 4. Turbo client returns normalized errors (not raw exception-only paths)
 """
 
-import os
 import pytest
-import tempfile
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from src.network.image_host_client import ImageHostClient
-from src.core.image_host_config import ImageHostConfig
 
 
 # ---------------------------------------------------------------------------

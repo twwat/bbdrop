@@ -1,6 +1,5 @@
 # tests/unit/processing/test_cover_routing.py
 """Tests for cover upload routing based on gallery host."""
-import pytest
 from unittest.mock import patch, MagicMock, Mock
 
 from src.storage.queue_manager import GalleryQueueItem

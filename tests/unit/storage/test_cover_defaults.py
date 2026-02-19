@@ -1,6 +1,5 @@
 """Tests that cover detection has sensible defaults out of the box."""
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 class TestCoverDefaults:

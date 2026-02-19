@@ -8,8 +8,7 @@ MultiProgressTracker, and HealthCheck classes.
 import pytest
 import time
 import threading
-from unittest.mock import Mock, patch, MagicMock
-from collections import deque
+from unittest.mock import Mock, patch
 
 from src.utils.progress_tracking import (
     ProgressState,

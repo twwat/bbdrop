@@ -3,11 +3,8 @@ Comprehensive test suite for src/processing/tasks.py
 Tests background task management, progress batching, icon caching, and table updates.
 """
 
-import pytest
 import time
-from unittest.mock import Mock, MagicMock, patch, call
-from PyQt6.QtCore import QTimer, QMutex, Qt
-from PyQt6.QtWidgets import QTableWidgetItem
+from unittest.mock import Mock, patch
 
 from src.processing.tasks import (
     BackgroundTask,

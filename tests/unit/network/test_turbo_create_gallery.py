@@ -6,7 +6,7 @@ for extracting the new gallery ID from the #album dropdown.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 from src.network.turbo_image_host_client import TurboImageHostClient
 

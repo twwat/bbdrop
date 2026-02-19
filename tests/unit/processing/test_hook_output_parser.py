@@ -1,4 +1,3 @@
-import pytest
 from src.processing.hook_output_parser import detect_stdout_values, resolve_placeholder
 
 

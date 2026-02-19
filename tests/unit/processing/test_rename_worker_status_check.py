@@ -12,8 +12,7 @@ Tests the following methods:
 import pytest
 import threading
 import queue
-import time
-from unittest.mock import Mock, MagicMock, patch, PropertyMock, call
+from unittest.mock import Mock, patch
 
 from src.processing.rename_worker import RenameWorker
 
@@ -617,7 +616,7 @@ class TestPerformStatusCheck:
         minimal_worker.session.post.side_effect = [mock_response_403, mock_response_200]
 
         with patch.object(minimal_worker, '_attempt_reauth_with_rate_limit', return_value=True):
-            result = minimal_worker._perform_status_check(sample_galleries_data)
+            minimal_worker._perform_status_check(sample_galleries_data)
 
         # Should have made 2 requests (original + retry)
         assert minimal_worker.session.post.call_count == 2

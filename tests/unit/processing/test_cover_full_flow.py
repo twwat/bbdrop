@@ -1,8 +1,5 @@
 # tests/unit/processing/test_cover_full_flow.py
 """Integration test: cover detection -> upload -> template output."""
-import os
-import pytest
-from unittest.mock import patch, MagicMock
 
 from src.storage.queue_manager import GalleryQueueItem
 

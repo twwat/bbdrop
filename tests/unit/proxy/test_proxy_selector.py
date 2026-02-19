@@ -1,7 +1,7 @@
 """Unit tests for ProxySelector widget - verifying argument order bug fix."""
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 
 class TestProxySelectorArgumentOrder:

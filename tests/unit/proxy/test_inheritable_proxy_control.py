@@ -34,7 +34,7 @@ class TestInheritableProxyControlDisplayName:
              patch('src.gui.widgets.inheritable_proxy_control.QComboBox'), \
              patch('src.gui.widgets.inheritable_proxy_control.QLabel'), \
              patch('src.gui.widgets.inheritable_proxy_control.QCheckBox'), \
-             patch('src.gui.widgets.inheritable_proxy_control.ProxyStorage') as mock_storage:
+             patch('src.gui.widgets.inheritable_proxy_control.ProxyStorage'):
 
             from src.gui.widgets.inheritable_proxy_control import InheritableProxyControl
             from src.proxy.models import ProxyPool
@@ -352,7 +352,7 @@ class TestInheritableProxyControlHierarchy:
              patch('src.gui.widgets.inheritable_proxy_control.QHBoxLayout'), \
              patch('src.gui.widgets.inheritable_proxy_control.QComboBox') as mock_combo, \
              patch('src.gui.widgets.inheritable_proxy_control.QLabel'), \
-             patch('src.gui.widgets.inheritable_proxy_control.QCheckBox') as mock_checkbox, \
+             patch('src.gui.widgets.inheritable_proxy_control.QCheckBox'), \
              patch('src.gui.widgets.inheritable_proxy_control.ProxyStorage') as mock_storage:
 
             mock_storage.return_value.list_pools.return_value = []

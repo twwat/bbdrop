@@ -1,6 +1,5 @@
 """Unit tests for proxy models."""
 
-import pytest
 from dataclasses import asdict
 
 from src.proxy.models import (

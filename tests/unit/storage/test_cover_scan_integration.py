@@ -4,7 +4,6 @@ import os
 import tempfile
 from contextlib import contextmanager
 
-import pytest
 from unittest.mock import patch, MagicMock
 
 from src.storage.queue_manager import QueueManager, GalleryQueueItem

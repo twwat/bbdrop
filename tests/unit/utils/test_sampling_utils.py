@@ -4,9 +4,6 @@ Comprehensive test suite for sampling_utils.py
 Testing image sampling logic and dimension calculations
 """
 
-import pytest
-import tempfile
-from pathlib import Path
 from PIL import Image
 from src.utils.sampling_utils import (
     get_sample_indices,

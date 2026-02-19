@@ -11,15 +11,11 @@ Verifies that UploadEngine works with ANY ImageHostClient, not just IMX:
 """
 
 import os
-import tempfile
-import shutil
-from pathlib import Path
-from unittest.mock import Mock, patch
-from typing import Dict, Any, Optional
+from unittest.mock import Mock
 
 import pytest
 
-from src.core.engine import UploadEngine, AtomicCounter
+from src.core.engine import UploadEngine
 from src.network.image_host_client import ImageHostClient
 from src.core.image_host_config import ImageHostConfig
 

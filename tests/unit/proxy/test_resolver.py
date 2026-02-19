@@ -1,9 +1,8 @@
 """Unit tests for proxy resolver."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from src.proxy.models import ProxyProfile, ProxyPool, ProxyContext, ProxyType, RotationStrategy
+from src.proxy.models import ProxyProfile, ProxyPool, ProxyContext, ProxyType
 from src.proxy.resolver import ProxyResolver
 
 
@@ -45,7 +44,7 @@ class TestProxyResolverHierarchy:
 
     def test_level2_service_pool(self):
         """Test Level 2: Service-specific pool."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         # Mock storage
         storage = MagicMock()
@@ -71,7 +70,7 @@ class TestProxyResolverHierarchy:
 
     def test_level3_service_profile(self):
         """Test Level 3: Service-specific profile (now service pool)."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         # Service level has a pool with one proxy
@@ -96,7 +95,7 @@ class TestProxyResolverHierarchy:
 
     def test_level4_category_pool(self):
         """Test Level 4: Category-level pool falls back when no service assignment."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         pool = ProxyPool(name="CategoryPool", id="catpool")
@@ -129,7 +128,7 @@ class TestProxyResolverHierarchy:
 
     def test_level5_category_profile(self):
         """Test Level 5: Category-level profile (now category pool)."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         # Category level has a pool with one proxy
@@ -163,7 +162,7 @@ class TestProxyResolverHierarchy:
 
     def test_level6_global_pool(self):
         """Test Level 6: Global default pool."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         pool = ProxyPool(name="GlobalPool", id="globalpool")
@@ -187,7 +186,7 @@ class TestProxyResolverHierarchy:
 
     def test_level7_global_profile(self):
         """Test Level 7: Global default profile (OS proxy as fallback)."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         # Global has no pool, but OS proxy is enabled
@@ -252,7 +251,7 @@ class TestProxyResolverPoolAware:
 
     def test_pool_rotation_used(self):
         """Test that pool rotation is used for pools."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         pool = ProxyPool(name="TestPool", id="testpool")
@@ -278,7 +277,7 @@ class TestProxyResolverPoolAware:
 
     def test_sticky_session_passed_to_rotator(self):
         """Test that service_key is passed for sticky sessions."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         pool = ProxyPool(name="StickyPool", id="stickypool")
@@ -411,7 +410,7 @@ class TestProxyResolverSpecialValues:
     def test_service_level_os_proxy_short_circuits(self):
         """Test that __os_proxy__ at service level returns OS proxy immediately."""
         from src.proxy.resolver import PROXY_OS_PROXY
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         rotator = MagicMock()
@@ -476,7 +475,7 @@ class TestProxyResolverSpecialValues:
     def test_category_level_os_proxy_short_circuits(self):
         """Test that __os_proxy__ at category level returns OS proxy."""
         from src.proxy.resolver import PROXY_OS_PROXY
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         rotator = MagicMock()
@@ -510,7 +509,7 @@ class TestProxyResolverThreeLevelHierarchy:
 
     def test_service_level_takes_priority(self):
         """Test that service-level assignment takes priority over category and global."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         rotator = MagicMock()
@@ -548,7 +547,7 @@ class TestProxyResolverThreeLevelHierarchy:
 
     def test_category_level_fallback(self):
         """Test that category level is used when no service assignment exists."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         rotator = MagicMock()
@@ -580,7 +579,7 @@ class TestProxyResolverThreeLevelHierarchy:
 
     def test_global_level_fallback(self):
         """Test that global level is used when no service/category assignment exists."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         rotator = MagicMock()
@@ -609,7 +608,7 @@ class TestProxyResolverThreeLevelHierarchy:
 
     def test_os_proxy_fallback(self):
         """Test that OS proxy is used as final fallback before direct."""
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         rotator = MagicMock()
@@ -672,7 +671,7 @@ class TestProxyResolverGetEffectiveProxyInfo:
     def test_info_with_service_os_proxy_override(self):
         """Test info when service has __os_proxy__ override."""
         from src.proxy.resolver import PROXY_OS_PROXY
-        from src.proxy.models import ProxyEntry, ProxyType
+        from src.proxy.models import ProxyEntry
 
         storage = MagicMock()
         rotator = MagicMock()

@@ -21,7 +21,7 @@ import configparser
 import threading
 from pathlib import Path
 from typing import Dict, Any
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
 from src.core.file_host_config import (
     HostConfig,

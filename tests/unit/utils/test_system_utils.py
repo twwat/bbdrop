@@ -14,11 +14,9 @@ Tests cover:
 
 import os
 import sys
-import platform
-import tempfile
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 import pytest
 
 # Import the module under test

@@ -8,9 +8,8 @@ and cross-platform compatibility with mocked filesystem.
 import os
 import pytest
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch
 import tempfile
-import shutil
 
 from src.storage.path_manager import (
     PathError,

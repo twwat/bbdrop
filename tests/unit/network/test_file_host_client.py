@@ -7,12 +7,9 @@ and session management with full pycurl mocking.
 
 import pytest
 import json
-import tempfile
 import time
 import hashlib
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, call
-from io import BytesIO
+from unittest.mock import Mock, patch, MagicMock
 
 import pycurl
 
@@ -816,7 +813,7 @@ class TestFileHostClientTokenRefresh:
             )
 
             # This should trigger refresh and retry
-            result = client.upload_file(test_file)
+            client.upload_file(test_file)
 
             # Verify token was refreshed
             assert client.auth_token == "new_token_refreshed"

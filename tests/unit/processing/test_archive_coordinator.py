@@ -3,9 +3,8 @@ Comprehensive test suite for src/processing/archive_coordinator.py
 Tests archive processing workflow with extraction, folder selection, and cleanup.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, patch
 
 from src.processing.archive_coordinator import ArchiveCoordinator
 

@@ -20,10 +20,8 @@ import os
 import tempfile
 import time
 import threading
-from unittest.mock import Mock, patch, MagicMock, call
-from queue import Queue, Empty
+from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import QSettings
 
 # Import module under test
 from src.storage.queue_manager import (
@@ -35,7 +33,6 @@ from src.core.constants import (
     QUEUE_STATE_QUEUED,
     QUEUE_STATE_UPLOADING,
     QUEUE_STATE_COMPLETED,
-    QUEUE_STATE_FAILED,
     QUEUE_STATE_SCAN_FAILED,
     QUEUE_STATE_UPLOAD_FAILED,
     QUEUE_STATE_PAUSED,
@@ -532,7 +529,7 @@ class TestCustomFields:
         """Test updating custom field."""
         queue_manager.add_item(gallery_dir)
 
-        success = queue_manager.update_custom_field(gallery_dir, 'custom1', 'test_value')
+        queue_manager.update_custom_field(gallery_dir, 'custom1', 'test_value')
 
         assert queue_manager.items[gallery_dir].custom1 == 'test_value'
         mock_store.update_item_custom_field.assert_called_with(gallery_dir, 'custom1', 'test_value')

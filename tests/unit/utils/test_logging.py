@@ -7,10 +7,8 @@ Testing AppLogger, file handlers, and logging configuration
 import pytest
 import os
 import logging
-import tempfile
 import configparser
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from src.utils.logging import (
     get_logger,
     AppLogger,

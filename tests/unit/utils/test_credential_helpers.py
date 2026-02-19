@@ -7,10 +7,9 @@ Coverage target: 80%+
 
 import pytest
 import base64
-import secrets
 import time
 from pathlib import Path
-from unittest.mock import Mock, patch, mock_open, MagicMock
+from unittest.mock import patch
 import json
 
 from src.utils.credential_helpers import (

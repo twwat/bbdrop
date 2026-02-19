@@ -5,7 +5,6 @@ Testing formatting functions for binary sizes, rates, durations, and string util
 """
 
 import pytest
-from datetime import datetime
 from src.utils.format_utils import (
     timestamp,
     format_binary_size,

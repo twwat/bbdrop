@@ -5,7 +5,6 @@ Verifies that when gallery_id is provided and create_gallery is False,
 the upload POST includes an 'album' field so images go into the existing gallery.
 """
 
-import os
 import pytest
 import pycurl
 from unittest.mock import patch, MagicMock

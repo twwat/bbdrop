@@ -40,7 +40,7 @@ class TestArchiveManagerInit:
 
     def test_init_creates_temp_dir(self, tmp_path):
         new_dir = tmp_path / "new_temp"
-        m = ArchiveManager(temp_dir=new_dir)
+        ArchiveManager(temp_dir=new_dir)
         assert new_dir.exists()
 
     def test_cache_initialized_empty(self, manager):

@@ -1,6 +1,5 @@
 # tests/unit/test_cover_template.py
 """Tests for #cover# template placeholder."""
-import pytest
 
 
 class TestCoverPlaceholder:

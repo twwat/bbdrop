@@ -5,8 +5,7 @@ and hierarchical proxy assignment using InheritableProxyControl.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, call
-from PyQt6.QtCore import Qt
+from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QApplication
 
 

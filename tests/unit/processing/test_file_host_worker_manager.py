@@ -6,12 +6,9 @@ concurrent operations, and persistence layers with proper mocking.
 """
 
 import pytest
-import time
 import threading
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
-from unittest.mock import ANY
+from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import QThread
 
 from src.processing.file_host_worker_manager import FileHostWorkerManager
 from src.storage.database import QueueStore
@@ -669,11 +666,6 @@ class TestInitEnabledHosts:
         mock_config_mgr.return_value.hosts = {'rapidgator': mock_host_config}
 
         # Mock INI file reading to return enabled=True for rapidgator
-        ini_content = {
-            'FILE_HOSTS': {
-                'rapidgator_enabled': 'True'
-            }
-        }
 
         with patch.object(manager, 'enable_host') as mock_enable, \
              patch('os.path.exists', return_value=True), \

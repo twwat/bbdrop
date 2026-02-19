@@ -1,11 +1,10 @@
 """Unit tests for bulk proxy import/export."""
 
-import pytest
 import json
 
 from src.proxy.models import ProxyProfile, ProxyType
 from src.proxy.bulk import (
-    BulkProxyParser, BulkProxyExporter, ParseResult, ParseFormat, ExportFormat,
+    BulkProxyParser, BulkProxyExporter, ParseFormat, ExportFormat,
     parse_csv_proxies, parse_json_proxies
 )
 # Note: Using ExportFormat enum with export() method instead of separate export_csv/export_json/export_text methods

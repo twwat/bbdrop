@@ -1,6 +1,5 @@
 # tests/unit/processing/test_cover_pipeline.py
 """Tests for cover photo upload wired into the upload pipeline."""
-import pytest
 from unittest.mock import patch, MagicMock, Mock
 
 from src.storage.queue_manager import GalleryQueueItem

@@ -18,20 +18,15 @@ import sqlite3
 import os
 import tempfile
 import time
-import json
 import threading
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import Mock
 
 # Import module under test
 from src.storage.database import (
     QueueStore,
     _connect,
     _ensure_schema,
-    _run_migrations,
-    _initialize_default_tabs,
-    _migrate_unnamed_galleries_to_db,
-    _get_db_path
+    _initialize_default_tabs
 )
 
 
@@ -574,7 +569,7 @@ class TestTabManagement:
 
     def test_move_galleries_to_tab(self, queue_store):
         """Test moving galleries to different tab."""
-        tab_id = queue_store.create_tab('Target')
+        queue_store.create_tab('Target')
 
         galleries = [
             {'path': '/test/gallery1', 'status': 'ready', 'added_time': int(time.time()), 'tab_name': 'Main'},
@@ -775,7 +770,7 @@ class TestTransactions:
             pass
 
         # Verify no items inserted (rollback worked)
-        loaded = queue_store.load_all_items()
+        queue_store.load_all_items()
         # Note: Current implementation continues on item errors, so this may vary
         # Adjust assertion based on actual implementation behavior
 
@@ -932,7 +927,7 @@ class TestErrorScenarios:
         try:
             queue_store.bulk_upsert([gallery])
             # If it succeeds, verify it wasn't inserted
-            items = queue_store.load_all_items()
+            queue_store.load_all_items()
             # Implementation may skip invalid items
         except Exception:
             # Expected to fail

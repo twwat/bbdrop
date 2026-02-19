@@ -3,9 +3,8 @@ Comprehensive test suite for src/processing/archive_worker.py
 Tests archive extraction worker with threading and signal mocking.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock
 from PyQt6.QtCore import QObject
 
 from src.processing.archive_worker import (

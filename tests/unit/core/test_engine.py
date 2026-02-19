@@ -19,11 +19,8 @@ import os
 import tempfile
 import shutil
 import threading
-import time
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-from unittest.mock import Mock, MagicMock, patch, call
-import concurrent.futures
+from typing import List
+from unittest.mock import Mock
 
 from src.core.engine import (
     AtomicCounter,
@@ -255,7 +252,7 @@ class TestFileGatheringAndSorting:
             'data': {'gallery_id': 'test123', 'image_url': 'http://test.com/img'}
         }
 
-        engine = UploadEngine(mock_uploader)
+        UploadEngine(mock_uploader)
 
         # This would normally be called in run() - testing the logic
         image_extensions = ('.jpg', '.jpeg', '.png', '.gif')

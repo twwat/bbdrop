@@ -1,11 +1,9 @@
 """Unit tests for proxy pool rotation."""
 
-import pytest
-from unittest.mock import MagicMock, patch
 import time
 
 from src.proxy.models import (
-    ProxyProfile, ProxyPool, ProxyEntry, ProxyHealth, RotationStrategy, ProxyType
+    ProxyPool, ProxyEntry, RotationStrategy, ProxyType
 )
 from src.proxy.pool import PoolRotator
 
@@ -261,7 +259,7 @@ class TestPoolRotatorStickySession:
         pool.sticky_ttl_seconds = 1  # 1 second TTL
         rotator = PoolRotator()
 
-        first = rotator.get_next_proxy(pool, service_key="test")
+        rotator.get_next_proxy(pool, service_key="test")
 
         # Wait for TTL to expire
         time.sleep(1.1)
