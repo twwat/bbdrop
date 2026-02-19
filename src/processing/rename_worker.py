@@ -325,7 +325,16 @@ class RenameWorker(QObject):
                 if file_cookies:
                     all_cookies.update(file_cookies)
                 if all_cookies:
-                    log(f"RenameWorker (no credentials) found {len(all_cookies)} cookies (Firefox: {len(firefox_cookies or {})}, File: {len(file_cookies or {})}), attempting cookie auth", level="debug", category="auth")
+                    ff_count = len(firefox_cookies or {})
+                    fc_count = len(file_cookies or {})
+                    log(
+                        f"RenameWorker (no credentials) found"
+                        f" {len(all_cookies)} cookies"
+                        f" (Firefox: {ff_count},"
+                        f" File: {fc_count}),"
+                        " attempting cookie auth",
+                        level="debug", category="auth",
+                    )
                     for name, cookie_data in all_cookies.items():
                         try:
                             self.session.cookies.set(
@@ -389,7 +398,16 @@ class RenameWorker(QObject):
                     all_cookies.update(file_cookies)
 
                 if all_cookies:
-                    log(f"RenameWorker found {len(all_cookies)} cookies (Firefox: {len(firefox_cookies or {})}, File: {len(file_cookies or {})}), attempting cookie auth", level="debug", category="auth")
+                    ff_count = len(firefox_cookies or {})
+                    fc_count = len(file_cookies or {})
+                    log(
+                        f"RenameWorker found"
+                        f" {len(all_cookies)} cookies"
+                        f" (Firefox: {ff_count},"
+                        f" File: {fc_count}),"
+                        " attempting cookie auth",
+                        level="debug", category="auth",
+                    )
                     for name, cookie_data in all_cookies.items():
                         try:
                             self.session.cookies.set(
@@ -406,7 +424,14 @@ class RenameWorker(QObject):
                         log("RenameWorker authenticated using cookies", category="auth", level="info")
                         return True
                     else:
-                        log(f"RenameWorker cookie auth failed (test URL: {test_response.url}, has DDoS-Guard: {'DDoS-Guard' in test_response.text}), falling back to credentials", level="debug", category="auth")
+                        has_ddos = 'DDoS-Guard' in test_response.text
+                        log(
+                            f"RenameWorker cookie auth failed"
+                            f" (test URL: {test_response.url},"
+                            f" has DDoS-Guard: {has_ddos}),"
+                            " falling back to credentials",
+                            level="debug", category="auth",
+                        )
                 else:
                     log("RenameWorker: no cookies found, will use credentials", level="debug", category="auth")
 
@@ -457,7 +482,12 @@ class RenameWorker(QObject):
     # EXACT COPY of ImxToUploader.rename_gallery_with_session() - lines 1300-1365 from bbdrop.py
     def rename_gallery_with_session(self, gallery_id, new_name, retry_on_auth_failure=True):
         """Rename gallery using existing session (will re-login on 403)"""
-        log(f"RenameWorker (ID: {self._instance_id}) using session {id(self.session)} for rename of {gallery_id} ({new_name})", level="debug", category="renaming")
+        log(
+            f"RenameWorker (ID: {self._instance_id})"
+            f" using session {id(self.session)}"
+            f" for rename of {gallery_id} ({new_name})",
+            level="debug", category="renaming",
+        )
         try:
             # Sanitize the gallery name
             original_name = new_name

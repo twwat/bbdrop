@@ -195,7 +195,14 @@ class CompletionWorker(QThread):
                     folder_path=path,
                     results={
                         **results,
-                        'started_at': datetime.fromtimestamp(gui_parent.queue_manager.items[path].start_time).strftime('%Y-%m-%d %H:%M:%S') if path in gui_parent.queue_manager.items and gui_parent.queue_manager.items[path].start_time else None,
+                        'started_at': (
+                            datetime.fromtimestamp(
+                                gui_parent.queue_manager.items[path].start_time
+                            ).strftime('%Y-%m-%d %H:%M:%S')
+                            if path in gui_parent.queue_manager.items
+                            and gui_parent.queue_manager.items[path].start_time
+                            else None
+                        ),
                         'thumbnail_size': gui_parent.thumbnail_size_combo.currentIndex() + 1,
                         'thumbnail_format': gui_parent.thumbnail_format_combo.currentIndex() + 1,
                         'parallel_batch_size': load_user_defaults().get('parallel_batch_size', 4),

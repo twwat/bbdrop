@@ -58,7 +58,13 @@ class HooksExecutor:
                     delay *= 2  # Exponential backoff
                 else:
                     # Final attempt failed - log as warning but don't fail the operation
-                    log(f"Could not remove temporary file after {max_retries} attempts (file will be cleaned up by OS): {file_path}", level="warning", category="hooks")
+                    log(
+                        f"Could not remove temporary file"
+                        f" after {max_retries} attempts"
+                        f" (file will be cleaned up by OS):"
+                        f" {file_path}",
+                        level="warning", category="hooks",
+                    )
                     return False
             except Exception as e:
                 # Other errors (file not found, etc.) - just log and move on

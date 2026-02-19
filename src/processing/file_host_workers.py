@@ -1173,7 +1173,11 @@ class FileHostWorker(QThread):
                 storage_total = user_info.get('storage_total')
                 storage_left = user_info.get('storage_left')
                 self._log(
-                    f"Extracted storage values: storage_total = {storage_total} ({type(storage_total).__name__})  storage_left = {storage_left} ({type(storage_left).__name__})",
+                    f"Extracted storage values:"
+                    f" storage_total = {storage_total}"
+                    f" ({type(storage_total).__name__}) "
+                    f" storage_left = {storage_left}"
+                    f" ({type(storage_left).__name__})",
                     level="debug"
                 )
                 if storage_total is not None and storage_left is not None:
