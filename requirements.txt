@@ -15,7 +15,7 @@ keyring>=25.0.0
 markdown>=3.4.0
 
 # Archive format support
-py7zr>=0.20.0
+py7zr>=1.0.0
 rarfile>=4.1
 splitzip>=0.2.0
 
