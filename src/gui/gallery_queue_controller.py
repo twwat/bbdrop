@@ -134,8 +134,6 @@ class GalleryQueueController(QObject):
         Args:
             folder_paths: List of folder paths to add to queue
         """
-        log(f"add_folders called with {len(folder_paths)} paths",
-            level="trace", category="queue")
 
         if len(folder_paths) == 1:
             self._add_single_folder(folder_paths[0])
@@ -152,7 +150,6 @@ class GalleryQueueController(QObject):
             path: Path to the folder to add
         """
         mw = self._main_window
-        log(f"_add_single_folder called with path={path}", level="trace", category="queue")
 
         folder_name = os.path.basename(path)
 

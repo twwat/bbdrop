@@ -629,10 +629,8 @@ class BBDropGUI(QMainWindow):
                     metrics_store.signals.host_metrics_updated.connect(
                         self.worker_status_widget._on_host_metrics_updated
                     )
-                    log("MetricsStore signals connected to WorkerStatusWidget", level="debug", category="ui")
 
                 # NOTE: init_enabled_hosts() called AFTER GUI shown (see launch_gui())
-                log("FileHost Worker Manager started", level="info", category="file_hosts")
             except Exception as e:
                 log(f"Failed to start FileHostWorkerManager: {e}", level="error", category="file_hosts")
                 self.file_host_manager = None
@@ -792,7 +790,6 @@ class BBDropGUI(QMainWindow):
             if hasattr(inner_table, 'verticalScrollBar'):
                 scrollbar = inner_table.verticalScrollBar()
                 scrollbar.valueChanged.connect(self._on_table_scrolled)
-                log("Connected scroll handler for viewport-based widget creation", level="debug", category="performance")
         elif hasattr(self.gallery_table, 'cellClicked'):
             # Direct connection if it's not a tabbed widget
             self.gallery_table.cellClicked.connect(self.on_gallery_cell_clicked)
@@ -804,8 +801,7 @@ class BBDropGUI(QMainWindow):
             if hasattr(self.gallery_table, 'verticalScrollBar'):
                 scrollbar = self.gallery_table.verticalScrollBar()
                 scrollbar.valueChanged.connect(self._on_table_scrolled)
-                log("Connected scroll handler for viewport-based widget creation", level="debug", category="performance")
-        
+
         # Set reference to update queue in tabbed widget for cache invalidation
         if hasattr(self.gallery_table, '_update_queue'):
             self.gallery_table._update_queue = self._table_update_queue
@@ -4215,12 +4211,7 @@ class BBDropGUI(QMainWindow):
 
         # Skip during startup - icons are created via normal widget creation
         if not self._file_host_startup_complete:
-            log(f"Skipping file host refresh during startup (complete={self._file_host_startup_complete})",
-                level="debug", category="startup")
             return
-
-        log(f"File host refresh triggered (startup_complete={self._file_host_startup_complete})",
-            level="debug", category="startup")
 
         # Remove disabled workers from status widget
         self.worker_signal_handler._on_enabled_workers_changed(_enabled_worker_ids)

@@ -160,7 +160,6 @@ class ThemeManager(QObject):
             if os.path.exists(tokens_path):
                 with open(tokens_path, 'r', encoding='utf-8') as f:
                     _cached_tokens = json.load(f)
-                    log("Design tokens loaded successfully", level="debug", category="ui")
                     return _cached_tokens
             else:
                 log(f"Design tokens file not found: {tokens_path}",
