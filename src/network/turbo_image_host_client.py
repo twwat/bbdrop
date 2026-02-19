@@ -26,7 +26,7 @@ import string
 import mimetypes
 import threading
 from io import BytesIO
-from typing import Dict, Any, Optional, Callable, List
+from typing import Dict, Any, Optional, Callable
 
 import pycurl
 import certifi
@@ -531,7 +531,7 @@ class TurboImageHostClient(ImageHostClient):
         )
         div_images = {}
         for m in div_pattern.finditer(html):
-            img_id, fname, image_url, thumb_url = m.group(1), m.group(2), m.group(3), m.group(4)
+            _img_id, fname, image_url, thumb_url = m.group(1), m.group(2), m.group(3), m.group(4)
             div_images[fname.lower()] = {
                 'original_filename': fname,
                 'image_url': image_url,

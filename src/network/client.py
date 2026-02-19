@@ -5,20 +5,18 @@ Handles GUI-specific upload logic and single instance server.
 
 import os
 import sys
-import time
 import socket
 import ctypes
-from typing import Dict, Any, Optional, Callable, Set
+from typing import Dict, Any, Optional
 from functools import cmp_to_key
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from bbdrop import ImxToUploader, timestamp, sanitize_gallery_name
+from bbdrop import ImxToUploader
 from src.core.engine import UploadEngine, AtomicCounter
 from src.utils.logger import log
 from src.core.constants import (
-    COMMUNICATION_PORT,
-    QUEUE_STATE_UPLOADING
+    COMMUNICATION_PORT
 )
 
 
@@ -87,14 +85,13 @@ class GUIImxToUploader(ImxToUploader):
                 f for f in os.listdir(folder_path)
                 if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
             ]
-            original_total = len(_explorer_sort(names))
+            len(_explorer_sort(names))
         except Exception as e:
             log(f"Failed to count images in folder: {e}", level="warning", category="uploads")
 
         # Sanitize name like CLI
         if not gallery_name:
             gallery_name = os.path.basename(folder_path)
-        original_name = gallery_name
         # No sanitization - only rename worker should sanitize
 
         # Get RenameWorker from worker thread if available

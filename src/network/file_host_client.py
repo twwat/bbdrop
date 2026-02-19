@@ -11,7 +11,6 @@ import re
 import base64
 import zipfile
 import threading
-import functools
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List, Union
 from io import BytesIO
@@ -19,7 +18,6 @@ from urllib.parse import quote
 
 from src.core.file_host_config import HostConfig
 from src.core.engine import AtomicCounter
-from src.utils.logger import log
 from src.proxy.pycurl_adapter import PyCurlProxyAdapter
 from src.proxy.models import ProxyEntry
 
@@ -346,7 +344,7 @@ class FileHostClient:
                         
                         if self._log_callback: self._log_callback(f"Solved CAPTCHA: {captcha_raw} -> {captcha_code}", "info")
                     else:
-                        if self._log_callback: self._log_callback(f"WARNING: Unable to solve matched CAPTCHA, upload may fail...", "warning")
+                        if self._log_callback: self._log_callback("WARNING: Unable to solve matched CAPTCHA, upload may fail...", "warning")
                 else:
                     pass  # No CAPTCHA on this host
 
@@ -472,7 +470,7 @@ class FileHostClient:
             # Token-based auth refresh (existing pattern)
             if not self.credentials:
                 if self._log_callback:
-                    self._log_callback(f"Cannot refresh token: no credentials available", "error")
+                    self._log_callback("Cannot refresh token: no credentials available", "error")
                 return
 
             from src.network.token_cache import get_token_cache
@@ -497,7 +495,7 @@ class FileHostClient:
             # Check credentials availability (same pattern as token_login)
             if not self.credentials:
                 if self._log_callback:
-                    self._log_callback(f"Cannot refresh session: no credentials available", "warning")
+                    self._log_callback("Cannot refresh session: no credentials available", "warning")
                 return
 
             if not self.config.session_id_regex:
@@ -507,7 +505,7 @@ class FileHostClient:
 
             # Log token age for TTL discovery
             with self._token_lock:
-                old_timestamp = self._session_token_timestamp
+                pass
 
             pass  # Refresh session token
 
@@ -553,7 +551,7 @@ class FileHostClient:
                     pass  # Session token refreshed
                 else:
                     if self._log_callback:
-                        self._log_callback(f"Failed to extract session token from upload page", "warning")
+                        self._log_callback("Failed to extract session token from upload page", "warning")
             finally:
                 curl.close()
 
@@ -670,7 +668,7 @@ class FileHostClient:
             # Check if this is a stale token error
             if self._detect_stale_token_error(error_text, response_code):
                 if self._log_callback:
-                    self._log_callback(f"Token expired, re-authenticating", "debug")
+                    self._log_callback("Token expired, re-authenticating", "debug")
                 # Refresh token
                 try:
                     self._refresh_auth_token()
@@ -894,7 +892,7 @@ class FileHostClient:
                             self._session_token_timestamp = time.time()
                             if self._log_callback: self._log_callback(f"Extracted session ID: {sess_id[:20]}...", "debug")
                         else:
-                            if self._log_callback: self._log_callback(f"Could not extract session ID from upload page", "debug")
+                            if self._log_callback: self._log_callback("Could not extract session ID from upload page", "debug")
                     finally:
                         page_curl.close()
 
@@ -1613,9 +1611,9 @@ class FileHostClient:
 
                 # Raise ValueError on auth errors (caught by _with_token_retry)
                 if response_code == 401:
-                    raise ValueError(f"Unauthorized: Authentication failed (401)")
+                    raise ValueError("Unauthorized: Authentication failed (401)")
                 elif response_code == 403:
-                    raise ValueError(f"Forbidden: Access denied (403)")
+                    raise ValueError("Forbidden: Access denied (403)")
                 elif response_code != 200:
                     raise ValueError(f"User info retrieval failed with status {response_code}")
 
