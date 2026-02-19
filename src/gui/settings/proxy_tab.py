@@ -13,6 +13,7 @@ import re
 from src.proxy.models import ProxyPool
 from src.proxy.storage import ProxyStorage
 from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
+from src.gui.widgets.info_button import InfoButton
 
 logger = logging.getLogger(__name__)
 
@@ -117,11 +118,20 @@ class ProxySettingsWidget(QWidget):
         self.category_group = QGroupBox("Category Overrides")
         category_layout = QVBoxLayout(self.category_group)
 
+        category_info_row = QHBoxLayout()
         category_info = QLabel(
             "Override the global proxy for specific categories."
         )
         category_info.setWordWrap(True)
-        category_layout.addWidget(category_info)
+        category_info_row.addWidget(category_info)
+        category_info_row.addWidget(InfoButton(
+            "Override the global proxy for specific traffic types. Useful if "
+            "you want file host traffic through one proxy but API calls "
+            "direct, or forums through a different region.<br><br>"
+            "If a category has no override, it falls back to the global "
+            "proxy pool."
+        ))
+        category_layout.addLayout(category_info_row)
 
         # File Hosts category
         fh_layout = QHBoxLayout()
