@@ -169,6 +169,7 @@ class GalleryQueueController(QObject):
 
             if msg.exec() == QMessageBox.StandardButton.Yes:
                 mw.queue_manager.remove_item(path)
+                mw._remove_gallery_from_table(path)
                 log(f"Replaced {folder_name} in queue", level="debug", category="queue")
             else:
                 return  # User chose not to replace
