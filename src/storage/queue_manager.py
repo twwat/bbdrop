@@ -1060,6 +1060,14 @@ class QueueManager(QObject):
         except Exception:
             queue_data = []
         
+        # Ensure _next_db_id accounts for ALL rows in DB (including
+        # orphans we skip below) to prevent id collisions on insert.
+        try:
+            max_id = self.store.get_max_gallery_id()
+            self._next_db_id = max(self._next_db_id, max_id + 1)
+        except Exception:
+            pass
+
         for data in queue_data:
             path = _normalize_path(data.get('path', ''))
             status = data.get('status', QUEUE_STATE_READY)

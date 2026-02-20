@@ -744,6 +744,17 @@ class QueueStore:
                 items.append(item)
             return items
 
+    def get_max_gallery_id(self) -> int:
+        """Return the highest gallery id in the database, or 0 if empty."""
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                cur = conn.execute("SELECT MAX(id) FROM galleries")
+                row = cur.fetchone()
+                return int(row[0]) if row and row[0] is not None else 0
+        except Exception:
+            return 0
+
     def delete_by_status(self, statuses: Iterable[str]) -> int:
         with _ConnectionContext(self.db_path) as conn:
             _ensure_schema(conn)
