@@ -13,6 +13,7 @@ Note: All heavy work should be triggered from worker/manager threads, not GUI.
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +21,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import json
 
 from src.utils.logger import log
+
+_LOW_DISK_THRESHOLD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
 # Access central data dir path from shared helper
@@ -624,6 +627,19 @@ class QueueStore:
 
     def bulk_upsert(self, items: Iterable[Dict[str, Any]]) -> None:
         items_list = list(items)  # Convert to list to avoid consuming iterator
+
+        # Check disk space before writing
+        try:
+            usage = shutil.disk_usage(os.path.dirname(self.db_path))
+            if usage.free < _LOW_DISK_THRESHOLD_BYTES:
+                log(
+                    f"Low disk space warning: {usage.free // (1024 * 1024)}MB free "
+                    f"at {self.db_path} — database writes may fail silently",
+                    level="warning", category="database",
+                )
+        except OSError:
+            pass  # Can't check — proceed anyway
+
         try:
             with _ConnectionContext(self.db_path) as conn:
                 _ensure_schema(conn)
