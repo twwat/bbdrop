@@ -1289,26 +1289,39 @@ class QueueManager(QObject):
 
     def update_item_status(self, path: str, status: str):
         """Update item status"""
+        path = _normalize_path(path)
         with QMutexLocker(self.mutex):
             if path in self.items:
                 old_status = self.items[path].status
                 self.items[path].status = status
-                
+
                 # When marking as completed, ensure progress is 100%
                 if status == "completed":
                     self.items[path].progress = 100
-                    
+
                 self._update_status_count(old_status, status)
-                
-                # Only schedule save if not in batch mode
-                if not self._batch_mode:
+
+                # Critical transitions get immediate synchronous save
+                # to prevent data loss on crash/close
+                critical_statuses = {
+                    QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED,
+                    QUEUE_STATE_UPLOAD_FAILED,
+                }
+                if status in critical_statuses:
+                    item_data = self._item_to_dict(self.items[path])
+                    try:
+                        self.store.bulk_upsert([item_data])
+                    except Exception as e:
+                        log(f"Critical save failed for {path}: {e}",
+                            level="error", category="database")
+                elif not self._batch_mode:
                     self._schedule_debounced_save([path])
                 else:
                     # In batch mode, just add to batched changes
                     self._batched_changes.add(path)
-                    
+
                 self._inc_version()
-                
+
                 if old_status != status:
                     # Emit signal asynchronously to avoid timer conflicts
                     QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, status))
