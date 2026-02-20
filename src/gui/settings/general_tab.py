@@ -5,7 +5,7 @@ import sys
 import configparser
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QGridLayout, QGroupBox, QCheckBox, QComboBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox, QCheckBox, QComboBox,
     QSpinBox, QLabel, QLineEdit, QPushButton, QRadioButton, QFileDialog,
     QMessageBox, QProgressDialog, QApplication,
 )
