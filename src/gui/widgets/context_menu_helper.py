@@ -44,6 +44,7 @@ class GalleryContextMenuHelper(QObject):
     
     def show_context_menu_for_table(self, table_widget, position):
         """Show context menu for a specific table widget"""
+        from PyQt6.QtCore import Qt
         
         # Position is already in viewport coordinates
         viewport_pos = position
@@ -124,7 +125,7 @@ class GalleryContextMenuHelper(QObject):
             return
             
         # Get paths by status for conditional menus
-        self._get_paths_by_status(selected_paths, ["scan_failed", "upload_failed", "failed"])
+        failed_paths = self._get_paths_by_status(selected_paths, ["scan_failed", "upload_failed", "failed"])
         rescannable_paths = self._get_rescannable_paths(selected_paths)
         rescan_all_paths = self._get_rescan_all_paths(selected_paths)
         
@@ -329,6 +330,7 @@ class GalleryContextMenuHelper(QObject):
 
     def _set_cover(self, gallery_path):
         """Open file picker for cover image selection within gallery folder."""
+        import os
         from PyQt6.QtWidgets import QFileDialog
         from src.core.constants import IMAGE_EXTENSIONS
 
@@ -425,6 +427,7 @@ class GalleryContextMenuHelper(QObject):
         
         try:
             from bbdrop import timestamp
+            import os
             
             # Update each gallery's template
             for gallery_path in gallery_paths:

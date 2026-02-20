@@ -128,7 +128,7 @@ class SimpleProxyDropdown(QComboBox):
                     self.setCurrentIndex(i)
                     return
 
-        except Exception:
+        except Exception as e:
             # On error, default to first item
             if self.count() > 0:
                 self.setCurrentIndex(0)

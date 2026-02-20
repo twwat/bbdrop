@@ -6,8 +6,9 @@ Splash screen with animated GIF and random status updates for bbdrop GUI
 import os
 import random
 #import threading
-from PyQt6.QtWidgets import QSplashScreen, QApplication
-from PyQt6.QtCore import Qt, QRectF
+import time
+from PyQt6.QtWidgets import QSplashScreen, QApplication, QVBoxLayout, QLabel, QWidget
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize, QRectF
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor, QPen, QPainterPath, QRegion
 
 

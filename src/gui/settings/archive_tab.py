@@ -119,6 +119,7 @@ class ArchiveSettingsWidget(QWidget):
         split_layout.addLayout(split_enable_row)
 
         # 7z CLI warning — only needed for 7z format splits, not ZIP
+        from src.utils.archive_manager import HAS_7Z_CLI
         self._7z_warning = QLabel(
             '7-Zip is required for split 7z archives. '
             '<a href="https://www.7-zip.org/download.html">Download 7-Zip</a>'

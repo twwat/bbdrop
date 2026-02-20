@@ -5,7 +5,8 @@ Eliminates code duplication by providing standardized message box patterns
 """
 
 from PyQt6.QtWidgets import QMessageBox, QWidget
-from typing import Optional
+from PyQt6.QtCore import Qt
+from typing import Optional, Union
 
 
 class MessageBoxFactory:
@@ -265,11 +266,11 @@ class MessageBoxFactory:
         
         save_button = msg_box.addButton(save_text, QMessageBox.ButtonRole.AcceptRole)
         discard_button = msg_box.addButton(discard_text, QMessageBox.ButtonRole.DestructiveRole)
-        msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        cancel_button = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
         
         msg_box.setDefaultButton(save_button)
         
-        msg_box.exec()
+        result = msg_box.exec()
         clicked_button = msg_box.clickedButton()
         
         if clicked_button == save_button:

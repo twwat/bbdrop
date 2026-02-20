@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QColor
+from typing import Optional, List
 import logging
 import re
 
@@ -387,7 +388,7 @@ class ProxySettingsWidget(QWidget):
             curl.setopt(pycurl.CONNECTTIMEOUT, 5)
 
             # Set proxy
-            proxy.get_full_url()
+            proxy_url = proxy.get_full_url()
             curl.setopt(pycurl.PROXY, f"{proxy.host}:{proxy.port}")
 
             if proxy.proxy_type.value in ('socks4', 'socks5'):

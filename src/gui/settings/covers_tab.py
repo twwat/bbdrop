@@ -680,8 +680,8 @@ class CoversTab(QWidget):
             else:
                 QMessageBox.information(
                     self, "Not Supported",
-                    "Gallery creation is not yet supported for this host.\n"
-                    "Please create the gallery on the website and paste the URL here."
+                    f"Gallery creation is not yet supported for this host.\n"
+                    f"Please create the gallery on the website and paste the URL here."
                 )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create gallery: {e}")

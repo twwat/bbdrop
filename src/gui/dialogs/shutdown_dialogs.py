@@ -6,10 +6,10 @@ a shutdown progress dialog with force quit option.
 """
 
 from threading import Event
-from typing import List, Dict, Tuple, TYPE_CHECKING
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QFrame
+    QScrollArea, QWidget, QFrame, QApplication, QSystemTrayIcon
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot, QThread, QMetaObject
 from PyQt6.QtGui import QFont
@@ -86,7 +86,7 @@ class ExitConfirmationDialog(QDialog):
         is_dark = is_dark_mode()
 
         # Get theme-aware colors from palette
-        self.palette().color(self.palette().ColorRole.PlaceholderText).name()
+        muted_color = self.palette().color(self.palette().ColorRole.PlaceholderText).name()
         window_bg = self.palette().color(self.palette().ColorRole.Window).name()
         text_color = self.palette().color(self.palette().ColorRole.WindowText).name()
 
@@ -128,6 +128,9 @@ class ExitConfirmationDialog(QDialog):
         details_layout.setSpacing(8)
 
         # Theme-aware colors for sections
+        uploading_color = "#f39c12" if is_dark else "#e67e22"  # Orange
+        file_host_color = "#bb86fc" if is_dark else "#9b59b6"  # Purple
+        queued_color = "#64b5f6" if is_dark else "#3498db"  # Blue
 
         # Uploading galleries section
         if self.uploading_galleries:

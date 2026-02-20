@@ -5,20 +5,24 @@ Provides tab-based organization for gallery queue with filtering and drag-and-dr
 """
 
 import time
+from pathlib import Path
+from typing import Optional, Set, Dict, List
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTabBar,
     QMessageBox, QInputDialog, QMenu
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMimeData, QUrl, QPoint, QSettings
 from PyQt6.QtGui import (
-    QColor, QShortcut, QKeySequence
+    QPainter, QColor, QPainterPath, QPen, QDragEnterEvent, 
+    QDropEvent, QDragMoveEvent, QDragLeaveEvent, QShortcut, QKeySequence
 )
 
 # Import the table widget we extracted
 from src.gui.widgets.gallery_table import GalleryTableWidget
 from src.gui.delegates import ActionButtonDelegate, FileHostsStatusDelegate
 from src.utils.logger import log
+from src.gui.dialogs.message_factory import show_warning, show_info
 
 
 class DropEnabledTabBar(QTabBar):
@@ -274,7 +278,7 @@ class TabbedGalleryWidget(QWidget):
     def _refresh_tabs(self):
         """Refresh tabs from tab manager"""
         if not self.tab_manager:
-            log("No tab manager available for TabbedGalleryWidget", level="warning")
+            log(f"No tab manager available for TabbedGalleryWidget", level="warning")
             return
 
         # Block tab change signals from saving during restoration
@@ -321,7 +325,7 @@ class TabbedGalleryWidget(QWidget):
                 self.tab_bar.setCurrentIndex(1)
         else:
             # No tabs available, create a default Main tab after "All Tabs"
-            log("No tabs available, creating default Main tab", level="warning")
+            log(f"No tabs available, creating default Main tab", level="warning")
             self.tab_bar.addTab("Main")
             self.tab_bar.setCurrentIndex(1)  # Select Main tab, not "All Tabs"
         
@@ -550,13 +554,13 @@ class TabbedGalleryWidget(QWidget):
         """Apply filtering to show only rows belonging to the specified tab with intelligent caching"""
         if not self.tab_manager:
             # No filtering if no tab manager
-            log("Error: No tab manager available for filtering", level="debug")
+            log(f"Error: No tab manager available for filtering", level="debug")
             for row in range(self.table.rowCount()):
                 self.table.setRowHidden(row, False)
             return
         
         if not tab_name:
-            log("No tab name specified for filtering", level="debug")
+            log(f"No tab name specified for filtering", level="debug")
             return
         
         start_time = time.time()
@@ -687,7 +691,7 @@ class TabbedGalleryWidget(QWidget):
             return set()
         
         if not self.tab_manager:
-            log("No tab manager available for loading tab galleries", level="warning")
+            log(f"No tab manager available for loading tab galleries", level="warning")
             return set()
         
         # CACHING DISABLED - always load fresh from database
@@ -829,6 +833,7 @@ class TabbedGalleryWidget(QWidget):
         if current_name in ["Main", "All Tabs"]:
             return  # Don't allow renaming system tabs
         
+        from PyQt6.QtWidgets import QInputDialog
         new_name, ok = QInputDialog.getText(
             self, 
             "Rename Tab", 
@@ -843,6 +848,7 @@ class TabbedGalleryWidget(QWidget):
     
     def _add_new_tab(self):
         """Add a new tab"""
+        from PyQt6.QtWidgets import QInputDialog
         tab_name, ok = QInputDialog.getText(
             self, 
             "New Tab", 
@@ -915,6 +921,8 @@ class TabbedGalleryWidget(QWidget):
     
     def _show_general_tab_menu(self, position):
         """Show context menu for empty tab bar area"""
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QIcon
         
         menu = QMenu()
         menu.setTitle("Tab Options")
@@ -941,6 +949,8 @@ class TabbedGalleryWidget(QWidget):
     
     def _show_specific_tab_menu(self, position, index, tab_name):
         """Show context menu for specific tab"""
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QIcon
         
         menu = QMenu()
         menu.setTitle(f"Tab: {tab_name}")
@@ -1023,6 +1033,7 @@ class TabbedGalleryWidget(QWidget):
     
     def _merge_tabs(self, source_tab, target_tab):
         """Merge source tab into target tab"""
+        from PyQt6.QtWidgets import QMessageBox
         
         reply = QMessageBox.question(
             self,
@@ -1127,6 +1138,7 @@ class TabbedGalleryWidget(QWidget):
     
     def _setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts for tab operations"""
+        from PyQt6.QtGui import QShortcut, QKeySequence
         
         # Ctrl+T: New tab
         new_tab_shortcut = QShortcut(QKeySequence("Ctrl+T"), self)
@@ -1173,7 +1185,7 @@ class TabbedGalleryWidget(QWidget):
         
         # Prevent recursive calls completely - return immediately if called again
         if hasattr(self, '_updating_tooltips') and self._updating_tooltips:
-            log("_update_tab_tooltips already running, skipping recursion", level="trace")
+            log(f"_update_tab_tooltips already running, skipping recursion", level="trace")
             return
         
         # Block ALL calls during initialization to prevent infinite loops
@@ -1408,6 +1420,7 @@ class TabbedGalleryWidget(QWidget):
     
     def _close_all_user_tabs(self):
         """Close all user tabs, keeping only system tabs (All Tabs and Main)"""
+        from PyQt6.QtWidgets import QMessageBox
         
         user_tabs = []
         for i in range(self.tab_bar.count()):
@@ -1448,6 +1461,7 @@ class TabbedGalleryWidget(QWidget):
         """Move all galleries from Main tab to other tabs"""
         # This would open a dialog to distribute galleries
         # Implementation would depend on specific requirements
+        from PyQt6.QtWidgets import QMessageBox
         QMessageBox.information(
             self,
             "Feature Not Implemented",
@@ -1456,6 +1470,7 @@ class TabbedGalleryWidget(QWidget):
     
     def _delete_tab_with_confirmation(self, index, tab_name, gallery_count):
         """Delete tab with appropriate confirmation dialog"""
+        from PyQt6.QtWidgets import QMessageBox
         
         if gallery_count > 0:
             reply = QMessageBox.question(

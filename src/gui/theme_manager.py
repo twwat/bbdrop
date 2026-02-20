@@ -17,7 +17,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import QObject, QTimer
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QColor, QFont, QPalette
 from PyQt6.QtWidgets import QApplication
 
 from src.utils.logger import log

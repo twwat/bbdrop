@@ -1,9 +1,11 @@
 """Proxy Selector Widget - Reusable dropdown for proxy/pool selection."""
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QComboBox, QLabel, QToolButton
+    QWidget, QHBoxLayout, QComboBox, QLabel, QPushButton, QToolButton,
+    QVBoxLayout, QMenu
 )
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtGui import QAction
 from typing import Optional, List
 
 from src.proxy.models import ProxyProfile, ProxyPool

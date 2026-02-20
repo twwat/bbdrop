@@ -12,9 +12,9 @@ Handles:
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Any
 
-from PyQt6.QtCore import QObject, QTimer, QSettings, QMutexLocker
+from PyQt6.QtCore import QObject, QTimer, QSettings, QMutexLocker, QMutex
 
 from src.utils.logger import log
 from src.utils.format_utils import format_binary_size
@@ -238,7 +238,7 @@ class WorkerSignalHandler(QObject):
         """
         # Test results are handled by FileHostsSettingsWidget if settings dialog is open
         # Log result for main window
-        sum([
+        tests_passed = sum([
             results.get('credentials_valid', False),
             results.get('user_info_valid', False),
             results.get('upload_success', False),

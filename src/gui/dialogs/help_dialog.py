@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QApplication, QTreeWidget, QTreeWidgetItem,
     QSplitter, QLabel, QPushButton
 )
+from PyQt6.QtCore import QUrl
 import webbrowser
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QColor

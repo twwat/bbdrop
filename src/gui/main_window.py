@@ -46,46 +46,74 @@ See Also:
     src.network.client: IMX.to API client implementation
 """
 
+import sys
 import os
+import json
+import logging
+import re
 import socket
+import threading
 import time
 import traceback
+import configparser
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+import sys
+import ctypes
+from functools import cmp_to_key
+import queue
+from queue import Queue
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, Tuple
+from contextlib import contextmanager
+import weakref
 import psutil
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel,
+    QListWidget, QListWidgetItem, QPushButton, QProgressBar, QLabel,
     QGroupBox, QSplitter, QTextEdit, QComboBox, QSpinBox, QCheckBox,
-    QMessageBox, QSystemTrayIcon, QMenu, QFrame, QGridLayout, QSizePolicy, QFileDialog, QTableWidgetItem, QDialog, QDialogButtonBox, QInputDialog
+    QMessageBox, QSystemTrayIcon, QMenu, QFrame, QScrollArea,
+    QGridLayout, QSizePolicy, QTabWidget, QTabBar, QFileDialog, QTableWidget,
+    QTableWidgetItem, QHeaderView, QDialog, QDialogButtonBox, QPlainTextEdit,
+    QLineEdit, QInputDialog, QSpacerItem, QStyle, QAbstractItemView,
+    QProgressDialog, QListView, QTreeView, QStyledItemDelegate, QStyleOptionViewItem
 )
 from PyQt6.QtCore import (
-    Qt, QThread, pyqtSignal, QTimer, QUrl,
-    QMutex, QMutexLocker, QSettings, QSize, pyqtSlot,
-    QThreadPool, QDir
+    Qt, QThread, pyqtSignal, QTimer, QMimeData, QUrl,
+    QMutex, QMutexLocker, QSettings, QSize, QObject, pyqtSlot,
+    QRunnable, QThreadPool, QPoint, QDir
 )
-from PyQt6.QtGui import QIcon, QFont, QPixmap, QColor, QDesktopServices
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup, QDrag
 
 # Import the core uploader functionality
-from bbdrop import get_project_root, load_user_defaults, get_config_path, build_gallery_filenames, get_central_storage_path
+from bbdrop import ImxToUploader, get_project_root, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from bbdrop import create_windows_context_menu, remove_windows_context_menu
+from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
 from src.utils.logger import log, set_main_window
-from src.gui.icon_manager import init_icon_manager, get_icon_manager
+from src.gui.splash_screen import SplashScreen
+from src.gui.icon_manager import IconManager, init_icon_manager, get_icon_manager
 from src.gui.dialogs.log_viewer import LogViewerDialog
 from src.gui.dialogs.bbcode_viewer import BBCodeViewerDialog
 from src.gui.dialogs.help_dialog import HelpDialog
 
 
+from src.core.engine import UploadEngine
+from src.core.constants import IMAGE_EXTENSIONS
+from src.storage.database import QueueStore
+from src.utils.logging import get_logger
 from src.gui.settings import ComprehensiveSettingsDialog
 from src.gui.tab_manager import TabManager
 
 # Import widget classes from module
 from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget, OverallProgressWidget
 from src.gui.widgets.context_menu_helper import GalleryContextMenuHelper
-from src.gui.widgets.gallery_table import GalleryTableWidget
-from src.gui.widgets.tabbed_gallery import TabbedGalleryWidget
+from src.gui.widgets.gallery_table import GalleryTableWidget, NumericColumnDelegate
+from src.gui.widgets.tabbed_gallery import TabbedGalleryWidget, DropEnabledTabBar
 from src.gui.widgets.adaptive_settings_panel import AdaptiveQuickSettingsPanel
+from src.gui.widgets.worker_status_widget import WorkerStatusWidget
 from src.core.image_host_config import get_image_host_config_manager
 from src.gui.progress_tracker import ProgressTracker
 from src.gui.worker_signal_handler import WorkerSignalHandler
@@ -97,19 +125,25 @@ from src.gui.menu_manager import MenuManager
 
 
 # Import queue manager classes - adding one at a time
-from src.storage.queue_manager import GalleryQueueItem
+from src.storage.queue_manager import GalleryQueueItem, QueueManager
 
 # Import background task classes one at a time
 from src.processing.tasks import (
-    ProgressUpdateBatcher,
-    IconCache, TableUpdateQueue
+    BackgroundTaskSignals, BackgroundTask, ProgressUpdateBatcher,
+    IconCache, TableRowUpdateTask, TableUpdateQueue
 )
+from src.processing.upload_workers import UploadWorker
 
 # Import dialog classes
+from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
+from src.gui.dialogs.log_viewer import LogViewerDialog
+from src.gui.dialogs.bbcode_viewer import BBCodeViewerDialog
+from src.gui.dialogs.help_dialog import HelpDialog
 
 # Import archive support
 from src.services.archive_service import ArchiveService
 from src.processing.archive_coordinator import ArchiveCoordinator
+from src.processing.archive_worker import ArchiveExtractionWorker
 from src.utils.archive_utils import is_archive_file
 from src.utils.system_utils import convert_to_wsl_path, is_wsl2
 
@@ -142,6 +176,9 @@ def format_timestamp_for_display(timestamp_value, include_seconds=False):
         return display_text, tooltip_text
     except (ValueError, OSError, OverflowError):
         return "", ""
+
+# Import network classes
+from src.network.client import SingleInstanceServer
 
 # Single instance communication port
 COMMUNICATION_PORT = 27849
@@ -303,7 +340,7 @@ class SingleInstanceServer(QThread):
                 try:
                     server_socket.bind(('127.0.0.1', self.port))
                     break
-                except OSError:
+                except OSError as e:
                     if attempt < max_retries - 1:
                         log(f"Port {self.port} bind failed (attempt {attempt+1}/{max_retries}), retrying in 1s...", level="warning", category="ipc")
                         time.sleep(1)
@@ -419,6 +456,7 @@ class BBDropGUI(QMainWindow):
             Configures single-instance server for IPC.
         """
         from src.utils.logger import log  # Import at function start
+        import traceback  # Import at function start
 
         super().__init__()
         self._initializing = True  # Block recursive calls during init
@@ -442,6 +480,7 @@ class BBDropGUI(QMainWindow):
         self._loading_phase = 0  # Track loading progress (0=not started, 1=phase1, 2=phase2, 3=complete)
 
         # Thread-safe file host startup tracking
+        from PyQt6.QtCore import QMutex
         self._file_host_startup_mutex = QMutex()
         self._file_host_startup_expected = 0
         self._file_host_startup_completed = 0
@@ -464,7 +503,7 @@ class BBDropGUI(QMainWindow):
             QDir.addSearchPath('assets', assets_dir)
             icon_mgr = init_icon_manager(assets_dir)
             # Validate icons and report any issues
-            icon_mgr.validate_icons(report=True)
+            validation_result = icon_mgr.validate_icons(report=True)
         except Exception as e:
             log(f"Failed to initialize IconManager: {e}", level="error", category="ui")
             
@@ -668,6 +707,7 @@ class BBDropGUI(QMainWindow):
                 actual_table = self.gallery_table.table
                 if hasattr(actual_table, 'show_context_menu'):
                     # Override the show_context_menu method to use our helper
+                    original_show_context_menu = actual_table.show_context_menu
                     def new_show_context_menu(position):
                         self.context_menu_helper.show_context_menu_for_table(actual_table, position)
                     actual_table.show_context_menu = new_show_context_menu
@@ -781,7 +821,7 @@ class BBDropGUI(QMainWindow):
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
         
-        log("GUI loaded", level="info", category="ui")
+        log(f"GUI loaded", level="info", category="ui")
 
         # Initialize update timer for automatic updates
         self.update_timer = QTimer()
@@ -954,6 +994,7 @@ class BBDropGUI(QMainWindow):
                 for path in gallery_paths:
                     item = self.queue_manager.get_item(path)
                     if item:
+                        old_tab = item.tab_name
                         item.tab_name = new_tab_name
                         item.tab_id = tab_id
             
@@ -1544,7 +1585,7 @@ class BBDropGUI(QMainWindow):
         self.thumbnail_size_combo.addItems(["100x100", "180x180", "250x250", "300x300", "150x150"])
         self.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
         self.thumbnail_size_combo.currentIndexChanged.connect(self.on_setting_changed)
-        from PyQt6.QtWidgets import QHBoxLayout as _HBox
+        from PyQt6.QtWidgets import QSpinBox, QHBoxLayout as _HBox
         self._thumb_size_spinbox = QSpinBox()
         self._thumb_size_spinbox.setSuffix("px")
         self._thumb_size_spinbox.setRange(150, 600)
@@ -2103,7 +2144,7 @@ class BBDropGUI(QMainWindow):
     def check_credentials(self):
         """Prompt to set credentials only if API key is not set."""
         if not api_key_is_set():
-            log("No API key set. Opening settings at Image Hosts tab...", level="warning", category="auth")
+            log(f"No API key set. Opening settings at Image Hosts tab...", level="warning", category="auth")
             from src.gui.settings import TabIndex
             self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
         else:
@@ -2117,16 +2158,16 @@ class BBDropGUI(QMainWindow):
                 if self.worker.rename_worker is not None:
                     try:
                         self.worker.rename_worker.invalidate_session()
-                        log("Invalidated RenameWorker session - will re-login on next rename", category="auth", level="debug")
+                        log(f"Invalidated RenameWorker session - will re-login on next rename", category="auth", level="debug")
                     except Exception as e:
                         log(f"Failed to invalidate RenameWorker session: {e}", category="auth", level="debug")
                 else:
-                    log("No RenameWorker available", category="auth", level="debug")
+                    log(f"No RenameWorker available", category="auth", level="debug")
             else:
                 if self.worker is None or not self.worker.isRunning():
-                    log("Worker not running", category="auth", level="debug")
+                    log(f"Worker not running", category="auth", level="debug")
                 else:
-                    log("Worker has no RenameWorker", category="auth", level="debug")
+                    log(f"Worker has no RenameWorker", category="auth", level="debug")
         except Exception as e:
             try:
                 log(f"Failed to invalidate session: {e}", category="auth", level="debug")
@@ -2185,7 +2226,7 @@ class BBDropGUI(QMainWindow):
             return
 
         dialog = UpdateDialog(self, __version__, version, url, notes, date)
-        dialog.exec()
+        result = dialog.exec()
 
         if dialog.skip_version:
             self.settings.setValue('updates/skipped_version', version)
@@ -2315,7 +2356,7 @@ class BBDropGUI(QMainWindow):
             main_widgets={},
             worker_manager=file_host_manager
         )
-        dialog.exec()
+        result = dialog.exec()
 
         # Refresh worker status table when dialog closes (accepted or rejected)
         # to update auto-upload icon if trigger settings changed
@@ -2354,13 +2395,13 @@ class BBDropGUI(QMainWindow):
     def _handle_settings_dialog_result(self, result):
         """Handle settings dialog result without blocking GUI"""
         if result == QDialog.DialogCode.Accepted:
-            log("Comprehensive settings updated successfully",level="debug")
+            log(f"Comprehensive settings updated successfully",level="debug")
             # Reload settings into quick settings UI
             from bbdrop import load_user_defaults
             defaults = load_user_defaults()
             self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
         else:
-            log("Comprehensive settings cancelled", level="debug", category="ui")
+            log(f"Comprehensive settings cancelled", level="debug", category="ui")
 
         # Refresh image host combo in case hosts were enabled/disabled
         self.refresh_image_host_combo()
@@ -2813,7 +2854,7 @@ class BBDropGUI(QMainWindow):
 
     def _on_image_host_changed(self):
         """Update thumb size/format controls based on selected image host capabilities."""
-        from src.core.image_host_config import get_image_host_setting
+        from src.core.image_host_config import get_image_host_setting, save_image_host_setting
 
         host_id = self.image_host_combo.currentData() if self.image_host_combo.count() else None
         try:
@@ -3355,8 +3396,10 @@ class BBDropGUI(QMainWindow):
                     item.finished_time = time.time()
 
                 # If there were failures (based on item.uploaded_images vs total), show Failed; else Completed
+                final_status_text = "Completed"
                 row_failed = False
                 if item.total_images and item.uploaded_images is not None and item.uploaded_images < item.total_images:
+                    final_status_text = "Failed"
                     row_failed = True
                 item.status = "completed" if not row_failed else "failed"
                 # Final icon and text
@@ -3620,7 +3663,7 @@ class BBDropGUI(QMainWindow):
                                 )
                         QTimer.singleShot(100, _maybe_regen)
                     elif not actual_table:
-                        log("WARNING: Table is None!", level="debug", category="hooks")
+                        log(f"WARNING: Table is None!", level="debug", category="hooks")
                 else:
                     log(f"Path {path} not found in queue_manager.items", level="debug", category="hooks")
         except Exception as e:
@@ -3652,7 +3695,7 @@ class BBDropGUI(QMainWindow):
         """Handle upload gallery exists confirmation"""
         if result != QMessageBox.StandardButton.Yes:
             # Cancel the upload
-            log("Upload cancelled by user due to existing gallery", level="info", category="ui")
+            log(f"Upload cancelled by user due to existing gallery", level="info", category="ui")
             # TODO: Implement proper cancellation mechanism
         else:
             log("User chose to continue with existing gallery", level="info", category="ui")
@@ -3772,7 +3815,7 @@ class BBDropGUI(QMainWindow):
             # Limit to 5000 items
             if self.log_text.count() > 5000:
                 self.log_text.takeItem(5000)
-        except Exception:
+        except Exception as e:
             # Fallback: add raw message if stripping fails
             self.log_text.insertItem(0, message)
 
@@ -3796,10 +3839,10 @@ class BBDropGUI(QMainWindow):
     def open_log_viewer_popup(self):
         """Open standalone log viewer dialog popup"""
         try:
-            log("Opening log viewer dialog popup", level="debug", category="ui")
+            log(f"Opening log viewer dialog popup", level="debug", category="ui")
             from src.utils.logging import get_logger
             initial_text = get_logger().read_current_log(tail_bytes=2 * 1024 * 1024) or ""
-        except Exception:
+        except Exception as e:
             log("Error opening log viewer dialog popup: {e}", level="error", category="ui")
             initial_text = ""
 
@@ -3940,6 +3983,7 @@ class BBDropGUI(QMainWindow):
     def _on_file_host_icon_clicked(self, gallery_path: str, host_name: str):
         """Handle file host icon click - show link if completed, queue upload if not"""
         from PyQt6.QtWidgets import QMessageBox
+        from PyQt6.QtGui import QClipboard
         from PyQt6.QtWidgets import QApplication
 
         log(f"File host icon clicked: {host_name} for {os.path.basename(gallery_path)}", level="debug", category="file_hosts")
@@ -3954,7 +3998,7 @@ class BBDropGUI(QMainWindow):
                 download_link = upload['download_url']
                 msg = QMessageBox(self)
                 msg.setWindowTitle(f"{host_name} Download Link")
-                msg.setText("Gallery uploaded successfully!\n\nDownload link:")
+                msg.setText(f"Gallery uploaded successfully!\n\nDownload link:")
                 msg.setInformativeText(download_link)
                 msg.setStandardButtons(QMessageBox.StandardButton.Ok)
 
@@ -4025,7 +4069,7 @@ class BBDropGUI(QMainWindow):
         Returns:
             New path if user relocated the gallery, None if cancelled/removed
         """
-        from PyQt6.QtWidgets import QMessageBox
+        from PyQt6.QtWidgets import QMessageBox, QFileDialog
 
         gallery_name = os.path.basename(gallery_path)
         old_parent = os.path.dirname(gallery_path)
@@ -4090,7 +4134,7 @@ class BBDropGUI(QMainWindow):
             new_parent: New parent folder where gallery was relocated
             already_relocated: Path that was just relocated (skip this one)
         """
-        from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QDialog, QLabel
+        from PyQt6.QtWidgets import QMessageBox, QCheckBox, QVBoxLayout, QDialog, QDialogButtonBox, QLabel
 
         # Get all galleries that were in the same parent folder
         try:
@@ -4172,6 +4216,7 @@ class BBDropGUI(QMainWindow):
 
     def _on_file_hosts_enabled_changed(self, _enabled_worker_ids: list):
         """Refresh all file host widgets when enabled hosts change."""
+        from src.utils.logger import log
 
         # Skip during startup - icons are created via normal widget creation
         if not self._file_host_startup_complete:
@@ -4246,7 +4291,7 @@ class BBDropGUI(QMainWindow):
         item = self.queue_manager.get_item(path)
         if not item or item.status != "completed":
             QMessageBox.warning(self, "Not Available", "BBCode files are only available for completed galleries.")
-            log("BBCode files are only available for completed galleries.", level="debug", category="fileio")
+            log(f"BBCode files are only available for completed galleries.", level="debug", category="fileio")
             return
         
         # Open the viewer dialog
@@ -4293,9 +4338,11 @@ class BBDropGUI(QMainWindow):
         folder_name = os.path.basename(path)
         
         # Import here to avoid circular imports  
+        from bbdrop import get_central_storage_path
         central_path = get_central_storage_path()
         
         # Try central location first with standardized naming, fallback to legacy
+        from bbdrop import build_gallery_filenames
         item = self.queue_manager.get_item(path)
         if item and item.gallery_id and (item.name or folder_name):
             log(f"BBcode copy: item.name='{item.name}', folder_name='{folder_name}', gallery_id='{item.gallery_id}'", level="debug", category="fileio")
@@ -4452,7 +4499,7 @@ class BBDropGUI(QMainWindow):
         try:
             # Only respond to table's horizontal header resizes
             # Compute total width of all visible columns except Name column
-            self.gallery_table.horizontalHeader()
+            header = self.gallery_table.horizontalHeader()
             table_width = self.gallery_table.viewport().width()
             name_col = getattr(self, '_name_col_index', 1)
             visible_other_width = 0
@@ -4466,7 +4513,7 @@ class BBDropGUI(QMainWindow):
             if logicalIndex == name_col and newSize != oldSize:
                 # Update user-preferred minimum
                 self._user_name_col_min_width = max(120, newSize)
-            max(int(getattr(self, '_user_name_col_min_width', 300)), available)
+            target = max(int(getattr(self, '_user_name_col_min_width', 300)), available)
             # Only expand; don't force shrink under user's chosen width
             current = self.gallery_table.columnWidth(name_col)
             if available > current and available > 0:
@@ -4655,8 +4702,8 @@ class BBDropGUI(QMainWindow):
 
         # Also accept if there's text (WSL2 might pass paths as text)
         if mime_data.hasText():
-            mime_data.text()
-            log("dragEnterEvent: Accepting text-based drag", level="trace", category="drag_drop")
+            text = mime_data.text()
+            log(f"dragEnterEvent: Accepting text-based drag", level="trace", category="drag_drop")
             event.acceptProposedAction()
             return
 
@@ -4913,9 +4960,10 @@ class BBDropGUI(QMainWindow):
 
         gallery_path = name_item.data(Qt.ItemDataRole.UserRole)
         if not gallery_path:
-            log("No UserRole data in gallery name column", category="ui", level="trace")
+            log(f"No UserRole data in gallery name column", category="ui", level="trace")
             return
 
+        from PyQt6.QtWidgets import QInputDialog
 
         if column == GalleryTableWidget.COL_TEMPLATE:
             # Get current template
@@ -4984,7 +5032,7 @@ class BBDropGUI(QMainWindow):
                 table = self.gallery_table
 
             # Update database
-            self.queue_manager.store.update_item_template(gallery_path, new_template)
+            success = self.queue_manager.store.update_item_template(gallery_path, new_template)
 
             # Update in-memory item
             with QMutexLocker(self.queue_manager.mutex):
@@ -4999,12 +5047,12 @@ class BBDropGUI(QMainWindow):
             else:
                 log(f"No template item found at row {row}, column {GalleryTableWidget.COL_TEMPLATE}", category="ui", level="debug")
             
-            log("Template updated", category="ui", level="info")
+            log(f"Template updated", category="ui", level="info")
             
             # Get the actual gallery item to check real status
             gallery_item = self.queue_manager.get_item(gallery_path)
             if not gallery_item:
-                log("Could not get gallery item from queue manager", category="ui", level="trace")
+                log(f"Could not get gallery item from queue manager", category="ui", level="trace")
                 status = ""
             else:
                 status = gallery_item.status
@@ -5012,7 +5060,7 @@ class BBDropGUI(QMainWindow):
             log(f"Gallery status: '{status}'", category="ui", level="trace")
             
             if status == "completed":
-                log("Gallery is completed, attempting BBCode regeneration", level="trace", category="fileio")
+                log(f"Gallery is completed, attempting BBCode regeneration", level="trace", category="fileio")
                 # Try to regenerate BBCode from JSON artifact
                 try:
                     self.artifact_handler.regenerate_gallery_bbcode(gallery_path, new_template)
@@ -5025,7 +5073,7 @@ class BBDropGUI(QMainWindow):
                         category="fileio", level="warning",
                     )
             else:
-                log("Gallery not completed, skipping BBCode regeneration", category="fileio", level="debug")
+                log(f"Gallery not completed, skipping BBCode regeneration", category="fileio", level="debug")
             
             # Remove combo box and update display
             table.removeCellWidget(row, GalleryTableWidget.COL_TEMPLATE)
@@ -5108,7 +5156,7 @@ class BBDropGUI(QMainWindow):
                 # Get the actual table that contains this item (important for tabbed galleries!)
                 table = item.tableWidget()
                 if not table:
-                    log("WARNING: Item has no parent table widget, skipping", level="debug", category="ui")
+                    log(f"WARNING: Item has no parent table widget, skipping", level="debug", category="ui")
                     return
 
                 # Skip if table signals are blocked (indicates programmatic update)

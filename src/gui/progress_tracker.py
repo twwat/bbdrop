@@ -8,10 +8,13 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, QTimer, QSettings, Qt
+from PyQt6.QtCore import QObject, QTimer, QSettings, Qt, QMutexLocker
+from PyQt6.QtWidgets import QTableWidgetItem
+from PyQt6.QtGui import QColor
 
 from src.utils.logger import log
 from src.gui.widgets.gallery_table import GalleryTableWidget
+from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI

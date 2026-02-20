@@ -196,7 +196,7 @@ class TabManager(QObject):
             raise ValueError("Tab name cannot be empty")
             
         # Create in database
-        self._store.create_tab(name.strip(), color_hint, display_order)
+        tab_id = self._store.create_tab(name.strip(), color_hint, display_order)
         
         # Get the created tab info
         tab_info = self.get_tab_by_name(name.strip())

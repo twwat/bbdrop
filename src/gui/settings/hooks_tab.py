@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QSplitter,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFontDatabase
+from PyQt6.QtGui import QFont, QFontDatabase, QSyntaxHighlighter, QTextCharFormat, QColor
 
 from bbdrop import get_config_path
 from src.gui.widgets.info_button import InfoButton
@@ -435,7 +435,7 @@ class HooksTab(QWidget):
             )
 
         # Apply CommandHighlighter from extracted widget
-        CommandHighlighter(command_input.document())
+        highlighter = CommandHighlighter(command_input.document())
 
         command_input.textChanged.connect(update_preview)
         update_preview()

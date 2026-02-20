@@ -96,7 +96,7 @@ class SettingsManager(QObject):
                 mw._pending_vertical_sizes = vertical_sizes_raw
 
         # Load settings from .ini file (for reference by other components)
-        load_user_defaults()
+        defaults = load_user_defaults()
 
         # Restore table columns (widths and visibility)
         self.restore_table_settings()

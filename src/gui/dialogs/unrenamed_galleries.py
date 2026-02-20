@@ -5,7 +5,7 @@ Dialog for managing unrenamed galleries (galleries still titled "untitled galler
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QAbstractItemView, QHeaderView, QMessageBox, QApplication
+    QPushButton, QDialogButtonBox, QAbstractItemView, QHeaderView, QMessageBox, QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 

@@ -11,6 +11,7 @@ Handles:
 """
 
 import os
+import time
 from typing import TYPE_CHECKING, List
 
 from PyQt6.QtCore import QObject, QTimer, Qt, QMutexLocker
@@ -22,9 +23,11 @@ from PyQt6.QtWidgets import (
 from src.utils.logger import log
 from src.utils.archive_utils import is_archive_file
 from src.processing.archive_worker import ArchiveExtractionWorker
+from src.storage.queue_manager import GalleryQueueItem
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI
+    from src.gui.widgets.gallery_table import GalleryTableWidget
 
 # Column index constant (mirrors GalleryTableWidget.COL_NAME)
 # Avoids circular import by defining locally
@@ -509,7 +512,7 @@ class GalleryQueueController(QObject):
             # Update button counts and progress after state changes
             QTimer.singleShot(0, mw.progress_tracker._update_counts_and_progress)
         else:
-            log("No items to start", category="queue", level="info")
+            log(f"No items to start", category="queue", level="info")
 
     def pause_all_uploads(self):
         """Reset all queued items back to ready (acts like Cancel for queued).
@@ -537,7 +540,7 @@ class GalleryQueueController(QObject):
             # Update button counts and progress after state changes
             QTimer.singleShot(0, mw.progress_tracker._update_counts_and_progress)
         else:
-            log("No queued items to reset", level="info", category="queue")
+            log(f"No queued items to reset", level="info", category="queue")
 
     def clear_completed(self):
         """Clear completed/failed uploads with confirmation.
@@ -546,7 +549,7 @@ class GalleryQueueController(QObject):
         batch removal for table updates.
         """
         mw = self._main_window
-        log("clear_completed() called", category="queue", level="debug")
+        log(f"clear_completed() called", category="queue", level="debug")
 
         # Get items to clear
         items_snapshot = mw._get_current_tab_items()
@@ -561,16 +564,16 @@ class GalleryQueueController(QObject):
             category="queue", level="debug")
 
         if not comp_paths:
-            log("No completed uploads to clear", category="queue", level="info")
+            log(f"No completed uploads to clear", category="queue", level="info")
             return
 
         # Use shared confirmation method
-        log("Requesting user confirmation", category="queue", level="debug")
+        log(f"Requesting user confirmation", category="queue", level="debug")
         if not mw._confirm_removal(comp_paths, operation_type="clear"):
-            log("User cancelled clear operation", category="queue", level="info")
+            log(f"User cancelled clear operation", category="queue", level="info")
             return
 
-        log("User confirmed - proceeding with clear", category="queue", level="debug")
+        log(f"User confirmed - proceeding with clear", category="queue", level="debug")
 
         # User confirmed - proceed with removal
         count_completed = sum(1 for it in items_snapshot if it.status == "completed")
@@ -589,7 +592,7 @@ class GalleryQueueController(QObject):
                         category="queue", level="debug")
 
         if not removed_paths:
-            log("No items actually removed", level="info", category="queue")
+            log(f"No items actually removed", level="info", category="queue")
             return
 
         log(f"Removed {len(removed_paths)} items from queue manager",
@@ -631,7 +634,7 @@ class GalleryQueueController(QObject):
         Skips items that are currently uploading.
         """
         mw = self._main_window
-        log("Delete method called", level="debug", category="queue")
+        log(f"Delete method called", level="debug", category="queue")
 
         # Get the actual table (handle tabbed interface)
         table = mw.gallery_table
@@ -643,7 +646,7 @@ class GalleryQueueController(QObject):
             selected_rows.add(item.row())
 
         if not selected_rows:
-            log("No rows selected", level="debug", category="queue")
+            log(f"No rows selected", level="debug", category="queue")
             return
 
         # Get paths directly from the table cells to handle sorting correctly
@@ -663,12 +666,12 @@ class GalleryQueueController(QObject):
                 log(f"No name item for row {row}", level="debug", category="queue")
 
         if not selected_paths:
-            log("No valid paths found", level="debug", category="queue")
+            log(f"No valid paths found", level="debug", category="queue")
             return
 
         # Use shared confirmation method
         if not mw._confirm_removal(selected_paths, selected_names, operation_type="delete"):
-            log("User cancelled delete", level="debug", category="ui")
+            log(f"User cancelled delete", level="debug", category="ui")
             return
 
         # Remove from queue manager first (filter out uploading items)
@@ -697,7 +700,7 @@ class GalleryQueueController(QObject):
                         category="queue", level="debug")
 
         if not removed_paths:
-            log("No items removed (all were uploading or not found)",
+            log(f"No items removed (all were uploading or not found)",
                 level="debug", category="queue")
             return
 

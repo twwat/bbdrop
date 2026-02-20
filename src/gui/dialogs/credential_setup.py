@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QMessageBox, QStyle
 )
 from PyQt6.QtCore import QSize
+from PyQt6.QtGui import QIcon
 
 # Import the core credential functions
 from bbdrop import (get_config_path, encrypt_password, decrypt_password,

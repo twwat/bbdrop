@@ -312,7 +312,7 @@ class ImageHostsSettingsWidget(QWidget):
         widgets["status"].setEnabled(enabled)
 
         # Update frame appearance for disabled hosts
-        widgets["frame"]
+        frame = widgets["frame"]
         # No frame styling change — match file hosts behavior
 
     def save(self):

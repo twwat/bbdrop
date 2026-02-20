@@ -10,13 +10,15 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QPushButton, QLabel, QWidget, QAbstractItemView, QApplication, QSizePolicy, QGroupBox
+    QHeaderView, QPushButton, QLabel, QProgressBar, QWidget, QFrame,
+    QAbstractItemView, QApplication, QSizePolicy, QGroupBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPaintEvent
 
 from src.gui.theme_manager import get_online_status_colors
 from src.gui.icon_manager import get_icon
+from src.utils.logger import log
 
 
 class ProportionalBar(QWidget):
@@ -611,7 +613,7 @@ class ImageStatusDialog(QDialog):
                 # Update table cells with new format: "X/Y (Z%)"
                 online_item = self.table.item(row, 3)
                 offline_item = self.table.item(row, 4)
-                self.table.item(row, 5)
+                status_item = self.table.item(row, 5)
 
                 if online_item:
                     online_item.setData(Qt.ItemDataRole.UserRole, online)
