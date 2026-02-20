@@ -999,7 +999,6 @@ class QueueManager(QObject):
                 self.store.bulk_upsert_async(queue_data)
             except Exception as e:
                 log(f"Database save failed: {e}", level="error", category="database")
-                pass
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
         """Convert item to dictionary for storage"""

@@ -667,9 +667,11 @@ class QueueStore:
                                             d.get('thumb_url') or "",
                                         ),
                                     )
-                        except Exception:
-                            failures.append(it.get('path', 'unknown'))
-                            # Continue with other items instead of failing completely
+                        except Exception as e:
+                            path = it.get('path', 'unknown')
+                            log(f"Upsert failed for '{path}': {e}",
+                                level="error", category="database")
+                            failures.append(path)
                             continue
                     if failures:
                         log(f"Bulk upsert: {len(failures)}/{len(items_list)} items failed", level="warning", category="database")
@@ -682,7 +684,16 @@ class QueueStore:
     def bulk_upsert_async(self, items: Iterable[Dict[str, Any]]) -> None:
         # Snapshot to avoid mutation while persisting
         items_list = [dict(it) for it in items]
-        self._executor.submit(self.bulk_upsert, items_list)
+
+        def _on_done(future):
+            try:
+                future.result()
+            except Exception as e:
+                log(f"Async bulk_upsert failed: {e}",
+                    level="error", category="database")
+
+        future = self._executor.submit(self.bulk_upsert, items_list)
+        future.add_done_callback(_on_done)
 
     def load_all_items(self) -> List[Dict[str, Any]]:
         with _ConnectionContext(self.db_path) as conn:
