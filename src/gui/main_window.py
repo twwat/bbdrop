@@ -52,14 +52,11 @@ import json
 import logging
 import re
 import socket
-import threading
 import time
 import traceback
-import configparser
 from pathlib import Path
 from datetime import datetime
 import sys
-import ctypes
 from functools import cmp_to_key
 import queue
 from queue import Queue
@@ -68,7 +65,6 @@ from typing import List, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Tuple
 from contextlib import contextmanager
-import weakref
 import psutil
 
 from PyQt6.QtWidgets import (

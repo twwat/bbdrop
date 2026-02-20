@@ -11,7 +11,6 @@ from PyQt6.QtCore import QSettings, QTimer, Qt
 from PyQt6.QtGui import QPixmap
 from datetime import datetime
 from typing import Optional
-import time
 
 from src.utils.format_utils import format_binary_size
 

@@ -11,7 +11,6 @@ Handles:
 """
 
 import os
-import time
 from typing import TYPE_CHECKING, List
 
 from PyQt6.QtCore import QObject, QTimer, Qt, QMutexLocker
