@@ -26,6 +26,16 @@ from src.core.constants import (
 )
 
 
+def _normalize_path(path: str) -> str:
+    """Normalize a filesystem path to a canonical form.
+
+    Strips trailing slashes and resolves '.' / '..' segments so that
+    different string representations of the same directory are treated
+    as equal by the dict-based duplicate check in QueueManager.
+    """
+    return os.path.normpath(path)
+
+
 @dataclass
 class GalleryQueueItem:
     """Represents a gallery in the upload queue"""
@@ -1051,7 +1061,7 @@ class QueueManager(QObject):
             queue_data = []
         
         for data in queue_data:
-            path = data.get('path', '')
+            path = _normalize_path(data.get('path', ''))
             status = data.get('status', QUEUE_STATE_READY)
             
             # Skip invalid paths unless completed
@@ -1136,6 +1146,7 @@ class QueueManager(QObject):
     
     def add_item(self, path: str, name: str | None = None, template_name: str = "default", tab_name: str = "Main", image_host_id: str = "imx") -> bool:
         """Add gallery to queue"""
+        path = _normalize_path(path)
         log(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}, image_host_id={image_host_id}", level="debug", category="queue")
         with QMutexLocker(self.mutex):
             if path in self.items:
@@ -1296,6 +1307,7 @@ class QueueManager(QObject):
     
     def remove_item(self, path: str) -> bool:
         """Remove item from queue"""
+        path = _normalize_path(path)
         with QMutexLocker(self.mutex):
             if path not in self.items:
                 return False
@@ -1323,6 +1335,7 @@ class QueueManager(QObject):
     
     def get_item(self, path: str) -> Optional[GalleryQueueItem]:
         """Get specific item"""
+        path = _normalize_path(path)
         with QMutexLocker(self.mutex):
             return self.items.get(path)
 
