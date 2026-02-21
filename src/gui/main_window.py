@@ -1083,6 +1083,86 @@ class BBDropGUI(QMainWindow):
         except Exception as e:
             log(f"Error updating memory status: {e}", level="debug", category="ui")
 
+    def _setup_disk_monitor(self):
+        """Initialize and start the disk space monitor."""
+        import tempfile
+        from src.utils.disk_space_monitor import DiskSpaceMonitor
+        from bbdrop import get_central_store_base_path
+
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        enabled = settings.value('disk_monitor/enabled', True, type=bool)
+        if not enabled:
+            self.disk_status_label.setVisible(False)
+            self._disk_monitor = None
+            return
+
+        warning_mb = settings.value('disk_monitor/warning_mb', 2048, type=int)
+        critical_mb = settings.value('disk_monitor/critical_mb', 512, type=int)
+        emergency_mb = settings.value('disk_monitor/emergency_mb', 100, type=int)
+
+        data_dir = get_central_store_base_path()
+        temp_dir = tempfile.gettempdir()
+
+        self._disk_monitor = DiskSpaceMonitor(
+            data_dir=data_dir,
+            temp_dir=temp_dir,
+            warning_mb=warning_mb,
+            critical_mb=critical_mb,
+            emergency_mb=emergency_mb,
+            parent=self,
+        )
+        self._disk_monitor.tier_changed.connect(self._on_disk_tier_changed)
+        self._disk_monitor.space_updated.connect(self._on_disk_space_updated)
+        self._disk_monitor.start()
+
+    def _on_disk_tier_changed(self, tier: str):
+        """Handle tier transitions — update label style and show dialog if critical."""
+        if tier == "ok":
+            self.disk_status_label.setStyleSheet("")
+            self._disk_dialog_shown_for_tier = None
+        elif tier == "warning":
+            self.disk_status_label.setStyleSheet("color: #f0ad4e; font-weight: bold;")
+        elif tier in ("critical", "emergency"):
+            self.disk_status_label.setStyleSheet("color: #d9534f; font-weight: bold;")
+
+            # Show dialog once per critical entry
+            if self._disk_dialog_shown_for_tier != tier:
+                self._disk_dialog_shown_for_tier = tier
+                free_mb = min(
+                    self._disk_monitor.data_free,
+                    self._disk_monitor.temp_free
+                ) // (1024 * 1024)
+
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self,
+                    "Low Disk Space",
+                    f"Only {free_mb} MB of disk space remaining.\n\n"
+                    f"New uploads have been paused until more space is available.\n\n"
+                    f"Free up disk space to resume uploading.",
+                )
+
+    def _on_disk_space_updated(self, data_free: int, temp_free: int):
+        """Update the status bar label with current free space."""
+        # Use the lower value for display
+        min_free = min(data_free, temp_free)
+        if min_free >= 1024 * 1024 * 1024:  # >= 1 GB
+            text = f"Disk: {min_free / (1024**3):.1f} GB"
+        else:
+            text = f"Disk: {min_free // (1024 * 1024)} MB"
+        self.disk_status_label.setText(text)
+
+        # Tooltip with per-path breakdown
+        if hasattr(self, '_disk_monitor') and self._disk_monitor and not self._disk_monitor._same_device:
+            self.disk_status_label.setToolTip(
+                f"Data: {data_free / (1024**3):.1f} GB free\n"
+                f"Temp: {temp_free / (1024**3):.1f} GB free"
+            )
+        else:
+            self.disk_status_label.setToolTip(
+                f"{min_free / (1024**3):.1f} GB free on disk"
+            )
+
     def _set_status_cell_icon(self, row: int, status: str):
         """Render the Status column as an icon.
 
@@ -1409,6 +1489,11 @@ class BBDropGUI(QMainWindow):
         self.memory_status_label = QLabel("Memory: 0 MB")
         self.memory_status_label.setToolTip("Application memory usage")
         self.statusBar().addPermanentWidget(self.memory_status_label)
+
+        # Add disk space indicator to status bar
+        self.disk_status_label = QLabel("")
+        self.disk_status_label.setToolTip("Disk space monitoring")
+        self.statusBar().addPermanentWidget(self.disk_status_label)
 
         self._log_viewer_dialog = None # Log viewer dialog reference
 
@@ -1871,6 +1956,10 @@ class BBDropGUI(QMainWindow):
         self.memory_status_timer = QTimer()
         self.memory_status_timer.timeout.connect(self._update_memory_status)
         self.memory_status_timer.start(1000)  # Update every 1 second
+
+        # Setup disk space monitor
+        self._disk_dialog_shown_for_tier = None
+        self._setup_disk_monitor()
 
         # Set minimum height for worker status group
         worker_status_group.setMinimumHeight(150)
@@ -4847,6 +4936,8 @@ class BBDropGUI(QMainWindow):
             self.update_timer.stop()
         if hasattr(self, 'memory_status_timer') and self.memory_status_timer.isActive():
             self.memory_status_timer.stop()
+        if hasattr(self, '_disk_monitor') and self._disk_monitor:
+            self._disk_monitor.stop()
         if hasattr(self, '_upload_animation_timer') and self._upload_animation_timer.isActive():
             self._upload_animation_timer.stop()
 
