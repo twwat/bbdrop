@@ -262,11 +262,10 @@ class GeneralTab(QWidget):
         # Icons-only mode for quick settings buttons
         qs_row = QHBoxLayout()
         self.quick_settings_icons_only_check = QCheckBox(
-            "Show icons only on quick settings buttons"
+            "Hide text labels on quick settings buttons"
         )
         self.quick_settings_icons_only_check.setToolTip(
-            "When enabled, quick settings buttons will always show icons only,\n"
-            "regardless of available space (overrides adaptive text display)"
+            "Always use compact icon-only mode for quick settings buttons"
         )
 
         if self.parent_window and hasattr(self.parent_window, 'settings'):
@@ -277,21 +276,20 @@ class GeneralTab(QWidget):
 
         qs_row.addWidget(self.quick_settings_icons_only_check)
         qs_row.addWidget(InfoButton(
-            "Quick settings are the buttons in the toolbar area of the main "
-            "window (pause, bandwidth limit, theme toggle, etc.). By default "
-            "they show text labels when space allows. This forces them to "
-            "always show just icons."
+            "Quick settings buttons normally show text labels when space "
+            "allows. This forces all of them to always show just icons. "
+            "The theme toggle button is always icon-only regardless of "
+            "this setting."
         ))
         qs_row.addStretch()
         theme_layout.addLayout(qs_row, 2, 0, 1, 2)
 
         # Show file host logos in worker table
         self.show_worker_logos_check = QCheckBox(
-            "Show file host logos in upload workers table"
+            "Show logos instead of text in the workers table"
         )
         self.show_worker_logos_check.setToolTip(
-            "When enabled, shows file host logos instead of text names\n"
-            "in the upload workers status table"
+            "Display file host logos instead of text names in the upload workers table"
         )
 
         if self.parent_window and hasattr(self.parent_window, 'settings'):
