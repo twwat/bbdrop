@@ -107,6 +107,14 @@ class UploadWorker(QThread):
 
                 # Process items based on status
                 if item.status == "queued":
+                    # Check disk space before starting upload
+                    if hasattr(self, 'disk_monitor') and self.disk_monitor and not self.disk_monitor.can_start_upload():
+                        log("Upload paused: insufficient disk space",
+                            level="warning", category="uploads")
+                        self.queue_manager.update_item_status(item.path, "queued")
+                        time.sleep(5)  # Wait before retrying
+                        continue
+
                     self.current_item = item
                     self.upload_gallery(item)
                 elif item.status == "paused":
