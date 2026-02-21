@@ -717,6 +717,30 @@ class FileHostWorker(QThread):
             split_enabled = defaults.get('archive_split_enabled', False)
             split_size_mb = defaults.get('archive_split_size_mb', 0) if split_enabled else 0
 
+            # Pre-flight disk space check before archive creation
+            import shutil as _shutil
+            import tempfile as _tempfile
+            try:
+                temp_free = _shutil.disk_usage(_tempfile.gettempdir()).free
+                estimated_size = sum(
+                    f.stat().st_size for f in folder_path.iterdir()
+                    if f.is_file()
+                )
+                critical_mb = 512  # Default; could read from QSettings
+                critical_bytes = critical_mb * 1024 * 1024
+                if temp_free < estimated_size + critical_bytes:
+                    free_mb = temp_free // (1024 * 1024)
+                    need_mb = (estimated_size + critical_bytes) // (1024 * 1024)
+                    raise OSError(
+                        f"Insufficient disk space for archive: "
+                        f"{free_mb}MB free, need ~{need_mb}MB"
+                    )
+            except OSError:
+                raise  # Re-raise our own space error
+            except Exception as e:
+                self._log(f"Disk space pre-flight check failed: {e}", level="warning")
+                # Proceed anyway if the check itself fails
+
             archive_paths = self.archive_manager.create_or_reuse_archive(
                 db_id=db_id,
                 folder_path=folder_path,
