@@ -619,13 +619,17 @@ class GeneralTab(QWidget):
                     show_logos = self.show_worker_logos_check.isChecked()
                     self.parent_window.settings.setValue('ui/show_worker_logos', show_logos)
 
-                    # Apply theme and font size immediately
-                    self.parent_window.apply_theme(theme)
-                    if hasattr(self.parent_window, 'theme_toggle_btn'):
-                        tooltip = "Switch to light theme" if theme == 'dark' else "Switch to dark theme"
-                        self.parent_window.theme_toggle_btn.setToolTip(tooltip)
-                    if hasattr(self.parent_window, 'apply_font_size'):
-                        self.parent_window.apply_font_size(font_size)
+                    # Apply theme only if it actually changed
+                    if theme != getattr(self.parent_window, '_current_theme_mode', None):
+                        self.parent_window.apply_theme(theme)
+                        if hasattr(self.parent_window, 'theme_toggle_btn'):
+                            tooltip = "Switch to light theme" if theme == 'dark' else "Switch to dark theme"
+                            self.parent_window.theme_toggle_btn.setToolTip(tooltip)
+
+                    # Apply font size only if it actually changed
+                    if font_size != getattr(self.parent_window, '_current_font_size', None):
+                        if hasattr(self.parent_window, 'apply_font_size'):
+                            self.parent_window.apply_font_size(font_size)
 
             return True
         except Exception as e:
