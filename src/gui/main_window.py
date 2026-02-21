@@ -2391,20 +2391,19 @@ class BBDropGUI(QMainWindow):
     def _handle_settings_dialog_result(self, result):
         """Handle settings dialog result without blocking GUI"""
         if result == QDialog.DialogCode.Accepted:
-            log(f"Comprehensive settings updated successfully",level="debug")
+            log("Comprehensive settings saved successfully", level="info", category="ui")
             # Reload settings into quick settings UI
             from bbdrop import load_user_defaults
             defaults = load_user_defaults()
+            self.auto_start_upload_check.blockSignals(True)
             self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
+            self.auto_start_upload_check.blockSignals(False)
+
+            # Refresh worker status widget to apply UI setting changes (e.g., show logos)
+            if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
+                self.worker_status_widget.refresh_icons()
         else:
-            log(f"Comprehensive settings cancelled", level="debug", category="ui")
-
-        # Refresh image host combo in case hosts were enabled/disabled
-        self.refresh_image_host_combo()
-
-        # Refresh worker status widget to apply UI setting changes (e.g., show logos)
-        if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
-            self.worker_status_widget.refresh_icons()
+            log("Comprehensive settings cancelled", level="debug", category="ui")
 
     def open_help_dialog(self):
         """Open the help/documentation dialog"""
