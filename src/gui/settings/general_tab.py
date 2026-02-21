@@ -66,29 +66,12 @@ class GeneralTab(QWidget):
         self.confirm_delete_check.setToolTip("Show confirmation dialog before removing a gallery")
         general_layout.addWidget(self.confirm_delete_check, 0, 0)
 
-        regen_row = QHBoxLayout()
-        self.auto_regenerate_bbcode_check = QCheckBox("Auto-regenerate artifacts when data changes")
-        self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
-        self.auto_regenerate_bbcode_check.setToolTip(
-            "Automatically regenerate BBCode when template, gallery name, or custom fields change"
-        )
-        regen_row.addWidget(self.auto_regenerate_bbcode_check)
-        regen_row.addWidget(InfoButton(
-            "<b>Artifacts</b> are the JSON and BBCode files generated after "
-            "a gallery finishes uploading. They contain image URLs, thumbnail "
-            "URLs, and formatted BBCode.<br><br>"
-            "When enabled, these files are automatically regenerated whenever "
-            "you change the template, gallery name, or custom field values."
-        ))
-        regen_row.addStretch()
-        general_layout.addLayout(regen_row, 1, 0)
-
         self.auto_start_upload_check = QCheckBox("Start uploads automatically")
         self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
         self.auto_start_upload_check.setToolTip(
             "Automatically start uploads when scanning completes instead of waiting for manual start"
         )
-        general_layout.addWidget(self.auto_start_upload_check, 2, 0)
+        general_layout.addWidget(self.auto_start_upload_check, 1, 0)
 
         clear_row = QHBoxLayout()
         self.auto_clear_completed_check = QCheckBox("Clear completed items automatically")
@@ -108,14 +91,14 @@ class GeneralTab(QWidget):
             "images go offline."
         ))
         clear_row.addStretch()
-        general_layout.addLayout(clear_row, 3, 0)
+        general_layout.addLayout(clear_row, 2, 0)
 
         self.check_updates_checkbox = QCheckBox("Check for updates on startup")
         self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
         self.check_updates_checkbox.setToolTip(
             "Automatically check for new versions when the application starts"
         )
-        general_layout.addWidget(self.check_updates_checkbox, 4, 0)
+        general_layout.addWidget(self.check_updates_checkbox, 3, 0)
 
         # --- Central Storage group ---
         storage_group = QGroupBox("Central Storage")
@@ -189,33 +172,55 @@ class GeneralTab(QWidget):
         # --- Gallery Artifacts group ---
         artifacts_group = QGroupBox("Gallery Artifacts")
         artifacts_layout = QVBoxLayout(artifacts_group)
-        artifacts_info_row = QHBoxLayout()
-        artifacts_info = QLabel("JSON / BBcode files containing uploaded gallery details.")
+        artifacts_info = QLabel("JSON / BBCode files containing uploaded gallery details.")
         artifacts_info.setWordWrap(True)
         artifacts_info.setStyleSheet("color: #666; font-style: italic;")
-        artifacts_info_row.addWidget(artifacts_info)
-        artifacts_info_row.addWidget(InfoButton(
-            "<b>Gallery subfolder:</b> Creates a <code>.uploaded</code> folder "
-            "inside each gallery's directory with that gallery's artifacts. "
-            "Useful if you organize by folder and want results alongside source images.<br><br>"
-            "<b>Central storage:</b> Saves all artifacts in one location "
-            "(your chosen data directory). Useful for browsing all upload "
-            "results in one place.<br><br>"
-            "You can enable both &mdash; artifacts are saved to each location independently."
-        ))
-        artifacts_layout.addLayout(artifacts_info_row)
+        artifacts_layout.addWidget(artifacts_info)
 
-        self.store_in_uploaded_check = QCheckBox(
-            "Save artifacts in '.uploaded' subfolder within the gallery"
+        subfolder_row = QHBoxLayout()
+        self.store_in_uploaded_check = QCheckBox("Save to gallery subfolder")
+        self.store_in_uploaded_check.setToolTip(
+            "Save artifacts in a .uploaded folder inside each gallery's directory"
         )
-        self.store_in_uploaded_check.setToolTip("Save BBCode in the uploaded folder for each gallery")
         self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
-        artifacts_layout.addWidget(self.store_in_uploaded_check)
+        subfolder_row.addWidget(self.store_in_uploaded_check)
+        subfolder_row.addWidget(InfoButton(
+            "Creates a <code>.uploaded</code> folder inside each gallery's "
+            "directory with that gallery's artifacts. Useful if you organize "
+            "by folder and want results alongside source images."
+        ))
+        subfolder_row.addStretch()
+        artifacts_layout.addLayout(subfolder_row)
 
-        self.store_in_central_check = QCheckBox("Save artifacts in central storage")
-        self.store_in_central_check.setToolTip("Save all BBCode in a central location")
+        central_row = QHBoxLayout()
+        self.store_in_central_check = QCheckBox("Save to central storage")
+        self.store_in_central_check.setToolTip(
+            "Save artifacts in your central data directory"
+        )
         self.store_in_central_check.setChecked(defaults.get('store_in_central', True))
-        artifacts_layout.addWidget(self.store_in_central_check)
+        central_row.addWidget(self.store_in_central_check)
+        central_row.addWidget(InfoButton(
+            "Saves all artifacts in one location (your chosen data directory). "
+            "Useful for browsing all upload results in one place.<br><br>"
+            "You can enable both options &mdash; artifacts are saved to each "
+            "location independently."
+        ))
+        central_row.addStretch()
+        artifacts_layout.addLayout(central_row)
+
+        regen_row = QHBoxLayout()
+        self.auto_regenerate_bbcode_check = QCheckBox("Auto-regenerate when data changes")
+        self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
+        self.auto_regenerate_bbcode_check.setToolTip(
+            "Automatically regenerate BBCode when template, gallery name, or custom fields change"
+        )
+        regen_row.addWidget(self.auto_regenerate_bbcode_check)
+        regen_row.addWidget(InfoButton(
+            "When enabled, artifacts are automatically regenerated whenever "
+            "you change the template, gallery name, or custom field values."
+        ))
+        regen_row.addStretch()
+        artifacts_layout.addLayout(regen_row)
 
         # --- Appearance / Theme group ---
         theme_group = QGroupBox("Appearance / Theme")
