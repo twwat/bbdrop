@@ -64,7 +64,7 @@ except ImportError:
 import mimetypes
 from src.network.cookies import get_firefox_cookies, load_cookies_from_file  # noqa: F401  # re-exported
 
-__version__ = "0.8.3"  # Application version number
+__version__ = "0.9.0"  # Application version number
 
 # GitHub repository info for update checker
 GITHUB_OWNER = "twwat"
