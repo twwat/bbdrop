@@ -90,10 +90,25 @@ class GeneralTab(QWidget):
         )
         general_layout.addWidget(self.auto_start_upload_check, 2, 0)
 
+        clear_row = QHBoxLayout()
         self.auto_clear_completed_check = QCheckBox("Clear completed items automatically")
         self.auto_clear_completed_check.setChecked(defaults.get('auto_clear_completed', False))
-        self.auto_clear_completed_check.setToolTip("Automatically remove completed galleries from the queue")
-        general_layout.addWidget(self.auto_clear_completed_check, 3, 0)
+        self.auto_clear_completed_check.setToolTip(
+            "Automatically remove completed galleries from the queue.\n"
+            "Warning: cleared galleries cannot be checked by the Link Scanner."
+        )
+        self.auto_clear_completed_check.toggled.connect(self._on_auto_clear_toggled)
+        clear_row.addWidget(self.auto_clear_completed_check)
+        clear_row.addWidget(InfoButton(
+            "<b>Not recommended.</b> Completed galleries are removed from "
+            "the queue immediately after uploading.<br><br>"
+            "<b>Why this matters:</b> The Link Scanner checks your uploaded "
+            "galleries for dead or removed links. Cleared galleries are no "
+            "longer available for scanning, so you won't be alerted if "
+            "images go offline."
+        ))
+        clear_row.addStretch()
+        general_layout.addLayout(clear_row, 3, 0)
 
         self.check_updates_checkbox = QCheckBox("Check for updates on startup")
         self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
@@ -318,6 +333,30 @@ class GeneralTab(QWidget):
         self.show_worker_logos_check.toggled.connect(self.dirty.emit)
 
     # ------------------------------------------------------------------
+    # Slot helpers
+    # ------------------------------------------------------------------
+
+    def _on_auto_clear_toggled(self, checked: bool):
+        """Show a confirmation dialog when the user enables auto-clear."""
+        if not checked:
+            return
+        reply = QMessageBox.warning(
+            self,
+            "Auto-Clear Warning",
+            "Completed galleries will be removed from the queue immediately "
+            "after uploading.\n\n"
+            "The Link Scanner won't be able to check cleared galleries for "
+            "dead links. You will not be alerted if images go offline.\n\n"
+            "Enable anyway?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            self.auto_clear_completed_check.blockSignals(True)
+            self.auto_clear_completed_check.setChecked(False)
+            self.auto_clear_completed_check.blockSignals(False)
+
+    # ------------------------------------------------------------------
     # Browse / directory selection helpers
     # ------------------------------------------------------------------
 
@@ -361,7 +400,9 @@ class GeneralTab(QWidget):
         self.confirm_delete_check.setChecked(defaults.get('confirm_delete', True))
         self.auto_regenerate_bbcode_check.setChecked(defaults.get('auto_regenerate_bbcode', True))
         self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
+        self.auto_clear_completed_check.blockSignals(True)
         self.auto_clear_completed_check.setChecked(defaults.get('auto_clear_completed', False))
+        self.auto_clear_completed_check.blockSignals(False)
         self.check_updates_checkbox.setChecked(defaults.get('check_updates_on_startup', True))
 
         self.store_in_uploaded_check.setChecked(defaults.get('store_in_uploaded', True))
