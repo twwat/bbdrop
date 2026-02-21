@@ -70,6 +70,10 @@ class WorkerSignalHandler(QObject):
             mw.worker.gallery_completed.connect(self._on_upload_worker_finished)
             mw.worker.gallery_failed.connect(self._on_upload_worker_finished)
 
+            # Wire disk space monitor for upload gating
+            if hasattr(mw, '_disk_monitor') and mw._disk_monitor:
+                mw.worker.disk_monitor = mw._disk_monitor
+
             mw.worker.start()
 
     def on_queue_item_status_changed(self, path: str, old_status: str, new_status: str):

@@ -624,6 +624,7 @@ class QueueStore:
 
     def bulk_upsert(self, items: Iterable[Dict[str, Any]]) -> None:
         items_list = list(items)  # Convert to list to avoid consuming iterator
+
         try:
             with _ConnectionContext(self.db_path) as conn:
                 _ensure_schema(conn)
