@@ -20,7 +20,7 @@ from PyQt6.QtGui import (
 
 # Import the table widget we extracted
 from src.gui.widgets.gallery_table import GalleryTableWidget
-from src.gui.delegates import ActionButtonDelegate, FileHostsStatusDelegate
+from src.gui.delegates import ActionButtonDelegate, CoverIndicatorDelegate, FileHostsStatusDelegate
 from src.utils.logger import log
 from src.gui.dialogs.message_factory import show_warning, show_info
 
@@ -233,6 +233,10 @@ class TabbedGalleryWidget(QWidget):
         self.action_delegate = ActionButtonDelegate(self.table)
         self.table.setItemDelegateForColumn(GalleryTableWidget.COL_ACTION, self.action_delegate)
         
+        # Cover indicator delegate (column 5)
+        self.cover_delegate = CoverIndicatorDelegate(self.table)
+        self.table.setItemDelegateForColumn(GalleryTableWidget.COL_COVER, self.cover_delegate)
+
         # File hosts status delegate (column 22)
         self.hosts_delegate = FileHostsStatusDelegate(self.table)
         self.table.setItemDelegateForColumn(GalleryTableWidget.COL_HOSTS_STATUS, self.hosts_delegate)
