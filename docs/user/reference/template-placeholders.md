@@ -15,8 +15,9 @@ Used in BBCode templates (`Settings > Templates`). Replaced with gallery data wh
 | `#width#` | Average image width (px) | "1920" |
 | `#height#` | Average image height (px) | "1080" |
 | `#longest#` | Longest dimension (px) | "1920" |
-| `#galleryLink#` | Gallery URL | "https://imx.to/g/abc123" |
-| `#allImages#` | BBCode for all images | `[url=...][img]...[/img][/url]` |
+| `#galleryLink#` | Image host gallery URL | "https://imx.to/g/abc123" |
+| `#allImages#` | BBCode for all images (excluding cover) | `[url=...][img]...[/img][/url]` |
+| `#cover#` | BBCode for cover image | `[url=...][img]...[/img][/url]` |
 | `#hostLinks#` | File host download links | Formatted per host's BBCode setting |
 | `#custom1#` - `#custom4#` | User-defined fields | Any text |
 | `#ext1#` - `#ext4#` | Fields from hooks | Any text |
@@ -49,6 +50,8 @@ Used in hook command templates (`Settings > Hooks`). These are a separate system
 | `%e1` - `%e4` | ext field values | All events |
 | `%c1` - `%c4` | custom field values | All events |
 | `%g` | Gallery ID | On Completed only |
+| `%cv` | Cover photo local path | All events |
+| `%cu` | Cover photo uploaded URL | On Completed only |
 | `%j` | JSON artifact path | On Completed only |
 | `%b` | BBCode artifact path | On Completed only |
 | `%%` | Literal % character | All events |

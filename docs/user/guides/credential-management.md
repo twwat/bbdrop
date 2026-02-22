@@ -2,20 +2,20 @@
 
 ## Quick Reference
 
-**Version:** v0.8.4
+**Version:** v0.9.0
 **Feature:** Secure storage and management of passwords and authentication keys
 **Storage:** Fernet encryption (AES-128-CBC + HMAC-SHA256) with CSPRNG master key, stored in OS Keyring
-**Supported Hosts:** IMX.to + 7 file hosting services
+**Supported Hosts:** 2 image hosts (IMX.to, TurboImageHost) + 7 file hosts
 **Last Updated:** 2026-02-13
 
 ---
 
 ## Overview
 
-Credential management in imxup is designed to be secure and transparent. Whether you're logging into imx.to or configuring multiple file hosts, your credentials are encrypted and stored securely—never sent to third parties, never stored in plain text.
+Credential management in BBDrop is designed to be secure and transparent. Whether you're logging into imx.to or configuring multiple file hosts, your credentials are encrypted and stored securely—never sent to third parties, never stored in plain text.
 
 This guide covers:
-- What credentials imxup stores
+- What credentials BBDrop stores
 - Where and how they're stored
 - How to set them up
 - Security practices
@@ -25,7 +25,7 @@ This guide covers:
 
 ## Credential Types
 
-IMXuploader handles four types of credentials, each with different authentication methods:
+BBDrop handles four types of credentials, each with different authentication methods:
 
 ### 1. IMX.to Username/Password
 
@@ -60,7 +60,7 @@ IMXuploader handles four types of credentials, each with different authenticatio
 1. Log into your file host account (e.g., rapidgator.net)
 2. Navigate to **Account Settings** or **API Settings**
 3. Copy your API Key
-4. In imxup: **Settings → File Hosts → [Host] → Credentials**
+4. In BBDrop: **Settings → File Hosts → [Host] → Credentials**
 5. Paste the API key and click **Test Connection**
 
 **Example Hosts:**
@@ -75,26 +75,26 @@ IMXuploader handles four types of credentials, each with different authenticatio
 
 **Host:** Rapidgator (rapidgator.net)
 
-**What it is:** Username:password that imxup converts to a temporary access token.
+**What it is:** Username:password that BBDrop converts to a temporary access token.
 
 **Storage:** OS Keyring (credentials) + `~/.bbdrop/token_cache.db` (token)
 - **Used for:** Uploading files to Rapidgator
 - **Format:** `username:password` (credentials stored separately from token)
 - **Token Expiry:** 24 hours (auto-refresh before expiry)
-- **Security:** Credentials never sent to imxup servers; only used for Rapidgator API
+- **Security:** Credentials never sent to BBDrop servers; only used for Rapidgator API
 
 **How it Works:**
 1. You provide username:password in Settings
-2. imxup logs in to Rapidgator and receives a 24-hour token
+2. BBDrop logs in to Rapidgator and receives a 24-hour token
 3. Token is cached locally (expires after 24 hours)
-4. Before expiry, imxup auto-refreshes the token
+4. Before expiry, BBDrop auto-refreshes the token
 5. If login fails, credentials are retried automatically
 
 **Setup:**
 1. Open **Settings → File Hosts → Rapidgator**
 2. Enter credentials as: `username:password`
 3. Click **Test Connection**
-4. imxup logs in and caches the token
+4. BBDrop logs in and caches the token
 
 ---
 
@@ -108,13 +108,13 @@ IMXuploader handles four types of credentials, each with different authenticatio
 - **Used for:** Creating upload sessions
 - **Format:** `username:password`
 - **Session Expiry:** 1 hour (auto-refresh on next upload)
-- **CAPTCHA:** Filedot uses visual CAPTCHA (solved automatically by imxup)
+- **CAPTCHA:** Filedot uses visual CAPTCHA (solved automatically by BBDrop)
 
 **Setup:**
 1. Open **Settings → File Hosts → [Host]**
 2. Enter credentials as: `username:password`
 3. Click **Test Connection**
-4. If CAPTCHA required (Filedot), imxup solves it automatically
+4. If CAPTCHA required (Filedot), BBDrop solves it automatically
 5. Session cookies are cached for future uploads
 
 ---
@@ -230,7 +230,7 @@ After successful test, click **OK** or **Save** to store credentials:
 
 ### What's NOT Encrypted?
 
-**Never stored by imxup:**
+**Never stored by BBDrop:**
 - ✗ Credentials sent to third-party servers (except the file host itself)
 - ✗ Plaintext passwords on disk
 - ✗ Credentials in log files or debug output
@@ -280,19 +280,19 @@ After successful test, click **OK** or **Save** to store credentials:
 If you change your password on a file host:
 
 1. **Rapidgator / Session-based hosts:**
-   - Open imxup Settings
+   - Open BBDrop Settings
    - Re-enter new credentials
    - Click Test Connection
    - Old token cache automatically invalidated
 
 2. **API Key hosts:**
    - Generate new API key on host website
-   - Open imxup Settings
+   - Open BBDrop Settings
    - Replace old API key with new one
    - Click Test Connection
 
 3. **IMX.to:**
-   - Open imxup Settings → General
+   - Open BBDrop Settings → General
    - Enter new password
    - Click Test Connection
 
@@ -302,19 +302,19 @@ If you change your password on a file host:
 
 1. Use "Forgot Password" on the file host website
 2. Reset your password
-3. In imxup, update the password in Settings
+3. In BBDrop, update the password in Settings
 4. Test the connection
 
 **If you forgot IMX.to password:**
 
 1. Visit imx.to website
 2. Use "Forgot Password" to reset
-3. In imxup Settings → General, enter new password
+3. In BBDrop Settings → General, enter new password
 4. Test the connection
 
 ### Reset All Credentials
 
-**Warning:** This deletes all stored credentials from imxup (not from your accounts)
+**Warning:** This deletes all stored credentials from BBDrop (not from your accounts)
 
 1. Open **Settings → Advanced**
 2. Click **Clear All Credentials**

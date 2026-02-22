@@ -1,6 +1,6 @@
 # Your First Upload
 
-Upload a gallery to imx.to in under a minute.
+Upload a gallery in under a minute.
 
 ---
 
@@ -16,11 +16,11 @@ Your gallery appears in the queue with **Ready** status.
 
 ## Configure Credentials (First Time Only)
 
-Before uploading, you need to add your imx.to account:
+Before uploading, you need to add your image host credentials:
 
 - Click **Settings** in the toolbar
 - Go to the **Credentials** section
-- Enter your imx.to username and password
+- Select your image host and enter your username and password
 - Click **Save**
 
 Your credentials are stored securely in your system keyring.
@@ -46,7 +46,7 @@ When the upload finishes:
 - Right-click the gallery and select **Copy BBCode**
 - Paste into your forum post
 
-The BBCode includes thumbnails linked to full-size images on imx.to.
+The BBCode includes thumbnails linked to full-size images on your image host.
 
 ---
 
