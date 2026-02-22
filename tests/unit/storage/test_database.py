@@ -1084,3 +1084,60 @@ class TestSafeJsonLoads:
             mock_log.assert_called_once()
             args = mock_log.call_args
             assert 'warning' in str(args) or args[1].get('level') == 'warning'
+
+
+class TestCoverPersistence:
+    """Test cover field roundtrip through database."""
+
+    def test_cover_fields_roundtrip(self, queue_store):
+        """Save and load cover_source_path, cover_host_id, cover_result."""
+        gallery = {
+            'path': '/test/cover_gallery',
+            'status': 'ready',
+            'added_time': int(time.time()),
+            'tab_name': 'Main',
+            'cover_source_path': '/test/cover_gallery/cover.jpg',
+            'cover_host_id': 'turbo',
+            'cover_result': {'image_url': 'https://example.com/img.jpg', 'thumb_url': 'https://example.com/thumb.jpg', 'bbcode': '[url]...[/url]'},
+        }
+        queue_store.bulk_upsert([gallery])
+
+        items = queue_store.load_all_items()
+        assert len(items) == 1
+        assert items[0]['cover_source_path'] == '/test/cover_gallery/cover.jpg'
+        assert items[0]['cover_host_id'] == 'turbo'
+        assert items[0]['cover_result']['image_url'] == 'https://example.com/img.jpg'
+
+    def test_cover_fields_null_roundtrip(self, queue_store):
+        """Verify null cover fields load back as None."""
+        gallery = {
+            'path': '/test/no_cover',
+            'status': 'ready',
+            'added_time': int(time.time()),
+            'tab_name': 'Main',
+        }
+        queue_store.bulk_upsert([gallery])
+
+        items = queue_store.load_all_items()
+        assert items[0]['cover_source_path'] is None
+        assert items[0]['cover_host_id'] is None
+        assert items[0]['cover_result'] is None
+
+    def test_corrupt_cover_result_returns_none(self, queue_store):
+        """Verify corrupt cover_result JSON doesn't crash load."""
+        gallery = {
+            'path': '/test/corrupt_cover',
+            'status': 'ready',
+            'added_time': int(time.time()),
+            'tab_name': 'Main',
+            'cover_result': {'valid': True},
+        }
+        queue_store.bulk_upsert([gallery])
+
+        # Corrupt the JSON directly in the database
+        from src.storage.database import _ConnectionContext
+        with _ConnectionContext(queue_store.db_path) as conn:
+            conn.execute("UPDATE galleries SET cover_result = '{corrupt' WHERE path = ?", ('/test/corrupt_cover',))
+
+        items = queue_store.load_all_items()
+        assert items[0]['cover_result'] is None  # Fallback, not crash

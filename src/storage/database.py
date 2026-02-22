@@ -617,6 +617,9 @@ class QueueStore:
             'imx_status': imx_status,
             'imx_status_checked': imx_status_checked,
             'image_host_id': item.get('image_host_id', 'imx'),
+            'cover_source_path': item.get('cover_source_path'),
+            'cover_host_id': item.get('cover_host_id'),
+            'cover_result': json.dumps(item['cover_result']) if item.get('cover_result') is not None else None,
         }
 
         for col_name, col_value in optional_fields.items():
