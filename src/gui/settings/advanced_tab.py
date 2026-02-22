@@ -53,6 +53,37 @@ ADVANCED_SETTINGS = [
         "max": 0.5,
         "decimals": 2
     },
+    # Disk space monitoring thresholds
+    {
+        "key": "disk_monitor/enabled",
+        "description": "Enable disk space monitoring with status bar indicator and upload gating",
+        "default": True,
+        "type": "bool"
+    },
+    {
+        "key": "disk_monitor/warning_mb",
+        "description": "Warning threshold in MB — status bar turns yellow (default: 2 GB)",
+        "default": 2048,
+        "type": "int",
+        "min": 500,
+        "max": 50000
+    },
+    {
+        "key": "disk_monitor/critical_mb",
+        "description": "Critical threshold in MB — new uploads blocked, dialog shown (default: 500 MB)",
+        "default": 512,
+        "type": "int",
+        "min": 100,
+        "max": 10000
+    },
+    {
+        "key": "disk_monitor/emergency_mb",
+        "description": "Emergency threshold in MB — reserve file deleted, DB flushed (default: 100 MB)",
+        "default": 100,
+        "type": "int",
+        "min": 20,
+        "max": 2000
+    },
 ]
 
 
