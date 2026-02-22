@@ -1009,3 +1009,132 @@ class TestDelegateIntegration:
         assert len(host_signals_received) == 1
         assert action_signals_received[0] == ("/path", "view")
         assert host_signals_received[0] == ("/path", "rapidgator")
+
+
+# =============================================================================
+# CoverIndicatorDelegate Tests
+# =============================================================================
+
+class TestCoverIndicatorDelegatePaint:
+    """Test suite for CoverIndicatorDelegate.paint()."""
+
+    @pytest.fixture
+    def delegate_with_mocks(self, qapp):
+        with patch('src.gui.delegates.cover_indicator_delegate.get_icon_manager') as mock_get_icon:
+            mock_icon_manager = Mock()
+            mock_icon = Mock(spec=QIcon)
+            mock_icon.isNull.return_value = False
+            mock_pixmap = Mock(spec=QPixmap)
+            mock_icon.pixmap.return_value = mock_pixmap
+            mock_icon_manager.get_icon.return_value = mock_icon
+            mock_get_icon.return_value = mock_icon_manager
+
+            from src.gui.delegates.cover_indicator_delegate import CoverIndicatorDelegate
+            delegate = CoverIndicatorDelegate()
+            yield delegate, mock_icon_manager, mock_pixmap
+
+    def test_paint_draws_icon_when_cover_present(self, delegate_with_mocks):
+        delegate, _, mock_pixmap = delegate_with_mocks
+        mock_painter = Mock(spec=QPainter)
+        mock_option = Mock(spec=QStyleOptionViewItem)
+        mock_option.rect = QRect(0, 0, 28, 22)
+        mock_style = Mock()
+        mock_option.widget = Mock()
+        mock_option.widget.style.return_value = mock_style
+        mock_index = Mock(spec=QModelIndex)
+        mock_index.data.return_value = "/gallery/cover.jpg"
+
+        delegate.paint(mock_painter, mock_option, mock_index)
+        mock_painter.drawPixmap.assert_called_once()
+
+    def test_paint_skips_when_no_cover(self, delegate_with_mocks):
+        delegate, mock_icon_manager, _ = delegate_with_mocks
+        mock_painter = Mock(spec=QPainter)
+        mock_option = Mock(spec=QStyleOptionViewItem)
+        mock_option.rect = QRect(0, 0, 28, 22)
+        mock_style = Mock()
+        mock_option.widget = Mock()
+        mock_option.widget.style.return_value = mock_style
+        mock_index = Mock(spec=QModelIndex)
+        mock_index.data.return_value = None
+
+        delegate.paint(mock_painter, mock_option, mock_index)
+        mock_painter.drawPixmap.assert_not_called()
+
+    def test_pixmap_cached_across_calls(self, delegate_with_mocks):
+        delegate, mock_icon_manager, _ = delegate_with_mocks
+        mock_painter = Mock(spec=QPainter)
+        mock_option = Mock(spec=QStyleOptionViewItem)
+        mock_option.rect = QRect(0, 0, 28, 22)
+        mock_style = Mock()
+        mock_option.widget = Mock()
+        mock_option.widget.style.return_value = mock_style
+        mock_index = Mock(spec=QModelIndex)
+        mock_index.data.return_value = "/gallery/cover.jpg"
+
+        delegate.paint(mock_painter, mock_option, mock_index)
+        delegate.paint(mock_painter, mock_option, mock_index)
+
+        # get_icon called only once (cached pixmap reused)
+        mock_icon_manager.get_icon.assert_called_once_with('cover_photo')
+
+
+class TestCoverIndicatorDelegateSizeHint:
+    """Test suite for CoverIndicatorDelegate.sizeHint()."""
+
+    @pytest.fixture
+    def delegate(self, qapp):
+        with patch('src.gui.delegates.cover_indicator_delegate.get_icon_manager'):
+            from src.gui.delegates.cover_indicator_delegate import CoverIndicatorDelegate
+            return CoverIndicatorDelegate()
+
+    def test_size_hint_returns_qsize(self, delegate):
+        option = Mock(spec=QStyleOptionViewItem)
+        index = Mock(spec=QModelIndex)
+        result = delegate.sizeHint(option, index)
+        assert isinstance(result, QSize)
+
+    def test_size_hint_dimensions(self, delegate):
+        option = Mock(spec=QStyleOptionViewItem)
+        index = Mock(spec=QModelIndex)
+        result = delegate.sizeHint(option, index)
+        assert result.width() == 28
+        assert result.height() == delegate.ICON_SIZE + 4
+
+
+class TestCoverIndicatorDelegateTooltip:
+    """Test suite for CoverIndicatorDelegate.helpEvent()."""
+
+    @pytest.fixture
+    def delegate(self, qapp):
+        with patch('src.gui.delegates.cover_indicator_delegate.get_icon_manager'):
+            from src.gui.delegates.cover_indicator_delegate import CoverIndicatorDelegate
+            return CoverIndicatorDelegate()
+
+    def test_tooltip_shows_filename(self, delegate):
+        mock_event = Mock()
+        mock_event.type.return_value = QEvent.Type.ToolTip
+        mock_event.globalPos.return_value = QPoint(0, 0)
+        mock_view = Mock()
+        mock_option = Mock(spec=QStyleOptionViewItem)
+        mock_index = Mock(spec=QModelIndex)
+        mock_index.data.return_value = "/gallery/cover.jpg"
+
+        with patch('src.gui.delegates.cover_indicator_delegate.QToolTip') as mock_tooltip:
+            result = delegate.helpEvent(mock_event, mock_view, mock_option, mock_index)
+            assert result is True
+            mock_tooltip.showText.assert_called_once()
+            tooltip_text = mock_tooltip.showText.call_args[0][1]
+            assert "cover.jpg" in tooltip_text
+
+    def test_tooltip_skips_when_no_cover(self, delegate):
+        mock_event = Mock()
+        mock_event.type.return_value = QEvent.Type.ToolTip
+        mock_view = Mock()
+        mock_option = Mock(spec=QStyleOptionViewItem)
+        mock_index = Mock(spec=QModelIndex)
+        mock_index.data.return_value = None
+
+        with patch.object(QStyledItemDelegate, 'helpEvent', return_value=False):
+            result = delegate.helpEvent(mock_event, mock_view, mock_option, mock_index)
+            assert result is False
