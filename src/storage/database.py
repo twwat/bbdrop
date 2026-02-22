@@ -737,7 +737,8 @@ class QueueStore:
                     g.insertion_order, g.failed_files, g.tab_name, g.tab_id,
                     g.custom1, g.custom2, g.custom3, g.custom4,
                     g.ext1, g.ext2, g.ext3, g.ext4,
-                    g.imx_status, g.imx_status_checked, g.image_host_id
+                    g.imx_status, g.imx_status_checked, g.image_host_id,
+                    g.cover_source_path, g.cover_host_id, g.cover_result
                 FROM galleries g
                 ORDER BY g.insertion_order ASC, g.added_ts ASC
                 """
@@ -764,7 +765,7 @@ class QueueStore:
                     'gallery_id': r[13] or "",
                     'gallery_url': r[14] or "",
                     'insertion_order': int(r[15] or 0),
-                    'failed_files': json.loads(r[16]) if r[16] else [],
+                    'failed_files': _safe_json_loads(r[16], []),
                     'tab_name': r[17] or 'Main',
                     'tab_id': int(r[18] or 1),
                     'custom1': r[19] or '',
@@ -778,6 +779,9 @@ class QueueStore:
                     'imx_status': r[27] or '',
                     'imx_status_checked': int(r[28]) if r[28] else None,
                     'image_host_id': r[29] or 'imx',
+                    'cover_source_path': r[30] or None,
+                    'cover_host_id': r[31] or None,
+                    'cover_result': _safe_json_loads(r[32], None),
                     'uploaded_files': [],  # Load separately when needed, not in gallery list query
                 }
                 items.append(item)
@@ -1035,7 +1039,7 @@ class QueueStore:
                         'gallery_id': r[13] or "",
                         'gallery_url': r[14] or "",
                         'insertion_order': int(r[15] or 0),
-                        'failed_files': json.loads(r[16]) if r[16] else [],
+                        'failed_files': _safe_json_loads(r[16], []),
                         'tab_name': r[17] or 'Main',
                         'custom1': r[18] or '',
                         'custom2': r[19] or '',
