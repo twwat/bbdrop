@@ -22,6 +22,18 @@ import json
 
 from src.utils.logger import log
 
+
+def _safe_json_loads(raw: str | None, fallback):
+    """Parse JSON with fallback on corrupt data. Logs a warning on failure."""
+    if not raw:
+        return fallback
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as e:
+        log(f"Corrupt JSON in database, using fallback: {e}", level="warning", category="database")
+        return fallback
+
+
 _LOW_DISK_THRESHOLD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 

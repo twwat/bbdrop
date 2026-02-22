@@ -19,7 +19,7 @@ import os
 import tempfile
 import time
 import threading
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 # Import module under test
 from src.storage.database import (
@@ -1052,3 +1052,35 @@ class TestEdgeCases:
 
         items = queue_store.load_all_items()
         assert len(items[0]['failed_files']) == 2
+
+
+class TestSafeJsonLoads:
+    """Test _safe_json_loads helper for corrupt data resilience."""
+
+    def test_valid_json_list(self):
+        from src.storage.database import _safe_json_loads
+        assert _safe_json_loads('[1, 2, 3]', []) == [1, 2, 3]
+
+    def test_valid_json_dict(self):
+        from src.storage.database import _safe_json_loads
+        assert _safe_json_loads('{"a": 1}', {}) == {"a": 1}
+
+    def test_none_returns_fallback(self):
+        from src.storage.database import _safe_json_loads
+        assert _safe_json_loads(None, []) == []
+
+    def test_empty_string_returns_fallback(self):
+        from src.storage.database import _safe_json_loads
+        assert _safe_json_loads('', {}) == {}
+
+    def test_corrupt_json_returns_fallback(self):
+        from src.storage.database import _safe_json_loads
+        assert _safe_json_loads('{corrupt', []) == []
+
+    def test_corrupt_json_logs_warning(self):
+        from src.storage.database import _safe_json_loads
+        with patch('src.storage.database.log') as mock_log:
+            _safe_json_loads('{corrupt', [])
+            mock_log.assert_called_once()
+            args = mock_log.call_args
+            assert 'warning' in str(args) or args[1].get('level') == 'warning'
