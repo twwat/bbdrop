@@ -1,24 +1,37 @@
 # BBDrop
 
-Desktop app for uploading image galleries to imx.to and 6 file hosts, generating BBCode, and tracking upload status.
+Cross-platform desktop app for uploading content to multiple image and file hosts, generating BBcode for forums, monitoring content links, and much more. 
 
 ![GitHub Release](https://img.shields.io/github/v/release/twwat/bbdrop)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/twwat/bbdrop/build.yml)
-![GitHub License](https://img.shields.io/github/license/twwat/bbdrop) ![Python](https://img.shields.io/badge/python-3.12+-lightgreen.svg?logo=python&logoColor=white)  [![Qt](https://img.shields.io/badge/PyQt-6.9.1-blue.svg?logo=Qt&logoColor=babyblue)](#)
-
-[![Windows](https://custom-icon-badges.demolab.com/badge/-blue.svg?logo=windows11&logoColor=white&style=for-the-badge)](#) [![macOS](https://img.shields.io/badge/-444444.svg?logo=apple&logoColor=F0F0F0&style=for-the-badge)](#) [![Linux](https://img.shields.io/badge/-yellow.svg?logo=linux&logoColor=black&style=for-the-badge)](#)
+[![Windows](https://custom-icon-badges.demolab.com/badge/-blue.svg?logo=windows11&logoColor=white)](#)
+[![macOS](https://img.shields.io/badge/-444444.svg?logo=apple&logoColor=F0F0F0)](#)
+[![Linux](https://img.shields.io/badge/-yellow.svg?logo=linux&logoColor=black)](#)
+[![GitHub License](https://img.shields.io/github/license/twwat/bbdrop)](https://github.com/twwat/bbdrop?tab=MIT-1-ov-file#readme)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/twwat/bbdrop/build.yml)](https://github.com/twwat/bbdrop/actions/workflows/build.yml)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/8ba50b3c4c82461d85c490e7ff55e641)](https://app.codacy.com/gh/twwat/bbdrop/dashboard)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/twwat/bbdrop/total)
 
 ---
 
+
 ## Install
 
-### Binary (recommended)
+### Binary _(recommended)_
 
-1. Go to the [Releases](https://github.com/twwat/bbdrop/releases) page
-2. Download the latest version for your operating system
-3. Extract and run the executable (`bbdrop`)
+[![Windows](https://custom-icon-badges.demolab.com/badge/Windows-blue.svg?logo=windows11&logoColor=white&style=for-the-badge)](#)
+[![Linux](https://img.shields.io/badge/Linux-f1c232.svg?logo=linux&logoColor=black&style=for-the-badge)](#)
+[![macOS](https://img.shields.io/badge/macOS-444444.svg?logo=apple&logoColor=F0F0F0&style=for-the-badge)](#) 
+
+1. Go to the [latest release](https://github.com/twwat/bbdrop/releases/latest) page
+2. Download the version for your operating system
+3. Extract and run the executable (e.g. `bbdrop.exe`)
+
+_**Note**: portable versions don't require installation, just unpack and run_
 
 ### From source
+
+![Python](https://img.shields.io/badge/python-3.14+-lightgreen.svg?logo=python&logoColor=white)
+[![Qt](https://img.shields.io/badge/PyQt-6.9.1-blue.svg?logo=Qt&logoColor=babyblue)](#)
 
 ```bash
 git clone https://github.com/twwat/bbdrop.git
@@ -86,12 +99,21 @@ Right-click any folder and select "Upload to imx.to (GUI)" to add it to the queu
 
 ## Supported Hosts
 
+### Image Hosts
+
 | Host | Auth | Max File Size | Storage | Notes |
 |------|------|---------------|---------|-------|
-| **IMX.to** | API / Session | Unlimited | Unlimited | Gallery/thumbnail hosting, status checking |
+| **IMX.to** | API / Session | Unlimited | Unlimited | Gallery/thumbnail hosting, status checking, gallery rename |
+| **TurboImageHost** | Session | Unlimited | Unlimited | Gallery hosting, pycurl-based uploads |
+
+### File Hosts
+
+| Host | Auth | Max File Size | Storage | Notes |
+|------|------|---------------|---------|-------|
 | **FileBoom** | API | 10 GiB | 20 TiB\* | Multi-step, deduplication |
 | **Filedot** | Session | Varies | 10 TiB | CAPTCHA handling, CSRF protection |
 | **Filespace** | Cookie | Varies | 50+ GiB (varies) | Cookie-based auth, storage monitoring |
+| **Katfile** | API | Varies | Varies | Session-based upload |
 | **Keep2Share** | API | 10 GiB | 20 TiB\* | Multi-step, deduplication |
 | **Rapidgator** | API / Token | 5 GiB | 4+ TiB (varies) | MD5 verification, polling |
 | **TezFiles** | API | Varies | 20 TiB\* | Multi-step, deduplication |
@@ -105,14 +127,16 @@ All hosts support automatic retry, connection pooling, and token caching.
 ## Features
 
 - **Upload engine** -- concurrent workers, batch processing, drag-and-drop queue, resume, duplicate detection, progress tracking
+- **Multi-host pipeline** -- upload to 2 image hosts and 7 file hosts with host-agnostic ABC architecture
 - **BBCode templates** -- 18 placeholders, multiple templates, switch on the fly
+- **Cover photos** -- automatic cover detection by filename pattern, dimension, and file size; per-host cover gallery support
 - **Archive management** -- create ZIP/7Z archives with configurable compression and split support; extract ZIP, 7Z, RAR, TAR
-- **File host uploads** -- upload to any combination of 6 file hosts alongside imx.to
-- **Proxy system** -- per-host SOCKS5/HTTP proxy support
+- **Disk space monitoring** -- tiered warnings with adaptive polling, pre-flight checks before uploads and archive creation
+- **Proxy system** -- per-host SOCKS5/HTTP proxy support with 3-level resolver (global, category, service)
 - **Statistics** -- upload history, bandwidth tracking, per-host metrics
 - **Online monitoring** -- check availability of previously uploaded files
-- **Credential storage** -- OS keyring with encrypted fallback
-- **Hook system** -- run external scripts on upload events
+- **Credential storage** -- OS keyring with CSPRNG-based Fernet encryption
+- **Hook system** -- run external scripts on upload events with positional placeholders and JSON output parsing
 - **GUI** -- PyQt6, dark/light themes, system tray, single-instance mode, keyboard shortcuts, custom tabs
 
 ---
@@ -130,15 +154,16 @@ File host credentials are configured in Settings > File Hosts. Use **Test Connec
 
 | Placeholder | Description |
 |-------------|-------------|
-| `#folderName#` | Gallery name |
+| `#folderName#` | Gallery or folder name |
 | `#width#` | Average width |
 | `#height#` | Average height |
 | `#longest#` | Longest dimension |
 | `#extension#` | Common format |
 | `#pictureCount#` | Number of images |
 | `#folderSize#` | Total size |
-| `#galleryLink#` | imx.to gallery URL |
-| `#allImages#` | BBCode for all images |
+| `#galleryLink#` | Image host gallery URL |
+| `#allImages#` | BBCode for all images except cover |
+| `#cover#` | BBCode for cover image |
 | `#hostLinks#` | File host download links |
 | `#custom1#` -- `#custom4#` | User-defined fields |
 | `#ext1#` -- `#ext4#` | External link fields (from hooks) |
@@ -151,8 +176,7 @@ File host credentials are configured in Settings > File Hosts. Use **Test Connec
 
 | Feature | Implementation |
 |---------|---------------|
-| Credential Storage | Fernet (AES-128-CBC + HMAC-SHA256) encryption with hostname-derived key, stored in OS Keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service) |
-| Password Hashing | PBKDF2-HMAC-SHA256 (100,000 iterations) with cryptographic salt |
+| Credential Storage | Fernet (AES-128-CBC + HMAC-SHA256) encryption with CSPRNG master key, stored in OS Keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service) |
 | Transport Security | TLS 1.2+ with SSL certificate verification via certifi CA bundle |
 | Token Management | Encrypted token caching with configurable TTL and automatic refresh |
 | Database Security | Parameterized SQL queries, SQLite WAL mode |
@@ -181,19 +205,6 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 pytest tests/
 ```
-
-</details>
-
-<details>
-<summary>Dependencies</summary>
-
-**Core:** PyQt6 6.9.1, requests 2.32.4, pycurl 7.45.7, Pillow 11.3.0, cryptography 45.0.5, keyring 25.0+, psutil 5.9+, certifi, markdown, standard-imghdr, tqdm, colorama
-
-**Archive:** py7zr, rarfile, splitzip
-
-**Windows only:** pywin32-ctypes, winregistry
-
-See `requirements.txt` for pinned versions.
 
 </details>
 
