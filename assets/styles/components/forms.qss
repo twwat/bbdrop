@@ -10,7 +10,7 @@
    BASE FORM STYLING (Theme-Independent)
    ========================================================================== */
 
-QComboBox, QSpinBox, QDoubleSpinBox { padding-left: 24px; font-family: 'Courier New', monospace; font-weight: bold; font-size:1.1em; height: 22px; border-radius: 3px; }
+QComboBox, QSpinBox, QDoubleSpinBox { padding-left: 24px; font-family: 'Courier New', monospace; font-weight: bold; font-size:1.1em; height: 22px; min-height: 22px; max-height: 22px; border-radius: 3px; }
 
 /* Combobox dropdown arrow styling */
 QComboBox::drop-down { width: 20px; border: none; background: transparent; }
