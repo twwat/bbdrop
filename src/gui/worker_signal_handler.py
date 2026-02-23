@@ -177,6 +177,11 @@ class WorkerSignalHandler(QObject):
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
+        # Fire notification
+        mw = self._main_window
+        if hasattr(mw, 'notification_manager'):
+            mw.notification_manager.notify('filehost_upload_completed')
+
     def on_file_host_upload_failed(self, db_id: int, host_name: str, error_message: str):
         """Handle file host upload failed - ASYNC to prevent blocking main thread."""
         log(f"File host upload failed: {host_name} for gallery {db_id}: {error_message}",
@@ -185,6 +190,11 @@ class WorkerSignalHandler(QObject):
         QTimer.singleShot(0, lambda: self._main_window._refresh_file_host_widgets_for_db_id(db_id))
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
+
+        # Fire notification
+        mw = self._main_window
+        if hasattr(mw, 'notification_manager'):
+            mw.notification_manager.notify('filehost_upload_failed', detail=error_message[:80])
 
     def _update_filehost_queue_for_host(self, host_name: str):
         """Update queue columns for a specific file host after upload state change.
@@ -334,6 +344,16 @@ class WorkerSignalHandler(QObject):
             host_id=host_id
         )
 
+        # Check if entire queue is done (no more queued/uploading items)
+        try:
+            items = mw.queue_manager.get_all_items()
+            any_active = any(i.status in ("queued", "uploading") for i in items)
+            if not any_active and hasattr(mw, 'notification_manager'):
+                mw.notification_manager.notify('queue_finished')
+        except Exception as e:
+            log(f"Error checking queue status for notification: {e}",
+                level="warning", category="notifications")
+
     def _on_filehost_worker_started(self, db_id: int, host_name: str):
         """Handle file host worker upload started."""
         mw = self._main_window
@@ -432,6 +452,12 @@ class WorkerSignalHandler(QObject):
                 mw._file_host_startup_complete = True
                 log(f"File host startup complete ({mw._file_host_startup_expected} worker{'s' if mw._file_host_startup_expected != 1 else ''})",
                     level="info", category="startup")
+
+        # Fire notification on successful spinup (outside mutex)
+        if not error:
+            mw = self._main_window
+            if hasattr(mw, 'notification_manager'):
+                mw.notification_manager.notify('filehost_spinup_complete')
 
     def _on_worker_status_updated(self, host_id: str, status_text: str):
         """Handle worker status updates during spinup."""

@@ -717,6 +717,13 @@ class BBDropGUI(QMainWindow):
         if self.splash:
             self.splash.set_status("Running setup_system_tray()")
         self.setup_system_tray()
+
+        # Notification manager
+        from src.services.notification_manager import NotificationManager
+        self.notification_manager = NotificationManager(
+            tray_icon=getattr(self, 'tray_icon', None)
+        )
+
         if self.splash:
             self.splash.set_status("Restoring settings...")
         self.restore_settings()
@@ -1141,6 +1148,11 @@ class BBDropGUI(QMainWindow):
                     f"New uploads have been paused until more space is available.\n\n"
                     f"Free up disk space to resume uploading.",
                 )
+
+        # Fire notification for warning/critical/emergency tiers
+        if tier in ('warning', 'critical', 'emergency'):
+            if hasattr(self, 'notification_manager'):
+                self.notification_manager.notify('disk_space_warning', detail=f'Disk space: {tier}')
 
     def _on_disk_space_updated(self, data_free: int, temp_free: int):
         """Update the status bar label with current free space."""
@@ -3652,7 +3664,11 @@ class BBDropGUI(QMainWindow):
 
         # Defer only the heavy stats update to avoid blocking
         QTimer.singleShot(50, lambda: self._update_stats_deferred(results))
-    
+
+        # Fire notification
+        if hasattr(self, 'notification_manager'):
+            self.notification_manager.notify('gallery_completed')
+
     def _update_stats_deferred(self, results: dict):
         """Update cumulative stats in background"""
         try:
@@ -3841,7 +3857,11 @@ class BBDropGUI(QMainWindow):
         
         gallery_name = os.path.basename(path)
         log(f"Failed: {gallery_name} - {error_message}", level="warning")
-    
+
+        # Fire notification
+        if hasattr(self, 'notification_manager'):
+            self.notification_manager.notify('gallery_failed', detail=error_message[:80])
+
     def _ensure_log_visible(self):
         """Ensure log is scrolled to bottom - called via QTimer for thread safety"""
         try:
