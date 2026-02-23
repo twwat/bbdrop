@@ -11,5 +11,6 @@ class TabIndex:
     HOOKS = 6
     PROXY = 7
     LOGS = 8
-    ARCHIVE = 9
-    ADVANCED = 10
+    NOTIFICATIONS = 9
+    ARCHIVE = 10
+    ADVANCED = 11

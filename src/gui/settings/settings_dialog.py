@@ -138,6 +138,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.setup_external_apps_tab()
         self.setup_proxy_tab()
         self.setup_logs_tab()
+        self.setup_notifications_tab()
         self.setup_archive_tab()
         self.setup_advanced_tab()
 
@@ -222,6 +223,20 @@ class ComprehensiveSettingsDialog(QDialog):
         self.log_settings_widget.load_settings()  # Load current settings
         self._add_settings_page(self.log_settings_widget, "Logging")
         
+    def setup_notifications_tab(self):
+        """Setup the Notifications settings tab."""
+        from src.gui.settings.notifications_tab import NotificationsTab
+        notification_manager = None
+        if self.parent_window and hasattr(self.parent_window, 'notification_manager'):
+            notification_manager = self.parent_window.notification_manager
+        self.notifications_tab = NotificationsTab(
+            notification_manager=notification_manager
+        )
+        self.notifications_tab.dirty.connect(
+            lambda: self.mark_tab_dirty(TabIndex.NOTIFICATIONS)
+        )
+        self._add_settings_page(self.notifications_tab, "Notifications")
+
     def setup_scanning_tab(self):
         """Setup the Image Scanning tab (delegated to ScanningTab widget)."""
         from src.gui.settings.scanning_tab import ScanningTab
@@ -590,6 +605,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 return self.covers_tab.save_settings()
             elif current_index == TabIndex.HOOKS:
                 return self.hooks_tab.save_settings()
+            elif current_index == TabIndex.NOTIFICATIONS:
+                return self.notifications_tab.save_settings()
             elif current_index == TabIndex.PROXY:
                 # ProxySettingsWidget handles its own persistence via ProxyStorage
                 return True
@@ -765,5 +782,7 @@ class ComprehensiveSettingsDialog(QDialog):
             self.hooks_tab.reload_settings()
         elif current_index == TabIndex.TEMPLATES:
             self.templates_tab.reload_settings()
+        elif current_index == TabIndex.NOTIFICATIONS:
+            self.notifications_tab.reload_settings()
         # Other tabs don't have form controls that need reloading
 
