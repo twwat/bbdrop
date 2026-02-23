@@ -2668,10 +2668,15 @@ class BBDropGUI(QMainWindow):
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray_icon = QSystemTrayIcon(self)
             
-            # Create a simple icon
-            pixmap = QPixmap(16, 16)
-            pixmap.fill(Qt.GlobalColor.blue)
-            self.tray_icon.setIcon(QIcon(pixmap))
+            # Use the app icon from icon manager
+            from src.gui.icon_manager import get_icon
+            app_icon = get_icon('main_window')
+            if app_icon and not app_icon.isNull():
+                self.tray_icon.setIcon(app_icon)
+            else:
+                pixmap = QPixmap(16, 16)
+                pixmap.fill(Qt.GlobalColor.blue)
+                self.tray_icon.setIcon(QIcon(pixmap))
             
             # Tray menu
             if self.splash:
