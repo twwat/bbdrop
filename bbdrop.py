@@ -2485,6 +2485,7 @@ def main():
             # Create QApplication and show splash IMMEDIATELY (before heavy imports)
             debug_print("Creating QApplication...")
             app = QApplication(sys.argv)
+            app.setApplicationName("BBDrop")
             #debug_print("Setting Fusion style...")
             app.setStyle("Fusion")
             #debug_print("Setting setQuitOnLastWindowClosed to True...")
