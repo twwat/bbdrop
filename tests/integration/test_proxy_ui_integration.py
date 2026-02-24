@@ -105,7 +105,7 @@ class TestGlobalDropdownIntegration:
                     break
 
             assert proxy_storage.get_use_os_proxy() is False
-            assert proxy_storage.get_global_default_pool() is None
+            assert proxy_storage.get_global_default_pool() == SimpleProxyDropdown.VALUE_DIRECT
 
     def test_global_dropdown_restores_on_creation(self, qapp, proxy_storage, sample_pools):
         """Test that global dropdown restores correct value from storage."""

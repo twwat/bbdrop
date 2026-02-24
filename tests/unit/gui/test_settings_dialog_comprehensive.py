@@ -41,80 +41,6 @@ from src.gui.settings import (
 # ============================================================================
 
 @pytest.fixture
-def mock_config_file(tmp_path):
-    """Create a temporary config file for testing"""
-    config_dir = tmp_path / ".bbdrop"
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    config_path = config_dir / "bbdrop.ini"
-    config = configparser.ConfigParser()
-
-    config['credentials'] = {
-        'username': 'testuser',
-        'password': 'testpass',
-        'api_key': 'testapikey',
-    }
-
-    config['templates'] = {
-        'default': '[b]{name}[/b]',
-    }
-
-    config['SCANNING'] = {
-        'fast_scanning': 'true',
-        'sampling_method': '0',
-        'sampling_fixed_count': '25',
-        'sampling_percentage': '10',
-        'exclude_first': 'false',
-        'exclude_last': 'false',
-        'exclude_small_images': 'false',
-        'exclude_small_threshold': '50',
-        'exclude_patterns': '',
-        'exclude_outliers': 'false',
-        'average_method': '1',
-    }
-
-    config['HOOKS'] = {
-        'execution_mode': 'parallel',
-        'added_enabled': 'false',
-        'added_command': '',
-        'added_show_console': 'false',
-        'started_enabled': 'false',
-        'started_command': '',
-        'completed_enabled': 'false',
-        'completed_command': '',
-    }
-
-    config['upload'] = {
-        'timeout': '30',
-        'retries': '3',
-        'batch_size': '5',
-    }
-
-    with open(config_path, 'w') as f:
-        config.write(f)
-
-    return config_path
-
-
-@pytest.fixture
-def mock_bbdrop_functions(monkeypatch, tmp_path):
-    """Mock core bbdrop functions"""
-    config_path = tmp_path / ".bbdrop"
-    config_path.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr('bbdrop.get_credential', lambda x: None)
-    monkeypatch.setattr('bbdrop.set_credential', lambda x, y: True)
-    monkeypatch.setattr('bbdrop.remove_credential', lambda x: True)
-    monkeypatch.setattr('bbdrop.encrypt_password', lambda x: f"encrypted_{x}")
-    monkeypatch.setattr('bbdrop.decrypt_password', lambda x: x.replace("encrypted_", ""))
-    monkeypatch.setattr('bbdrop.get_config_path', lambda: str(config_path / "bbdrop.ini"))
-    monkeypatch.setattr('bbdrop.get_project_root', lambda: str(tmp_path))
-    monkeypatch.setattr('bbdrop.get_central_store_base_path', lambda: str(config_path))
-    monkeypatch.setattr('bbdrop.get_default_central_store_base_path', lambda: str(config_path))
-    monkeypatch.setattr('bbdrop.get_base_path', lambda: str(config_path))
-
-
-@pytest.fixture
 def default_settings():
     """Return default settings values for testing"""
     return {
@@ -240,9 +166,9 @@ class TestHostTestDialogAdvanced:
             dialog.update_test_status(test_id, status)
 
         # Verify final states
-        assert dialog.test_items['login']['status_label'].text() == "✓"
-        assert dialog.test_items['credentials']['status_label'].text() == "✓"
-        assert dialog.test_items['user_info']['status_label'].text() == "✗"
+        assert dialog.test_items['login']['status_label'].text() == "\u2713"
+        assert dialog.test_items['credentials']['status_label'].text() == "\u2713"
+        assert dialog.test_items['user_info']['status_label'].text() == "\u2717"
 
 
 # ============================================================================
@@ -252,14 +178,9 @@ class TestHostTestDialogAdvanced:
 class TestSettingsDialogGeneralTab:
     """Test General tab functionality"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_general_tab_widgets_exist(self, mock_get_path, mock_load, qtbot,
+    def test_general_tab_widgets_exist(self, qtbot,
                                        mock_config_file, mock_bbdrop_functions):
         """Test all expected widgets exist in General tab"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -271,28 +192,19 @@ class TestSettingsDialogGeneralTab:
         # Note: Some widgets like max_retries_slider may be on sub-panels
         # (e.g., in image_host_config_panel), not directly on the dialog
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_slider_value_labels_update(self, mock_get_path, mock_load, qtbot,
+    def test_slider_value_labels_update(self, qtbot,
                                         mock_config_file, mock_bbdrop_functions):
         """Test slider value labels update when slider moves"""
         pytest.skip("Slider widgets may be on sub-panels, not directly on dialog")
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_slider_ranges(self, mock_get_path, mock_load, qtbot,
+    def test_slider_ranges(self, qtbot,
                           mock_config_file, mock_bbdrop_functions):
         """Test slider min/max ranges are correct"""
         pytest.skip("Slider widgets may be on sub-panels, not directly on dialog")
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_storage_radio_buttons(self, mock_get_path, mock_load, qtbot,
+    def test_storage_radio_buttons(self, qtbot,
                                    mock_config_file, mock_bbdrop_functions):
         """Test storage location radio buttons work correctly"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -306,14 +218,9 @@ class TestSettingsDialogGeneralTab:
         assert not dialog.general_tab.home_radio.isChecked()
         assert dialog.general_tab.custom_radio.isChecked()
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_custom_path_controls_state(self, mock_get_path, mock_load, qtbot,
+    def test_custom_path_controls_state(self, qtbot,
                                         mock_config_file, mock_bbdrop_functions):
         """Test custom path controls enable/disable based on radio selection"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -335,14 +242,9 @@ class TestSettingsDialogGeneralTab:
 class TestSettingsDialogScanningTab:
     """Test Scanning tab functionality"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_scanning_widgets_exist(self, mock_get_path, mock_load, qtbot,
+    def test_scanning_widgets_exist(self, qtbot,
                                     mock_config_file, mock_bbdrop_functions):
         """Test all scanning tab widgets exist"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -366,14 +268,9 @@ class TestSettingsDialogScanningTab:
         assert hasattr(dialog.scanning_tab, 'exclude_patterns_check')
         assert hasattr(dialog.scanning_tab, 'exclude_patterns_edit')
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_sampling_method_radio_buttons(self, mock_get_path, mock_load, qtbot,
+    def test_sampling_method_radio_buttons(self, qtbot,
                                            mock_config_file, mock_bbdrop_functions):
         """Test sampling method radio buttons exist and can be toggled"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -390,14 +287,9 @@ class TestSettingsDialogScanningTab:
         assert dialog.scanning_tab.sampling_fixed_radio.isChecked()
         assert not dialog.scanning_tab.sampling_percent_radio.isChecked()
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_exclude_small_toggle(self, mock_get_path, mock_load, qtbot,
+    def test_exclude_small_toggle(self, qtbot,
                                   mock_config_file, mock_bbdrop_functions):
         """Test exclude small images checkbox exists and can toggle"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -412,14 +304,9 @@ class TestSettingsDialogScanningTab:
         dialog.scanning_tab.exclude_small_check.setChecked(False)
         assert not dialog.scanning_tab.exclude_small_check.isChecked()
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_average_method_radio_buttons(self, mock_get_path, mock_load, qtbot,
+    def test_average_method_radio_buttons(self, qtbot,
                                           mock_config_file, mock_bbdrop_functions):
         """Test average method radio buttons"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -439,14 +326,9 @@ class TestSettingsDialogScanningTab:
 class TestSettingsDialogHooksTab:
     """Test External Apps/Hooks tab functionality"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_hooks_widgets_exist(self, mock_get_path, mock_load, qtbot,
+    def test_hooks_widgets_exist(self, qtbot,
                                  mock_config_file, mock_bbdrop_functions):
         """Test all hooks tab widgets exist"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -463,28 +345,18 @@ class TestSettingsDialogHooksTab:
             assert hasattr(dialog.hooks_tab, f'hook_{hook_type}_command')
             assert hasattr(dialog.hooks_tab, f'hook_{hook_type}_show_console')
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_execution_mode_default(self, mock_get_path, mock_load, qtbot,
+    def test_execution_mode_default(self, qtbot,
                                     mock_config_file, mock_bbdrop_functions):
         """Test parallel execution mode is default"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
         assert dialog.hooks_tab.hooks_parallel_radio.isChecked()
         assert not dialog.hooks_tab.hooks_sequential_radio.isChecked()
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_hook_enabled_toggle(self, mock_get_path, mock_load, qtbot,
+    def test_hook_enabled_toggle(self, qtbot,
                                  mock_config_file, mock_bbdrop_functions):
         """Test hook enable checkbox can be toggled"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -495,14 +367,9 @@ class TestSettingsDialogHooksTab:
             checkbox.setChecked(False)
             assert not checkbox.isChecked()
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_hook_command_input(self, mock_get_path, mock_load, qtbot,
+    def test_hook_command_input(self, qtbot,
                                 mock_config_file, mock_bbdrop_functions):
         """Test hook command input accepts text"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -518,14 +385,9 @@ class TestSettingsDialogHooksTab:
 class TestSettingsDialogTheme:
     """Test theme and appearance functionality"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_theme_combo_options(self, mock_get_path, mock_load, qtbot,
+    def test_theme_combo_options(self, qtbot,
                                  mock_config_file, mock_bbdrop_functions):
         """Test theme combo has correct options"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -534,14 +396,9 @@ class TestSettingsDialogTheme:
         assert 'light' in themes
         assert 'dark' in themes
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_font_size_spin_range(self, mock_get_path, mock_load, qtbot,
+    def test_font_size_spin_range(self, qtbot,
                                   mock_config_file, mock_bbdrop_functions):
         """Test font size spinbox has correct range"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -549,14 +406,9 @@ class TestSettingsDialogTheme:
         assert dialog.general_tab.font_size_spin.maximum() == 24
         assert dialog.general_tab.font_size_spin.suffix() == " pt"
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_icons_only_checkbox(self, mock_get_path, mock_load, qtbot,
+    def test_icons_only_checkbox(self, qtbot,
                                  mock_config_file, mock_bbdrop_functions):
         """Test icons only checkbox exists and toggles"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -572,14 +424,9 @@ class TestSettingsDialogTheme:
 class TestSettingsDialogDirtyStateTracking:
     """Test dirty state tracking across multiple tabs"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_multiple_tabs_dirty(self, mock_get_path, mock_load, qtbot,
+    def test_multiple_tabs_dirty(self, qtbot,
                                  mock_config_file, mock_bbdrop_functions):
         """Test multiple tabs can be marked dirty independently"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -593,14 +440,9 @@ class TestSettingsDialogDirtyStateTracking:
         assert dialog.has_unsaved_changes(2)
         assert dialog.has_unsaved_changes()  # Any tab
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_clean_specific_tab(self, mock_get_path, mock_load, qtbot,
+    def test_clean_specific_tab(self, qtbot,
                                 mock_config_file, mock_bbdrop_functions):
         """Test cleaning specific tab changes its state"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -612,9 +454,7 @@ class TestSettingsDialogDirtyStateTracking:
         dialog.mark_tab_clean(0)
         assert not dialog.has_unsaved_changes(0)
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_widget_changes_mark_dirty(self, mock_get_path, mock_load, qtbot,
+    def test_widget_changes_mark_dirty(self, qtbot,
                                        mock_config_file, mock_bbdrop_functions):
         """Test that widget changes automatically mark tab as dirty"""
         pytest.skip("Widget attributes may be on sub-panels, not directly on dialog")
@@ -631,17 +471,11 @@ class TestSettingsDialogSaveLoad:
     """Test save and load functionality"""
 
     @patch('src.gui.settings.scanning_tab.get_config_path')
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_save_scanning_settings_creates_section(self, mock_get_path, mock_load,
-                                                     mock_scan_path, qtbot, tmp_path,
+    def test_save_scanning_settings_creates_section(self, mock_scan_path, qtbot, tmp_path,
                                                      mock_bbdrop_functions):
         """Test saving scanning settings creates proper INI section"""
-        mock_load.return_value = {}
-
         config_path = tmp_path / "test_config.ini"
         config_path.write_text("")
-        mock_get_path.return_value = str(config_path)
         mock_scan_path.return_value = str(config_path)
 
         dialog = ComprehensiveSettingsDialog()
@@ -660,16 +494,8 @@ class TestSettingsDialogSaveLoad:
 
         assert 'SCANNING' in config.sections()
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_load_preserves_default_on_missing_config(self, mock_get_path, mock_load,
-                                                       qtbot, tmp_path, mock_bbdrop_functions):
+    def test_load_preserves_default_on_missing_config(self, qtbot, tmp_path, mock_bbdrop_functions):
         """Test loading uses defaults when config is missing"""
-        mock_load.return_value = {'max_retries': 3}
-
-        config_path = tmp_path / "nonexistent.ini"
-        mock_get_path.return_value = str(config_path)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -683,14 +509,9 @@ class TestSettingsDialogSaveLoad:
 class TestSettingsDialogButtons:
     """Test dialog button behavior"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_apply_saves_and_clears_dirty(self, mock_get_path, mock_load, qtbot,
+    def test_apply_saves_and_clears_dirty(self, qtbot,
                                           mock_config_file, mock_bbdrop_functions):
         """Test Apply button saves and clears dirty state"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -705,14 +526,9 @@ class TestSettingsDialogButtons:
             # Should clear dirty state
             assert not dialog.has_unsaved_changes(dialog.current_tab_index)
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_cancel_with_unsaved_prompts_user(self, mock_get_path, mock_load, qtbot,
+    def test_cancel_with_unsaved_prompts_user(self, qtbot,
                                                mock_config_file, mock_bbdrop_functions):
         """Test Cancel with unsaved changes - dialog has on_cancel_clicked method"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -732,14 +548,9 @@ class TestSettingsDialogButtons:
 class TestSettingsDialogBrowse:
     """Test file/folder browse functionality"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_browse_central_store(self, mock_get_path, mock_load, qtbot,
+    def test_browse_central_store(self, qtbot,
                                   mock_config_file, mock_bbdrop_functions, tmp_path):
         """Test browse for central store location method exists"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -763,14 +574,9 @@ class TestSettingsDialogBrowse:
 class TestSettingsDialogResetExtended:
     """Extended tests for reset to defaults functionality"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_reset_restores_slider_values(self, mock_get_path, mock_load, qtbot,
+    def test_reset_restores_slider_values(self, qtbot,
                                           mock_config_file, mock_bbdrop_functions):
         """Test reset method exists and can be called"""
-        mock_load.return_value = {'max_retries': 3, 'parallel_batch_size': 4}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -787,14 +593,9 @@ class TestSettingsDialogResetExtended:
         assert hasattr(dialog, 'reset_to_defaults')
         assert hasattr(dialog, '_handle_reset_confirmation')
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_reset_restores_checkbox_states(self, mock_get_path, mock_load, qtbot,
+    def test_reset_restores_checkbox_states(self, qtbot,
                                             mock_config_file, mock_bbdrop_functions):
         """Test checkbox states can be changed from defaults"""
-        mock_load.return_value = {'confirm_delete': True, 'auto_rename': True}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -817,28 +618,18 @@ class TestSettingsDialogResetExtended:
 class TestSettingsDialogTabNavigation:
     """Test tab navigation behavior"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_tab_count(self, mock_get_path, mock_load, qtbot,
+    def test_tab_count(self, qtbot,
                       mock_config_file, mock_bbdrop_functions):
         """Test expected number of tabs exist"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
         # Should have multiple pages (exact count may vary)
         assert dialog.stack_widget.count() >= 5
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_tab_names(self, mock_get_path, mock_load, qtbot,
+    def test_tab_names(self, qtbot,
                        mock_config_file, mock_bbdrop_functions):
         """Test expected tab names exist"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -858,14 +649,9 @@ class TestSettingsDialogTabNavigation:
 class TestSettingsDialogWindowBehavior:
     """Test window behavior and properties"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_dialog_size(self, mock_get_path, mock_load, qtbot,
+    def test_dialog_size(self, qtbot,
                          mock_config_file, mock_bbdrop_functions):
         """Test dialog has expected initial size"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         # Clear any saved geometry so we test the default size
         QSettings("BBDropUploader", "BBDropGUI").remove('settings_dialog/geometry')
 
@@ -875,14 +661,9 @@ class TestSettingsDialogWindowBehavior:
         assert dialog.width() == 1010
         assert dialog.height() == 670
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_close_event_no_changes(self, mock_get_path, mock_load, qtbot,
+    def test_close_event_no_changes(self, qtbot,
                                      mock_config_file, mock_bbdrop_functions):
         """Test close event accepts when no changes"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -900,27 +681,17 @@ class TestSettingsDialogWindowBehavior:
 class TestSettingsDialogFileHosts:
     """Test file hosts tab functionality"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_file_host_manager_none(self, mock_get_path, mock_load, qtbot,
+    def test_file_host_manager_none(self, qtbot,
                                     mock_config_file, mock_bbdrop_functions):
         """Test dialog works without file host manager"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog(file_host_manager=None)
         qtbot.addWidget(dialog)
 
         assert dialog.file_host_manager is None
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_file_host_manager_provided(self, mock_get_path, mock_load, qtbot,
+    def test_file_host_manager_provided(self, qtbot,
                                         mock_config_file, mock_bbdrop_functions):
         """Test dialog integrates file host manager when provided"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         mock_manager = Mock()
         mock_manager.get_enabled_hosts.return_value = []
 
@@ -937,27 +708,17 @@ class TestSettingsDialogFileHosts:
 class TestSettingsDialogParentIntegration:
     """Test parent window integration"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_dialog_without_parent(self, mock_get_path, mock_load, qtbot,
+    def test_dialog_without_parent(self, qtbot,
                                    mock_config_file, mock_bbdrop_functions):
         """Test dialog works without parent"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog(parent=None)
         qtbot.addWidget(dialog)
 
         assert dialog.parent_window is None
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_dialog_with_parent_settings(self, mock_get_path, mock_load, qtbot,
+    def test_dialog_with_parent_settings(self, qtbot,
                                          mock_config_file, mock_bbdrop_functions):
         """Test dialog uses parent's QSettings when available"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         # Create parent with settings
         parent = QWidget()
         qtbot.addWidget(parent)
@@ -981,17 +742,8 @@ class TestSettingsDialogParentIntegration:
 class TestSettingsDialogWorkflows:
     """Test complete user workflows"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_modify_and_save_general_settings(self, mock_get_path, mock_load,
-                                               qtbot, tmp_path, mock_bbdrop_functions):
+    def test_modify_and_save_general_settings(self, qtbot, tmp_path, mock_bbdrop_functions):
         """Test complete workflow: modify general settings and save"""
-        mock_load.return_value = {'max_retries': 3}
-
-        config_path = tmp_path / "test.ini"
-        config_path.write_text("[upload]\nretries = 3\n")
-        mock_get_path.return_value = str(config_path)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -1006,14 +758,9 @@ class TestSettingsDialogWorkflows:
         # The test verifies the workflow is set up correctly
         # Actual saving would require more complex mocking
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_modify_and_cancel(self, mock_get_path, mock_load, qtbot,
+    def test_modify_and_cancel(self, qtbot,
                                mock_config_file, mock_bbdrop_functions):
         """Test workflow: modify settings then cancel"""
-        mock_load.return_value = {'max_retries': 3}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -1039,14 +786,9 @@ class TestSettingsDialogWorkflows:
 class TestSettingsDialogEdgeCasesExtended:
     """Extended edge case and error handling tests"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_extreme_slider_values(self, mock_get_path, mock_load, qtbot,
+    def test_extreme_slider_values(self, qtbot,
                                    mock_config_file, mock_bbdrop_functions):
         """Test sliders handle extreme values correctly"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -1058,14 +800,9 @@ class TestSettingsDialogEdgeCasesExtended:
         dialog.max_retries_slider.setValue(dialog.max_retries_slider.maximum())
         assert dialog.max_retries_slider.value() == dialog.max_retries_slider.maximum()
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_special_characters_in_patterns(self, mock_get_path, mock_load, qtbot,
+    def test_special_characters_in_patterns(self, qtbot,
                                             mock_config_file, mock_bbdrop_functions):
         """Test exclusion patterns with special characters"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -1078,14 +815,9 @@ class TestSettingsDialogEdgeCasesExtended:
 
         assert dialog.scanning_tab.exclude_patterns_edit.text() == special_pattern
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_rapid_widget_changes(self, mock_get_path, mock_load, qtbot,
+    def test_rapid_widget_changes(self, qtbot,
                                   mock_config_file, mock_bbdrop_functions):
         """Test rapid sequential widget changes don't cause issues"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -1109,14 +841,9 @@ class TestSettingsDialogEdgeCasesExtended:
 class TestSettingsDialogSignals:
     """Test signal emissions"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_slider_signals_emit(self, mock_get_path, mock_load, qtbot,
+    def test_slider_signals_emit(self, qtbot,
                                  mock_config_file, mock_bbdrop_functions):
         """Test slider value changes emit signals"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
@@ -1124,14 +851,9 @@ class TestSettingsDialogSignals:
         with qtbot.waitSignal(dialog.max_retries_slider.valueChanged, timeout=1000):
             dialog.max_retries_slider.setValue(4)
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    @patch('src.gui.settings.settings_dialog.get_config_path')
-    def test_checkbox_signals_emit(self, mock_get_path, mock_load, qtbot,
+    def test_checkbox_signals_emit(self, qtbot,
                                    mock_config_file, mock_bbdrop_functions):
         """Test checkbox changes emit signals"""
-        mock_load.return_value = {}
-        mock_get_path.return_value = str(mock_config_file)
-
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 

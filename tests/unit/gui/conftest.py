@@ -138,6 +138,44 @@ def default_settings():
 
 
 @pytest.fixture(autouse=True)
+def mock_tab_config_paths(monkeypatch, tmp_path):
+    """Patch get_config_path and load_user_defaults at the correct tab module namespaces.
+
+    After the settings dialog refactor, these functions are no longer imported in
+    settings_dialog.py — they're imported at the top level of individual tab modules
+    (general_tab, scanning_tab, hooks_tab). Tests must patch them there.
+    """
+    config_dir = tmp_path / ".bbdrop_settings_test"
+    config_dir.mkdir(exist_ok=True)
+    config_file = config_dir / "bbdrop.ini"
+
+    config = configparser.ConfigParser()
+    config['SCANNING'] = {
+        'fast_scanning': 'true', 'sampling_method': '0',
+        'sampling_fixed_count': '25', 'sampling_percentage': '10',
+        'exclude_first': 'false', 'exclude_last': 'false',
+        'exclude_small_images': 'false', 'exclude_small_threshold': '50',
+        'exclude_patterns': '', 'exclude_outliers': 'false',
+        'average_method': '1',
+    }
+    config['HOOKS'] = {
+        'execution_mode': 'parallel',
+        'added_enabled': 'false', 'added_command': '', 'added_show_console': 'false',
+        'started_enabled': 'false', 'started_command': '',
+        'completed_enabled': 'false', 'completed_command': '',
+    }
+    with open(config_file, 'w') as f:
+        config.write(f)
+
+    config_path = str(config_file)
+
+    monkeypatch.setattr('src.gui.settings.general_tab.get_config_path', lambda: config_path)
+    monkeypatch.setattr('src.gui.settings.general_tab.load_user_defaults', lambda: {})
+    monkeypatch.setattr('src.gui.settings.scanning_tab.get_config_path', lambda: config_path)
+    monkeypatch.setattr('src.gui.settings.hooks_tab.get_config_path', lambda: config_path)
+
+
+@pytest.fixture(autouse=True)
 def mock_qmessagebox_for_unit_tests(monkeypatch):
     """
     CRITICAL: Mock QMessageBox to prevent modal dialogs from blocking test teardown.
