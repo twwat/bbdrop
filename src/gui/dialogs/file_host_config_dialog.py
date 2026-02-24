@@ -1392,7 +1392,7 @@ class FileHostConfigDialog(QDialog):
         # Category overrides global
         if category_pool:
             # Category has explicit setting
-            if category_pool in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY):
+            if category_pool in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, SimpleProxyDropdown.VALUE_TOR):
                 is_locked = True
                 is_direct = category_pool == SimpleProxyDropdown.VALUE_DIRECT
             else:
@@ -1438,7 +1438,7 @@ class FileHostConfigDialog(QDialog):
             return
         value = self.proxy_dropdown.currentData()
         # Disable for Direct Connection or OS System Proxy
-        is_pool = value not in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, None)
+        is_pool = value not in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, SimpleProxyDropdown.VALUE_TOR, SimpleProxyDropdown.VALUE_USE_DEFAULT, None)
         self.proxy_test_btn.setEnabled(is_pool)
         self.proxy_test_btn.setToolTip("Test proxy connection" if is_pool else "Select a proxy pool to test")
 
@@ -1449,7 +1449,7 @@ class FileHostConfigDialog(QDialog):
         from PyQt6.QtWidgets import QMessageBox
 
         value = self.proxy_dropdown.currentData()
-        if value in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, None):
+        if value in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, SimpleProxyDropdown.VALUE_TOR, SimpleProxyDropdown.VALUE_USE_DEFAULT, None):
             QMessageBox.information(self, "No Proxy", "Select a proxy pool to test.")
             return
 
