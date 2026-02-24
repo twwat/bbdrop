@@ -1634,7 +1634,7 @@ class ImxToUploader(ImageHostClient):
         except Exception as e:
             log(f"Failed to refresh session pool: {e}", level="warning", category="network")
 
-    def __init__(self):
+    def __init__(self, proxy=None):
         # Initialize image host config (ABC parent)
         from src.core.image_host_config import get_image_host_config_manager, get_image_host_setting
         _cfg = get_image_host_config_manager().get_host('imx')
@@ -1642,7 +1642,7 @@ class ImxToUploader(ImageHostClient):
             # Fallback: create minimal config if JSON not loaded
             from src.core.image_host_config import ImageHostConfig
             _cfg = ImageHostConfig(name="IMX.to", host_id="imx")
-        super().__init__(_cfg)
+        super().__init__(_cfg, proxy=proxy)
 
         # Get credentials from stored config
         self.username, self.password, self.api_key = self._get_credentials()
@@ -1719,6 +1719,10 @@ class ImxToUploader(ImageHostClient):
             self._curl_local.curl.setopt(pycurl.CAINFO, certifi.where())
             self._curl_local.curl.setopt(pycurl.SSL_VERIFYPEER, 1)
             self._curl_local.curl.setopt(pycurl.SSL_VERIFYHOST, 2)
+
+            if self.proxy:
+                from src.proxy.pycurl_adapter import PyCurlProxyAdapter
+                PyCurlProxyAdapter.configure_proxy(self._curl_local.curl, self.proxy)
 
             log(f"Created new curl handle for thread {threading.current_thread().name}", level="debug", category="network")
         return self._curl_local.curl
@@ -1820,7 +1824,15 @@ class ImxToUploader(ImageHostClient):
             curl = self._get_thread_curl()
 
             # Reset curl handle to clear previous settings (but keep connection alive)
+            import certifi
             curl.reset()
+            curl.setopt(pycurl.NOSIGNAL, 1)
+            curl.setopt(pycurl.CAINFO, certifi.where())
+            curl.setopt(pycurl.SSL_VERIFYPEER, 1)
+            curl.setopt(pycurl.SSL_VERIFYHOST, 2)
+            if self.proxy:
+                from src.proxy.pycurl_adapter import PyCurlProxyAdapter
+                PyCurlProxyAdapter.configure_proxy(curl, self.proxy)
 
             # NOTE: Cookies are cleared per-gallery (via clear_api_cookies()), NOT per-image.
             # This maintains PHP session continuity within a single gallery upload.
