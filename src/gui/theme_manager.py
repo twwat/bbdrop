@@ -426,23 +426,17 @@ class ThemeManager(QObject):
         Args:
             mode: Theme mode to apply ('light' or 'dark')
         """
-        import time as _time
         mw = self._main_window
         try:
-            _t0 = _time.perf_counter()
             mode = mode if mode in ('light', 'dark') else 'dark'
             mw.settings.setValue('ui/theme', mode)
             mw._current_theme_mode = mode  # Update cached theme state
 
             self.apply_theme(mode)
 
-            _t1 = _time.perf_counter()
             # Update tabbed gallery widget theme
             if hasattr(mw, 'gallery_table') and hasattr(mw.gallery_table, 'update_theme'):
                 mw.gallery_table.update_theme()
-            _t2 = _time.perf_counter()
-            log(f"THEME TIMING: gallery_table.update_theme = {_t2 - _t1:.3f}s",
-                level="info", category="ui")
 
             # Note: refresh_all_status_icons() is already called inside apply_theme()
 
@@ -457,9 +451,6 @@ class ThemeManager(QObject):
             elif mode == 'dark' and hasattr(mw, '_theme_action_dark'):
                 mw._theme_action_dark.setChecked(True)
 
-            _t3 = _time.perf_counter()
-            log(f"THEME TIMING: TOTAL set_theme_mode = {_t3 - _t0:.3f}s",
-                level="info", category="ui")
         except Exception as e:
             log(f"Exception in theme_manager set_theme_mode: {e}",
                 level="error", category="ui")
@@ -648,24 +639,17 @@ class ThemeManager(QObject):
         Args:
             mode: Theme mode to apply ('light' or 'dark')
         """
-        import time as _time
         mw = self._main_window
         try:
             qapp = QApplication.instance()
             if qapp is None or not isinstance(qapp, QApplication):
                 return
 
-            _t0 = _time.perf_counter()
-
             # Disable updates during theme switch to prevent intermediate repaints
             mw.setUpdatesEnabled(False)
             try:
                 # Try to load modular QSS first, fallback to legacy
                 stylesheet = self._get_stylesheet_for_theme(mode)
-
-                _t1 = _time.perf_counter()
-                log(f"THEME TIMING: stylesheet load = {_t1 - _t0:.3f}s ({len(stylesheet)} chars)",
-                    level="info", category="ui")
 
                 if mode == 'dark':
                     # Simple dark palette and base stylesheet
@@ -699,16 +683,8 @@ class ThemeManager(QObject):
                             level="error", category="ui")
                         raise
 
-                    _t2 = _time.perf_counter()
                     qapp.setPalette(palette)
-                    _t3 = _time.perf_counter()
-                    log(f"THEME TIMING: setPalette = {_t3 - _t2:.3f}s",
-                        level="info", category="ui")
-
                     qapp.setStyleSheet(stylesheet)
-                    _t4 = _time.perf_counter()
-                    log(f"THEME TIMING: setStyleSheet = {_t4 - _t3:.3f}s",
-                        level="info", category="ui")
 
                 elif mode == 'light':
                     palette = qapp.palette()
@@ -741,16 +717,8 @@ class ThemeManager(QObject):
                             level="error", category="ui")
                         raise
 
-                    _t2 = _time.perf_counter()
                     qapp.setPalette(palette)
-                    _t3 = _time.perf_counter()
-                    log(f"THEME TIMING: setPalette = {_t3 - _t2:.3f}s",
-                        level="info", category="ui")
-
                     qapp.setStyleSheet(stylesheet)
-                    _t4 = _time.perf_counter()
-                    log(f"THEME TIMING: setStyleSheet = {_t4 - _t3:.3f}s",
-                        level="info", category="ui")
 
                 else:
                     # Default to dark if unknown mode
@@ -760,13 +728,9 @@ class ThemeManager(QObject):
                 # Trigger a light refresh on key widgets
                 try:
                     # Just apply font sizes instead of full refresh when changing theme
-                    _t5 = _time.perf_counter()
                     if hasattr(mw, 'gallery_table') and mw.gallery_table:
                         font_size = self._get_current_font_size()
                         self.apply_font_size(font_size)
-                    _t6 = _time.perf_counter()
-                    log(f"THEME TIMING: apply_font_size = {_t6 - _t5:.3f}s",
-                        level="info", category="ui")
 
                     # Defer icon refresh to next event loop iteration
                     # This allows the stylesheet to render first, making UI immediately responsive
@@ -777,13 +741,7 @@ class ThemeManager(QObject):
                         level="error", category="ui")
                     raise
             finally:
-                _t7 = _time.perf_counter()
                 mw.setUpdatesEnabled(True)
-                _t8 = _time.perf_counter()
-                log(f"THEME TIMING: setUpdatesEnabled(True) = {_t8 - _t7:.3f}s",
-                    level="info", category="ui")
-                log(f"THEME TIMING: TOTAL apply_theme = {_t8 - _t0:.3f}s",
-                    level="info", category="ui")
         except Exception as e:
             log(f"Exception in theme_manager apply_theme: {e}",
                 level="error", category="ui")
