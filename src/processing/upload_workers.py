@@ -144,8 +144,27 @@ class UploadWorker(QThread):
                 log(f"Error stopping previous RenameWorker: {e}", level="warning", category="renaming")
             self.rename_worker = None
 
+        # Resolve proxy for this image host (matches FileHostWorker pattern)
+        proxy = None
+        try:
+            from src.proxy.resolver import ProxyResolver
+            from src.proxy.models import ProxyContext
+            resolver = ProxyResolver()
+            context = ProxyContext(
+                category="image_hosts",
+                service_id=host_id,
+                operation="upload",
+            )
+            proxy = resolver.resolve(context)
+            if proxy:
+                log(f"Resolved proxy for {host_id}: {proxy.host}:{proxy.port}",
+                    level="debug", category="network")
+        except Exception as e:
+            log(f"Proxy resolution failed for {host_id}, using direct: {e}",
+                level="warning", category="network")
+
         # Initialize uploader using factory pattern for multi-host support
-        self.uploader = create_image_host_client(host_id)
+        self.uploader = create_image_host_client(host_id, proxy=proxy)
         if hasattr(self.uploader, 'worker_thread'):
             self.uploader.worker_thread = self
         self._current_host_id = host_id
