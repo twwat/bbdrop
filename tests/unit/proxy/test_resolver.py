@@ -713,3 +713,115 @@ class TestProxyResolverGetEffectiveProxyInfo:
         assert info['source'] == 'category'
         assert 'Direct connection' in info['reason']
         assert 'file_hosts' in info['reason']
+
+
+class TestProxyResolverTorSupport:
+    """Tests for __tor__ special value resolution."""
+
+    def test_global_tor_returns_tor_proxy(self):
+        """Test that __tor__ at global level returns Tor SOCKS5 proxy."""
+        from src.proxy.resolver import PROXY_TOR
+
+        storage = MagicMock()
+        rotator = MagicMock()
+
+        storage.get_pool_assignment.return_value = None
+        storage.get_global_default_pool.return_value = PROXY_TOR
+        storage.get_use_os_proxy.return_value = False
+
+        resolver = ProxyResolver(storage=storage, rotator=rotator)
+        context = ProxyContext(category="file_hosts", service_id="rapidgator")
+
+        result = resolver.resolve(context)
+
+        assert result is not None
+        assert result.host == "127.0.0.1"
+        assert result.port == 9050
+        assert result.proxy_type == ProxyType.SOCKS5
+        assert result.resolve_dns_through_proxy is True
+
+    def test_category_tor_override(self):
+        """Test that __tor__ at category level returns Tor proxy."""
+        from src.proxy.resolver import PROXY_TOR
+
+        storage = MagicMock()
+        rotator = MagicMock()
+
+        def get_pool_assignment(category, service_id=None):
+            if service_id:
+                return None
+            return PROXY_TOR
+
+        storage.get_pool_assignment.side_effect = get_pool_assignment
+        storage.get_global_default_pool.return_value = "some-pool"
+        storage.get_use_os_proxy.return_value = False
+
+        resolver = ProxyResolver(storage=storage, rotator=rotator)
+        context = ProxyContext(category="image_hosts", service_id="imx")
+
+        result = resolver.resolve(context)
+
+        assert result is not None
+        assert result.host == "127.0.0.1"
+        assert result.port == 9050
+
+    def test_service_tor_override(self):
+        """Test that __tor__ at service level returns Tor proxy."""
+        from src.proxy.resolver import PROXY_TOR
+
+        storage = MagicMock()
+        rotator = MagicMock()
+
+        def get_pool_assignment(category, service_id=None):
+            if service_id == "imx":
+                return PROXY_TOR
+            return None
+
+        storage.get_pool_assignment.side_effect = get_pool_assignment
+        storage.get_global_default_pool.return_value = "some-pool"
+        storage.get_use_os_proxy.return_value = False
+
+        resolver = ProxyResolver(storage=storage, rotator=rotator)
+        context = ProxyContext(category="image_hosts", service_id="imx")
+
+        result = resolver.resolve(context)
+
+        assert result is not None
+        assert result.host == "127.0.0.1"
+        assert result.port == 9050
+
+    def test_global_tor_with_category_pool_override(self):
+        """Global is Tor, but category overrides with a pool."""
+        from src.proxy.resolver import PROXY_TOR
+        from src.proxy.models import ProxyEntry
+
+        storage = MagicMock()
+        rotator = MagicMock()
+
+        pool = ProxyPool(name="FilePool", id="fp1")
+        pool.enabled = True
+        pool_proxy = ProxyEntry(host="filepool.proxy", port=8080, proxy_type=ProxyType.HTTP)
+        pool.proxies = [pool_proxy]
+
+        def get_pool_assignment(category, service_id=None):
+            if service_id:
+                return None
+            if category == "file_hosts":
+                return "fp1"
+            return None
+
+        storage.get_pool_assignment.side_effect = get_pool_assignment
+        storage.get_global_default_pool.return_value = PROXY_TOR
+        storage.get_use_os_proxy.return_value = False
+        storage.load_pool.return_value = pool
+
+        rotator.get_next_proxy.return_value = pool_proxy
+
+        resolver = ProxyResolver(storage=storage, rotator=rotator)
+        context = ProxyContext(category="file_hosts", service_id="rapidgator")
+
+        result = resolver.resolve(context)
+
+        # Category override should win over global Tor
+        assert result is not None
+        assert result.host == "filepool.proxy"
