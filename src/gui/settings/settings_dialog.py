@@ -297,7 +297,7 @@ class ComprehensiveSettingsDialog(QDialog):
 
         self.proxy_widget = ProxySettingsWidget(self)
         self.proxy_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.PROXY))
-        self._add_settings_page(self.proxy_widget, "Proxy Servers")
+        self._add_settings_page(self.proxy_widget, "Proxies & Tor")
 
     def setup_advanced_tab(self):
         """Setup the Advanced settings tab."""
