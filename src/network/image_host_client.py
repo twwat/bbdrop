@@ -10,13 +10,15 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Callable
 
 from src.core.image_host_config import ImageHostConfig
+from src.proxy.models import ProxyEntry
 
 
 class ImageHostClient(ABC):
     """Abstract base for all image host uploaders."""
 
-    def __init__(self, config: ImageHostConfig):
+    def __init__(self, config: ImageHostConfig, proxy: Optional[ProxyEntry] = None):
         self.config = config
+        self.proxy = proxy
 
     @property
     @abstractmethod

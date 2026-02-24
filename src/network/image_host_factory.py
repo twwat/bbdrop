@@ -7,16 +7,17 @@ client based on the host identifier. Supports:
 - 'turbo' -> TurboImageHostClient (from turbo_image_host_client.py)
 """
 
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from src.core.image_host_config import get_image_host_config_manager
 from src.network.image_host_client import ImageHostClient
+from src.proxy.models import ProxyEntry
 
 if TYPE_CHECKING:
     pass
 
 
-def create_image_host_client(host_id: str) -> ImageHostClient:
+def create_image_host_client(host_id: str, proxy: Optional[ProxyEntry] = None) -> ImageHostClient:
     """
     Create an image host client instance for the specified host.
 
@@ -52,11 +53,11 @@ def create_image_host_client(host_id: str) -> ImageHostClient:
     # Create the appropriate client based on host_id
     if host_id == "imx":
         from bbdrop import ImxToUploader
-        return ImxToUploader()
+        return ImxToUploader(proxy=proxy)
 
     elif host_id == "turbo":
         from src.network.turbo_image_host_client import TurboImageHostClient
-        return TurboImageHostClient()
+        return TurboImageHostClient(proxy=proxy)
 
     else:
         # Host exists in config but no client implementation available
