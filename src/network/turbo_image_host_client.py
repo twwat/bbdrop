@@ -37,6 +37,7 @@ from src.core.image_host_config import (
     get_image_host_setting,
 )
 from src.network.image_host_client import ImageHostClient
+from src.proxy.models import ProxyEntry
 from src.utils.logger import log
 
 
@@ -46,12 +47,12 @@ class TurboImageHostClient(ImageHostClient):
     # Type hints for attributes
     worker_thread: Optional[Any] = None
 
-    def __init__(self):
+    def __init__(self, proxy: Optional[ProxyEntry] = None):
         # Initialize image host config (ABC parent)
         _cfg = get_image_host_config_manager().get_host('turbo')
         if _cfg is None:
             _cfg = ImageHostConfig(name="TurboImageHost", host_id="turbo")
-        super().__init__(_cfg)
+        super().__init__(_cfg, proxy=proxy)
 
         # TurboImageHost endpoints
         self.base_url = "https://www.turboimagehost.com"
@@ -101,10 +102,13 @@ class TurboImageHostClient(ImageHostClient):
                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0')
         if self.upload_connect_timeout:
             curl.setopt(pycurl.CONNECTTIMEOUT, self.upload_connect_timeout)
+        if self.proxy:
+            from src.proxy.pycurl_adapter import PyCurlProxyAdapter
+            PyCurlProxyAdapter.configure_proxy(curl, self.proxy)
         return curl
 
     def _configure_curl(self, curl: pycurl.Curl) -> None:
-        """Apply common SSL/UA/timeout settings to a fresh curl handle."""
+        """Apply common SSL/UA/timeout/proxy settings to a fresh curl handle."""
         curl.setopt(pycurl.CAINFO, certifi.where())
         curl.setopt(pycurl.SSL_VERIFYPEER, 1)
         curl.setopt(pycurl.SSL_VERIFYHOST, 2)
@@ -113,6 +117,9 @@ class TurboImageHostClient(ImageHostClient):
                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0')
         if self.upload_connect_timeout:
             curl.setopt(pycurl.CONNECTTIMEOUT, self.upload_connect_timeout)
+        if self.proxy:
+            from src.proxy.pycurl_adapter import PyCurlProxyAdapter
+            PyCurlProxyAdapter.configure_proxy(curl, self.proxy)
 
     def _set_cookies(self, curl: pycurl.Curl) -> None:
         """Apply cookie jar to a curl handle."""
