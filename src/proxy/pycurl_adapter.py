@@ -54,6 +54,11 @@ class PyCurlProxyAdapter:
 
             # Set proxy type
             pycurl_type = PROXY_TYPE_MAP.get(proxy.proxy_type, pycurl.PROXYTYPE_HTTP)
+            # For SOCKS5 with DNS-through-proxy (Tor), use SOCKS5_HOSTNAME
+            # to prevent DNS leaks — hostname resolved by the proxy, not locally
+            if (proxy.proxy_type == ProxyType.SOCKS5
+                    and getattr(proxy, 'resolve_dns_through_proxy', False)):
+                pycurl_type = pycurl.PROXYTYPE_SOCKS5_HOSTNAME
             curl.setopt(pycurl.PROXYTYPE, pycurl_type)
 
             # Set authentication
