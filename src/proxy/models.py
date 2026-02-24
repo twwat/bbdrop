@@ -99,10 +99,11 @@ class ProxyEntry:
     password: str = ""  # Stored directly for pool entries
     weight: int = 1
     enabled: bool = True
+    resolve_dns_through_proxy: bool = False  # SOCKS5: resolve DNS via proxy (Tor needs this)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
-        return {
+        d = {
             'host': self.host,
             'port': self.port,
             'proxy_type': self.proxy_type.value,
@@ -111,6 +112,9 @@ class ProxyEntry:
             'weight': self.weight,
             'enabled': self.enabled,
         }
+        if self.resolve_dns_through_proxy:
+            d['resolve_dns_through_proxy'] = True
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ProxyEntry':
@@ -123,6 +127,7 @@ class ProxyEntry:
             password=data.get('password', ''),
             weight=data.get('weight', 1),
             enabled=data.get('enabled', True),
+            resolve_dns_through_proxy=data.get('resolve_dns_through_proxy', False),
         )
 
     def get_display_url(self) -> str:
