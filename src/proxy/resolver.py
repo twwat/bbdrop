@@ -11,6 +11,9 @@ from src.proxy.pool import PoolRotator
 # Special values for proxy assignments
 PROXY_DIRECT = "__direct__"
 PROXY_OS_PROXY = "__os_proxy__"
+PROXY_TOR = "__tor__"
+
+_SPECIAL_VALUES = (PROXY_DIRECT, PROXY_OS_PROXY, PROXY_TOR)
 
 
 class ProxyResolver:
@@ -18,7 +21,7 @@ class ProxyResolver:
 
     Now pool-centric: pools contain proxies directly, no separate profiles needed.
 
-    Resolution hierarchy (3 levels):
+    Resolution hierarchy (3 levels, most specific wins):
     1. Service-level (e.g., file_hosts/rapidgator)
     2. Category-level (e.g., file_hosts)
     3. Global-level
@@ -26,6 +29,7 @@ class ProxyResolver:
     Special values:
     - "__direct__" - Direct connection (no proxy)
     - "__os_proxy__" - Use OS system proxy
+    - "__tor__" - Use Tor SOCKS5 proxy (127.0.0.1:9050)
     """
 
     def __init__(
@@ -36,18 +40,37 @@ class ProxyResolver:
         self._storage = storage or ProxyStorage()
         self._rotator = rotator or PoolRotator()
 
+    def _resolve_special_value(self, value: str) -> Optional[ProxyEntry]:
+        """Resolve a special value to a ProxyEntry or None."""
+        if value == PROXY_DIRECT:
+            return None
+        if value == PROXY_OS_PROXY:
+            return self._get_os_proxy()
+        if value == PROXY_TOR:
+            return self._get_tor_proxy()
+        return None
+
+    def _get_tor_proxy(self) -> Optional[ProxyEntry]:
+        """Create ephemeral Tor proxy entry."""
+        from src.proxy.tor import TOR_HOST, TOR_SOCKS_PORT
+        return ProxyEntry(
+            host=TOR_HOST,
+            port=TOR_SOCKS_PORT,
+            proxy_type=ProxyType.SOCKS5,
+            resolve_dns_through_proxy=True,
+        )
+
     def resolve(self, context: ProxyContext) -> Optional[ProxyEntry]:
         """
         Resolve proxy for a given context.
 
-        Resolution hierarchy:
-        1. Global "No Proxy" or "OS Proxy" - takes absolute precedence
-        2. Category "No Proxy" or "OS Proxy" - takes precedence over per-service
-        3. Service pool assignment (e.g., file_hosts/rapidgator -> "Fast Pool")
-        4. Category pool assignment (e.g., file_hosts -> "Main Pool")
-        5. Global default pool
-        6. OS proxy (if enabled as fallback)
-        7. None (direct connection)
+        Resolution hierarchy (most specific wins):
+        1. Category special values (__direct__, __os_proxy__, __tor__)
+        2. Service pool assignment (e.g., file_hosts/rapidgator -> pool or special)
+        3. Category pool assignment (e.g., file_hosts -> "Main Pool")
+        4. Global default (pool or special value)
+        5. Legacy fallback: use_os_proxy boolean
+        6. None (direct connection)
 
         Args:
             context: ProxyContext with category and service_id
@@ -57,56 +80,45 @@ class ProxyResolver:
         """
         service_key = f"{context.category}/{context.service_id}" if context.service_id else context.category
 
-        # 1. Check global setting FIRST - "No Proxy" or "OS Proxy" takes absolute precedence
-        global_pool = self._storage.get_global_default_pool()
-        use_os = self._storage.get_use_os_proxy()
-
-        if not global_pool:
-            # Global is either Direct (no pool, use_os=False) or OS Proxy (no pool, use_os=True)
-            if use_os:
-                return self._get_os_proxy()
-            else:
-                return None  # Direct connection - no proxy
-
-        # 2. Check category pool assignment - special values take precedence
+        # 1. Check category-level assignment (special values short-circuit)
         cat_pool_id = self._storage.get_pool_assignment(context.category)
-        if cat_pool_id:
-            if cat_pool_id == PROXY_DIRECT:
-                return None
-            if cat_pool_id == PROXY_OS_PROXY:
-                return self._get_os_proxy()
+        if cat_pool_id and cat_pool_id in _SPECIAL_VALUES:
+            return self._resolve_special_value(cat_pool_id)
 
-        # 3. Check service-level pool assignment (if service_id provided)
+        # 2. Check service-level pool assignment
         if context.service_id:
             pool_id = self._storage.get_pool_assignment(context.category, context.service_id)
             if pool_id:
-                # Handle special values
-                if pool_id == PROXY_DIRECT:
-                    return None
-                if pool_id == PROXY_OS_PROXY:
-                    return self._get_os_proxy()
-
+                if pool_id in _SPECIAL_VALUES:
+                    return self._resolve_special_value(pool_id)
                 pool = self._storage.load_pool(pool_id)
                 if pool and pool.enabled and pool.proxies:
                     proxy = self._rotator.get_next_proxy(pool, service_key)
                     if proxy:
                         return proxy
 
-        # 4. Check category pool (if it's an actual pool, not special value)
-        if cat_pool_id and cat_pool_id not in (PROXY_DIRECT, PROXY_OS_PROXY):
+        # 3. Check category pool (if it's an actual pool ID, not special value)
+        if cat_pool_id and cat_pool_id not in _SPECIAL_VALUES:
             pool = self._storage.load_pool(cat_pool_id)
             if pool and pool.enabled and pool.proxies:
                 proxy = self._rotator.get_next_proxy(pool, service_key)
                 if proxy:
                     return proxy
 
-        # 5. Check global default pool
+        # 4. Check global default
+        global_pool = self._storage.get_global_default_pool()
         if global_pool:
+            if global_pool in _SPECIAL_VALUES:
+                return self._resolve_special_value(global_pool)
             pool = self._storage.load_pool(global_pool)
             if pool and pool.enabled and pool.proxies:
                 proxy = self._rotator.get_next_proxy(pool, service_key)
                 if proxy:
                     return proxy
+
+        # 5. Legacy fallback: check use_os_proxy boolean
+        if self._storage.get_use_os_proxy():
+            return self._get_os_proxy()
 
         # 6. Direct connection
         return None
@@ -172,7 +184,6 @@ class ProxyResolver:
         if context.service_id:
             pool_id = self._storage.get_pool_assignment(context.category, context.service_id)
             if pool_id:
-                # Handle special values
                 if pool_id == PROXY_DIRECT:
                     info['source'] = 'service'
                     info['reason'] = f"Service override: Direct connection ({context.service_id})"
@@ -184,6 +195,11 @@ class ProxyResolver:
                         info['source'] = 'service'
                         info['reason'] = f"Service override: OS proxy ({context.service_id})"
                         return info
+                if pool_id == PROXY_TOR:
+                    info['proxy'] = self._get_tor_proxy()
+                    info['source'] = 'service'
+                    info['reason'] = f"Service override: Tor ({context.service_id})"
+                    return info
 
                 pool = self._storage.load_pool(pool_id)
                 if pool and pool.enabled and pool.proxies:
@@ -196,7 +212,6 @@ class ProxyResolver:
         # Check category pool
         pool_id = self._storage.get_pool_assignment(context.category)
         if pool_id:
-            # Handle special values
             if pool_id == PROXY_DIRECT:
                 info['source'] = 'category'
                 info['reason'] = f"Category override: Direct connection ({context.category})"
@@ -208,6 +223,11 @@ class ProxyResolver:
                     info['source'] = 'category'
                     info['reason'] = f"Category override: OS proxy ({context.category})"
                     return info
+            if pool_id == PROXY_TOR:
+                info['proxy'] = self._get_tor_proxy()
+                info['source'] = 'category'
+                info['reason'] = f"Category override: Tor ({context.category})"
+                return info
 
             pool = self._storage.load_pool(pool_id)
             if pool and pool.enabled and pool.proxies:
@@ -220,6 +240,11 @@ class ProxyResolver:
         # Check global pool
         pool_id = self._storage.get_global_default_pool()
         if pool_id:
+            if pool_id == PROXY_TOR:
+                info['proxy'] = self._get_tor_proxy()
+                info['source'] = 'global'
+                info['reason'] = 'Global: Tor'
+                return info
             pool = self._storage.load_pool(pool_id)
             if pool and pool.enabled and pool.proxies:
                 info['pool'] = pool
