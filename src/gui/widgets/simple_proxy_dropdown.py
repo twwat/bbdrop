@@ -59,14 +59,15 @@ class SimpleProxyDropdown(QComboBox):
         try:
             self.clear()
 
-            # "Use default" for non-global dropdowns
+            # "Use global default: <effective>" for non-global dropdowns
             if not self.is_global:
-                self.addItem("Use default", self.VALUE_USE_DEFAULT)
+                effective = self._get_global_effective_label()
+                self.addItem(f"Use global default: {effective}", self.VALUE_USE_DEFAULT)
                 self.insertSeparator(self.count())
 
-            self.addItem("No proxy (direct)", self.VALUE_DIRECT)
-            self.addItem("System proxy", self.VALUE_OS_PROXY)
-            self.addItem("Tor", self.VALUE_TOR)
+            self.addItem("No proxy (direct connection)", self.VALUE_DIRECT)
+            self.addItem("Use system proxy settings", self.VALUE_OS_PROXY)
+            self.addItem("Use Tor network", self.VALUE_TOR)
 
             self.insertSeparator(self.count())
 
@@ -85,6 +86,19 @@ class SimpleProxyDropdown(QComboBox):
             self.addItem(f"Error loading pools: {e}", None)
         finally:
             self.blockSignals(False)
+
+    def _get_global_effective_label(self) -> str:
+        """Get human-readable label for the current global default."""
+        global_val = self.storage.get_global_default_pool()
+        if not global_val or global_val == self.VALUE_DIRECT:
+            return "No proxy (direct connection)"
+        elif global_val == self.VALUE_OS_PROXY:
+            return "Use system proxy settings"
+        elif global_val == self.VALUE_TOR:
+            return "Use Tor network"
+        else:
+            pool = self.storage.load_pool(global_val)
+            return pool.name if pool else "Unknown pool"
 
     def _load_value(self):
         """Load current assignment from storage."""
@@ -138,7 +152,7 @@ class SimpleProxyDropdown(QComboBox):
 
             if self.is_global:
                 if value == self.VALUE_DIRECT:
-                    self.storage.set_global_default_pool(None)
+                    self.storage.set_global_default_pool(self.VALUE_DIRECT)
                     self.storage.set_use_os_proxy(False)
                 elif value == self.VALUE_OS_PROXY:
                     self.storage.set_global_default_pool(self.VALUE_OS_PROXY)
