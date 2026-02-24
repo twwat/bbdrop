@@ -1384,6 +1384,11 @@ class FileHostConfigDialog(QDialog):
     def _update_proxy_section_state(self):
         """Disable proxy dropdown when global/category is No Proxy or OS Proxy."""
         from src.proxy.storage import ProxyStorage
+        _SPECIAL_VALUES = (
+            SimpleProxyDropdown.VALUE_DIRECT,
+            SimpleProxyDropdown.VALUE_OS_PROXY,
+            SimpleProxyDropdown.VALUE_TOR,
+        )
         storage = ProxyStorage()
 
         # Check category-level first
@@ -1392,34 +1397,57 @@ class FileHostConfigDialog(QDialog):
         # Category overrides global
         if category_pool:
             # Category has explicit setting
-            if category_pool in (SimpleProxyDropdown.VALUE_DIRECT, SimpleProxyDropdown.VALUE_OS_PROXY, SimpleProxyDropdown.VALUE_TOR):
+            if category_pool in _SPECIAL_VALUES:
                 is_locked = True
                 is_direct = category_pool == SimpleProxyDropdown.VALUE_DIRECT
+                is_tor = category_pool == SimpleProxyDropdown.VALUE_TOR
             else:
                 # Category has a pool - allow per-host override
                 is_locked = False
                 is_direct = False
+                is_tor = False
         else:
             # No category override - check global
             global_pool = storage.get_global_default_pool()
             use_os = storage.get_use_os_proxy()
 
-            if global_pool:
+            if global_pool and global_pool in _SPECIAL_VALUES:
+                # Global is a special value - lock per-host dropdown
+                is_locked = True
+                is_direct = global_pool == SimpleProxyDropdown.VALUE_DIRECT
+                is_tor = global_pool == SimpleProxyDropdown.VALUE_TOR
+            elif global_pool:
                 # Global has a pool - allow per-host override
                 is_locked = False
                 is_direct = False
-            else:
-                # Global is either Direct (use_os=False) or OS Proxy (use_os=True)
+                is_tor = False
+            elif use_os:
+                # Legacy OS proxy fallback
                 is_locked = True
-                is_direct = not use_os
+                is_direct = False
+                is_tor = False
+            else:
+                # Nothing set - direct by default
+                is_locked = True
+                is_direct = True
+                is_tor = False
 
         self.proxy_dropdown.setEnabled(not is_locked)
         self.proxy_test_btn.setEnabled(not is_locked)
 
         if is_locked:
+            # Clear any stale service-level pool assignment so the resolver
+            # doesn't pick up an old pool when global/category says direct.
+            storage.clear_pool_assignment("file_hosts", self.host_id)
+
             # Set dropdown to show the effective value
             self.proxy_dropdown.blockSignals(True)
-            target_value = SimpleProxyDropdown.VALUE_DIRECT if is_direct else SimpleProxyDropdown.VALUE_OS_PROXY
+            if is_tor:
+                target_value = SimpleProxyDropdown.VALUE_TOR
+            elif is_direct:
+                target_value = SimpleProxyDropdown.VALUE_DIRECT
+            else:
+                target_value = SimpleProxyDropdown.VALUE_OS_PROXY
             for i in range(self.proxy_dropdown.count()):
                 if self.proxy_dropdown.itemData(i) == target_value:
                     self.proxy_dropdown.setCurrentIndex(i)
@@ -1428,6 +1456,8 @@ class FileHostConfigDialog(QDialog):
 
             if is_direct:
                 self.proxy_dropdown.setToolTip("Proxy disabled globally (Direct Connection)")
+            elif is_tor:
+                self.proxy_dropdown.setToolTip("Using Tor (set at category or global level)")
             else:
                 self.proxy_dropdown.setToolTip("Using OS system proxy (set globally)")
 
