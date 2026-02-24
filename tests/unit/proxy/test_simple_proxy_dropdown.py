@@ -1,6 +1,6 @@
 """Unit tests for simplified proxy UI dropdown functionality.
 
-Tests cover the refactored proxy settings widget with radio button modes
+Tests cover proxy pool dropdowns, category assignment persistence,
 and hierarchical proxy assignment using InheritableProxyControl.
 """
 
@@ -65,140 +65,6 @@ def mock_pools():
     )
 
     return [pool1, pool2, pool3]
-
-
-class TestProxyModeRadioButtons:
-    """Tests for proxy mode radio button selection."""
-
-    def test_initial_mode_no_proxy(self, qapp, mock_storage):
-        """Test that 'No proxy' is selected when no configuration exists."""
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            assert widget.no_proxy_radio.isChecked()
-            assert not widget.system_proxy_radio.isChecked()
-            assert not widget.custom_proxy_radio.isChecked()
-
-    def test_initial_mode_system_proxy(self, qapp, mock_storage):
-        """Test that 'System proxy' is selected when OS proxy is enabled."""
-        mock_storage.get_use_os_proxy.return_value = True
-
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            assert not widget.no_proxy_radio.isChecked()
-            assert widget.system_proxy_radio.isChecked()
-            assert not widget.custom_proxy_radio.isChecked()
-
-    def test_initial_mode_custom_proxy(self, qapp, mock_storage, mock_pools):
-        """Test that 'Custom proxy' is selected when pools exist."""
-        mock_storage.list_pools.return_value = mock_pools[:2]  # Only enabled pools
-        mock_storage.get_global_default_pool.return_value = "pool-uuid-1"
-
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            assert not widget.no_proxy_radio.isChecked()
-            assert not widget.system_proxy_radio.isChecked()
-            assert widget.custom_proxy_radio.isChecked()
-
-    def test_switching_to_no_proxy_saves_settings(self, qapp, mock_storage):
-        """Test that switching to 'No proxy' clears proxy settings."""
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            # Switch to no proxy mode
-            widget.no_proxy_radio.setChecked(True)
-            widget._on_proxy_mode_changed()
-
-            # Should clear global default and OS proxy
-            mock_storage.set_global_default_pool.assert_called_with(None)
-            mock_storage.set_use_os_proxy.assert_called_with(False)
-
-    def test_switching_to_system_proxy_saves_settings(self, qapp, mock_storage):
-        """Test that switching to 'System proxy' enables OS proxy."""
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            # Switch to system proxy mode
-            widget.system_proxy_radio.setChecked(True)
-            widget._on_proxy_mode_changed()
-
-            # Should enable OS proxy and clear pool
-            mock_storage.set_global_default_pool.assert_called_with(None)
-            mock_storage.set_use_os_proxy.assert_called_with(True)
-
-    def test_mode_change_emits_signal(self, qapp, mock_storage):
-        """Test that changing proxy mode emits settings_changed signal."""
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            signal_spy = MagicMock()
-            widget.settings_changed.connect(signal_spy)
-
-            # Change mode
-            widget.system_proxy_radio.setChecked(True)
-            widget._on_proxy_mode_changed()
-
-            signal_spy.assert_called_once()
-
-
-class TestProxyUIStateManagement:
-    """Tests for UI state enable/disable based on proxy mode."""
-
-    def test_custom_mode_enables_configuration_sections(self, qapp, mock_storage):
-        """Test that custom mode enables all proxy configuration sections."""
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            # Switch to custom mode
-            widget.custom_proxy_radio.setChecked(True)
-            widget._update_ui_state()
-
-            assert widget.pools_group.isEnabled()
-            assert widget.category_group.isEnabled()
-
-    def test_no_proxy_mode_disables_configuration_sections(self, qapp, mock_storage):
-        """Test that no proxy mode disables all configuration sections."""
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            # Switch to no proxy mode
-            widget.no_proxy_radio.setChecked(True)
-            widget._update_ui_state()
-
-            assert not widget.pools_group.isEnabled()
-            assert not widget.category_group.isEnabled()
-
-    def test_system_proxy_mode_disables_configuration_sections(self, qapp, mock_storage):
-        """Test that system proxy mode disables all configuration sections."""
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
-            widget = ProxySettingsWidget()
-
-            # Switch to system proxy mode
-            widget.system_proxy_radio.setChecked(True)
-            widget._update_ui_state()
-
-            assert not widget.pools_group.isEnabled()
-            assert not widget.category_group.isEnabled()
 
 
 class TestProxyPoolDropdownPopulation:
@@ -420,7 +286,7 @@ class TestSignalEmissions:
             assert signal_spy.call_count >= 1
 
     def test_settings_changed_signal_propagates(self, qapp, mock_storage):
-        """Test that settings_changed signal propagates from mode changes."""
+        """Test that settings_changed signal propagates from dropdown changes."""
         from src.gui.settings.proxy_tab import ProxySettingsWidget
 
         with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=mock_storage):
@@ -429,11 +295,9 @@ class TestSignalEmissions:
             signal_spy = MagicMock()
             widget.settings_changed.connect(signal_spy)
 
-            # Trigger mode change via the handler directly
-            widget.system_proxy_radio.setChecked(True)
-            widget._on_proxy_mode_changed()
+            # Trigger settings change via _on_settings_changed
+            widget._on_settings_changed()
 
-            # Should emit settings_changed from mode change
             assert signal_spy.call_count >= 1
 
 
@@ -602,15 +466,10 @@ class TestPoolButtonStates:
             widget = ProxySettingsWidget()
             widget.load_pools()
 
-            # Switch to custom mode to enable pool controls
-            widget.custom_proxy_radio.setChecked(True)
-            widget._update_ui_state()
-
             # Select first pool
             if widget.pools_list.count() > 0:
                 item = widget.pools_list.item(0)
                 widget.pools_list.setCurrentItem(item)
-                # Manually call the handler to update button state
                 widget._on_pool_selected()
 
                 assert widget.edit_pool_btn.isEnabled()

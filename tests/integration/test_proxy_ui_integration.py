@@ -66,61 +66,60 @@ def sample_pools():
     return pools
 
 
-class TestProxyModeIntegration:
-    """Integration tests for proxy mode switching."""
+class TestGlobalDropdownIntegration:
+    """Integration tests for global dropdown proxy selection."""
 
-    def test_mode_switch_persists_to_storage(self, qapp, proxy_storage):
-        """Test that mode switches are persisted to storage."""
+    def test_global_dropdown_persists_system_proxy(self, qapp, proxy_storage):
+        """Test that selecting system proxy in global dropdown persists to storage."""
         from src.gui.settings.proxy_tab import ProxySettingsWidget
+        from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
 
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage), \
+             patch('src.gui.widgets.simple_proxy_dropdown.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
-            # Switch to system proxy
-            widget.system_proxy_radio.setChecked(True)
-            widget._on_proxy_mode_changed()
+            # Find and select system proxy in global dropdown
+            for i in range(widget.global_dropdown.count()):
+                if widget.global_dropdown.itemData(i) == SimpleProxyDropdown.VALUE_OS_PROXY:
+                    widget.global_dropdown.setCurrentIndex(i)
+                    break
 
-            # Verify storage
             assert proxy_storage.get_use_os_proxy() is True
-            assert proxy_storage.get_global_default_pool() is None
 
-            # Switch to no proxy
-            widget.no_proxy_radio.setChecked(True)
-            widget._on_proxy_mode_changed()
+    def test_global_dropdown_persists_direct(self, qapp, proxy_storage):
+        """Test that selecting direct in global dropdown persists to storage."""
+        from src.gui.settings.proxy_tab import ProxySettingsWidget
+        from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
 
-            # Verify storage
+        # Start with OS proxy enabled
+        proxy_storage.set_use_os_proxy(True)
+
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage), \
+             patch('src.gui.widgets.simple_proxy_dropdown.ProxyStorage', return_value=proxy_storage):
+            widget = ProxySettingsWidget()
+
+            # Select direct connection
+            for i in range(widget.global_dropdown.count()):
+                if widget.global_dropdown.itemData(i) == SimpleProxyDropdown.VALUE_DIRECT:
+                    widget.global_dropdown.setCurrentIndex(i)
+                    break
+
             assert proxy_storage.get_use_os_proxy() is False
             assert proxy_storage.get_global_default_pool() is None
 
-    def test_mode_restores_on_widget_creation(self, qapp, proxy_storage, sample_pools):
-        """Test that proxy mode is correctly restored from storage."""
-        # Set up storage state
-        proxy_storage.set_use_os_proxy(True)
-
-        from src.gui.settings.proxy_tab import ProxySettingsWidget
-
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
-            widget = ProxySettingsWidget()
-
-            # Should load system proxy mode
-            assert widget.system_proxy_radio.isChecked()
-            assert not widget.custom_proxy_radio.isChecked()
-
-    def test_custom_mode_with_pools(self, qapp, proxy_storage, sample_pools):
-        """Test that custom mode is selected when pools exist."""
-        # Save pools to storage
+    def test_global_dropdown_restores_on_creation(self, qapp, proxy_storage, sample_pools):
+        """Test that global dropdown restores correct value from storage."""
+        proxy_storage.set_global_default_pool("pool-1")
         for pool in sample_pools:
             proxy_storage.save_pool(pool)
-        proxy_storage.set_global_default_pool("pool-1")
 
         from src.gui.settings.proxy_tab import ProxySettingsWidget
 
-        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
+        with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage), \
+             patch('src.gui.widgets.simple_proxy_dropdown.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
 
-            # Should load custom mode
-            assert widget.custom_proxy_radio.isChecked()
-            assert widget.pools_group.isEnabled()
+            assert widget.global_dropdown.currentData() == "pool-1"
 
 
 class TestCategoryInheritanceIntegration:
@@ -286,8 +285,6 @@ class TestPoolManagementIntegration:
 
         with patch('src.gui.settings.proxy_tab.ProxyStorage', return_value=proxy_storage):
             widget = ProxySettingsWidget()
-            widget.custom_proxy_radio.setChecked(True)
-            widget._update_ui_state()
 
             initial_count = widget.pools_list.count()
 
