@@ -1,4 +1,4 @@
-"""Proxy Settings Widget - Manage proxy pools and assignments."""
+"""Proxies & Tor Settings Widget - Manage proxy pools, assignments, and Tor."""
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -19,10 +19,19 @@ from src.gui.widgets.info_button import InfoButton
 logger = logging.getLogger(__name__)
 
 
+def _group_desc(text: str) -> QLabel:
+    """Create a styled description label for use inside QGroupBox sections."""
+    label = QLabel(text)
+    label.setWordWrap(True)
+    label.setProperty("class", "group-description")
+    return label
+
+
 class ProxySettingsWidget(QWidget):
-    """Widget for configuring proxy settings - pools and assignments."""
+    """Widget for configuring proxy settings - pools, assignments, and Tor."""
 
     settings_changed = pyqtSignal()
+    _tor_status_ready = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,51 +42,82 @@ class ProxySettingsWidget(QWidget):
 
     def setup_ui(self):
         """Setup the proxy settings UI."""
+        from PyQt6.QtWidgets import QGridLayout, QFormLayout
+
         layout = QVBoxLayout(self)
 
-        desc = QLabel("Configure proxy pools and per-category overrides for network requests.")
+        desc = QLabel(
+            "Route traffic through proxy servers or Tor. Set a global default, "
+            "then optionally override it per-category."
+        )
         desc.setWordWrap(True)
         desc.setProperty("class", "tab-description")
         layout.addWidget(desc)
 
-        # Default Connection Group
+        # ── 2-column grid ─────────────────────────────────────────────
+        grid = QGridLayout()
+        grid.setVerticalSpacing(12)
+        grid.setColumnStretch(0, 50)
+        grid.setColumnStretch(1, 50)
+
+        # ── Top-left: Default Connection ──────────────────────────────
         default_group = QGroupBox("Default Connection")
         default_layout = QVBoxLayout(default_group)
 
-        default_info = QLabel(
-            "Choose the default proxy for all network traffic. "
-            "Category overrides below can use a different proxy for specific traffic types."
-        )
-        default_info.setWordWrap(True)
-        default_layout.addWidget(default_info)
+        default_desc_row = QHBoxLayout()
+        default_desc_row.addWidget(_group_desc(
+            "All traffic uses this unless a category override says otherwise."
+        ))
+        default_desc_row.addWidget(InfoButton(
+            "<b>No proxy (direct connection)</b> &mdash; connect straight to the "
+            "internet, no proxy.<br><br>"
+            "<b>Use system proxy settings</b> &mdash; use whatever proxy your "
+            "operating system is configured with.<br><br>"
+            "<b>Use Tor network</b> &mdash; route traffic through the Tor "
+            "anonymity network (see Tor section).<br><br>"
+            "<b>Pool name</b> &mdash; use a custom proxy pool you have created."
+        ))
+        default_layout.addLayout(default_desc_row)
 
         global_row = QHBoxLayout()
-        global_row.addWidget(QLabel("Default:"))
+        global_row.addWidget(QLabel("Global Default:"))
         self.global_dropdown = SimpleProxyDropdown(category="__global__", is_global=True)
+        self.global_dropdown.setToolTip("Default proxy for all network traffic")
         self.global_dropdown.value_changed.connect(self._on_settings_changed)
+        self.global_dropdown.value_changed.connect(self._refresh_category_dropdowns)
         global_row.addWidget(self.global_dropdown, 1)
         default_layout.addLayout(global_row)
 
-        layout.addWidget(default_group)
+        grid.addWidget(default_group, 0, 0)
 
-        # Proxy Pools Group
+        # ── Top-right: Proxy Pools ────────────────────────────────────
         self.pools_group = QGroupBox("Proxy Pools")
         pools_layout = QVBoxLayout(self.pools_group)
 
-        pools_info = QLabel(
-            "Each pool contains your proxy servers. Create a pool, paste your proxies, done."
-        )
-        pools_info.setWordWrap(True)
-        pools_layout.addWidget(pools_info)
+        pools_desc_row = QHBoxLayout()
+        pools_desc_row.addWidget(_group_desc(
+            "Named groups of proxy servers. Assign a pool as the global "
+            "default or to a specific category."
+        ))
+        pools_desc_row.addWidget(InfoButton(
+            "<b>What is a pool?</b><br>"
+            "A named collection of one or more proxy servers. When a pool "
+            "is assigned, BBDrop picks a proxy from it according to the "
+            "rotation strategy you choose when creating the pool.<br><br>"
+            "<b>Adding proxies</b><br>"
+            "Click <b>New Pool</b>, give it a name, choose a rotation "
+            "strategy, and paste your proxies &mdash; one per line in "
+            "<code>host:port</code> format. Use "
+            "<code>user:pass@host:port</code> for authenticated proxies."
+        ))
+        pools_layout.addLayout(pools_desc_row)
 
-        # Pools list
         self.pools_list = QListWidget()
-        self.pools_list.setMinimumHeight(150)
+        self.pools_list.setMinimumHeight(100)
         self.pools_list.itemSelectionChanged.connect(self._on_pool_selected)
         self.pools_list.itemDoubleClicked.connect(self._on_pool_edit)
         pools_layout.addWidget(self.pools_list)
 
-        # Pool buttons
         pool_btn_layout = QHBoxLayout()
 
         self.add_pool_btn = QPushButton("New Pool")
@@ -92,98 +132,182 @@ class ProxySettingsWidget(QWidget):
         pool_btn_layout.addWidget(self.edit_pool_btn)
 
         self.delete_pool_btn = QPushButton("Delete")
-        self.delete_pool_btn.setToolTip("Delete the selected proxy pool")
+        self.delete_pool_btn.setToolTip("Delete the selected proxy pool and clear its assignments")
         self.delete_pool_btn.setEnabled(False)
         self.delete_pool_btn.clicked.connect(self._on_delete_pool)
         pool_btn_layout.addWidget(self.delete_pool_btn)
 
         self.test_pool_btn = QPushButton("Test")
         self.test_pool_btn.setEnabled(False)
-        self.test_pool_btn.setToolTip("Test first proxy in pool")
+        self.test_pool_btn.setToolTip("Test connectivity through the first proxy in the selected pool")
         self.test_pool_btn.clicked.connect(self._on_test_pool)
         pool_btn_layout.addWidget(self.test_pool_btn)
 
         pool_btn_layout.addStretch()
         pools_layout.addLayout(pool_btn_layout)
 
-        layout.addWidget(self.pools_group)
+        grid.addWidget(self.pools_group, 0, 1)
 
-        # Category Overrides Group
+        # ── Bottom-left: Category Overrides ───────────────────────────
         self.category_group = QGroupBox("Category Overrides")
         category_layout = QVBoxLayout(self.category_group)
 
-        category_info_row = QHBoxLayout()
-        category_info = QLabel(
-            "Override the default proxy for specific categories."
-        )
-        category_info.setWordWrap(True)
-        category_info_row.addWidget(category_info)
-        category_info_row.addWidget(InfoButton(
-            "Override the default proxy for specific traffic types. Useful if "
-            "you want file host traffic through one proxy but API calls "
-            "direct, or forums through a different region.<br><br>"
-            "'Use default' means this category inherits the global default above."
+        cat_desc_row = QHBoxLayout()
+        cat_desc_row.addWidget(_group_desc(
+            "Override the global default for specific traffic types."
         ))
-        category_layout.addLayout(category_info_row)
+        cat_desc_row.addWidget(InfoButton(
+            "Each category can use a different proxy setting. For example, "
+            "route file host traffic through a fast proxy and image uploads "
+            "through Tor.<br><br>"
+            "<b>Use global default</b> &mdash; no override; inherits the "
+            "global default connection above.<br><br>"
+            "All other options work the same as the global default dropdown."
+        ))
+        category_layout.addLayout(cat_desc_row)
 
-        # File Hosts category
-        fh_layout = QHBoxLayout()
-        fh_layout.addWidget(QLabel("File Hosts:"))
+        cat_form = QFormLayout()
+        cat_form.setHorizontalSpacing(8)
+
         self.file_hosts_dropdown = SimpleProxyDropdown(category="file_hosts")
+        self.file_hosts_dropdown.setToolTip("RapidGator, FileBoom, Keep2Share, TezFiles, Filedot, Filespace")
         self.file_hosts_dropdown.value_changed.connect(self._on_settings_changed)
-        fh_layout.addWidget(self.file_hosts_dropdown, 1)
-        category_layout.addLayout(fh_layout)
+        cat_form.addRow("File Hosts:", self.file_hosts_dropdown)
 
-        # Forums category
-        forums_layout = QHBoxLayout()
-        forums_layout.addWidget(QLabel("Forums:"))
-        self.forums_dropdown = SimpleProxyDropdown(category="forums")
-        self.forums_dropdown.value_changed.connect(self._on_settings_changed)
-        forums_layout.addWidget(self.forums_dropdown, 1)
-        category_layout.addLayout(forums_layout)
-
-        # API category
-        api_layout = QHBoxLayout()
-        api_layout.addWidget(QLabel("API:"))
-        self.api_dropdown = SimpleProxyDropdown(category="api")
-        self.api_dropdown.value_changed.connect(self._on_settings_changed)
-        api_layout.addWidget(self.api_dropdown, 1)
-        category_layout.addLayout(api_layout)
-
-        # Image Hosts category
-        ih_layout = QHBoxLayout()
-        ih_layout.addWidget(QLabel("Image Hosts:"))
         self.image_hosts_dropdown = SimpleProxyDropdown(category="image_hosts")
+        self.image_hosts_dropdown.setToolTip("IMX.to, TurboImageHost")
         self.image_hosts_dropdown.value_changed.connect(self._on_settings_changed)
-        ih_layout.addWidget(self.image_hosts_dropdown, 1)
-        category_layout.addLayout(ih_layout)
+        cat_form.addRow("Image Hosts:", self.image_hosts_dropdown)
 
-        layout.addWidget(self.category_group)
+        self.forums_dropdown = SimpleProxyDropdown(category="forums")
+        self.forums_dropdown.setToolTip("Forum posting and scraping requests")
+        self.forums_dropdown.value_changed.connect(self._on_settings_changed)
+        cat_form.addRow("Forums:", self.forums_dropdown)
 
-        # Tor Circuit Renewal Group
-        tor_group = QGroupBox("Tor Circuit Renewal")
+        self.api_dropdown = SimpleProxyDropdown(category="api")
+        self.api_dropdown.setToolTip("API calls to host services (login, status checks)")
+        self.api_dropdown.value_changed.connect(self._on_settings_changed)
+        cat_form.addRow("API:", self.api_dropdown)
+
+        category_layout.addLayout(cat_form)
+
+        grid.addWidget(self.category_group, 1, 0)
+
+        # ── Bottom-right: Tor ─────────────────────────────────────────
+        tor_group = QGroupBox("Tor")
         tor_layout = QVBoxLayout(tor_group)
 
-        tor_circuit_layout = QHBoxLayout()
-        self.tor_newnym_btn = QPushButton("New Circuit")
-        self.tor_newnym_btn.setToolTip("Request a new Tor circuit (new exit node IP)")
-        self.tor_newnym_btn.clicked.connect(self._on_new_circuit)
-        tor_circuit_layout.addWidget(self.tor_newnym_btn)
+        tor_desc_row = QHBoxLayout()
+        tor_desc_row.addWidget(_group_desc(
+            "Tor encrypts your traffic through multiple independent relays, "
+            "so no single point can see both who you are and what you are "
+            "connecting to."
+        ))
+        tor_desc_row.addWidget(InfoButton(
+            "<b>What is Tor?</b><br>"
+            "Free software that routes traffic through a worldwide network of "
+            "relays, hiding your real IP address. Unlike a regular proxy, Tor "
+            "encrypts your traffic through multiple independent relays, so no "
+            "single point can see both who you are and what you are connecting "
+            "to.<br><br>"
+            "<b>Getting Tor</b><br>"
+            "Download the <b>Tor Expert Bundle</b> (the standalone daemon, no "
+            "browser needed) from "
+            "<a href='https://www.torproject.org/download/tor/'>"
+            "torproject.org/download/tor/</a>. "
+            "Extract it and run the Tor executable &mdash; it listens on port "
+            "9050 by default.<br><br>"
+            "<b>Tor Browser</b> also works: while the browser is open, the "
+            "bundled Tor daemon listens on port 9150. Close the browser and "
+            "the daemon stops.<br><br>"
+            "<b>How BBDrop uses Tor</b><br>"
+            "BBDrop connects through <code>127.0.0.1:9050</code> using the "
+            "SOCKS5 protocol. DNS lookups are also routed through Tor to "
+            "prevent leaks.<br><br>"
+            "<b>Circuit renewal</b><br>"
+            "Tor rotates your exit node automatically. Force an immediate "
+            "rotation by clicking <b>New Circuit</b> below (sends a NEWNYM "
+            "signal to Tor's control port 9051). Takes about 10 seconds to "
+            "take effect.<br><br>"
+            "<b>Speed</b><br>"
+            "Tor is significantly slower than a direct connection or a regular "
+            "proxy due to multi-hop routing. Expect lower upload and download "
+            "speeds."
+        ))
+        tor_layout.addLayout(tor_desc_row)
 
-        tor_circuit_layout.addWidget(QLabel("Control password:"))
+        status_row = QHBoxLayout()
+        status_row.addWidget(QLabel("Status:"))
+        self.tor_status_label = QLabel("Checking...")
+        status_row.addWidget(self.tor_status_label)
+        self.tor_refresh_btn = QPushButton("Refresh")
+        self.tor_refresh_btn.setToolTip("Check if Tor is running on port 9050")
+        self.tor_refresh_btn.clicked.connect(self._check_tor_status)
+        status_row.addWidget(self.tor_refresh_btn)
+        status_row.addStretch()
+        tor_layout.addLayout(status_row)
+
+        circuit_row = QHBoxLayout()
+        self.tor_newnym_btn = QPushButton("New Circuit")
+        self.tor_newnym_btn.setToolTip(
+            "Request a new Tor exit node IP. Takes about 10 seconds to take effect."
+        )
+        self.tor_newnym_btn.clicked.connect(self._on_new_circuit)
+        self.tor_newnym_btn.setEnabled(False)
+        circuit_row.addWidget(self.tor_newnym_btn)
+
+        circuit_row.addWidget(QLabel("Control password:"))
         self.tor_control_password = QLineEdit()
         self.tor_control_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.tor_control_password.setPlaceholderText("(leave blank if no auth)")
+        self.tor_control_password.setToolTip(
+            "Password for Tor's control port (9051). Leave blank if Tor has no "
+            "authentication configured. Only needed for circuit renewal."
+        )
         self.tor_control_password.setMaximumWidth(200)
-        tor_circuit_layout.addWidget(self.tor_control_password)
+        circuit_row.addWidget(self.tor_control_password)
 
         self.tor_circuit_status = QLabel("")
-        tor_circuit_layout.addWidget(self.tor_circuit_status)
-        tor_circuit_layout.addStretch()
-        tor_layout.addLayout(tor_circuit_layout)
+        circuit_row.addWidget(self.tor_circuit_status)
+        circuit_row.addStretch()
+        tor_layout.addLayout(circuit_row)
 
-        layout.addWidget(tor_group)
+        grid.addWidget(tor_group, 1, 1)
+
+        layout.addLayout(grid)
         layout.addStretch()
+
+        # Check Tor status after UI is built (non-blocking)
+        self._tor_status_ready.connect(self._update_tor_status)
+        QTimer.singleShot(0, self._check_tor_status)
+
+    # ── Tor status ────────────────────────────────────────────────────
+
+    def _check_tor_status(self):
+        """Check if Tor is running, in a background thread to avoid UI freeze."""
+        self.tor_status_label.setText("Checking...")
+        self.tor_status_label.setStyleSheet("")
+        self.tor_refresh_btn.setEnabled(False)
+
+        def _probe():
+            from src.proxy.tor import is_tor_running
+            running = is_tor_running(timeout=1.5)
+            self._tor_status_ready.emit(running)
+
+        threading.Thread(target=_probe, daemon=True).start()
+
+    def _update_tor_status(self, running: bool):
+        """Update Tor status label on the main thread."""
+        self.tor_refresh_btn.setEnabled(True)
+        self.tor_newnym_btn.setEnabled(running)
+        if running:
+            self.tor_status_label.setText("Running (port 9050)")
+            self.tor_status_label.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.tor_status_label.setText("Not detected")
+            self.tor_status_label.setStyleSheet("color: red;")
+
+    # ── Pool management ───────────────────────────────────────────────
 
     def load_pools(self):
         """Load proxy pools from storage."""
@@ -228,6 +352,13 @@ class ProxySettingsWidget(QWidget):
     def _on_settings_changed(self):
         """Handle any settings change."""
         self.settings_changed.emit()
+
+    def _refresh_category_dropdowns(self):
+        """Refresh category dropdowns so 'Use global default: ...' text stays current."""
+        self.file_hosts_dropdown.refresh()
+        self.image_hosts_dropdown.refresh()
+        self.forums_dropdown.refresh()
+        self.api_dropdown.refresh()
 
     def _on_pool_selected(self):
         """Handle pool selection change."""
@@ -394,6 +525,7 @@ class ProxySettingsWidget(QWidget):
     def load_settings(self, settings: dict):
         """Load settings - called by parent settings dialog."""
         self.load_pools()
+        self._check_tor_status()
 
     def get_settings(self) -> dict:
         """Get settings - called by parent settings dialog."""
