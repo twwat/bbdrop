@@ -280,7 +280,7 @@ coverage report --sort=cover | head -20
 ### Your First Command (Copy & Paste):
 ```bash
 # Create test structure
-cd /mnt/h/cursor/imxup
+cd /mnt/h/cursor/bbdrop
 mkdir -p tests/unit/{core,network,storage,processing}
 
 # Create first test

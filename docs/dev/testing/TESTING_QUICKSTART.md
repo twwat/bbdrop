@@ -15,7 +15,7 @@ pytest --version
 
 ```bash
 # Navigate to project
-cd /mnt/h/cursor/imxup
+cd /mnt/h/cursor/bbdrop
 
 # Run all tests
 pytest tests/
@@ -37,8 +37,8 @@ You need to install python3-venv first:
 sudo apt install python3.12-venv python3-full
 
 # Then create venv
-python3 -m venv ~/imxup-venv
-source ~/imxup-venv/bin/activate
+python3 -m venv ~/bbdrop-venv
+source ~/bbdrop-venv/bin/activate
 pip install -r tests/requirements.txt
 ```
 
@@ -53,6 +53,6 @@ pipx install pytest
 pipx inject pytest pytest-cov pytest-mock
 
 # Run tests
-cd /mnt/h/cursor/imxup
+cd /mnt/h/cursor/bbdrop
 pytest tests/
 ```

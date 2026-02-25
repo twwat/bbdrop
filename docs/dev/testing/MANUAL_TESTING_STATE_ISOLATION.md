@@ -4,7 +4,7 @@
 This document provides step-by-step manual testing procedures to verify state isolation between tabs in the TabbedGalleryWidget.
 
 ## Prerequisites
-- ImxUp application running
+- BBDrop application running
 - Multiple galleries loaded across different tabs
 - At least 3 tabs created (Main, Tab1, Tab2)
 - Each tab has at least 20-30 galleries for scrolling
@@ -356,7 +356,7 @@ For each failure, note:
 ## Automation Status
 
 Automated tests created in:
-- `/home/jimbo/imxup/tests/unit/gui/widgets/test_tabbed_state_isolation.py`
+- `/home/bassdrop/imxup2/tests/unit/gui/widgets/test_tabbed_state_isolation.py`
 
 Run tests with:
 ```bash
@@ -375,6 +375,6 @@ Current automation coverage:
 
 ## References
 
-- Implementation: `/home/jimbo/imxup/src/gui/widgets/tabbed_gallery.py`
-- Table Widget: `/home/jimbo/imxup/src/gui/widgets/gallery_table.py`
-- Automated Tests: `/home/jimbo/imxup/tests/unit/gui/widgets/test_tabbed_state_isolation.py`
+- Implementation: `/home/bassdrop/imxup2/src/gui/widgets/tabbed_gallery.py`
+- Table Widget: `/home/bassdrop/imxup2/src/gui/widgets/gallery_table.py`
+- Automated Tests: `/home/bassdrop/imxup2/tests/unit/gui/widgets/test_tabbed_state_isolation.py`
