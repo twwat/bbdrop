@@ -167,8 +167,8 @@ open /Applications/Utilities/Keychain\ Access.app
 ### Step 2: Navigate to Credential Sections
 
 #### IMX.to Setup
-1. Click **General** tab
-2. Enter IMX.to username and password
+1. Go to **Image Hosts** and select **IMX.to**
+2. Enter your username and password (or API key)
 3. Click **Test Connection** button
 4. Wait for "Connection successful" message
 
@@ -393,11 +393,5 @@ If you change your password on a file host:
 ## See Also
 
 - [File Host Upload Guide](./multi-host-upload.md) — Detailed setup for each file host
-- [Setup Instructions](../getting-started/setup.md) — Initial application setup
 - [Settings Reference](../reference/FEATURES.md) — All configuration options
 - [Troubleshooting](../troubleshooting/troubleshooting.md) — Common issues and solutions
-
----
-
-**Version:** 0.8.4
-**Last Updated:** 2026-02-13

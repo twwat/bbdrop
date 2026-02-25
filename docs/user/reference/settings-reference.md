@@ -44,7 +44,7 @@ Lists all available file hosts. Click **Configure** on any host to open its sett
 
 ## Templates
 
-Embedded template manager for creating, editing, copying, and deleting BBCode templates. See [BBCode Templates](../guides/templates.md) for full details.
+Embedded template manager for creating, editing, copying, and deleting BBCode templates. See [BBCode Templates](../guides/bbcode-templates.md) for full details.
 
 ## Image Scan
 
@@ -112,7 +112,7 @@ Configure global proxy mode and proxy pools. See [Proxies](../guides/proxies.md)
 
 ## Archive
 
-Configure archive format, compression, and splitting for file host uploads. See [File Hosts](../guides/file-hosts.md#archive-settings) for full details.
+Configure archive format, compression, and splitting for file host uploads. See [File Hosts](../guides/multi-host-upload.md#archive-settings) for full details.
 
 ## Advanced
 

@@ -6,6 +6,8 @@ Quick lookup for features, parameters, and specifications.
 
 - [Features](./FEATURES.md) - Complete feature list (100+ features documented)
 - [Quick Reference](./quick-reference.md) - One-page cheat sheet
+- [Settings Reference](./settings-reference.md) - All settings organized by tab
+- [Keyboard Shortcuts](./keyboard-shortcuts.md) - All keyboard shortcuts
 - [External Apps Parameters](./external-apps-parameters.md) - Hook parameters and custom fields
 - [Help Content](./HELP_CONTENT.md) - In-app help text reference
 

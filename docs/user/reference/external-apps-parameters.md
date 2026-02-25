@@ -1,8 +1,8 @@
 # External Apps Hook Parameters
 
-Complete reference for all available parameters in imxup's External Apps hooks system.
+Complete reference for all available parameters in BBDrop's External Apps hooks system.
 
-## 📋 Parameter Categories
+## Parameter Categories
 
 ### Gallery Information
 - **%N** - Gallery name
@@ -13,7 +13,7 @@ Complete reference for all available parameters in imxup's External Apps hooks s
 - **%t** - Template name used for BBCode generation
 
 ### Artifacts (Completed Events Only)
-- **%g** - Gallery ID (from imx.to)
+- **%g** - Gallery ID (from image host)
 - **%j** - JSON artifact file path
 - **%b** - BBCode artifact file path
 - **%z** - ZIP archive path (auto-created if needed)
@@ -31,7 +31,7 @@ Complete reference for all available parameters in imxup's External Apps hooks s
 - **%c3** - custom3 field value
 - **%c4** - custom4 field value
 
-## 🎯 Hook Event Types
+## Hook Event Types
 
 ### 1. On Gallery Added
 Triggered when a gallery is added to the queue.
@@ -72,7 +72,7 @@ Triggered when a gallery upload finishes successfully.
 python multi_host_uploader.py gofile "%z" --metadata "%N (%s bytes)"
 ```
 
-## 💡 Usage Examples
+## Usage Examples
 
 ### Upload to File Host with Metadata
 ```bash
@@ -108,7 +108,7 @@ python workflow.py \
   --custom1 "%c1"
 ```
 
-## 🔧 Technical Details
+## Technical Details
 
 ### Multi-Character Variables
 Multi-character parameters (%e1, %c1, etc.) are processed using **longest-match-first** substitution:
@@ -131,11 +131,11 @@ Order: %e1, %e2, %c1, %c2 ... %N, %T, %p, %C, %s, %t, %g
 ### Path Quoting
 Always quote paths to handle spaces:
 ```bash
-python uploader.py "%p"              # ✓ Correct
-python uploader.py %p                # ✗ Wrong (breaks with spaces)
+python uploader.py "%p"              # Correct
+python uploader.py %p                # Wrong (breaks with spaces)
 ```
 
-## 📊 Field Value Flow
+## Field Value Flow
 
 ### Ext Fields (%e1-%e4)
 1. External program outputs JSON:
@@ -148,9 +148,9 @@ python uploader.py %p                # ✗ Wrong (breaks with spaces)
    ```
 
 2. Map in "Configure & Test" dialog:
-   - ext1 ← "url"
-   - ext2 ← "file_id"
-   - ext3 ← "status"
+   - ext1 <- "url"
+   - ext2 <- "file_id"
+   - ext3 <- "status"
 
 3. Values appear in database and templates:
    ```
@@ -167,7 +167,7 @@ python uploader.py %p                # ✗ Wrong (breaks with spaces)
 - Can be set manually or by external programs
 - Available in templates as #custom1#-#custom4#
 
-## 🎨 Real-World Workflows
+## Real-World Workflows
 
 ### Multi-Host Upload with Tracking
 ```bash
@@ -189,9 +189,9 @@ python smart_uploader.py "%z" --size %s --auto-select-host
 ```
 
 **Logic:**
-- < 100MB → Transfer.sh (fast, temporary)
-- 100MB-1GB → GoFile (free, permanent)
-- > 1GB → pCloud (requires account)
+- < 100MB -> Transfer.sh (fast, temporary)
+- 100MB-1GB -> GoFile (free, permanent)
+- > 1GB -> pCloud (requires account)
 
 ### Template-Specific Processing
 ```bash
@@ -200,13 +200,13 @@ python processor.py "%p" --template "%t" --optimize
 ```
 
 **Behavior:**
-- "High Quality" template → No compression
-- "Web Optimized" template → JPEG compression
-- "Archive" template → ZIP with metadata
+- "High Quality" template -> No compression
+- "Web Optimized" template -> JPEG compression
+- "Archive" template -> ZIP with metadata
 
-## ⚙️ Automatic ZIP Creation
+## Automatic ZIP Creation
 
-When using **%z** parameter, imxup automatically:
+When using **%z** parameter, BBDrop automatically:
 
 1. **Detects** if command contains %z
 2. **Creates** temporary ZIP in system temp folder
@@ -219,16 +219,16 @@ When using **%z** parameter, imxup automatically:
 - No disk space wasted after execution
 - Works transparently with any host
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **Multi-Host Uploader:** See `multi_host_uploader.py` for 44-host support
 - **Keep2Share Uploader:** See `up3_windows.py` for K2S integration
 - **Hook System:** See `src/processing/hooks_executor.py` for implementation
 
-## 🔍 Debugging
+## Debugging
 
 ### Test Your Command
-1. Open Settings → External Apps
+1. Open Settings -> External Apps
 2. Click "Configure & Test..." for any hook
 3. See live preview with all substitutions
 4. Click "Run Test Command" to verify output
@@ -256,8 +256,3 @@ python script.py "%N"
 # Fields may be empty - always quote them
 python script.py "%e1" "%c1"  # Safe
 ```
-
----
-
-**Version:** imxup 0.5.08+
-**Updated:** 2024-01-16

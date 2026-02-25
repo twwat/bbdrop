@@ -75,3 +75,28 @@ Scan statistics (total scans, galleries checked, online/offline counts) are avai
 
 !!! note
     The link scanner currently supports IMX.to galleries. Scanning runs in the background — you can close the dashboard and results will still be saved.
+
+## Cover Photos
+
+BBDrop can automatically detect cover images in your galleries and handle them separately — different thumbnail size, different upload host, or exclusion from the main gallery.
+
+Enable cover detection in **Settings > Covers**.
+
+### Detection Methods
+
+Three detection methods are available (can be combined):
+
+- **By filename** — glob patterns like `cover*`, `poster*`, `*_cover.*` (case-insensitive, comma-separated)
+- **By dimensions** — images whose area differs significantly from the gallery average (configurable threshold)
+- **By file size** — images within a specific KB range
+
+### Cover Upload Options
+
+- **Upload host** — which image host receives the cover (can differ from the gallery's host)
+- **Thumbnail format** — per-host thumbnail settings for covers
+- **Max covers per gallery** — limit how many covers are detected
+- **Skip duplicates** — don't upload a cover if it's identical to a gallery image
+
+### Hooks Integration
+
+Cover data is available in hooks via `%cv` (cover source path) and `%cu` (cover URL after upload).

@@ -2,7 +2,6 @@
 
 ## Quick Reference
 
-**Version:** v0.6.16
 **Feature:** Extract archives and create ZIPs for external apps
 **Supported Formats:** ZIP, RAR, 7Z, TAR, TAR.GZ, TAR.BZ2
 **Compression:** STORE (fastest) | DEFLATE | BZIP2 | LZMA (maximum)
@@ -12,7 +11,7 @@
 
 ## What is Archive Support?
 
-Archive support in imxup provides two key features:
+Archive support in BBDrop provides two key features:
 
 1. **Archive Extraction** - Extract compressed gallery folders and select which ones to upload
 2. **ZIP Creation** - Automatically create compressed archives for external applications and multi-host uploads
@@ -25,7 +24,7 @@ This guide covers how to use both features effectively.
 
 ### Extraction Formats
 
-imxup can extract and process the following compressed archive formats:
+BBDrop can extract and process the following compressed archive formats:
 
 | Format | Extension | Best For | Notes |
 |--------|-----------|----------|-------|
@@ -38,7 +37,7 @@ imxup can extract and process the following compressed archive formats:
 
 ### Compression Formats (ZIP Creation)
 
-When imxup creates archives automatically, it supports these compression modes:
+When BBDrop creates archives automatically, it supports these compression modes:
 
 | Mode | Type | Speed | Size | Recommended Use |
 |------|------|-------|------|-----------------|
@@ -55,26 +54,26 @@ When imxup creates archives automatically, it supports these compression modes:
 
 ### Step 1: Adding an Archive to the Queue
 
-You can add an archive file to imxup in three ways:
+You can add an archive file to BBDrop in three ways:
 
 #### Drag & Drop
 1. Locate your archive file in File Explorer
-2. Drag it directly into the imxup window
-3. imxup will auto-detect the archive type
+2. Drag it directly into the BBDrop window
+3. BBDrop will auto-detect the archive type
 
 #### Using the GUI
-1. In imxup, click **File -> Add Archive**
+1. In BBDrop, click **File -> Add Archive**
 2. Select your archive file
 3. Click **Open**
 
 #### Command Line
 ```bash
-python imxup.py vacation.zip --gui
+python bbdrop.py vacation.zip --gui
 ```
 
 ### Step 2: Archive Detection & Extraction
 
-When you add an archive, imxup will:
+When you add an archive, BBDrop will:
 
 1. **Validate** the archive integrity and format
 2. **Extract** to a temporary system directory (`/tmp` on Linux, `%TEMP%` on Windows)
@@ -88,14 +87,14 @@ The Archive Folder Selector appears after extraction:
 ```
 +--- Select Folders to Upload ---+
 | Archive: vacation_photos.zip    |
-| Extracted to: /tmp/imxup_xyz    |
+| Extracted to: /tmp/bbdrop_xyz   |
 |                                 |
 | Found 3 image folders:          |
-| [x] Day1_Beach (127 images)     |
-| [x] Day2_City (84 images)       |
-| [ ] Day3_Mountain (95 images)   |
+| [x] Day1_Beach (127 images)    |
+| [x] Day2_City (84 images)      |
+| [ ] Day3_Mountain (95 images)  |
 |                                 |
-| [Select All] [Upload] [Cancel]  |
+| [Select All] [Upload] [Cancel] |
 +---------------------------------+
 ```
 
@@ -123,23 +122,23 @@ You have a single ZIP file containing photos from a 3-day event, organized by da
 
 ```
 vacation_photos.zip
-├── Day1_Beach/
-│   ├── IMG_0001.jpg
-│   ├── IMG_0002.jpg
-│   └── ... (127 total)
-├── Day2_City/
-│   ├── IMG_0128.jpg
-│   ├── IMG_0129.jpg
-│   └── ... (84 total)
-└── Day3_Mountain/
-    ├── IMG_0212.jpg
-    ├── IMG_0213.jpg
-    └── ... (95 total)
++-- Day1_Beach/
+|   +-- IMG_0001.jpg
+|   +-- IMG_0002.jpg
+|   +-- ... (127 total)
++-- Day2_City/
+|   +-- IMG_0128.jpg
+|   +-- IMG_0129.jpg
+|   +-- ... (84 total)
++-- Day3_Mountain/
+    +-- IMG_0212.jpg
+    +-- IMG_0213.jpg
+    +-- ... (95 total)
 ```
 
 **Steps:**
-1. Drag `vacation_photos.zip` into imxup
-2. imxup extracts and detects 3 folders
+1. Drag `vacation_photos.zip` into BBDrop
+2. BBDrop extracts and detects 3 folders
 3. Folder selector appears with all 3 checked by default
 4. Click **Upload** to add all three as separate galleries
 5. Each folder becomes a separate queue entry:
@@ -153,7 +152,7 @@ vacation_photos.zip
 
 ### What is ZIP Creation for Hooks?
 
-When you use external apps (hooks) to upload to additional hosts, imxup can automatically create temporary ZIP archives. This is useful for:
+When you use external apps (hooks) to upload to additional hosts, BBDrop can automatically create temporary ZIP archives. This is useful for:
 
 - **Multi-host uploaders** (like muh.py for Gofile)
 - **Custom scripts** that process entire galleries
@@ -176,26 +175,26 @@ In **Settings -> External Apps**, set up an app with the `%z` parameter:
 }
 ```
 
-The `%z` parameter tells imxup to create a ZIP file.
+The `%z` parameter tells BBDrop to create a ZIP file.
 
 #### 2. Gallery Upload Completes
 
-After your gallery finishes uploading to imx.to:
+After your gallery finishes uploading to the image host:
 
-1. imxup creates a temporary ZIP file:
+1. BBDrop creates a temporary ZIP file:
    - **Location:** System temp directory
-   - **Name:** `imxup_<gallery_id>_<gallery_name>.zip`
+   - **Name:** `bbdrop_<gallery_id>_<gallery_name>.zip`
    - **Contents:** All images from the gallery
    - **Compression:** STORE mode (fastest)
 
-2. Example: `imxup_abc123_Summer_Vacation.zip` (245 MB)
+2. Example: `bbdrop_abc123_Summer_Vacation.zip` (245 MB)
 
 #### 3. External App Executes
 
-imxup runs the external app and passes the ZIP path:
+BBDrop runs the external app and passes the ZIP path:
 
 ```bash
-python hooks/muh.py gofile /tmp/imxup_abc123_Summer_Vacation.zip
+python hooks/muh.py gofile /tmp/bbdrop_abc123_Summer_Vacation.zip
 ```
 
 #### 4. Automatic Cleanup
@@ -207,11 +206,11 @@ After the external app completes (success or failure):
 
 ### ZIP Creation Example
 
-**Scenario:** Upload to both imx.to and Gofile
+**Scenario:** Upload to both your image host and Gofile
 
-1. Drag 250 MB gallery into imxup
+1. Drag 250 MB gallery into BBDrop
 2. Start upload
-3. Gallery uploads to imx.to (takes 2 minutes at 2 MB/s)
+3. Gallery uploads to the image host (takes 2 minutes at 2 MB/s)
 4. Gallery completes and gallery_id is obtained
 5. External app configured:
    ```
@@ -220,9 +219,9 @@ After the external app completes (success or failure):
    Arguments: hooks/muh.py gofile %z
    Execute on: completed
    ```
-6. imxup automatically:
+6. BBDrop automatically:
    - Creates 250 MB ZIP in temp directory (0.5 seconds)
-   - Runs: `python hooks/muh.py gofile /tmp/imxup_abc123_Summer_Vacation.zip`
+   - Runs: `python hooks/muh.py gofile /tmp/bbdrop_abc123_Summer_Vacation.zip`
    - Waits for Gofile upload to complete
    - Deletes temporary ZIP file
 7. External app output (like Gofile URL) is captured and stored in `ext1` field
@@ -249,7 +248,7 @@ After the external app completes (success or failure):
 | **BZIP2** | Slower | 210 MB | 6-8 sec |
 | **LZMA** | Slowest | 190 MB | 10-15 sec |
 
-imxup uses **STORE mode by default** for ZIP creation because:
+BBDrop uses **STORE mode by default** for ZIP creation because:
 - JPG and PNG files are already compressed
 - STORE is 50-100x faster than DEFLATE
 - Size difference is negligible (<1% for images)
@@ -258,14 +257,14 @@ imxup uses **STORE mode by default** for ZIP creation because:
 
 **Temporary Extraction:**
 ```
-Windows: C:\Users\[username]\AppData\Local\Temp\imxup_extract_*
-Linux:   /tmp/imxup_extract_*
+Windows: C:\Users\[username]\AppData\Local\Temp\bbdrop_extract_*
+Linux:   /tmp/bbdrop_extract_*
 ```
 
 **Temporary ZIP Creation:**
 ```
-Windows: C:\Users\[username]\AppData\Local\Temp\imxup_[id]_[name].zip
-Linux:   /tmp/imxup_[id]_[name].zip
+Windows: C:\Users\[username]\AppData\Local\Temp\bbdrop_[id]_[name].zip
+Linux:   /tmp/bbdrop_[id]_[name].zip
 ```
 
 These directories are automatically cleaned up:
@@ -333,21 +332,21 @@ For multi-location photo events:
 
 ```
 vacation_2025.zip
-├── Day1_Beach/
-│   ├── Morning/
-│   │   └── IMG_*.jpg
-│   └── Sunset/
-│       └── IMG_*.jpg
-├── Day2_City/
-│   ├── Downtown/
-│   │   └── IMG_*.jpg
-│   └── Museum/
-│       └── IMG_*.jpg
-└── Day3_Mountain/
-    ├── Summit/
-    │   └── IMG_*.jpg
-    └── Base/
-        └── IMG_*.jpg
++-- Day1_Beach/
+|   +-- Morning/
+|   |   +-- IMG_*.jpg
+|   +-- Sunset/
+|       +-- IMG_*.jpg
++-- Day2_City/
+|   +-- Downtown/
+|   |   +-- IMG_*.jpg
+|   +-- Museum/
+|       +-- IMG_*.jpg
++-- Day3_Mountain/
+    +-- Summit/
+    |   +-- IMG_*.jpg
+    +-- Base/
+        +-- IMG_*.jpg
 ```
 
 Benefits:
@@ -362,10 +361,10 @@ Don't do this:
 
 ```
 all_vacation_photos.zip
-├── IMG_0001.jpg
-├── IMG_0002.jpg
-├── IMG_0003.jpg
-└── ... (300+ files)
++-- IMG_0001.jpg
++-- IMG_0002.jpg
++-- IMG_0003.jpg
++-- ... (300+ files)
 ```
 
 Problems:
@@ -387,12 +386,12 @@ Problems:
    - Confirm file isn't corrupted
 
 2. **Check file permissions**
-   - Ensure imxup has read access to archive
+   - Ensure BBDrop has read access to archive
    - Check temp directory has write access
 
 3. **Free up disk space**
    - Archive extraction needs space for full uncompressed size
-   - Check available disk space > archive size × 1.5
+   - Check available disk space > archive size x 1.5
 
 ### Folders Not Detected
 
@@ -406,7 +405,7 @@ Problems:
 
 2. **Check folder structure**
    - Images must be in folders, not at root of archive
-   - Create folders: `Photos/` → `IMG_*.jpg`
+   - Create folders: `Photos/` -> `IMG_*.jpg`
    - Subfolder depth doesn't matter
 
 3. **Check image count**
@@ -434,21 +433,21 @@ Problems:
 
 ### Temporary Files Not Cleaned Up
 
-**Problem:** `C:\Users\[user]\AppData\Local\Temp\imxup_*` files remain
+**Problem:** `C:\Users\[user]\AppData\Local\Temp\bbdrop_*` files remain
 
 **Solutions:**
 1. **Manual cleanup (one-time)**
    ```bash
    # Windows
-   rmdir /s /q %TEMP%\imxup_*
+   rmdir /s /q %TEMP%\bbdrop_*
 
    # Linux
-   rm -rf /tmp/imxup_*
+   rm -rf /tmp/bbdrop_*
    ```
 
 2. **Ensure proper shutdown**
    - Application crashed during extraction/upload
-   - Restart imxup and check Logs
+   - Restart BBDrop and check Logs
 
 3. **Check disk space**
    - If drive is full, cleanup may fail
@@ -460,17 +459,17 @@ Problems:
 
 ### Using muh.py with ZIP Archives
 
-The `muh.py` script is a multi-host uploader that works great with imxup-created ZIPs:
+The `muh.py` script is a multi-host uploader that works great with BBDrop-created ZIPs:
 
 ```bash
 # Upload ZIP to Gofile
-python hooks/muh.py gofile /tmp/imxup_abc123_Summer_Vacation.zip
+python hooks/muh.py gofile /tmp/bbdrop_abc123_Summer_Vacation.zip
 
 # Upload ZIP to Pixeldrain
-python hooks/muh.py pixeldrain /tmp/imxup_abc123_Summer_Vacation.zip
+python hooks/muh.py pixeldrain /tmp/bbdrop_abc123_Summer_Vacation.zip
 
 # Upload ZIP with authentication (Rapidgator)
-python hooks/muh.py rapidgator /tmp/imxup_abc123_Summer_Vacation.zip username:password
+python hooks/muh.py rapidgator /tmp/bbdrop_abc123_Summer_Vacation.zip username:password
 ```
 
 ### Configuring Multiple External Apps
@@ -507,18 +506,18 @@ Available parameters for external apps:
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `%z` | ZIP path (auto-created) | `/tmp/imxup_abc123_vacation.zip` |
+| `%z` | ZIP path (auto-created) | `/tmp/bbdrop_abc123_vacation.zip` |
 | `%N` | Gallery name | `Summer Vacation` |
 | `%p` | Gallery path | `/home/user/images/vacation` |
 | `%C` | Image count | `127` |
 | `%g` | Gallery ID | `abc123xyz` |
-| `%j` | JSON artifact path | `~/.imxup/artifacts/abc123.json` |
+| `%j` | JSON artifact path | `~/.bbdrop/artifacts/abc123.json` |
 
 ---
 
 ## Summary
 
-Archive support in imxup is designed to be intuitive and automatic:
+Archive support in BBDrop is designed to be intuitive and automatic:
 
 - **Extract archives** with a single drag-and-drop
 - **Select folders** visually with a friendly dialog
@@ -527,8 +526,3 @@ Archive support in imxup is designed to be intuitive and automatic:
 - **Support multiple formats** (ZIP, RAR, 7Z, TAR variants)
 
 Use archives to handle complex gallery structures, multi-host uploads, and external application workflows efficiently.
-
----
-
-**Version:** 0.6.16
-**Last Updated:** 2026-01-03

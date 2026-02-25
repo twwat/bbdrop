@@ -1,6 +1,6 @@
-# Welcome to IMXuploader
+# Welcome to BBDrop
 
-Upload image galleries to imx.to and premium file hosts with one click.
+Upload image galleries to multiple image hosts and premium file hosts with one click.
 
 ---
 
@@ -16,13 +16,13 @@ Upload image galleries to imx.to and premium file hosts with one click.
 
 ## Common Tasks
 
-**First time?** See [Your First Upload](getting-started/quick-start.md)
+**First time?** See [Your First Upload](../getting-started/quick-start.md)
 
-**Using file hosts?** See [Multi-Host Upload](guides/multi-host-upload.md)
+**Using file hosts?** See [Multi-Host Upload](../guides/multi-host-upload.md)
 
-**Customize output?** See [BBCode Templates](guides/bbcode-templates.md)
+**Customize output?** See [BBCode Templates](../guides/bbcode-templates.md)
 
-**Something not working?** See [Troubleshooting](troubleshooting/troubleshooting.md)
+**Something not working?** See [Troubleshooting](../troubleshooting/troubleshooting.md)
 
 ---
 
@@ -47,7 +47,7 @@ Upload image galleries to imx.to and premium file hosts with one click.
 | `F2` | Rename gallery |
 | `Ctrl+Tab` | Next tab |
 
-See [All Shortcuts](getting-started/keyboard-shortcuts.md) for the complete list.
+See [All Shortcuts](../getting-started/keyboard-shortcuts.md) for the complete list.
 
 ---
 
@@ -57,4 +57,4 @@ See [All Shortcuts](getting-started/keyboard-shortcuts.md) for the complete list
 - **Slow uploads?** Your internet speed is the limit, not the app
 - **Missing credentials?** Open **Settings** and check the **Credentials** section
 
-Still stuck? Check [Troubleshooting](troubleshooting/troubleshooting.md).
+Still stuck? Check [Troubleshooting](../troubleshooting/troubleshooting.md).

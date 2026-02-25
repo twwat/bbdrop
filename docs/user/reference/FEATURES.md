@@ -1,7 +1,5 @@
-# ImXup Features Documentation
+# BBDrop Features Documentation
 
-**Version:** 0.6.16
-**Last Updated:** 2026-01-03
 **Platform:** Windows 10+ | Linux (Ubuntu 20.04+)
 
 ---
@@ -26,7 +24,6 @@
 ## Gallery Management
 
 ### Drag & Drop Interface
-**Version:** All versions
 **Description:** Intuitive drag-and-drop functionality for adding galleries to the upload queue.
 
 **Features:**
@@ -41,16 +38,9 @@
 - `.png` - PNG images
 - `.gif` - GIF animations
 
-**Technical Details:**
-- Uses PyQt6 drag-and-drop events (`QDragEnterEvent`, `QDropEvent`)
-- Validates folder contains supported image formats
-- Integrates with single-instance architecture via port 27849
-- Thread-safe queue operations with `QMutex`
-
 ---
 
 ### Queue Management
-**Version:** All versions
 **Description:** Comprehensive queue system for managing multiple gallery uploads.
 
 **Queue States (11 Total):**
@@ -104,7 +94,6 @@ CREATE TABLE galleries (
 ---
 
 ### Tab-Based Organization
-**Version:** v0.5.12+
 **Description:** Organize galleries across multiple tabs for better workflow management.
 
 **Features:**
@@ -122,16 +111,9 @@ CREATE TABLE galleries (
 - **File Hosts**: Multi-host uploads (optional)
 - **Completed**: Finished uploads (optional)
 
-**Technical Details:**
-- Tab state stored in QSettings
-- Each tab maintains independent gallery list
-- Shared database with `tab` column for filtering
-- Thread-safe tab switching
-
 ---
 
 ### Gallery Renaming
-**Version:** All versions
 **Description:** Flexible gallery naming with conflict detection.
 
 **Features:**
@@ -145,13 +127,12 @@ CREATE TABLE galleries (
 - Lists all galleries using default folder names
 - Batch rename with pattern matching
 - Preview new names before applying
-- Persistent tracking in `~/.imxup/unnamed_galleries.json`
+- Persistent tracking in `~/.bbdrop/unnamed_galleries.json`
 
 ---
 
 ## Multi-Host Upload System
 
-**Version:** v0.6.00 (Major Feature)
 **Description:** Upload galleries to 7 file hosting services simultaneously.
 
 ### Supported File Hosts (7 Total)
@@ -244,7 +225,7 @@ CREATE TABLE galleries (
 
 **Token Management:**
 ```python
-# Token cached in .imxup/token_cache.db
+# Token cached in .bbdrop/token_cache.db
 {
   "host": "rapidgator",
   "token": "abc123xyz789",
@@ -289,7 +270,7 @@ CREATE TABLE galleries (
 1. Log into file host account
 2. Navigate to Account -> API Settings
 3. Generate or copy your API key
-4. Paste into imxup Settings -> File Hosts -> Configure
+4. Paste into BBDrop Settings -> File Hosts -> Configure
 5. Click **Test Connection** to verify
 
 **Security:**
@@ -305,13 +286,13 @@ CREATE TABLE galleries (
 
 **Workflow:**
 1. User provides credentials in format: `username:password`
-2. imxup performs login request to obtain token
+2. BBDrop performs login request to obtain token
 3. Extracts authentication token from JSON response
 4. Caches token with TTL (24 hours for Rapidgator)
 5. Automatically refreshes token on expiration or 401/403 errors
 
 **Token Cache:**
-- **Location**: `~/.imxup/token_cache.db` (SQLite)
+- **Location**: `~/.bbdrop/token_cache.db` (SQLite)
 - **Schema**:
 ```sql
 CREATE TABLE tokens (
@@ -406,7 +387,6 @@ Status Bar: Upload 2.5 MB/s | Total: 127.3 MB / 245.8 MB | ETA: 3m 24s
 ### Multi-Host Download Links
 
 **Placeholder:** `#hostLinks#`
-**Version:** v0.6.00
 
 **Description:** Automatically generate BBCode download links for all enabled file hosts.
 
@@ -430,7 +410,6 @@ Status Bar: Upload 2.5 MB/s | Total: 127.3 MB / 245.8 MB | ETA: 3m 24s
 
 ## Archive & Compression
 
-**Version:** v0.5.13+
 **Description:** Advanced ZIP archive handling for gallery compression and extraction.
 
 ### ZIP Creation
@@ -443,22 +422,15 @@ Status Bar: Upload 2.5 MB/s | Total: 127.3 MB / 245.8 MB | ETA: 3m 24s
   - **BZIP2** (12): High compression
   - **LZMA** (14): Maximum compression
 - **Temporary Files**: Auto-cleanup after upload
-- **Unique Prefixes**: Prevent collisions with `imxup_<gallery_id>_` prefix
+- **Unique Prefixes**: Prevent collisions with `bbdrop_<gallery_id>_` prefix
 - **Progress Tracking**: Real-time compression progress
 
 **Usage Example:**
 ```bash
 # External app parameter: %z
 # Automatically creates temporary ZIP, uploads, then deletes
-python hooks/muh.py gofile "%z"
+python hooks/muh.py rapidgator "%z"
 ```
-
-**Technical Details:**
-- Uses Python `zipfile` module
-- STORE mode: 0.2-0.5 seconds for 250 MB gallery
-- DEFLATE mode: 3-8 seconds for 250 MB gallery (minimal size reduction for images)
-- Temporary location: System temp directory
-- Auto-cleanup on upload completion or error
 
 ---
 
@@ -478,7 +450,7 @@ python hooks/muh.py gofile "%z"
 ```
 +-- Select Folders to Upload ---------------+
 | Archive: vacation_photos.zip              |
-| Extracted to: /tmp/imxup_extract          |
+| Extracted to: /tmp/bbdrop_extract          |
 |                                           |
 | Found 3 image folders:                    |
 | [x] Day1_Beach (127 images)               |
@@ -514,7 +486,6 @@ python hooks/muh.py gofile "%z"
 
 ## BBCode Generation & Templates
 
-**Version:** All versions
 **Description:** Powerful template system for generating formatted forum posts.
 
 ### 18 Available Placeholders (Gallery Info + File Hosts + Custom Fields)
@@ -658,7 +629,7 @@ python hooks/muh.py gofile "%z"
 
 **Template Storage:**
 ```
-~/.imxup/templates/
+~/.bbdrop/templates/
 +-- Default Template.template.txt
 +-- Detailed Example.template.txt
 +-- Compact Template.template.txt
@@ -705,7 +676,6 @@ python hooks/muh.py gofile "%z"
 
 ## File Host Integration
 
-**Version:** v0.6.00
 **Description:** Comprehensive integration with 7 file hosting services.
 
 ### Credential Management
@@ -730,10 +700,10 @@ python hooks/muh.py gofile "%z"
 ```python
 # Method 1: System Keyring (preferred)
 import keyring
-keyring.set_password("imxup", "rapidgator", "username:password")
+keyring.set_password("bbdrop", "rapidgator", "username:password")
 
 # Method 2: Encrypted config file (fallback)
-# ~/.imxup/credentials.enc
+# ~/.bbdrop/credentials.enc
 from cryptography.fernet import Fernet
 cipher = Fernet(key)
 encrypted = cipher.encrypt(b"username:password")
@@ -795,7 +765,7 @@ encrypted = cipher.encrypt(b"username:password")
 ### Token Cache System
 
 **Component:** `src/network/token_cache.py`
-**Database:** `~/.imxup/token_cache.db` (SQLite)
+**Database:** `~/.bbdrop/token_cache.db` (SQLite)
 
 **Features:**
 - **Persistent Storage**: Tokens survive application restarts
@@ -847,18 +817,12 @@ class TokenCache:
 **Component:** `src/network/file_host_client.py`
 
 **Architecture:**
-```
-FileHostClient (abstract base class)
-+-- FileboomClient
-+-- FiledotClient
-+-- FilespaceClient
-+-- Keep2ShareClient
-+-- RapidgatorClient
-+-- TezfilesClient
-+-- KatfileClient
-```
 
-**Common Interface:**
+`FileHostClient` is a single concrete class that handles all 7 file hosts via configuration.
+Each host's behavior (authentication method, upload protocol, endpoint URLs) is driven by
+per-host config dictionaries rather than separate subclasses.
+
+**Key Methods:**
 ```python
 class FileHostClient:
     def authenticate(self) -> bool
@@ -903,7 +867,7 @@ return download_link
 
 ### Template Storage Format
 
-**Location:** `~/.imxup/templates/*.template.txt`
+**Location:** `~/.bbdrop/templates/*.template.txt`
 **Encoding:** UTF-8
 **Format:** Plain text with BBCode and placeholder syntax
 
@@ -1007,7 +971,6 @@ Error Line 30: Invalid URL syntax
 
 ## Automation & Hooks
 
-**Version:** v0.5.12+
 **Description:** External script integration for custom workflows and automation.
 
 ### Hook System
@@ -1049,10 +1012,10 @@ Error Line 30: Invalid URL syntax
 **Example Configuration:**
 ```json
 {
-  "name": "Upload to Gofile",
+  "name": "Upload to Rapidgator",
   "command": "python",
-  "args": ["hooks/muh.py", "gofile", "%z"],
-  "working_directory": "/home/user/imxup",
+  "args": ["hooks/muh.py", "rapidgator", "%z"],
+  "working_directory": "/home/user/bbdrop",
   "capture_output": true,
   "execute_on": "completed",
   "timeout": 300,
@@ -1080,16 +1043,16 @@ Error Line 30: Invalid URL syntax
 | `%s` | Size in bytes | `245823412` |
 | `%t` | Template name | `Detailed Example` |
 | `%g` | Gallery ID (completed only) | `abc123xyz` |
-| `%j` | JSON artifact path | `~/.imxup/artifacts/abc123.json` |
-| `%b` | BBCode file path | `~/.imxup/bbcode/abc123.txt` |
-| `%z` | ZIP path (auto-created) | `/tmp/imxup_abc123_vacation.zip` |
+| `%j` | JSON artifact path | `~/.bbdrop/artifacts/abc123.json` |
+| `%b` | BBCode file path | `~/.bbdrop/bbcode/abc123.txt` |
+| `%z` | ZIP path (auto-created) | `/tmp/bbdrop_abc123_vacation.zip` |
 | `%c1-%c4` | Custom field values | User-defined |
 | `%e1-%e4` | Extension field values | External app outputs |
 
 **Usage Example:**
 ```bash
 # Upload ZIP to external host after gallery completes
-python hooks/muh.py gofile "%z"
+python hooks/muh.py rapidgator "%z"
 
 # Process images with metadata
 python hooks/process.py --name "%N" --count %C --path "%p"
@@ -1105,11 +1068,9 @@ curl -X POST https://api.example.com/notify \
 ### Multi-Host Uploader (muh.py)
 
 **Component:** `hooks/muh.py`
-**Version:** v0.6.00
 **Description:** Standalone multi-host file uploader inspired by PolyUploader.
 
 **Supported Hosts:**
-- Gofile
 - Pixeldrain
 - Litterbox
 - Filedot
@@ -1126,22 +1087,22 @@ curl -X POST https://api.example.com/notify \
 
 **Usage:**
 ```bash
-# Upload file to Gofile
-python muh.py gofile /path/to/file.zip
+# Upload file to Rapidgator
+python muh.py rapidgator /path/to/file.zip
 
 # Upload with credentials
 python muh.py rapidgator /path/to/file.zip username:password
 
-# Upload from imxup hook (auto-created ZIP)
-python muh.py gofile "%z"
+# Upload from BBDrop hook (auto-created ZIP)
+python muh.py rapidgator "%z"
 ```
 
 **Example Output:**
 ```json
 {
   "success": true,
-  "host": "gofile",
-  "download_link": "https://gofile.io/d/abc123",
+  "host": "rapidgator",
+  "download_link": "https://rapidgator.net/file/abc123",
   "file_id": "abc123",
   "file_name": "vacation.zip",
   "file_size": 245823412,
@@ -1150,10 +1111,10 @@ python muh.py gofile "%z"
 }
 ```
 
-**Field Mapping in imxup:**
+**Field Mapping in BBDrop:**
 ```json
 {
-  "ext1": "$.download_link",  // https://gofile.io/d/abc123
+  "ext1": "$.download_link",  // https://rapidgator.net/file/abc123
   "ext2": "$.file_id",        // abc123
   "ext3": "$.file_size",      // 245823412
   "ext4": "$.upload_time"     // 12.34
@@ -1170,9 +1131,9 @@ python muh.py gofile "%z"
 **Behavior:**
 1. User configures external app with `%z` parameter
 2. Gallery upload completes
-3. imxup creates temporary ZIP:
+3. BBDrop creates temporary ZIP:
    - Location: System temp directory
-   - Name: `imxup_<gallery_id>_<gallery_name>.zip`
+   - Name: `bbdrop_<gallery_id>_<gallery_name>.zip`
    - Compression: STORE mode (no compression, fastest)
    - Contents: All images from gallery
 4. External app executes with ZIP path
@@ -1188,7 +1149,6 @@ python muh.py gofile "%z"
 
 ## Configuration & Settings
 
-**Version:** All versions
 **Description:** Comprehensive settings system with persistent storage.
 
 ### Settings Dialog
@@ -1196,50 +1156,49 @@ python muh.py gofile "%z"
 **Component:** `src/gui/settings_dialog.py`
 **Access:** Ctrl+, or File -> Settings
 
-**Tabs:**
-1. **General**: Application-wide settings
-   - Window behavior
-   - Theme selection
-   - Single-instance mode
-   - System tray integration
-2. **Upload**: Upload behavior and retries
-   - Max retry attempts (1-10)
-   - Retry delay (1-60 seconds)
-   - Parallel workers (1-10)
-   - Thumbnail size and format
-   - Gallery visibility (public/private)
-3. **BBCode**: Template selection and management
-   - Default template
-   - Auto-copy to clipboard
-   - Include host links
-   - Template manager
-4. **File Hosts**: Multi-host upload configuration
-   - Enable/disable hosts
-   - Credentials management
-   - Connection limits
-   - Test connections
-5. **External Apps**: Hook system configuration
-   - Add/edit/delete apps
-   - Parameter substitution
-   - Output mapping
-   - Event triggers
-6. **Logging**: Log level and output settings
-   - Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-   - Max log lines (100-10000)
-   - Auto-scroll
-   - Log file location
-7. **Advanced**: Database, cache, and performance
-   - Database maintenance
-   - Cache management
-   - Performance tuning
-   - Debug options
+**Sections** (sidebar navigation):
+- **General**: Application-wide settings
+  - Window behavior
+  - Theme selection
+  - Single-instance mode
+  - System tray integration
+- **Upload**: Upload behavior and retries
+  - Max retry attempts (1-10)
+  - Retry delay (1-60 seconds)
+  - Parallel workers (1-10)
+  - Thumbnail size and format
+  - Gallery visibility (public/private)
+- **BBCode**: Template selection and management
+  - Default template
+  - Auto-copy to clipboard
+  - Include host links
+  - Template manager
+- **File Hosts**: Multi-host upload configuration
+  - Enable/disable hosts
+  - Credentials management
+  - Connection limits
+  - Test connections
+- **External Apps**: Hook system configuration
+  - Add/edit/delete apps
+  - Parameter substitution
+  - Output mapping
+  - Event triggers
+- **Logging**: Log level and output settings
+  - Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  - Max log lines (100-10000)
+  - Auto-scroll
+  - Log file location
+- **Advanced**: Database, cache, and performance
+  - Database maintenance
+  - Cache management
+  - Performance tuning
+  - Debug options
 
 ---
 
 ### Adaptive Settings Panel
 
 **Component:** `src/gui/widgets/adaptive_settings_panel.py`
-**Version:** v0.5.12+
 
 **Features:**
 - **Context-Aware**: Shows/hides options based on selections
@@ -1272,20 +1231,20 @@ else:
 
 **Windows:**
 ```
-Registry: HKEY_CURRENT_USER\Software\ImxUploader\ImxUploadGUI
-Files: %APPDATA%\ImxUploader\
+Registry: HKEY_CURRENT_USER\Software\BBDropUploader\BBDropGUI
+Files: %APPDATA%\BBDropUploader\
   +-- settings.ini
-  +-- imxup.db
+  +-- bbdrop.db
   +-- token_cache.db
   +-- templates/
 ```
 
 **Linux:**
 ```
-Config: ~/.config/ImxUploader/ImxUploadGUI.conf
-Files: ~/.imxup/
-  +-- imxup.ini
-  +-- imxup.db
+Config: ~/.config/BBDropUploader/BBDropGUI.conf
+Files: ~/.bbdrop/
+  +-- bbdrop.ini
+  +-- bbdrop.db
   +-- token_cache.db
   +-- templates/
   +-- artifacts/
@@ -1341,7 +1300,6 @@ SETTINGS = {
 
 ## User Interface
 
-**Version:** All versions
 **Platform:** PyQt6
 **Description:** Modern, responsive GUI with dark/light theme support.
 
@@ -1351,7 +1309,7 @@ SETTINGS = {
 
 **Layout:**
 ```
-+-- ImXup v0.6.16 -----------------------------+
++-- BBDrop ----------------------------------------+
 | File  Edit  View  Tools  Help                |
 +----------------------------------------------+
 | +-- Tabs ----------------------------------+ |
@@ -1430,7 +1388,7 @@ SETTINGS = {
 - **Dark**: Dark mode with `#1e1e1e` background
 - **Light**: Light mode with `#f0f0f0` background
 
-**Stylesheet:** `assets/styles.qss`
+**Stylesheets:** Modular QSS system (`assets/qss/base.qss` + `assets/qss/components/*.qss` + `assets/qss/themes/*.qss`)
 
 **Dark Theme:**
 ```css
@@ -1487,28 +1445,32 @@ QTextEdit {
 - **Navigation**: tabs, settings, help, logs
 
 **Icon Locations:**
+
+Since v0.7.4 icons use unified names (no `-dark`/`-light` suffix). The icon manager
+handles theme adaptation at runtime.
+
 ```
 assets/
-+-- status_queued-dark.png
-+-- status_queued-light.png
-+-- status_uploading-001-dark.png
-+-- status_uploading-001-light.png
-+-- status_uploading-002-dark.png
-+-- status_uploading-003-dark.png
-+-- status_uploading-004-dark.png
-+-- status_completed-dark.png
-+-- status_failed-dark.png
++-- status_queued.png
++-- status_uploading-001.png
++-- status_uploading-002.png
++-- status_uploading-003.png
++-- status_uploading-004.png
++-- status_completed.png
++-- status_failed.png
 +-- hosts/
 |   +-- logo/
 |       +-- fileboom-icon.png
-|       +-- fileboom-icon-dim.png
 |       +-- rapidgator-icon.png
 |       +-- keep2share-icon.png
 |       +-- tezfiles-icon.png
 |       +-- filedot-icon.png
 |       +-- filespace-icon.png
 |       +-- katfile-icon.png
-+-- styles.qss
++-- qss/
+    +-- base.qss
+    +-- components/
+    +-- themes/
 ```
 
 **API:**
@@ -1600,7 +1562,6 @@ LOG_LEVELS = {
 ### Duplicate Detection
 
 **Component:** `src/gui/dialogs/duplicate_detection_dialogs.py`
-**Version:** All versions
 
 **Detection Methods:**
 - **Path Matching**: Compare gallery folder paths
@@ -1667,7 +1628,6 @@ DUPLICATE_DETECTION = {
 ### Help Dialog
 
 **Component:** `src/gui/dialogs/help_dialog.py`
-**Version:** All versions
 
 **Help Tabs:**
 1. **Overview**: Application introduction and quick start
@@ -1704,7 +1664,7 @@ font.setFamilies([
 
 ### Queue Database
 
-**Location:** `~/.imxup/imxup.db`
+**Location:** `~/.bbdrop/bbdrop.db`
 **Engine:** SQLite 3
 **Component:** `src/storage/database.py`
 
@@ -1785,9 +1745,9 @@ class QueueManager:
 **Backup Location:**
 ```
 ~/.db-backups/
-+-- imxup-2025-11-17-001.db
-+-- imxup-2025-11-16-001.db
-+-- imxup-2025-11-15-001.db
++-- bbdrop-2025-11-17-001.db
++-- bbdrop-2025-11-16-001.db
++-- bbdrop-2025-11-15-001.db
 ```
 
 **Vacuum Schedule:**
@@ -1802,7 +1762,7 @@ class QueueManager:
 
 ### Artifact Storage
 
-**Location:** `~/.imxup/artifacts/`
+**Location:** `~/.bbdrop/artifacts/`
 **Format:** JSON
 **Purpose:** Store upload metadata and results
 
@@ -1835,7 +1795,7 @@ class QueueManager:
     "custom2": "Location: Hawaii"
   },
   "ext_fields": {
-    "ext1": "https://gofile.io/d/abc123",
+    "ext1": "https://pixeldrain.com/u/abc123",
     "ext2": "file_id_12345",
     "ext3": "245823412",
     "ext4": "12.34"
@@ -1876,7 +1836,6 @@ SESSION_CONFIG = {
 ### pycurl Integration
 
 **Component:** `src/network/client.py` (pycurl backend)
-**Version:** v0.6.00
 
 **Features:**
 - **High Performance**: 2-3x faster than requests library
@@ -1953,149 +1912,3 @@ WORKER_CONFIG = {
 - Image sampling (sample 25 images for dimensions, not all)
 - Database pagination (load galleries in batches)
 - Icon cache limit (max 100 cached icons)
-
-**Benchmark Results (v0.6.13):**
-```
-Startup Time: 1.2s (down from 3.5s in v0.5.12)
-Gallery Load: 0.8s for 100 galleries (down from 2.1s)
-BBCode Generation: 0.3s for 127 images
-Upload Speed: 2.5 MB/s average (pycurl backend)
-Memory Usage: 120 MB (GUI + 4 workers)
-CPU Usage: 15-25% (during active upload)
-```
-
----
-
-## Version History
-
-### v0.6.16 (Latest - 2026-01-03)
-**Latest Release**
-
-**Updates:**
-- Audit and correct FEATURES.md for accuracy
-- Add Katfile (7th file host) to feature list
-- Correct queue states (11 total, not 9)
-- Verify BBCode placeholder count (18 confirmed)
-
----
-
-### v0.6.13 (2025-12-28)
-**Latest Stable Release**
-
-**Updates:**
-- Fix help dialog performance, add emoji PNG support, improve quick settings
-- Optimize theme switching speed
-- Refactor worker table, extract ArtifactHandler, add worker logo setting
-- Fix thread-safety in ImageStatusChecker, improve worker lifecycle
-- Extract WorkerSignalHandler from main_window.py
-
----
-
-### v0.6.00 (2025-11-17)
-**Major Release: Multi-Host Upload System**
-
-**New Features:**
-- Multi-host file upload with 6 provider integrations
-- Enhanced authentication (API keys, token login, sessions)
-- Adaptive settings panels
-- External hooks system with parameter substitution
-- ZIP auto-creation for external apps (`%z` parameter)
-- `#hostLinks#` placeholder for BBCode templates
-
-**Improvements:**
-- 2x faster startup (1.2s vs 3.5s)
-- Icon cache optimization
-- Table viewport lazy loading
-- pycurl Windows DLL bundling
-- Thread-safe bandwidth tracking
-
-**Bug Fixes:**
-- Fixed emoji rendering in help dialog (Segoe UI Emoji font)
-- Fixed dark theme code background (#222222)
-- Fixed PyInstaller pycurl bundling (delvewheel DLLs)
-
----
-
-### v0.5.13 (2025-11-15)
-**Partial Multi-Host Implementation**
-- ZIP compression support
-- Token caching foundation
-- File host client architecture
-- Gallery loading splash screen status
-
----
-
-### v0.5.12 (2025-11-14)
-**Adaptive UI and Hooks**
-- Adaptive Settings Panel
-- External Hooks system
-- Thread safety improvements
-- System enhancements
-
----
-
-## Technical Specifications
-
-### Dependencies
-
-**Core:**
-- Python 3.14+
-- PyQt6 6.9.1+
-- requests 2.31.0+
-- pycurl 7.45.7+
-- Pillow 11.3.0+
-- cryptography 45.0.5+
-- keyring 25.0.0+
-
-**Development:**
-- pytest 8.0.0+
-- pytest-qt 4.4.0+
-- black 24.0.0+ (code formatting)
-- mypy 1.8.0+ (type checking)
-- pylint 3.0.0+ (linting)
-
----
-
-### System Requirements
-
-**Minimum:**
-- OS: Windows 10 / Linux (Ubuntu 20.04+)
-- Python: 3.14
-- RAM: 512 MB
-- Disk: 100 MB
-- Network: Stable internet
-
-**Recommended:**
-- OS: Windows 11 / Linux (latest)
-- Python: 3.14+
-- RAM: 2 GB
-- Disk: 500 MB (logs/cache)
-- Network: 10+ Mbps upload
-
----
-
-## Support & Documentation
-
-**User Documentation:**
-- [GUI Guide](../guides/gui-guide.md) - Complete GUI walkthrough
-- [Multi-Host Upload](../guides/multi-host-upload.md) - File host setup
-- [BBCode Templates](../guides/bbcode-templates.md) - Template reference
-- [Keyboard Shortcuts](../getting-started/keyboard-shortcuts.md) - All shortcuts
-- [Quick Start](../getting-started/quick-start.md) - 5-minute guide
-- [Troubleshooting](../troubleshooting/troubleshooting.md) - Common issues
-
-**Developer Documentation:**
-- [Architecture](../../architecture/) - System design
-- [Testing Guide](../../dev/) - Running tests
-- [API Reference](../../dev/) - Internal APIs
-
-**Support:**
-- GitHub Issues: Bug reports and feature requests
-- GitHub Discussions: Questions and community
-- Logs: Help -> View Logs for debugging
-
----
-
-**Made by the ImXup team**
-
-*Last updated: 2026-01-03 | Version: 0.6.16*

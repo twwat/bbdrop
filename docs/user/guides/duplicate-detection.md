@@ -2,8 +2,6 @@
 
 ## Quick Reference
 
-**Version:** 0.6.16
-**Last Updated:** 2026-01-03
 **Feature:** Prevent uploading the same gallery twice
 **Detection Methods:** Path matching, name matching, queue checking
 **Use Case:** Organize and manage gallery uploads without accidental duplicates
@@ -12,12 +10,12 @@
 
 ## What is Duplicate Detection?
 
-Duplicate detection helps you avoid uploading the same gallery multiple times. imxup automatically detects two types of duplicates:
+Duplicate detection helps you avoid uploading the same gallery multiple times. BBDrop automatically detects two types of duplicates:
 
-1. **Previously Uploaded** - Galleries you've already uploaded to imx.to
+1. **Previously Uploaded** - Galleries you've already uploaded
 2. **Already in Queue** - Galleries currently waiting to upload in the queue
 
-When detected, imxup shows friendly dialogs allowing you to decide what to do.
+When detected, BBDrop shows friendly dialogs allowing you to decide what to do.
 
 ---
 
@@ -25,11 +23,11 @@ When detected, imxup shows friendly dialogs allowing you to decide what to do.
 
 ### Previously Uploaded Galleries
 
-imxup checks if a gallery folder has been uploaded before by looking for special marker files:
+BBDrop checks if a gallery folder has been uploaded before by looking for special marker files:
 
-- **`.imxgalleryid`** - Stores the gallery ID from imx.to
+- **`.imxgalleryid`** - Stores the gallery ID from the image host
 - **`.imxmetadata`** - Stores upload metadata and timestamp
-- Other imx-specific files in the gallery folder
+- Other host-specific files in the gallery folder
 
 **Detection Accuracy:**
 - Matches on folder path (primary method)
@@ -39,7 +37,7 @@ imxup checks if a gallery folder has been uploaded before by looking for special
 
 ### Already in Queue
 
-imxup checks if the folder path is already in your current upload queue:
+BBDrop checks if the folder path is already in your current upload queue:
 
 - Exact path matching
 - Works across all tabs
@@ -69,12 +67,12 @@ Duplicate detection is **enabled by default** and cannot be disabled. This is in
 
 ## User Options When Duplicates Detected
 
-When imxup finds duplicates, you'll see a dialog with options:
+When BBDrop finds duplicates, you'll see a dialog with options:
 
 ### Previously Uploaded Dialog
 
 ```
-⚠️ 2 galleries were uploaded previously
+2 galleries were uploaded previously
 
 These folders have existing gallery files, indicating they
 were uploaded before. Select which ones you want to upload again:
@@ -92,10 +90,10 @@ were uploaded before. Select which ones you want to upload again:
 
 **Your Options:**
 
-1. **Yes, Upload Selected** - Re-upload checked galleries to imx.to
+1. **Yes, Upload Selected** - Re-upload checked galleries
    - Use when: Gallery was updated with new images
-   - Use when: Previous upload failed (has .imxgalleryid but no images on imx.to)
-   - Creates new gallery ID on imx.to
+   - Use when: Previous upload failed (has .imxgalleryid but no images on host)
+   - Creates new gallery ID on the image host
 
 2. **No, Skip All** - Skip all previously uploaded galleries
    - Use when: You don't want to re-upload anything
@@ -104,7 +102,7 @@ were uploaded before. Select which ones you want to upload again:
 ### Queue Duplicates Dialog
 
 ```
-📋 1 item already in queue
+1 item already in queue
 
 These folders are already in your upload queue.
 Select which ones you want to replace:
@@ -146,18 +144,18 @@ When the previously uploaded dialog appears:
 
 1. Check the galleries you want to re-upload
 2. Click "Yes, Upload Selected"
-3. imxup creates a new gallery ID on imx.to
+3. BBDrop creates a new gallery ID on the image host
 4. Both old and new galleries exist separately
 
-**Important:** This creates a NEW gallery on imx.to. The old gallery is not modified or replaced.
+**Important:** This creates a NEW gallery on the image host. The old gallery is not modified or replaced.
 
 ### Updating an Existing Gallery
 
-If you want to modify an existing gallery on imx.to (not create a new one):
+If you want to modify an existing gallery (not create a new one):
 
 1. Edit the images in your folder
 2. Delete the `.imxgalleryid` file from the folder
-3. Add the folder to imxup again
+3. Add the folder to BBDrop again
 4. Gallery will be treated as new
 
 ---
@@ -186,11 +184,11 @@ If you want to modify an existing gallery on imx.to (not create a new one):
 
 2. **Remove old metadata**
    - Delete `.imxgalleryid` and `.imxmetadata` files
-   - Right-click folder → Properties (Windows) or show hidden files (Linux)
+   - Right-click folder -> Properties (Windows) or show hidden files (Linux)
    - Confirm deletion
 
 3. **Re-add the gallery**
-   - Drag folder back into imxup
+   - Drag folder back into BBDrop
    - Should now be treated as new upload
 
 ### False Negatives - Duplicate Not Detected
@@ -219,7 +217,7 @@ If you want to modify an existing gallery on imx.to (not create a new one):
 
 1. Locate the gallery folder
 2. Show hidden files (if not already visible):
-   - **Windows:** View → Hidden items
+   - **Windows:** View -> Hidden items
    - **Linux:** Press Ctrl+H in file manager
 
 3. Find and delete these files:
@@ -227,7 +225,7 @@ If you want to modify an existing gallery on imx.to (not create a new one):
    - `.imxmetadata`
    - Any other `.imx*` files
 
-4. Close folder window and re-add to imxup
+4. Close folder window and re-add to BBDrop
 
 5. Gallery will now be treated as new upload
 
@@ -242,7 +240,7 @@ If you want to modify an existing gallery on imx.to (not create a new one):
    - Helps with duplicate detection accuracy
 
 2. **Don't rename uploaded folders**
-   - If you rename, imxup won't recognize as duplicate
+   - If you rename, BBDrop won't recognize as duplicate
    - Rename after confirming upload completed
 
 3. **Use tabs for organization**
@@ -255,7 +253,7 @@ If you want to modify an existing gallery on imx.to (not create a new one):
 **Recommended process:**
 
 1. Add gallery folders to queue
-2. imxup shows duplicate dialogs if needed
+2. BBDrop shows duplicate dialogs if needed
 3. Review detected duplicates
 4. Click "Yes, Upload Selected" or "No, Skip All"
 5. Confirm uploads in queue
@@ -276,8 +274,3 @@ If you want to modify an existing gallery on imx.to (not create a new one):
 - **[GUI Guide](../guides/gui-guide.md)** - Complete interface walkthrough
 - **[Multi-Host Upload](../guides/multi-host-upload.md)** - Upload to multiple hosts
 - **[Features Reference](../reference/FEATURES.md)** - Full feature list
-
----
-
-**Version:** 0.6.16
-**Last Updated:** 2026-01-03

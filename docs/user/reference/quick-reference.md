@@ -1,4 +1,4 @@
-# IMXuploader Quick Reference
+# BBDrop Quick Reference
 
 A concise reference card for common operations and settings.
 
@@ -8,13 +8,13 @@ A concise reference card for common operations and settings.
 
 ```bash
 # GUI Mode (recommended)
-python imxup.py --gui
+python bbdrop.py --gui
 
 # CLI Mode
-python imxup.py /path/to/folder --name "Gallery Name"
+python bbdrop.py /path/to/folder --name "Gallery Name"
 
 # Debug Mode (verbose logging)
-python imxup.py --gui --debug
+python bbdrop.py --gui --debug
 ```
 
 ---
@@ -58,10 +58,10 @@ python imxup.py --gui --debug
 
 | File | Purpose |
 |------|---------|
-| `~/.imxup/imxup.ini` | User settings and preferences |
-| `~/.imxup/imxup.db` | Queue database (SQLite) |
-| `~/.imxup/templates/` | Custom BBCode templates |
-| `~/.imxup/logs/` | Application logs |
+| `~/.bbdrop/bbdrop.ini` | User settings and preferences |
+| `~/.bbdrop/bbdrop.db` | Queue database (SQLite) |
+| `~/.bbdrop/templates/` | Custom BBCode templates |
+| `~/.bbdrop/logs/` | Application logs |
 
 **Note:** On Windows, `~` refers to `%USERPROFILE%` (e.g., `C:\Users\YourName`).
 
@@ -83,13 +83,13 @@ python imxup.py --gui --debug
 
 ```bash
 # Upload a folder with custom name
-python imxup.py "C:\Photos\Vacation" --name "Summer Vacation 2024"
+python bbdrop.py "C:\Photos\Vacation" --name "Summer Vacation 2024"
 
 # Upload with specific thumbnail size
-python imxup.py /path/to/folder --thumb-size 3
+python bbdrop.py /path/to/folder --thumb-size 3
 
 # Upload NSFW content
-python imxup.py /path/to/folder --content-type 1
+python bbdrop.py /path/to/folder --content-type 1
 ```
 
 ---
@@ -140,16 +140,18 @@ Archives are automatically extracted before upload.
 
 | Placeholder | Description |
 |-------------|-------------|
-| `{gallery_name}` | Gallery display name |
-| `{gallery_url}` | IMX.to gallery URL |
-| `{image_count}` | Number of images |
-| `{total_size}` | Total size (formatted) |
-| `{upload_date}` | Upload timestamp |
-| `{thumb_url}` | Thumbnail URL |
-| `{image_url}` | Full image URL |
-| `{download_url}` | File host download link |
+| `#folderName#` | Gallery display name |
+| `#galleryLink#` | Image host gallery URL |
+| `#pictureCount#` | Number of uploaded images |
+| `#folderSize#` | Total size (formatted) |
+| `#width#` | Average image width |
+| `#height#` | Average image height |
+| `#allImages#` | All image BBCode |
+| `#hostLinks#` | File host download links |
+| `#custom1#`-`#custom4#` | User-defined fields |
+| `#ext1#`-`#ext4#` | External app outputs |
 
-See the full template documentation for all 18 placeholders.
+See [BBCode Templates](../guides/bbcode-templates.md) for conditional logic and full details.
 
 ---
 
@@ -171,7 +173,7 @@ See the full template documentation for all 18 placeholders.
 | Login failed | Verify credentials in Settings |
 | Gallery not appearing | Ensure folder contains supported images |
 | Slow uploads | Reduce concurrent uploads in Settings |
-| Database locked | Close other IMXuploader instances |
+| Database locked | Close other BBDrop instances |
 
 ---
 
@@ -179,17 +181,13 @@ See the full template documentation for all 18 placeholders.
 
 - **F1 Key:** Opens built-in help
 - **Ctrl+.:** Shows all keyboard shortcuts
-- **Logs:** Check `~/.imxup/logs/` for detailed error messages
+- **Logs:** Check `~/.bbdrop/logs/` for detailed error messages
 - **Debug Mode:** Run with `--debug` for verbose output
 
 ---
 
 ## Version Information
 
-Check your version: `python imxup.py --version`
+Check your version: `python bbdrop.py --version`
 
 Current version information and changelog available in the application Help menu.
-
----
-
-*Last Updated: 2025-12-28*

@@ -1,33 +1,36 @@
-# IMXuploader User Documentation
+# BBDrop User Documentation
 
-Welcome to IMXuploader, a professional-grade desktop application for uploading image galleries to imx.to and multiple file hosting services. This documentation covers everything from setup to advanced features and troubleshooting.
+Welcome to BBDrop, a professional-grade desktop application for uploading image galleries to multiple image hosts and file hosting services. This documentation covers everything from setup to advanced features and troubleshooting.
 
 ---
 
 ## Getting Started
 
-New to IMXuploader? Start here.
+New to BBDrop? Start here.
 
 - [Quick Start](./getting-started/quick-start.md) — Upload your first gallery in 5 minutes
-- [Setup](./getting-started/setup.md) — Installation, configuration, and credentials
 - [Keyboard Shortcuts](./getting-started/keyboard-shortcuts.md) — Master the keyboard (18+ shortcuts)
 
 ---
 
 ## Guides
 
-Learn how to use IMXuploader effectively.
+Learn how to use BBDrop effectively.
 
 ### Core Features
 - [GUI Guide](./guides/gui-guide.md) — Complete walkthrough of the interface, tabs, and queue management
-- [Multi-Host Upload](./guides/multi-host-upload.md) — Upload to imx.to + 7 premium file hosts
+- [Image Hosts](./guides/image-hosts.md) — IMX.to and TurboImageHost configuration
+- [Multi-Host Upload](./guides/multi-host-upload.md) — Upload to multiple image hosts + 7 premium file hosts
+- [Queue Management](./guides/queue-management.md) — Queue operations, tabs, columns, context menu
+- [Scanning](./guides/scanning.md) — Image scanning, link checking, cover photos
 - [BBCode Templates](./guides/bbcode-templates.md) — Generate customizable forum post templates with 18 dynamic placeholders
+- [Proxies](./guides/proxies.md) — Proxy pools, per-host proxy, Tor support
 
 ### Advanced Features
 - [Archive Management](./guides/archive-management.md) — Handle ZIP, RAR, 7Z archives
 - [Duplicate Detection](./guides/duplicate-detection.md) — Identify previously uploaded galleries
 - [Theme Customization](./guides/theme-customization.md) — Dark, light, and auto themes
-- [Hooks System](./guides/hooks-system.md) — External app integration and automation
+- [Hooks & Automation](./guides/hooks.md) — External app integration and automation
 - [Credential Management](./guides/credential-management.md) — Secure password and API key storage
 
 ---
@@ -54,13 +57,3 @@ Something not working? Find answers here.
 - [Log Diagnosis Quick Reference](./troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md) — Interpret log files quickly
 - [Log Filtering Quick Diagnosis](./troubleshooting/LOG_FILTERING_QUICK_DIAGNOSIS.md) — Filter logs for specific issues
 
----
-
-## Other Resources
-
-- [Contributing](../../CONTRIBUTING.md) — How to contribute to the project
-- [Project README](../../README.md) — Project overview and quick links
-
----
-
-**Version:** 0.6.16 | **Last Updated:** 2026-01-03

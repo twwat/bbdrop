@@ -2,17 +2,16 @@
 
 ## Quick Reference
 
-**Version:** v0.6.16
 **Feature:** Dark/light theme support with system detection
 **Supported Themes:** Dark, Light, Auto (system-aware)
 **Customization:** Font sizes, color schemes, icon themes
-**Use Case:** Adapt IMXuploader to your working environment
+**Use Case:** Adapt BBDrop to your working environment
 
 ---
 
 ## What is Theme Customization?
 
-IMXuploader includes a professional theming system that allows you to customize the application's appearance. This guide covers how to switch themes, adjust font sizes, and troubleshoot display issues.
+BBDrop includes a professional theming system that allows you to customize the application's appearance. This guide covers how to switch themes, adjust font sizes, and troubleshoot display issues.
 
 The theming system provides:
 - **Dark Mode** - Eye-friendly dark interface (recommended for evening work)
@@ -95,17 +94,17 @@ Auto mode automatically detects your system theme setting and applies the matchi
 **Menu Location:**
 ```
 File  Edit  View  Tools  Help
-              └─ Themes
-                  ├─ Dark Theme
-                  ├─ Light Theme
-                  └─ Auto (System)
+              +- Themes
+                  +- Dark Theme
+                  +- Light Theme
+                  +- Auto (System)
 ```
 
 ### Method 2: Settings Dialog
 
 **Steps:**
 1. Press **Ctrl+,** or go to **File -> Settings**
-2. Click **General** tab
+2. Click **General** section
 3. Under "Appearance," find **Theme**
 4. Select desired theme from dropdown
 5. Click **Save**
@@ -166,7 +165,7 @@ Font sizes can be adjusted independently from theme selection.
 
 **Via Settings Dialog:**
 1. Press **Ctrl+,** to open Settings
-2. Click **General** tab
+2. Click **General** section
 3. Find **Font Size** slider or input
 4. Current options: 8pt to 14pt (default: 9pt)
 5. Click **Save**
@@ -198,13 +197,13 @@ Theme settings are **automatically saved** in your configuration:
 
 **Windows:**
 ```
-Registry: HKEY_CURRENT_USER\Software\ImxUploader\ImxUploadGUI
+Registry: HKEY_CURRENT_USER\Software\BBDrop\BBDropGUI
 Settings: ui/theme (value: "dark", "light", or "auto")
 ```
 
 **Linux:**
 ```
-File: ~/.config/ImxUploader/ImxUploadGUI.conf
+File: ~/.config/BBDrop/BBDropGUI.conf
 Settings: ui/theme=dark
 ```
 
@@ -272,7 +271,7 @@ If auto-detect doesn't match your system theme, manually select dark or light.
    - Look at menu to see checkmark next to active theme
 
 2. **Restart application**
-   - Close IMXuploader completely
+   - Close BBDrop completely
    - Wait 2 seconds
    - Reopen application
    - Check if theme persisted
@@ -285,7 +284,7 @@ If auto-detect doesn't match your system theme, manually select dark or light.
 
 4. **Clear settings cache** (if nothing works)
    - Close application
-   - Delete: `~/.imxup/imxup.ini` (Linux) or Registry keys (Windows)
+   - Delete: `~/.bbdrop/bbdrop.ini` (Linux) or Registry keys (Windows)
    - Restart application
    - Theme will reset to default (dark)
 
@@ -298,12 +297,12 @@ If auto-detect doesn't match your system theme, manually select dark or light.
 1. **System settings override**
    - Windows: Check Windows Settings > Personalization > Colors
    - Linux: Check system theme in Settings
-   - May conflict with IMXuploader theme
+   - May conflict with BBDrop theme
 
 2. **High Contrast mode enabled**
    - Windows: Settings > Ease of Access > High Contrast
    - Temporarily disable to test
-   - IMXuploader themes designed for standard contrast
+   - BBDrop themes designed for standard contrast
 
 3. **Display color profile**
    - Monitor calibration affects appearance
@@ -322,14 +321,14 @@ If auto-detect doesn't match your system theme, manually select dark or light.
 
 2. **Refresh icon cache**
    - Close application
-   - Delete: `~/.imxup/.icon_cache/` (if exists)
+   - Delete: `~/.bbdrop/.icon_cache/` (if exists)
    - Restart application
    - Icons will regenerate with correct theme
 
 3. **Check icon files exist**
    - Icons should be in: `assets/hosts/logo/` and `assets/` directory
    - If files missing, application falls back to placeholder icons
-   - Try reinstalling IMXuploader to restore icon files
+   - Try reinstalling BBDrop to restore icon files
 
 ### Text Too Small or Too Large
 
@@ -338,14 +337,14 @@ If auto-detect doesn't match your system theme, manually select dark or light.
 **Solutions:**
 
 1. **Check font size in Settings**
-   - Ctrl+, > General tab
+   - Ctrl+, > General section
    - Verify font size slider is at desired position
    - Confirm "Save" was clicked
 
 2. **Verify system DPI settings**
    - Windows: Settings > Display > Scale and Layout
    - Standard DPI is 100% - if set higher, text appears larger
-   - IMXuploader font size + Windows DPI = final size
+   - BBDrop font size + Windows DPI = final size
 
 3. **Reset to defaults**
    - In Settings, look for "Reset to Defaults" button
@@ -401,7 +400,7 @@ If auto-detect doesn't match your system theme, manually select dark or light.
 
 1. **Verify System Detection Works**
    - Switch your system to dark/light theme
-   - Check if IMXuploader follows (requires app restart)
+   - Check if BBDrop follows (requires app restart)
    - If not, manually select dark or light
 
 2. **Consistent Environment**
@@ -422,12 +421,7 @@ No dedicated keyboard shortcut exists for theme toggle by default. If needed, us
 
 ## See Also
 
-- [GUI Guide](./gui-guide.md) - Complete IMXuploader interface walkthrough
+- [GUI Guide](./gui-guide.md) - Complete BBDrop interface walkthrough
 - [Keyboard Shortcuts](../getting-started/keyboard-shortcuts.md) - All keyboard shortcuts
 - [FEATURES.md](../reference/FEATURES.md) - Full feature documentation
 - [Troubleshooting](../troubleshooting/troubleshooting.md) - Common issues and solutions
-
----
-
-**Version:** 0.6.16
-**Last Updated:** 2026-01-03

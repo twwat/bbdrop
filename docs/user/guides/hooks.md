@@ -110,3 +110,57 @@ python upload_to_host.py "%z" --name "%N"
 ```
 
 The download link appears in your BBCode automatically, only when a URL was actually returned.
+
+## Example: Multi-Host Integration
+
+Upload to both GoFile and Pixeldrain after gallery completion, then reference both links in your template.
+
+**Hook 1 — GoFile:**
+```
+python hooks/muh.py gofile "%z"
+```
+**Mapping:** ext1 → `download_link`
+
+**Hook 2 — Pixeldrain:**
+```
+python hooks/muh.py pixeldrain "%z"
+```
+**Mapping:** ext2 → `download_link`
+
+**Template usage:**
+```bbcode
+[b]Download Links:[/b]
+[url=#ext1#]GoFile[/url] | [url=#ext2#]Pixeldrain[/url]
+```
+
+Each hook maps its output to a different ext field, so the template can reference both links.
+
+## Troubleshooting
+
+### Hook Not Executing
+
+1. Check that the correct event is selected (e.g., "On Gallery Completed" for post-upload hooks)
+2. Verify the command path is correct — use a full path if the executable isn't on PATH
+3. Check the working directory setting (defaults to the BBDrop folder)
+4. Open the log viewer (Ctrl+L) to see error messages from the hook executor
+
+### Parameters Not Substituted
+
+1. Always quote variables in your command template — `"%N"` not `%N`
+2. Fields may be empty at runtime; quoting prevents argument splitting
+3. Multi-character variables like `%e1` are matched before single-character ones like `%e`
+
+### JSON Output Not Captured
+
+1. Enable the **Capture Output** checkbox for the hook
+2. Verify the script outputs valid JSON to stdout (test it outside BBDrop first)
+3. Check that JSON key names in the mapping match exactly what the script outputs
+4. Use **Run Test Command** to see parsed output and verify mappings
+5. Check logs for JSON parsing errors
+
+### Hook Timeout
+
+1. Increase the timeout value (in seconds) in the hook configuration
+2. For file host uploads, allow at least 300 seconds (5 minutes)
+3. Slow network connections need longer timeouts — check your upload speed
+4. Check logs for timeout messages
