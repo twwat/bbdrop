@@ -280,7 +280,7 @@ class HelpDialog(QDialog):
     DOC_STRUCTURE = {
         "Getting Started": [
             ("Installation", "getting-started/installation.md"),
-            ("Your First Upload", "getting-started/first-upload.md"),
+            ("Your First Upload", "getting-started/quick-start.md"),
             ("Key Concepts", "getting-started/concepts.md"),
         ],
         "Guides": [
