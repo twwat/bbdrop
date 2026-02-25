@@ -126,6 +126,7 @@ assets/upload-anim/
 *.exe
 
 docs/internal/
+docs/archive/
 
 .cursor/
 CLAUDE.md
@@ -139,3 +140,9 @@ winvenv/
 .venv/
 docs/RELEASE_PROCESS.md
 tests/visual/diffs/
+assets/ignored/
+assets/image_hosts/ignored/
+assets/hosts/logo/ignored/
+voo/
+gemini-superpowers/
+GEMINI.md

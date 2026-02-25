@@ -1,9 +1,6 @@
-# IMXuploader API Reference
+# BBDrop API Reference
 
-**Version:** 0.6.06
-**Last Updated:** 2025-12-15
-
-This document provides comprehensive API documentation for the IMXuploader project's core modules and classes.
+This document provides comprehensive API documentation for the BBDrop project's core modules and classes.
 
 ---
 
@@ -18,7 +15,7 @@ This document provides comprehensive API documentation for the IMXuploader proje
 3. [Storage Layer](#3-storage-layer)
    - [QueueStore](#queuestore)
 4. [GUI Layer](#4-gui-layer)
-   - [ImxUploadGUI](#imxuploadgui)
+   - [BBDropGUI](#bbdropgui)
 5. [Core Engine](#5-core-engine)
    - [UploadEngine](#uploadengine)
    - [AtomicCounter](#atomiccounter)
@@ -232,7 +229,7 @@ def __init__(self, queue_manager: QueueManager)
 
 **Attributes:**
 - `queue_manager` (QueueManager): Queue manager reference
-- `uploader` (Optional[GUIImxToUploader]): Uploader instance (initialized in run())
+- `uploader`: Uploader instance (initialized in run())
 - `running` (bool): Worker running state
 - `current_item` (Optional[GalleryQueueItem]): Currently processing item
 - `global_byte_counter` (AtomicCounter): Persistent byte counter across all galleries
@@ -402,7 +399,7 @@ def __init__(self, db_path: Optional[str] = None)
 ```
 
 **Parameters:**
-- `db_path` (Optional[str]): Path to SQLite database file (default: `~/.imxup/imxup.db`)
+- `db_path` (Optional[str]): Path to SQLite database file (default: `~/.bbdrop/bbdrop.db`)
 
 **Database Schema:**
 - `galleries`: Gallery metadata and upload state
@@ -431,8 +428,8 @@ Insert or update multiple gallery items.
 - `added_time` (int): Unix timestamp when added
 - `total_images` (int): Total image count
 - `total_size` (int): Total size in bytes
-- `gallery_id` (str): IMX gallery ID
-- `gallery_url` (str): IMX gallery URL
+- `gallery_id` (str): Gallery ID
+- `gallery_url` (str): Gallery URL
 - `tab_name` (str): Tab assignment
 - `custom1-4` (str): Custom field values
 - `ext1-4` (str): External program result fields
@@ -738,7 +735,7 @@ Main GUI application window using PyQt6. Provides drag-and-drop interface, queue
 
 ---
 
-### ImxUploadGUI
+### BBDropGUI
 
 **Purpose:** Main application window coordinating all GUI components and background workers.
 
@@ -833,9 +830,9 @@ Export BBCode for a completed gallery.
 }
 
 **Configuration Paths:**
-- Queue database: `~/.imxup/imxup.db`
-- Config file: `~/.imxup/config.ini`
-- Logs: `~/.imxup/logs/`
+- Queue database: `~/.bbdrop/bbdrop.db`
+- Config file: `~/.bbdrop/bbdrop.ini`
+- Logs: `~/.bbdrop/logs/`
 
 ---
 
@@ -850,7 +847,7 @@ Core upload engine shared by CLI and GUI. Centralizes upload loop, retries, and 
 
 ### UploadEngine
 
-**Purpose:** Orchestrates folder upload to imx.to with concurrent uploads, retry logic, and progress tracking.
+**Purpose:** Orchestrates folder upload to configured image host with concurrent uploads, retry logic, and progress tracking.
 
 #### Constructor
 
@@ -894,7 +891,7 @@ def run(
 ) -> Dict[str, Any]
 ```
 
-Upload a folder as an imx.to gallery.
+Upload a folder as a gallery to the configured image host.
 
 **Parameters:**
 - `folder_path` (str): Path to folder containing images
@@ -1049,12 +1046,12 @@ inactivity_timeout = 300
 upload_timeout = 3600
 enabled = true
 
-[gofile]
+[fileboom]
 inactivity_timeout = 300
 enabled = true
 ```
 
-### ~/.imxup/config.ini
+### ~/.bbdrop/bbdrop.ini
 ```ini
 [SETTINGS]
 username = user@example.com
@@ -1160,16 +1157,6 @@ app.exec()
 
 ---
 
-## Version History
-
-- **0.6.06** (2025-12-15): Current version
-  - Added file host upload tracking
-  - Improved tab management with referential integrity
-  - Added custom fields (custom1-4, ext1-4)
-  - Performance optimizations for database queries
-
----
-
 ## See Also
 
 - [README.md](../README.md) - Project overview
@@ -1177,6 +1164,3 @@ app.exec()
 - [src/utils/logger.py](../src/utils/logger.py) - Logging utilities
 - [src/gui/dialogs/](../src/gui/dialogs/) - GUI dialog classes
 
----
-
-**Document End**

@@ -30,12 +30,13 @@ _**Note**: portable versions don't require installation, just unpack and run_
 
 ### From source
 
-![Python](https://img.shields.io/badge/python-3.14+-lightgreen.svg?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/python-3.12+-lightgreen.svg?logo=python&logoColor=white)
 [![Qt](https://img.shields.io/badge/PyQt-6.9.1-blue.svg?logo=Qt&logoColor=babyblue)](#)
 
 ```bash
 git clone https://github.com/twwat/bbdrop.git
 cd bbdrop
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python bbdrop.py --gui
 ```
@@ -93,7 +94,7 @@ python bbdrop.py /path/to/images --name "Gallery Name" --template "Forum Post"
 python bbdrop.py --install-context-menu
 ```
 
-Right-click any folder and select "Upload to imx.to (GUI)" to add it to the queue. Remove with `--remove-context-menu`.
+Right-click any folder and select **Upload to imx.to (GUI)** to add it to the queue. Remove with `--remove-context-menu`.
 
 ---
 
@@ -193,26 +194,10 @@ pyinstaller bbdrop.spec
 ```
 
 <details>
-<summary>Development setup</summary>
-
-```bash
-git clone https://github.com/twwat/bbdrop.git
-cd bbdrop
-python -m venv venv
-source venv/bin/activate   # Linux/Mac
-./venv/scripts/activate    # Windows
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pytest tests/
-```
-
-</details>
-
-<details>
 <summary>System requirements</summary>
 
 - **OS:** Windows 10+, Linux (Ubuntu 20.04+, Fedora 35+), macOS 15+
-- **Python:** 3.14+ (when running from source)
+- **Python:** 3.12+ (when running from source)
 - **RAM:** 512 MB minimum, 2 GB recommended
 - **Disk:** 100 MB minimum, 500 MB recommended (logs/cache)
 
@@ -222,7 +207,7 @@ pytest tests/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and feature requests: [GitHub Issues](https://github.com/twwat/bbdrop/issues).
+Bug reports and feature requests: [GitHub Issues](https://github.com/twwat/bbdrop/issues).
 
 ## License
 

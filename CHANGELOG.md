@@ -4,6 +4,40 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.0] - 2026-02-24
+
+### Added
+- **Notifications**: Desktop toast alerts and audio notifications for upload events
+  - New Notifications tab in settings with per-event audio and alert toggles
+  - Plays sounds on upload completion, errors, and queue events
+- **Tor support**: Route uploads through the Tor network
+  - Auto-detects running Tor daemon and supports circuit renewal
+  - DNS-through-proxy option prevents DNS leaks (SOCKS5_HOSTNAME)
+  - Select Tor per-service, per-category, or globally from the proxy dropdown
+- **Proxy support for image hosts**: IMX.to and TurboImageHost uploads now route through the proxy system (previously file hosts only)
+- **Disk space monitoring**: Prevents data loss when disk fills up during uploads
+  - Status bar indicator shows current disk usage with tier-based warnings
+  - Configurable warning and critical thresholds in settings
+  - Blocks image and file host uploads when disk space is critically low
+  - Pre-flight check before archive creation
+- **Auto-clear warning**: Confirmation dialog when auto-clear would remove galleries with pending Link Scanner results
+- **Cover photo indicator**: Gallery table shows a visual indicator for galleries with detected covers
+
+### Changed
+- Proxy settings tab renamed to "Proxies & Tor" with a two-column grid layout
+- Proxy dropdowns use clearer labels (replaces radio button mode selection)
+
+### Fixed
+- System tray icon showed a blue square instead of the app logo
+- Queue data loss if app closed during upload (immediate sync save on completion/failure)
+- Duplicate galleries from trailing slashes in folder paths
+- Database ID collisions after deleting and re-adding galleries
+- Quick settings incorrectly saving when closing the main settings dialog
+- Theme and font unnecessarily reapplied when values hadn't changed
+- InfoButton popups could overflow outside the app window
+- Proxy resolver crash when global default was unset in older configs
+- certifi bumped to 2024.7.4 (fixes CVE-2024-39689)
+
 ## [0.8.3] - 2026-02-14
 
 ### Added
@@ -548,8 +582,9 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.9.0  | 2026-02-24 | Notifications, Tor support, image host proxies, disk space monitoring |
 | 0.8.3  | 2026-02-14 | Multi-host uploads, cover redesign, CSPRNG credentials, hooks |
-| 0.8.2  | 2026-01-31 | Multi-format archives, split uploads, tooltips |
+| 0.8.2  | 2026-02-03 | Multi-format archives, split uploads, tooltips |
 | 0.8.0  | 2026-01-27 | Proxy system, bbdrop rebrand, status icons |
 | 0.7.4  | 2026-01-19 | Unified icons, bandwidth manager, table delegates |
 | 0.7.2  | 2026-01-10 | Performance optimization, modular theming, design tokens |

@@ -1,9 +1,6 @@
-# IMXuploader Styling Guide
+# BBDrop Styling Guide
 
-**Version:** 1.0.0
-**Last Updated:** 2025-01-09
-
-This guide documents the modular QSS styling system used in IMXuploader, including design tokens, theme support, and best practices for adding new styles.
+This guide documents the modular QSS styling system used in BBDrop, including design tokens, theme support, and best practices for adding new styles.
 
 ---
 
@@ -22,7 +19,7 @@ This guide documents the modular QSS styling system used in IMXuploader, includi
 
 ## Overview
 
-IMXuploader uses a **modular QSS styling system** with three key components:
+BBDrop uses a **modular QSS styling system** with three key components:
 
 1. **Design Tokens** (`tokens.json`) - Centralized color and spacing definitions
 2. **Modular QSS Files** - Split by component type for maintainability
@@ -357,7 +354,7 @@ def update_progress_status(progress_bar, status):
 
 ### How Themes Work
 
-IMXuploader supports two themes: **dark** (default) and **light**.
+BBDrop supports two themes: **dark** (default) and **light**.
 
 Theme switching involves:
 1. Loading theme-specific QSS
@@ -813,6 +810,3 @@ status="completed", status="failed", status="uploading"
 - `assets/tokens.json` - Token definitions
 - `docs/user/guides/theme-customization.md` - User-facing theme documentation
 
----
-
-**End of STYLING_GUIDE.md**
