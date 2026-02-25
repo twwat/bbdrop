@@ -2,11 +2,10 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QMessageBox, QListWidget, QListWidgetItem, QLineEdit,
+    QGroupBox, QMessageBox, QListWidget, QListWidgetItem,
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer
 from PyQt6.QtGui import QColor
-from typing import Optional, List
 import logging
 import re
 import threading
@@ -90,7 +89,7 @@ class ProxySettingsWidget(QWidget):
 
         grid.addWidget(default_group, 0, 0)
 
-        # ── Top-right: Proxy Pools ────────────────────────────────────
+        # ── Bottom-right: Proxy Pools ─────────────────────────────────
         self.pools_group = QGroupBox("Proxy Pools")
         pools_layout = QVBoxLayout(self.pools_group)
 
@@ -146,7 +145,31 @@ class ProxySettingsWidget(QWidget):
         pool_btn_layout.addStretch()
         pools_layout.addLayout(pool_btn_layout)
 
-        grid.addWidget(self.pools_group, 0, 1)
+        grid.addWidget(self.pools_group, 1, 1)
+
+        # ── Top-right: Tor Network ────────────────────────────────────
+        tor_group = QGroupBox("Tor Network")
+        tor_layout = QVBoxLayout(tor_group)
+
+        tor_layout.addWidget(_group_desc(
+            "Route traffic through the Tor anonymity network. "
+            "Significantly slower than a direct connection."
+        ))
+
+        status_row = QHBoxLayout()
+        status_row.addWidget(QLabel("Status:"))
+        self.tor_status_label = QLabel("Checking...")
+        status_row.addWidget(self.tor_status_label)
+        status_row.addStretch()
+        self.tor_configure_btn = QPushButton("Configure...")
+        self.tor_configure_btn.setToolTip(
+            "Connection settings, circuit control, and download info"
+        )
+        self.tor_configure_btn.clicked.connect(self._on_tor_configure)
+        status_row.addWidget(self.tor_configure_btn)
+        tor_layout.addLayout(status_row)
+
+        grid.addWidget(tor_group, 0, 1)
 
         # ── Bottom-left: Category Overrides ───────────────────────────
         self.category_group = QGroupBox("Category Overrides")
@@ -193,87 +216,6 @@ class ProxySettingsWidget(QWidget):
 
         grid.addWidget(self.category_group, 1, 0)
 
-        # ── Bottom-right: Tor ─────────────────────────────────────────
-        tor_group = QGroupBox("Tor")
-        tor_layout = QVBoxLayout(tor_group)
-
-        tor_desc_row = QHBoxLayout()
-        tor_desc_row.addWidget(_group_desc(
-            "Tor encrypts your traffic through multiple independent relays, "
-            "so no single point can see both who you are and what you are "
-            "connecting to."
-        ))
-        tor_desc_row.addWidget(InfoButton(
-            "<b>What is Tor?</b><br>"
-            "Free software that routes traffic through a worldwide network of "
-            "relays, hiding your real IP address. Unlike a regular proxy, Tor "
-            "encrypts your traffic through multiple independent relays, so no "
-            "single point can see both who you are and what you are connecting "
-            "to.<br><br>"
-            "<b>Getting Tor</b><br>"
-            "Download the <b>Tor Expert Bundle</b> (the standalone daemon, no "
-            "browser needed) from "
-            "<a href='https://www.torproject.org/download/tor/'>"
-            "torproject.org/download/tor/</a>. "
-            "Extract it and run the Tor executable &mdash; it listens on port "
-            "9050 by default.<br><br>"
-            "<b>Tor Browser</b> also works: while the browser is open, the "
-            "bundled Tor daemon listens on port 9150. Close the browser and "
-            "the daemon stops.<br><br>"
-            "<b>How BBDrop uses Tor</b><br>"
-            "BBDrop connects through <code>127.0.0.1:9050</code> using the "
-            "SOCKS5 protocol. DNS lookups are also routed through Tor to "
-            "prevent leaks.<br><br>"
-            "<b>Circuit renewal</b><br>"
-            "Tor rotates your exit node automatically. Force an immediate "
-            "rotation by clicking <b>New Circuit</b> below (sends a NEWNYM "
-            "signal to Tor's control port 9051). Takes about 10 seconds to "
-            "take effect.<br><br>"
-            "<b>Speed</b><br>"
-            "Tor is significantly slower than a direct connection or a regular "
-            "proxy due to multi-hop routing. Expect lower upload and download "
-            "speeds."
-        ))
-        tor_layout.addLayout(tor_desc_row)
-
-        status_row = QHBoxLayout()
-        status_row.addWidget(QLabel("Status:"))
-        self.tor_status_label = QLabel("Checking...")
-        status_row.addWidget(self.tor_status_label)
-        self.tor_refresh_btn = QPushButton("Refresh")
-        self.tor_refresh_btn.setToolTip("Check if Tor is running on port 9050")
-        self.tor_refresh_btn.clicked.connect(self._check_tor_status)
-        status_row.addWidget(self.tor_refresh_btn)
-        status_row.addStretch()
-        tor_layout.addLayout(status_row)
-
-        circuit_row = QHBoxLayout()
-        self.tor_newnym_btn = QPushButton("New Circuit")
-        self.tor_newnym_btn.setToolTip(
-            "Request a new Tor exit node IP. Takes about 10 seconds to take effect."
-        )
-        self.tor_newnym_btn.clicked.connect(self._on_new_circuit)
-        self.tor_newnym_btn.setEnabled(False)
-        circuit_row.addWidget(self.tor_newnym_btn)
-
-        circuit_row.addWidget(QLabel("Control password:"))
-        self.tor_control_password = QLineEdit()
-        self.tor_control_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.tor_control_password.setPlaceholderText("(leave blank if no auth)")
-        self.tor_control_password.setToolTip(
-            "Password for Tor's control port (9051). Leave blank if Tor has no "
-            "authentication configured. Only needed for circuit renewal."
-        )
-        self.tor_control_password.setMaximumWidth(200)
-        circuit_row.addWidget(self.tor_control_password)
-
-        self.tor_circuit_status = QLabel("")
-        circuit_row.addWidget(self.tor_circuit_status)
-        circuit_row.addStretch()
-        tor_layout.addLayout(circuit_row)
-
-        grid.addWidget(tor_group, 1, 1)
-
         layout.addLayout(grid)
         layout.addStretch()
 
@@ -287,7 +229,6 @@ class ProxySettingsWidget(QWidget):
         """Check if Tor is running, in a background thread to avoid UI freeze."""
         self.tor_status_label.setText("Checking...")
         self.tor_status_label.setStyleSheet("")
-        self.tor_refresh_btn.setEnabled(False)
 
         def _probe():
             from src.proxy.tor import is_tor_running
@@ -298,13 +239,11 @@ class ProxySettingsWidget(QWidget):
 
     def _update_tor_status(self, running: bool):
         """Update Tor status label on the main thread."""
-        self.tor_refresh_btn.setEnabled(True)
-        self.tor_newnym_btn.setEnabled(running)
         if running:
-            self.tor_status_label.setText("Running (port 9050)")
+            self.tor_status_label.setText("Running (127.0.0.1:9050)")
             self.tor_status_label.setStyleSheet("color: green; font-weight: bold;")
         else:
-            self.tor_status_label.setText("Not detected")
+            self.tor_status_label.setText("Not detected (127.0.0.1:9050)")
             self.tor_status_label.setStyleSheet("color: red;")
 
     # ── Pool management ───────────────────────────────────────────────
@@ -509,18 +448,14 @@ class ProxySettingsWidget(QWidget):
                 f"Connection error: {e}"
             )
 
-    def _on_new_circuit(self):
-        """Request a new Tor circuit."""
-        from src.proxy.tor import request_new_circuit
-        password = self.tor_control_password.text()
-        success, message = request_new_circuit(password=password)
+    def _on_tor_configure(self):
+        """Open the Tor configuration dialog."""
+        from src.gui.dialogs.tor_config_dialog import TorConfigDialog
 
-        if success:
-            self.tor_circuit_status.setText("New circuit requested")
-            self.tor_circuit_status.setStyleSheet("color: green;")
-        else:
-            self.tor_circuit_status.setText(message)
-            self.tor_circuit_status.setStyleSheet("color: red;")
+        dialog = TorConfigDialog(self)
+        dialog.exec()
+        # Refresh status on the tab after dialog closes
+        self._check_tor_status()
 
     def load_settings(self, settings: dict):
         """Load settings - called by parent settings dialog."""

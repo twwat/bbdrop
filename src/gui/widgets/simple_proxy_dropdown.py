@@ -59,10 +59,9 @@ class SimpleProxyDropdown(QComboBox):
         try:
             self.clear()
 
-            # "Use global default: <effective>" for non-global dropdowns
+            # "Use Global Default" for non-global dropdowns
             if not self.is_global:
-                effective = self._get_global_effective_label()
-                self.addItem(f"Use global default: {effective}", self.VALUE_USE_DEFAULT)
+                self.addItem("Use Global Default", self.VALUE_USE_DEFAULT)
                 self.insertSeparator(self.count())
 
             self.addItem("No proxy (direct connection)", self.VALUE_DIRECT)
@@ -86,19 +85,6 @@ class SimpleProxyDropdown(QComboBox):
             self.addItem(f"Error loading pools: {e}", None)
         finally:
             self.blockSignals(False)
-
-    def _get_global_effective_label(self) -> str:
-        """Get human-readable label for the current global default."""
-        global_val = self.storage.get_global_default_pool()
-        if not global_val or global_val == self.VALUE_DIRECT:
-            return "No proxy (direct connection)"
-        elif global_val == self.VALUE_OS_PROXY:
-            return "Use system proxy settings"
-        elif global_val == self.VALUE_TOR:
-            return "Use Tor network"
-        else:
-            pool = self.storage.load_pool(global_val)
-            return pool.name if pool else "Unknown pool"
 
     def _load_value(self):
         """Load current assignment from storage."""
