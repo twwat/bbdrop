@@ -1,6 +1,6 @@
 # GUI Test Suite - pytest-qt
 
-Comprehensive test suite for ImxUp GUI components using pytest-qt.
+Comprehensive test suite for BBDrop GUI components using pytest-qt.
 
 ## Test Files Generated
 
@@ -65,27 +65,27 @@ Comprehensive test suite for ImxUp GUI components using pytest-qt.
 
 ### Run all GUI tests:
 ```bash
-pytest tests/gui/ -v
+.venv/bin/python -m pytest tests/gui/ -v
 ```
 
 ### Run specific test file:
 ```bash
-pytest tests/gui/test_splash_screen.py -v
+.venv/bin/python -m pytest tests/gui/test_splash_screen.py -v
 ```
 
 ### Run with coverage:
 ```bash
-pytest tests/gui/ --cov=src/gui --cov-report=html
+.venv/bin/python -m pytest tests/gui/ --cov=src/gui --cov-report=html
 ```
 
 ### Run tests matching a pattern:
 ```bash
-pytest tests/gui/ -k "icon_manager" -v
+.venv/bin/python -m pytest tests/gui/ -k "icon_manager" -v
 ```
 
 ### Run tests with Qt event loop debugging:
 ```bash
-pytest tests/gui/ -v --capture=no
+.venv/bin/python -m pytest tests/gui/ -v --capture=no
 ```
 
 ## Test Coverage
@@ -157,10 +157,10 @@ class TestComponentEdgeCases:
 
 ## Virtual Environment
 
-Tests are designed to work with the imxup virtual environment:
+Tests are designed to work with the BBDrop virtual environment:
 ```bash
-source ~/imxup-venv-314/bin/activate
-pytest tests/gui/ -v
+source .venv/bin/activate
+.venv/bin/python -m pytest tests/gui/ -v
 ```
 
 ## CI/CD Integration
@@ -168,10 +168,10 @@ pytest tests/gui/ -v
 Tests can be run in CI environments with:
 ```bash
 # Install dependencies
-pip install -r requirements-test.txt
+.venv/bin/pip install -r requirements-dev.txt
 
 # Run tests with coverage
-pytest tests/gui/ --cov=src/gui --cov-report=xml
+.venv/bin/python -m pytest tests/gui/ --cov=src/gui --cov-report=xml
 
 # Upload coverage to codecov
 codecov -f coverage.xml
@@ -183,19 +183,19 @@ codecov -f coverage.xml
 If you see "Could not find the Qt platform plugin":
 ```bash
 export QT_QPA_PLATFORM=offscreen
-pytest tests/gui/ -v
+.venv/bin/python -m pytest tests/gui/ -v
 ```
 
 ### Display Issues in Headless Environments
 Use Xvfb for headless testing:
 ```bash
-xvfb-run pytest tests/gui/ -v
+xvfb-run .venv/bin/python -m pytest tests/gui/ -v
 ```
 
 ### Slow Tests
 Skip slow tests in CI:
 ```bash
-pytest tests/gui/ -v -m "not slow"
+.venv/bin/python -m pytest tests/gui/ -v -m "not slow"
 ```
 
 ## Contributing

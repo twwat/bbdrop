@@ -31,29 +31,29 @@ This directory contains comprehensive unit tests for GUI widget components.
 **Quick Start:**
 ```bash
 # Activate virtual environment
-source ~/imxup-venv-314/bin/activate
+source .venv/bin/activate
 
 # Run all tests
-pytest tests/unit/gui/widgets/test_gallery_table.py -v
+.venv/bin/python -m pytest tests/unit/gui/widgets/test_gallery_table.py -v
 
 # Run with coverage
-pytest tests/unit/gui/widgets/test_gallery_table.py --cov=src/gui/widgets/gallery_table --cov-report=term-missing
+.venv/bin/python -m pytest tests/unit/gui/widgets/test_gallery_table.py --cov=src/gui/widgets/gallery_table --cov-report=term-missing
 
 # Run specific test class
-pytest tests/unit/gui/widgets/test_gallery_table.py::TestGalleryTableInit -v
+.venv/bin/python -m pytest tests/unit/gui/widgets/test_gallery_table.py::TestGalleryTableInit -v
 
 # Run single test
-pytest tests/unit/gui/widgets/test_gallery_table.py::TestGalleryTableInit::test_table_creates_successfully -v
+.venv/bin/python -m pytest tests/unit/gui/widgets/test_gallery_table.py::TestGalleryTableInit::test_table_creates_successfully -v
 ```
 
 ## Test Environment
 
 **Requirements:**
-- Python 3.14.0
-- pytest 9.0.1
-- pytest-qt 4.5.0
-- PyQt6 6.9.1
-- Virtual environment: `~/imxup-venv-314`
+- Python 3.12+
+- pytest
+- pytest-qt
+- PyQt6
+- Virtual environment: `.venv`
 
 ## Test Structure
 
@@ -90,10 +90,10 @@ class TestMyFeature:
         """Test that feature works correctly"""
         # Arrange
         gallery_table.insertRow(0)
-        
+
         # Act
         result = gallery_table.some_method()
-        
+
         # Assert
         assert result == expected_value
 ```

@@ -1,58 +1,58 @@
 # Processing Module Unit Tests
 
-Comprehensive pytest test suite for all 5 processing modules in the imxup project.
+Comprehensive pytest test suite for all 5 processing modules in the BBDrop project.
 
-## 📋 Test Files Created
+## Test Files Created
 
 | Test File | Source Module | LOC | Tests | Status |
 |-----------|---------------|-----|-------|--------|
-| `test_tasks.py` | `src/processing/tasks.py` | 17K | 33 | ✅ Ready |
-| `test_rename_worker.py` | `src/processing/rename_worker.py` | 21K | 24 | ✅ Ready |
-| `test_file_host_workers.py` | `src/processing/file_host_workers.py` | 26K | 26 | ✅ Ready |
-| `test_hooks_executor.py` | `src/processing/hooks_executor.py` | 25K | 31 | ✅ Ready |
-| `test_upload_workers.py` | `src/processing/upload_workers.py` | 26K | 37 | ✅ Ready |
+| `test_tasks.py` | `src/processing/tasks.py` | 17K | 33 | Ready |
+| `test_rename_worker.py` | `src/processing/rename_worker.py` | 21K | 24 | Ready |
+| `test_file_host_workers.py` | `src/processing/file_host_workers.py` | 26K | 26 | Ready |
+| `test_hooks_executor.py` | `src/processing/hooks_executor.py` | 25K | 31 | Ready |
+| `test_upload_workers.py` | `src/processing/upload_workers.py` | 26K | 37 | Ready |
 
 **Total**: 151 test functions across 115K lines of test code
 
-## 🎯 Coverage Targets
+## Coverage Targets
 
 All tests aim for **>75% code coverage** per module with focus on:
-- ✅ Threading and multiprocessing operations (mocked)
-- ✅ Worker lifecycle (start, stop, pause, resume)
-- ✅ Queue operations and task processing
-- ✅ Error handling and edge cases
-- ✅ Signal emission (PyQt6)
-- ✅ Session management and authentication
-- ✅ Concurrent operations and race conditions
+- Threading and multiprocessing operations (mocked)
+- Worker lifecycle (start, stop, pause, resume)
+- Queue operations and task processing
+- Error handling and edge cases
+- Signal emission (PyQt6)
+- Session management and authentication
+- Concurrent operations and race conditions
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Install Dependencies
 ```bash
-pip install pytest pytest-mock pytest-cov PyQt6
+.venv/bin/pip install pytest pytest-mock pytest-cov PyQt6
 ```
 
 ### Run All Tests
 ```bash
-pytest tests/unit/processing/ -v
+.venv/bin/python -m pytest tests/unit/processing/ -v
 ```
 
 ### Run with Coverage Report
 ```bash
-pytest tests/unit/processing/ --cov=src/processing --cov-report=html --cov-report=term
+.venv/bin/python -m pytest tests/unit/processing/ --cov=src/processing --cov-report=html --cov-report=term
 ```
 
 ### Run Specific Test File
 ```bash
-pytest tests/unit/processing/test_tasks.py -v
+.venv/bin/python -m pytest tests/unit/processing/test_tasks.py -v
 ```
 
 ### Run Specific Test
 ```bash
-pytest tests/unit/processing/test_tasks.py::TestBackgroundTask::test_run_success -v
+.venv/bin/python -m pytest tests/unit/processing/test_tasks.py::TestBackgroundTask::test_run_success -v
 ```
 
-## 📊 Module Coverage Breakdown
+## Module Coverage Breakdown
 
 ### test_tasks.py (33 tests)
 - **Background Task Management**: Task execution, signal emission, error handling
@@ -82,7 +82,7 @@ pytest tests/unit/processing/test_tasks.py::TestBackgroundTask::test_run_success
 - **Hook Execution**: Success, failure, timeout, JSON output
 - **Temp ZIP**: Create ZIP when %z parameter used
 - **Parallel/Sequential**: ThreadPoolExecutor for parallel hooks
-- **Key Mapping**: JSON output → ext1-4 fields
+- **Key Mapping**: JSON output -> ext1-4 fields
 
 ### test_upload_workers.py (37 tests)
 - **Upload Worker**: Gallery upload flow, hook integration
@@ -92,7 +92,7 @@ pytest tests/unit/processing/test_tasks.py::TestBackgroundTask::test_run_success
 - **Artifact Saving**: JSON/BBCode to central/uploaded directories
 - **Queue Stats**: Throttled emission, error handling
 
-## 🧪 Test Patterns
+## Test Patterns
 
 ### Threading Mocks
 ```python
@@ -138,17 +138,17 @@ def test_network_error():
     assert result is False
 ```
 
-## 📈 Estimated Coverage
+## Estimated Coverage
 
 | Module | Target | Estimated |
 |--------|--------|-----------|
-| tasks.py | >75% | ~85% ✅ |
-| rename_worker.py | >75% | ~82% ✅ |
-| file_host_workers.py | >75% | ~78% ✅ |
-| hooks_executor.py | >75% | ~88% ✅ |
-| upload_workers.py | >75% | ~80% ✅ |
+| tasks.py | >75% | ~85% |
+| rename_worker.py | >75% | ~82% |
+| file_host_workers.py | >75% | ~78% |
+| hooks_executor.py | >75% | ~88% |
+| upload_workers.py | >75% | ~80% |
 
-## 🔧 Mocked Dependencies
+## Mocked Dependencies
 
 ### External Libraries
 - `threading.Thread` - Worker threads
@@ -159,29 +159,29 @@ def test_network_error():
 - `PyQt6.QtCore.QMutex` - Mutex locks
 
 ### Internal Modules
-- `imxup.*` - Core uploader functions
+- `bbdrop.*` - Core uploader functions
 - `src.network.*` - Network clients
 - `src.storage.*` - Database operations
 - `src.utils.*` - Utility functions
 
-## 📚 Additional Documentation
+## Additional Documentation
 
 - **TEST_COVERAGE_SUMMARY.md**: Detailed coverage analysis
 - **conftest.py**: Shared test fixtures (project root)
 - **pytest.ini**: Test configuration (project root)
 
-## ✅ Validation
+## Validation
 
 All test files have been syntax-checked:
 ```bash
-✅ test_tasks.py syntax OK
-✅ test_rename_worker.py syntax OK
-✅ test_file_host_workers.py syntax OK
-✅ test_hooks_executor.py syntax OK
-✅ test_upload_workers.py syntax OK
+test_tasks.py syntax OK
+test_rename_worker.py syntax OK
+test_file_host_workers.py syntax OK
+test_hooks_executor.py syntax OK
+test_upload_workers.py syntax OK
 ```
 
-## 🐛 Known Limitations
+## Known Limitations
 
 1. **No actual threading**: Tests mock `threading.Thread` to avoid race conditions
 2. **No file system**: All file operations mocked (no temp files)
@@ -191,19 +191,18 @@ All test files have been syntax-checked:
 
 For integration tests with actual threading/networking/database, see `tests/integration/`.
 
-## 🤝 Contributing
+## Contributing
 
 When adding new tests:
-1. Follow existing patterns (TestClass → test_method)
+1. Follow existing patterns (TestClass -> test_method)
 2. Mock all external dependencies
 3. Test success, failure, and edge cases
 4. Use descriptive test names with docstrings
 5. Aim for >75% coverage
-6. Run all tests before committing: `pytest tests/unit/processing/ -v`
+6. Run all tests before committing: `.venv/bin/python -m pytest tests/unit/processing/ -v`
 
 ---
 
-**Generated**: 2025-11-13
 **Framework**: pytest 7.4+
 **Coverage Tool**: pytest-cov
 **Total Tests**: 151

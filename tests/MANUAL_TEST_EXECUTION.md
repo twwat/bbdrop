@@ -5,76 +5,75 @@ Quick reference for running path resolution and retry logic tests.
 ## Prerequisites
 
 ```bash
-cd /home/jimbo/imxup
-source ~/imxup-venv-314/bin/activate
+source .venv/bin/activate
 ```
 
 ## Quick Test Runs
 
 ### Run All Tests
 ```bash
-pytest tests/integration/test_path_retry_fixes.py -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py -v
 ```
 
 ### Run Specific Test Suite
 
 **Path Resolution:**
 ```bash
-pytest tests/integration/test_path_retry_fixes.py::TestPathResolution -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py::TestPathResolution -v
 ```
 
 **Retry Logic:**
 ```bash
-pytest tests/integration/test_path_retry_fixes.py::TestRetryLogic -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py::TestRetryLogic -v
 ```
 
 **Error Messages:**
 ```bash
-pytest tests/integration/test_path_retry_fixes.py::TestErrorMessages -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py::TestErrorMessages -v
 ```
 
 **Regression:**
 ```bash
-pytest tests/integration/test_path_retry_fixes.py::TestRegressionCases -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py::TestRegressionCases -v
 ```
 
 **ZIP Creation:**
 ```bash
-pytest tests/integration/test_path_retry_fixes.py::TestZIPCreationWithPaths -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py::TestZIPCreationWithPaths -v
 ```
 
 ### Run Specific Test
 
 ```bash
 # Example: Test Windows path conversion
-pytest tests/integration/test_path_retry_fixes.py::TestPathResolution::test_windows_path_conversion -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py::TestPathResolution::test_windows_path_conversion -v
 ```
 
 ## Test Output Options
 
 ### Detailed Output
 ```bash
-pytest tests/integration/test_path_retry_fixes.py -vv
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py -vv
 ```
 
 ### With Coverage
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --cov=src/processing --cov=src/network --cov-report=html
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --cov=src/processing --cov=src/network --cov-report=html
 ```
 
 ### Generate HTML Report
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --html=tests/results/report.html --self-contained-html
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --html=tests/results/report.html --self-contained-html
 ```
 
 ### Generate JUnit XML
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --junit-xml=tests/results/junit.xml
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --junit-xml=tests/results/junit.xml
 ```
 
 ### Comprehensive Report (All formats)
 ```bash
-pytest tests/integration/test_path_retry_fixes.py \
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py \
     -v \
     --cov=src/processing \
     --cov=src/network \
@@ -102,58 +101,58 @@ pytest tests/integration/test_path_retry_fixes.py \
 
 ### Run Only Failed Tests
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --lf
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --lf
 ```
 
 ### Run Failed Tests First
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --ff
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --ff
 ```
 
 ### Stop on First Failure
 ```bash
-pytest tests/integration/test_path_retry_fixes.py -x
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py -x
 ```
 
 ### Show Local Variables on Failure
 ```bash
-pytest tests/integration/test_path_retry_fixes.py -l
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py -l
 ```
 
 ## Debugging Options
 
 ### Drop into debugger on failure
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --pdb
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --pdb
 ```
 
 ### Show print statements
 ```bash
-pytest tests/integration/test_path_retry_fixes.py -s
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py -s
 ```
 
 ### Verbose traceback
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --tb=long
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --tb=long
 ```
 
 ### Short traceback
 ```bash
-pytest tests/integration/test_path_retry_fixes.py --tb=short
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py --tb=short
 ```
 
 ## Parallel Execution
 
 ```bash
 # Run tests in parallel (requires pytest-xdist)
-pytest tests/integration/test_path_retry_fixes.py -n auto
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py -n auto
 ```
 
 ## Test Results Location
 
 After running tests, check:
 ```
-/home/jimbo/imxup/tests/results/
+tests/results/
 ```
 
 ## Coordination Memory
@@ -178,7 +177,6 @@ npx claude-flow@alpha memory retrieve swarm/tester/results --namespace coordinat
 ### Tests Not Found
 ```bash
 # Make sure you're in the project root
-cd /home/jimbo/imxup
 
 # Verify test file exists
 ls -l tests/integration/test_path_retry_fixes.py
@@ -187,10 +185,10 @@ ls -l tests/integration/test_path_retry_fixes.py
 ### Import Errors
 ```bash
 # Activate virtual environment
-source ~/imxup-venv-314/bin/activate
+source .venv/bin/activate
 
 # Verify dependencies
-pip list | grep pytest
+.venv/bin/pip list | grep pytest
 ```
 
 ### Permission Errors
@@ -203,7 +201,7 @@ chmod +x tests/scripts/*.sh
 
 Run a quick sanity check:
 ```bash
-pytest tests/integration/test_path_retry_fixes.py::TestPathResolution::test_relative_path_resolution -v
+.venv/bin/python -m pytest tests/integration/test_path_retry_fixes.py::TestPathResolution::test_relative_path_resolution -v
 ```
 
 If this passes, the test framework is working correctly.

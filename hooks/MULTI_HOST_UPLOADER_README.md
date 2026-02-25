@@ -72,7 +72,7 @@ python multi_host_uploader.py pixeldrain video.mp4 YOUR_API_KEY
 python multi_host_uploader.py imgur screenshot.png YOUR_CLIENT_ID
 ```
 
-### Integration with imxup
+### Integration with BBDrop
 
 1. **Configure External Apps:**
    ```
@@ -220,7 +220,7 @@ That's it! No complex dependencies.
 |---------|------------------|---------------|
 | Hosts | ~30 | 44 |
 | Language | JavaScript/Rust | Python |
-| Use Case | Tauri Desktop App | CLI/imxup Integration |
+| Use Case | Tauri Desktop App | CLI/BBDrop Integration |
 | Pattern | Configuration Objects | HostConfig Classes |
 
 Both use the same elegant abstraction pattern!

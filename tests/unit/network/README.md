@@ -1,6 +1,6 @@
 # Network Module Unit Tests
 
-Comprehensive pytest test suites for imxup network components with >75% coverage per module.
+Comprehensive pytest test suites for BBDrop network components with >75% coverage per module.
 
 ## Test Files
 
@@ -25,7 +25,7 @@ Comprehensive pytest test suites for imxup network components with >75% coverage
 
 ### `test_file_host_client.py` - File Host Client Tests
 - Standard single-step file uploads
-- Multi-step uploads (init → upload → poll)
+- Multi-step uploads (init -> upload -> poll)
 - Authentication mechanisms (API key, token login, session)
 - Automatic token refresh on staleness
 - Proactive TTL-based token refresh
@@ -41,29 +41,29 @@ Comprehensive pytest test suites for imxup network components with >75% coverage
 
 ### Run all network tests:
 ```bash
-pytest tests/unit/network/ -v
+.venv/bin/python -m pytest tests/unit/network/ -v
 ```
 
 ### Run specific test file:
 ```bash
-pytest tests/unit/network/test_cookies.py -v
-pytest tests/unit/network/test_token_cache.py -v
-pytest tests/unit/network/test_file_host_client.py -v
+.venv/bin/python -m pytest tests/unit/network/test_cookies.py -v
+.venv/bin/python -m pytest tests/unit/network/test_token_cache.py -v
+.venv/bin/python -m pytest tests/unit/network/test_file_host_client.py -v
 ```
 
 ### Run with coverage report:
 ```bash
-pytest tests/unit/network/ --cov=src/network --cov-report=term-missing
+.venv/bin/python -m pytest tests/unit/network/ --cov=src/network --cov-report=term-missing
 ```
 
 ### Run specific test class:
 ```bash
-pytest tests/unit/network/test_cookies.py::TestGetFirefoxCookies -v
+.venv/bin/python -m pytest tests/unit/network/test_cookies.py::TestGetFirefoxCookies -v
 ```
 
 ### Run specific test:
 ```bash
-pytest tests/unit/network/test_file_host_client.py::TestFileHostClientUploadStandard::test_upload_file_success -v
+.venv/bin/python -m pytest tests/unit/network/test_file_host_client.py::TestFileHostClientUploadStandard::test_upload_file_success -v
 ```
 
 ## Test Patterns
@@ -125,41 +125,41 @@ def mock_encryption():
 ## Edge Cases Tested
 
 ### Cookies Module
-- ✅ Firefox directory not found
-- ✅ No Firefox profiles
-- ✅ Database locked/timeout
-- ✅ Corrupted database
-- ✅ Cache expiration (300s TTL)
-- ✅ Multiple cache keys for different filters
-- ✅ Windows vs Linux platform differences
-- ✅ Unicode in cookie values
-- ✅ Malformed cookie lines
+- Firefox directory not found
+- No Firefox profiles
+- Database locked/timeout
+- Corrupted database
+- Cache expiration (300s TTL)
+- Multiple cache keys for different filters
+- Windows vs Linux platform differences
+- Unicode in cookie values
+- Malformed cookie lines
 
 ### Token Cache Module
-- ✅ Token expiration (negative TTL, zero TTL)
-- ✅ Decryption failures
-- ✅ Empty tokens
-- ✅ Very long tokens (10KB)
-- ✅ Special characters in tokens
-- ✅ Unicode tokens
-- ✅ Malformed expiry timestamps
-- ✅ Global singleton pattern
+- Token expiration (negative TTL, zero TTL)
+- Decryption failures
+- Empty tokens
+- Very long tokens (10KB)
+- Special characters in tokens
+- Unicode tokens
+- Malformed expiry timestamps
+- Global singleton pattern
 
 ### File Host Client Module
-- ✅ HTTP errors (401, 403, 500)
-- ✅ Network timeouts (pycurl error 28)
-- ✅ Upload cancellation mid-transfer
-- ✅ Progress callback tracking
-- ✅ Bandwidth counter updates
-- ✅ Token refresh on staleness detection
-- ✅ Proactive TTL-based token refresh
-- ✅ Multi-step upload failures (init, upload, poll)
-- ✅ Session cookie management
-- ✅ File hash calculation (MD5)
+- HTTP errors (401, 403, 500)
+- Network timeouts (pycurl error 28)
+- Upload cancellation mid-transfer
+- Progress callback tracking
+- Bandwidth counter updates
+- Token refresh on staleness detection
+- Proactive TTL-based token refresh
+- Multi-step upload failures (init, upload, poll)
+- Session cookie management
+- File hash calculation (MD5)
 
 ## Dependencies
 
-The tests require these packages (see `tests/requirements.txt`):
+The tests require these packages (see `requirements-dev.txt`):
 - `pytest>=7.4.0`
 - `pytest-cov>=4.1.0`
 - `pytest-mock>=3.11.1`

@@ -4,13 +4,13 @@
 
 ```bash
 # Activate virtual environment
-source ~/imxup-venv-314/bin/activate
+source .venv/bin/activate
 
 # Run all tests
-python -m pytest tests/unit/gui/dialogs/test_gallery_file_manager.py -v
+.venv/bin/python -m pytest tests/unit/gui/dialogs/test_gallery_file_manager.py -v
 
 # Run with coverage
-python -m pytest tests/unit/gui/dialogs/test_gallery_file_manager.py \
+.venv/bin/python -m pytest tests/unit/gui/dialogs/test_gallery_file_manager.py \
     --cov=src.gui.dialogs.gallery_file_manager \
     --cov-report=term-missing
 ```

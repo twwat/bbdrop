@@ -1,6 +1,6 @@
 # Core Module Tests
 
-Comprehensive pytest test suite for imxup core modules with >80% coverage target.
+Comprehensive pytest test suite for BBDrop core modules with >80% coverage target.
 
 ## Test Files
 
@@ -8,16 +8,16 @@ Comprehensive pytest test suite for imxup core modules with >80% coverage target
 Tests for `src/core/engine.py` - Main upload engine
 
 **Coverage Areas:**
-- ✅ AtomicCounter thread-safe operations (8 tests)
-- ✅ ByteCountingCallback progress tracking (6 tests)
-- ✅ UploadEngine initialization (3 tests)
-- ✅ File gathering and natural sorting (4 tests)
-- ✅ Gallery creation workflows (new, resume, append) (3 tests)
-- ✅ Upload operations and concurrency (2 tests)
-- ✅ Progress callbacks and soft stop (3 tests)
-- ✅ Statistics and results aggregation (3 tests)
-- ✅ Edge cases and error handling (3 tests)
-- ✅ Integration tests (1 test)
+- AtomicCounter thread-safe operations (8 tests)
+- ByteCountingCallback progress tracking (6 tests)
+- UploadEngine initialization (3 tests)
+- File gathering and natural sorting (4 tests)
+- Gallery creation workflows (new, resume, append) (3 tests)
+- Upload operations and concurrency (2 tests)
+- Progress callbacks and soft stop (3 tests)
+- Statistics and results aggregation (3 tests)
+- Edge cases and error handling (3 tests)
+- Integration tests (1 test)
 
 **Total: 36 test methods across 10 test classes**
 
@@ -25,12 +25,12 @@ Tests for `src/core/engine.py` - Main upload engine
 Tests for `src/core/file_host_config.py` - File host configuration system
 
 **Coverage Areas:**
-- ✅ HostConfig dataclass initialization (7 tests)
-- ✅ FileHostConfigManager loading (9 tests)
-- ✅ Settings management (INI persistence) (9 tests)
-- ✅ Enable/disable and trigger filtering (6 tests)
-- ✅ Thread safety and INI operations (2 tests)
-- ✅ Singleton pattern (2 tests)
+- HostConfig dataclass initialization (7 tests)
+- FileHostConfigManager loading (9 tests)
+- Settings management (INI persistence) (9 tests)
+- Enable/disable and trigger filtering (6 tests)
+- Thread safety and INI operations (2 tests)
+- Singleton pattern (2 tests)
 
 **Total: 35 test methods across 6 test classes**
 
@@ -38,31 +38,31 @@ Tests for `src/core/file_host_config.py` - File host configuration system
 Tests for `src/core/constants.py` - Application constants
 
 **Coverage Areas:**
-- ✅ Application info (2 tests)
-- ✅ Network configuration (4 tests)
-- ✅ File size constants (5 tests)
-- ✅ File size limits (3 tests)
-- ✅ Image processing (4 tests)
-- ✅ Thumbnail configuration (6 tests)
-- ✅ Gallery settings (2 tests)
-- ✅ Progress updates (2 tests)
-- ✅ URLs and endpoints (4 tests)
-- ✅ HTTP status codes (6 tests)
-- ✅ Queue states (2 tests)
-- ✅ Logging configuration (3 tests)
-- ✅ GUI settings (4 tests)
-- ✅ Performance settings (3 tests)
-- ✅ File paths (3 tests)
-- ✅ Template placeholders (4 tests)
-- ✅ Encryption settings (2 tests)
-- ✅ Time formats (3 tests)
-- ✅ Message constants (2 tests)
-- ✅ Worker thread settings (2 tests)
-- ✅ Database settings (3 tests)
-- ✅ Rate limiting (2 tests)
-- ✅ Memory management (2 tests)
-- ✅ Testing constants (2 tests)
-- ✅ Integration tests (4 tests)
+- Application info (2 tests)
+- Network configuration (4 tests)
+- File size constants (5 tests)
+- File size limits (3 tests)
+- Image processing (4 tests)
+- Thumbnail configuration (6 tests)
+- Gallery settings (2 tests)
+- Progress updates (2 tests)
+- URLs and endpoints (4 tests)
+- HTTP status codes (6 tests)
+- Queue states (2 tests)
+- Logging configuration (3 tests)
+- GUI settings (4 tests)
+- Performance settings (3 tests)
+- File paths (3 tests)
+- Template placeholders (4 tests)
+- Encryption settings (2 tests)
+- Time formats (3 tests)
+- Message constants (2 tests)
+- Worker thread settings (2 tests)
+- Database settings (3 tests)
+- Rate limiting (2 tests)
+- Memory management (2 tests)
+- Testing constants (2 tests)
+- Integration tests (4 tests)
 
 **Total: 79 test methods across 25 test classes**
 
@@ -70,31 +70,31 @@ Tests for `src/core/constants.py` - Application constants
 
 ### Run All Core Tests
 ```bash
-pytest tests/unit/core/ -v
+.venv/bin/python -m pytest tests/unit/core/ -v
 ```
 
 ### Run Specific Module Tests
 ```bash
-pytest tests/unit/core/test_engine.py -v
-pytest tests/unit/core/test_file_host_config.py -v
-pytest tests/unit/core/test_constants.py -v
+.venv/bin/python -m pytest tests/unit/core/test_engine.py -v
+.venv/bin/python -m pytest tests/unit/core/test_file_host_config.py -v
+.venv/bin/python -m pytest tests/unit/core/test_constants.py -v
 ```
 
 ### Run with Coverage Report
 ```bash
-pytest tests/unit/core/ --cov=src/core --cov-report=html --cov-report=term
+.venv/bin/python -m pytest tests/unit/core/ --cov=src/core --cov-report=html --cov-report=term
 ```
 
 ### Run Specific Test Classes
 ```bash
-pytest tests/unit/core/test_engine.py::TestAtomicCounter -v
-pytest tests/unit/core/test_file_host_config.py::TestHostConfig -v
-pytest tests/unit/core/test_constants.py::TestFileSizeConstants -v
+.venv/bin/python -m pytest tests/unit/core/test_engine.py::TestAtomicCounter -v
+.venv/bin/python -m pytest tests/unit/core/test_file_host_config.py::TestHostConfig -v
+.venv/bin/python -m pytest tests/unit/core/test_constants.py::TestFileSizeConstants -v
 ```
 
 ### Run with Markers
 ```bash
-pytest tests/unit/core/ -m unit -v
+.venv/bin/python -m pytest tests/unit/core/ -m unit -v
 ```
 
 ## Test Strategy

@@ -2,7 +2,7 @@
 
 ## Generated Test Files
 
-✅ **3 comprehensive test files created** in `/mnt/h/cursor/imxup/tests/unit/core/`
+**3 comprehensive test files created** in `tests/unit/core/`
 
 ### Test Coverage Statistics
 
@@ -30,17 +30,17 @@
 10. `TestIntegration` (1 test) - End-to-end workflow
 
 **Key Coverage:**
-- ✅ Thread-safe operations with concurrent access (10 threads, 1000 ops/thread)
-- ✅ Upload progress tracking with byte deltas
-- ✅ Gallery creation (new gallery, resume, append modes)
-- ✅ Natural sorting and Windows Explorer sort
-- ✅ Concurrent upload operations with ThreadPoolExecutor
-- ✅ Retry logic with configurable max_retries
-- ✅ Progress callbacks (on_progress, on_image_uploaded)
-- ✅ Soft stop functionality for graceful cancellation
-- ✅ Statistics calculation (upload time, transfer speed, dimensions)
-- ✅ Error handling (missing folders, no images, upload failures)
-- ✅ Thread-local session management for connection reuse
+- Thread-safe operations with concurrent access (10 threads, 1000 ops/thread)
+- Upload progress tracking with byte deltas
+- Gallery creation (new gallery, resume, append modes)
+- Natural sorting and Windows Explorer sort
+- Concurrent upload operations with ThreadPoolExecutor
+- Retry logic with configurable max_retries
+- Progress callbacks (on_progress, on_image_uploaded)
+- Soft stop functionality for graceful cancellation
+- Statistics calculation (upload time, transfer speed, dimensions)
+- Error handling (missing folders, no images, upload failures)
+- Thread-local session management for connection reuse
 
 ### 2. test_file_host_config.py (769 lines, 34 tests)
 
@@ -53,17 +53,17 @@
 6. `TestSingleton` (1 test) - Singleton pattern verification
 
 **Key Coverage:**
-- ✅ HostConfig dataclass with minimal and full initialization
-- ✅ from_dict conversion with nested structures (auth, multistep, defaults)
-- ✅ Builtin and custom config loading from JSON files
-- ✅ Custom configs override builtin configs
-- ✅ Invalid JSON handling and missing field validation
-- ✅ Settings fallback chain: INI → JSON defaults → hardcoded defaults
-- ✅ Thread-safe INI read/write with locks (20 threads, 10 ops/thread)
-- ✅ Setting validation (type checking, range validation)
-- ✅ Enable/disable hosts with INI persistence
-- ✅ Trigger filtering (on_added, on_started, on_completed)
-- ✅ Singleton pattern with thread-safe initialization
+- HostConfig dataclass with minimal and full initialization
+- from_dict conversion with nested structures (auth, multistep, defaults)
+- Builtin and custom config loading from JSON files
+- Custom configs override builtin configs
+- Invalid JSON handling and missing field validation
+- Settings fallback chain: INI -> JSON defaults -> hardcoded defaults
+- Thread-safe INI read/write with locks (20 threads, 10 ops/thread)
+- Setting validation (type checking, range validation)
+- Enable/disable hosts with INI persistence
+- Trigger filtering (on_added, on_started, on_completed)
+- Singleton pattern with thread-safe initialization
 
 ### 3. test_constants.py (716 lines, 79 tests)
 
@@ -95,19 +95,19 @@
 25. `TestConstantsIntegration` (4 tests)
 
 **Key Coverage:**
-- ✅ All 176 application constants validated
-- ✅ File size hierarchy (KB < MB < GB < TB)
-- ✅ Network configuration ranges (ports 1024-65535)
-- ✅ Image extensions and processing limits
-- ✅ Thumbnail sizes and formats
-- ✅ URLs and API endpoints
-- ✅ HTTP status codes (200, 401, 403, 404, 500)
-- ✅ Queue states (11 different states)
-- ✅ Template placeholders (14 placeholders)
-- ✅ Encryption settings (100,000 iterations, 32-byte keys)
-- ✅ Time format strings (timestamp, datetime, date)
-- ✅ Error and success message constants
-- ✅ Integration tests for constant relationships
+- All 176 application constants validated
+- File size hierarchy (KB < MB < GB < TB)
+- Network configuration ranges (ports 1024-65535)
+- Image extensions and processing limits
+- Thumbnail sizes and formats
+- URLs and API endpoints
+- HTTP status codes (200, 401, 403, 404, 500)
+- Queue states (11 different states)
+- Template placeholders (14 placeholders)
+- Encryption settings (100,000 iterations, 32-byte keys)
+- Time format strings (timestamp, datetime, date)
+- Error and success message constants
+- Integration tests for constant relationships
 
 ## Testing Patterns Used
 
@@ -188,25 +188,24 @@ def test_concurrent_operations(self):
 
 ### Install Requirements
 ```bash
-pip install pytest pytest-cov pytest-mock
+.venv/bin/pip install pytest pytest-cov pytest-mock
 ```
 
 ### Run All Core Tests
 ```bash
-cd /mnt/h/cursor/imxup
-pytest tests/unit/core/ -v
+.venv/bin/python -m pytest tests/unit/core/ -v
 ```
 
 ### Run Individual Modules
 ```bash
-pytest tests/unit/core/test_engine.py -v
-pytest tests/unit/core/test_file_host_config.py -v
-pytest tests/unit/core/test_constants.py -v
+.venv/bin/python -m pytest tests/unit/core/test_engine.py -v
+.venv/bin/python -m pytest tests/unit/core/test_file_host_config.py -v
+.venv/bin/python -m pytest tests/unit/core/test_constants.py -v
 ```
 
 ### Run with Coverage Report
 ```bash
-pytest tests/unit/core/ \
+.venv/bin/python -m pytest tests/unit/core/ \
   --cov=src/core \
   --cov-report=html \
   --cov-report=term-missing
@@ -214,35 +213,35 @@ pytest tests/unit/core/ \
 
 ### Run Specific Test Class
 ```bash
-pytest tests/unit/core/test_engine.py::TestAtomicCounter -v
+.venv/bin/python -m pytest tests/unit/core/test_engine.py::TestAtomicCounter -v
 ```
 
 ### Run Specific Test Method
 ```bash
-pytest tests/unit/core/test_engine.py::TestAtomicCounter::test_counter_thread_safety -v
+.venv/bin/python -m pytest tests/unit/core/test_engine.py::TestAtomicCounter::test_counter_thread_safety -v
 ```
 
 ## Test Quality Metrics
 
 ### Test Characteristics:
-- ✅ **Fast**: Unit tests run in <100ms each
-- ✅ **Isolated**: No dependencies between tests
-- ✅ **Repeatable**: Deterministic results
-- ✅ **Self-validating**: Clear pass/fail
-- ✅ **Timely**: Tests written with code
+- **Fast**: Unit tests run in <100ms each
+- **Isolated**: No dependencies between tests
+- **Repeatable**: Deterministic results
+- **Self-validating**: Clear pass/fail
+- **Timely**: Tests written with code
 
 ### Edge Cases Covered:
-- ✅ Boundary values (min/max ranges)
-- ✅ Empty/null inputs
-- ✅ Error conditions and exceptions
-- ✅ Concurrent operations (race conditions)
-- ✅ Resource cleanup (files, threads, memory)
+- Boundary values (min/max ranges)
+- Empty/null inputs
+- Error conditions and exceptions
+- Concurrent operations (race conditions)
+- Resource cleanup (files, threads, memory)
 
 ### Documentation:
-- ✅ Module-level docstrings explaining test scope
-- ✅ Class-level docstrings for test suites
-- ✅ Test method docstrings for complex tests
-- ✅ Inline comments for non-obvious assertions
+- Module-level docstrings explaining test scope
+- Class-level docstrings for test suites
+- Test method docstrings for complex tests
+- Inline comments for non-obvious assertions
 
 ## Key Features Tested
 
@@ -261,7 +260,7 @@ pytest tests/unit/core/test_engine.py::TestAtomicCounter::test_counter_thread_sa
 ### File Host Config Module:
 - JSON-based host configuration loading
 - Custom configs override builtin configs
-- Three-tier settings fallback (INI → JSON → hardcoded)
+- Three-tier settings fallback (INI -> JSON -> hardcoded)
 - Thread-safe INI file operations with locks
 - Host enable/disable with persistence
 - Trigger-based filtering (added/started/completed)
@@ -295,12 +294,12 @@ tests/unit/core/
 
 1. **Run the tests** to verify they pass:
    ```bash
-   pytest tests/unit/core/ -v
+   .venv/bin/python -m pytest tests/unit/core/ -v
    ```
 
 2. **Generate coverage report**:
    ```bash
-   pytest tests/unit/core/ --cov=src/core --cov-report=html
+   .venv/bin/python -m pytest tests/unit/core/ --cov=src/core --cov-report=html
    ```
 
 3. **Review coverage gaps** and add tests if needed
@@ -311,15 +310,15 @@ tests/unit/core/
 
 ## Summary
 
-✅ **147 comprehensive test methods** covering all aspects of core modules
-✅ **2,393 lines** of well-documented test code
-✅ **>80% coverage target** for all modules
-✅ **Thread-safe testing** with concurrent operations
-✅ **Edge case coverage** for robustness
-✅ **Mocked dependencies** for isolation
-✅ **AAA pattern** for clarity
-✅ **Parametrized tests** for efficiency
-✅ **Integration tests** for workflows
-✅ **Comprehensive documentation** for maintainability
+- **147 comprehensive test methods** covering all aspects of core modules
+- **2,393 lines** of well-documented test code
+- **>80% coverage target** for all modules
+- **Thread-safe testing** with concurrent operations
+- **Edge case coverage** for robustness
+- **Mocked dependencies** for isolation
+- **AAA pattern** for clarity
+- **Parametrized tests** for efficiency
+- **Integration tests** for workflows
+- **Comprehensive documentation** for maintainability
 
 The test suite is production-ready and follows pytest best practices!
