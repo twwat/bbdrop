@@ -18,20 +18,20 @@ python3 scripts/inject_test_messages.py
 
 ## What to Look For
 
-### ✅ If test messages appear:
+### If test messages appear:
 - **Conclusion**: System works! Your app isn't logging errors yet.
 - **Solution**: Add error logging to your code:
   ```python
   log("Error occurred", level="error")
   ```
 
-### ❌ If test messages don't appear:
+### If test messages don't appear:
 
 Check diagnostic output for these issues:
 
 #### Issue 1: Wrong GUI Level
 ```
-GUI Log Level: ERROR  ← WRONG! Should be INFO
+GUI Log Level: ERROR  <- WRONG! Should be INFO
 ```
 **Fix**: Edit config file:
 ```ini
@@ -41,7 +41,7 @@ level_gui = INFO
 
 #### Issue 2: Disabled Categories
 ```
-general [cats_gui_general] = ✗ DISABLED  ← WRONG!
+general [cats_gui_general] = DISABLED  <- WRONG!
 ```
 **Fix**: Edit config file:
 ```ini
@@ -51,7 +51,7 @@ cats_gui_general = true
 
 #### Issue 3: Filter Test Fails
 ```
-ERROR in general (level=40): ✗ BLOCKED  ← WRONG!
+ERROR in general (level=40): BLOCKED  <- WRONG!
 ```
 **Fix**: There's a bug. Report this output.
 
@@ -61,7 +61,7 @@ ERROR in general (level=40): ✗ BLOCKED  ← WRONG!
 
 This means:
 - Message sent: `"12:34:56 ERROR: Upload failed"`
-- GUI shows: `"12:34:56 Upload failed"` ← No "ERROR:" visible!
+- GUI shows: `"12:34:56 Upload failed"` <- No "ERROR:" visible!
 
 **How to tell what level a message is**:
 1. Enable level prefixes: `show_log_level_gui = true` in config
@@ -72,10 +72,10 @@ This means:
 
 ### Mistake 1: Not using level parameter
 ```python
-# ❌ Wrong (defaults to INFO)
+# Wrong (defaults to INFO)
 log("Upload failed")
 
-# ✅ Correct (explicit ERROR level)
+# Correct (explicit ERROR level)
 log("Upload failed", level="error")
 ```
 
@@ -93,21 +93,21 @@ log_level >= gui_level
 ```
 
 With default `gui_level = INFO (20)`:
-- DEBUG (10) < 20 → ❌ BLOCKED
-- INFO (20) >= 20 → ✅ SHOWN
-- WARNING (30) >= 20 → ✅ SHOWN
-- ERROR (40) >= 20 → ✅ SHOWN
-- CRITICAL (50) >= 20 → ✅ SHOWN
+- DEBUG (10) < 20 -> BLOCKED
+- INFO (20) >= 20 -> SHOWN
+- WARNING (30) >= 20 -> SHOWN
+- ERROR (40) >= 20 -> SHOWN
+- CRITICAL (50) >= 20 -> SHOWN
 
 **Conclusion**: If INFO shows, ERROR/WARNING MUST show too (unless categories are disabled).
 
 ## Files to Check
 
-1. **Config file**: `~/.config/imxup/config.ini`
+1. **Config file**: `~/.bbdrop/bbdrop.ini`
    - Section: `[LOGGING]`
    - Key settings: `level_gui`, `cats_gui_*`
 
-2. **Log file**: `~/.local/share/imxup/logs/imxup.log`
+2. **Log file**: `~/.bbdrop/logs/bbdrop.log`
    - Shows ALL messages with full prefixes
    - Useful for comparison with GUI
 
@@ -161,10 +161,10 @@ python3 scripts/test_log_levels.py
 grep -rn 'level="error"' src/
 
 # 5. Check config file
-cat ~/.config/imxup/config.ini | grep -A 20 "\[LOGGING\]"
+cat ~/.bbdrop/bbdrop.ini | grep -A 20 "\[LOGGING\]"
 
 # 6. Check log file (last 50 lines)
-tail -50 ~/.local/share/imxup/logs/imxup.log
+tail -50 ~/.bbdrop/logs/bbdrop.log
 ```
 
 ## Most Likely Answer

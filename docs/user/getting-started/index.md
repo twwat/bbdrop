@@ -6,6 +6,7 @@ Welcome to BBDrop! This section will guide you through installation, basic usage
 
 - [Quick Start](./quick-start.md) - Upload your first gallery in 5 minutes
 - [Setup](./setup.md) - Full installation and configuration guide
+- [Key Concepts](./concepts.md) - How the pieces fit together
 - [Keyboard Shortcuts](./keyboard-shortcuts.md) - Master 18+ keyboard shortcuts
 
 ## Recommended Path

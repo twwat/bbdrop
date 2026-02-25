@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Find solutions to common issues with IMXuploader.
+Find solutions to common issues with BBDrop.
 
 ## Quick Links
 

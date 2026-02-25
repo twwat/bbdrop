@@ -1,6 +1,6 @@
 # Keyboard Shortcuts
 
-This document lists all keyboard shortcuts available in the imxup GUI.
+This document lists all keyboard shortcuts available in the BBDrop GUI.
 
 ## Tab Management
 
@@ -64,7 +64,3 @@ While not keyboard shortcuts, these frequently used actions are available via ri
 - Use **Ctrl+,** frequently to access settings for credentials, templates, and file hosts
 - **F1** provides context-sensitive help throughout the application
 - Check the status bar at the bottom for quick shortcut hints
-
----
-
-**Last Updated:** 2026-01-03

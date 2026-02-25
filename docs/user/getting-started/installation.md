@@ -39,7 +39,7 @@ sudo rpm -i bbdrop-x.x.x-linux-x64.rpm
 
 ## First Launch
 
-When you first open BBDrop, you'll see the main window with an empty gallery queue on the left and the host panel on the right. No hosts are enabled by default — head to [Your First Upload](first-upload.md) to get started.
+When you first open BBDrop, you'll see the main window with an empty gallery queue on the left and the host panel on the right. No hosts are enabled by default — head to [Your First Upload](quick-start.md) to get started.
 
 !!! tip
     The portable versions store settings alongside the executable, making them ideal for USB drives or keeping separate configurations.

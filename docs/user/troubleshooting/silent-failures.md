@@ -1,7 +1,7 @@
 # Troubleshooting: Silent Startup Failure
 
 ## Problem
-Running `python imxup.py --gui --debug` produces:
+Running `python bbdrop.py --gui --debug` produces:
 - No GUI window
 - No console output
 - No error messages
@@ -18,8 +18,8 @@ python check_crash_logs.py
 ```
 
 This will check for:
-- `imxup_crash.log` in the project directory (from top-level exception handler)
-- `~/.imxup/crash.log` in user directory (from Qt exception hook)
+- `bbdrop_crash.log` in the project directory (from top-level exception handler)
+- `~/.bbdrop/crash.log` in user directory (from Qt exception hook)
 - Windows Error Reporting crash dumps
 - SQLite database integrity
 
@@ -86,15 +86,15 @@ pip install -r requirements.txt
 **Solution (Windows CMD):**
 ```cmd
 REM Backup and recreate database
-move %USERPROFILE%\.imxup\imxup.db %USERPROFILE%\.imxup\imxup.db.backup
-REM Run imxup again - it will create fresh database
+move %USERPROFILE%\.bbdrop\bbdrop.db %USERPROFILE%\.bbdrop\bbdrop.db.backup
+REM Run bbdrop again - it will create fresh database
 ```
 
 **Solution (PowerShell):**
 ```powershell
 # Backup and recreate database
-Move-Item $env:USERPROFILE\.imxup\imxup.db $env:USERPROFILE\.imxup\imxup.db.backup
-# Run imxup again - it will create fresh database
+Move-Item $env:USERPROFILE\.bbdrop\bbdrop.db $env:USERPROFILE\.bbdrop\bbdrop.db.backup
+# Run bbdrop again - it will create fresh database
 ```
 
 ### 4. Windows-Specific DLL Issues
@@ -109,20 +109,20 @@ Move-Item $env:USERPROFILE\.imxup\imxup.db $env:USERPROFILE\.imxup\imxup.db.back
 
 **Check Windows Defender logs:**
 1. Open Event Viewer: `Win+R`, type `eventvwr.msc`
-2. Navigate to: Applications and Services Logs → Microsoft → Windows → Windows Defender → Operational
-3. Look for recent blocks/warnings related to Python or imxup
+2. Navigate to: Applications and Services Logs -> Microsoft -> Windows -> Windows Defender -> Operational
+3. Look for recent blocks/warnings related to Python or BBDrop
 
 **Add exclusions (Windows Security):**
-1. Open Windows Security → Virus & threat protection
+1. Open Windows Security -> Virus & threat protection
 2. Click "Manage settings" under Virus & threat protection settings
 3. Scroll to "Exclusions" and click "Add or remove exclusions"
-4. Add folder exclusion for your imxup directory
+4. Add folder exclusion for your BBDrop directory
 
 **Test as administrator (diagnostic only - NOT recommended for regular use):**
-- Right-click Python script → "Run as administrator"
+- Right-click Python script -> "Run as administrator"
 - If this works, indicates permission issue
 
-## Exception Handling in imxup.py
+## Exception Handling in bbdrop.py
 
 The application has **three layers** of exception handling:
 
@@ -133,11 +133,11 @@ The application has **three layers** of exception handling:
 
 2. **Qt event loop handler** (lines 2400-2421): Catches runtime exceptions in Qt callbacks
    - Prints to console with full traceback
-   - Writes to `~/.imxup/crash.log` in user directory
+   - Writes to `~/.bbdrop/crash.log` in user directory
    - Allows application to continue running
 
 3. **Top-level handler** (lines 2809-2823): Catch-all for unhandled exceptions
-   - Writes to `imxup_crash.log` in project directory
+   - Writes to `bbdrop_crash.log` in project directory
    - Attempts to log via normal logging system
    - Exits with code 1
 
@@ -173,11 +173,11 @@ venv_new\Scripts\activate
 pip install -r requirements.txt
 
 # Test with new environment
-venv_new\Scripts\python.exe imxup.py --gui --debug
+venv_new\Scripts\python.exe bbdrop.py --gui --debug
 ```
 
 ### Option B: Minimal Test
-Create `test_minimal.py` in the imxup project directory:
+Create `test_minimal.py` in the BBDrop project directory:
 ```python
 import sys
 print("Step 1: Python works")
@@ -199,4 +199,4 @@ sys.exit(app.exec())
 
 Run: `python test_minimal.py`
 
-This isolates whether the issue is PyQt6-related or specific to imxup's startup sequence.
+This isolates whether the issue is PyQt6-related or specific to BBDrop's startup sequence.

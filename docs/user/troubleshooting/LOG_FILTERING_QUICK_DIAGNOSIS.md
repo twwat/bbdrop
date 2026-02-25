@@ -26,16 +26,16 @@ I traced through the entire logging system and found the filtering logic:
    - CRITICAL = 50
 
 3. **Default behavior**: With `level_gui = INFO`:
-   - ✓ Should show: INFO, WARNING, ERROR, CRITICAL
-   - ✗ Should block: DEBUG, TRACE
+   - Should show: INFO, WARNING, ERROR, CRITICAL
+   - Should block: DEBUG, TRACE
 
 ## The Paradox
 
 **According to the code, ERROR and WARNING should ALWAYS show when INFO shows!**
 
 This is because:
-- ERROR (40) >= INFO (20) ✓
-- WARNING (30) >= INFO (20) ✓
+- ERROR (40) >= INFO (20)
+- WARNING (30) >= INFO (20)
 
 So if INFO appears, ERROR and WARNING must also pass the filter.
 
@@ -125,7 +125,7 @@ If everything is working correctly:
 Check the diagnostic output for:
 - `level_gui` setting (should be INFO or DEBUG)
 - Category status (ERROR messages' categories should be enabled)
-- Test results (ERROR test should show "✓ SHOWN")
+- Test results (ERROR test should show "SHOWN")
 
 ### If ERROR messages aren't being generated:
 
@@ -164,7 +164,7 @@ All three should appear in the GUI (assuming general category is enabled).
 
 ## Files to Check
 
-1. `/home/jimbo/.config/imxup/config.ini` - Check `[LOGGING]` section
+1. `~/.bbdrop/bbdrop.ini` - Check `[LOGGING]` section
 2. `src/utils/logger.py` - Main logging function (line 198-370)
 3. `src/utils/logging.py` - AppLogger class with filters (line 330-338)
 4. `src/gui/main_window.py` - GUI log display (line 5214-5263)

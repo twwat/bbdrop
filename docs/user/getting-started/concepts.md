@@ -56,4 +56,4 @@ Hooks let you run external scripts or programs at key points in the upload workf
 This is how you connect BBDrop to other tools and scripts without modifying the app itself.
 
 !!! tip
-    You don't need to understand all of this upfront. Start with [Your First Upload](first-upload.md) and explore features as you need them.
+    You don't need to understand all of this upfront. Start with [Your First Upload](quick-start.md) and explore features as you need them.

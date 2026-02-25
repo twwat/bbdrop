@@ -2,7 +2,7 @@
 
 ## Problem Identified
 
-When dragging files from Windows Explorer into the imxup application running in WSL2, the drag operation was being rejected with a "no drop" cursor (circle with line through it). The files were never reaching the `dropEvent` handler where WSL path conversion occurs.
+When dragging files from Windows Explorer into the BBDrop application running in WSL2, the drag operation was being rejected with a "no drop" cursor (circle with line through it). The files were never reaching the `dropEvent` handler where WSL path conversion occurs.
 
 ## Root Cause
 
@@ -78,10 +78,10 @@ To enable drag-drop debugging, ensure logging is enabled for the "drag_drop" cat
 
 ## Testing Instructions
 
-1. Launch imxup in WSL2: `python imxup.py`
+1. Launch BBDrop in WSL2: `python bbdrop.py`
 2. Open Windows Explorer
 3. Navigate to a folder containing archives (ZIP, RAR, etc.) or folders with images
-4. Drag a folder or archive from Windows Explorer to the imxup window
+4. Drag a folder or archive from Windows Explorer to the BBDrop window
 5. **Expected behavior**:
    - Cursor should change to "drop allowed" (no circle with line)
    - File should be accepted
@@ -91,17 +91,17 @@ To enable drag-drop debugging, ensure logging is enabled for the "drag_drop" cat
 
 ### WSL Path Conversion
 The `convert_to_wsl_path()` function (from `src/utils/system_utils.py`) converts:
-- `C:\path\to\folder` → `/mnt/c/path/to/folder`
+- `C:\path\to\folder` -> `/mnt/c/path/to/folder`
 - Only active when `is_wsl2()` returns True
 
 ### Acceptance Flow
 ```
 Windows Explorer drag
-    ↓
+    |
 dragEnterEvent: Accept if hasUrls OR hasText
-    ↓
+    |
 dragMoveEvent: Accept if hasUrls OR hasText
-    ↓
+    |
 dropEvent:
     - Extract URLs from mime data
     - Convert Windows paths to WSL format
@@ -111,7 +111,7 @@ dropEvent:
 
 ## Files Modified
 
-- `/home/jimbo/imxup/src/gui/main_window.py`
+- `src/gui/main_window.py`
   - `dragEnterEvent()` (lines 6562-6588): Enhanced acceptance logic + logging
   - `dragMoveEvent()` (lines 6590-6602): Accept URLs or text
   - `dropEvent()` (lines 6607-6649): Enhanced logging throughout

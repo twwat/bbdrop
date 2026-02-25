@@ -10,7 +10,7 @@ Quick fixes for common problems.
 
 | Error | Solution |
 |-------|----------|
-| **Authentication failed** | Re-enter credentials in Settings → Credentials |
+| **Authentication failed** | Re-enter credentials in Settings -> Credentials |
 | **Connection timeout** | Check your internet connection |
 | **Server error (5xx)** | Wait a few minutes and retry |
 | **Rate limited** | Wait 10-15 minutes before retrying |
@@ -37,7 +37,7 @@ Quick fixes for common problems.
 
 ## File Host Upload Failed
 
-- Click **Test Connection** in Settings → File Hosts to verify credentials
+- Click **Test Connection** in Settings -> File Hosts to verify credentials
 - Check if your API key has expired
 - Some hosts require premium accounts for uploads
 - Try uploading to one host at a time to isolate the problem
@@ -64,8 +64,8 @@ Quick fixes for common problems.
 
 Settings are stored in your user folder. If you need to reset:
 
-- Close IMXuploader
-- Delete the `.imxup` folder in your home directory
+- Close BBDrop
+- Delete the `.bbdrop` folder in your home directory
 - Restart and reconfigure your credentials
 
 ---

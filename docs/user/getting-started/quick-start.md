@@ -1,61 +1,32 @@
 # Your First Upload
 
-Upload a gallery in under a minute.
+This guide gets you from zero to a working gallery upload in under 5 minutes, using TurboImageHost — no credentials required.
 
----
+## 1. Enable TurboImageHost
 
-## Add Your Gallery
+In the right panel, you'll see the **Upload Workers** table listing all available hosts. Right-click **turboimagehost** and select **Enable Host**.
 
-**Drag and drop** a folder of images onto the queue table.
+## 2. Add a Gallery
 
-Or click **Add Folder** in the toolbar and select a folder.
+Drag a folder of images from your file manager into the main gallery table. The folder name becomes the gallery name. BBDrop will scan the images automatically.
 
-Your gallery appears in the queue with **Ready** status.
+You can also drag ZIP, RAR, or 7Z archives — BBDrop will extract them and queue the contents.
 
----
+!!! tip
+    You can also use **File > Add Folders** or the Windows Explorer right-click menu to add galleries.
 
-## Configure Credentials (First Time Only)
+## 3. Start the Upload
 
-Before uploading, you need to add your image host credentials:
+Click **Start** in the toolbar, or right-click the gallery and select **Start Selected**. You'll see progress update in real time — image count, percentage, and upload speed.
 
-- Click **Settings** in the toolbar
-- Go to the **Credentials** section
-- Select your image host and enter your username and password
-- Click **Save**
+## 4. Get Your BBCode
 
-Your credentials are stored securely in your system keyring.
+When the upload completes, the gallery status changes to **Completed**. Right-click the gallery and choose **Copy BBCode** to copy the generated BBCode to your clipboard.
 
----
+You can also click **View BBCode** to preview it, or find the saved BBCode file in the `.uploaded` subfolder inside your gallery folder.
 
-## Start the Upload
+## Next Steps
 
-Click **Start All** to begin uploading.
-
-Watch the progress:
-- **Progress bar** shows current image and overall completion
-- **Speed** shows your current upload rate
-- **Status** changes from Ready → Uploading → Completed
-
----
-
-## Get Your Links
-
-When the upload finishes:
-
-- The gallery turns **green** with Completed status
-- Right-click the gallery and select **Copy BBCode**
-- Paste into your forum post
-
-The BBCode includes thumbnails linked to full-size images on your image host.
-
----
-
-## What's Next?
-
-**Upload to file hosts too** - [Multi-Host Upload](../guides/multi-host-upload.md)
-
-**Customize the BBCode** - [BBCode Templates](../guides/bbcode-templates.md)
-
-**Organize with tabs** - Right-click the tab bar to create new tabs
-
-**Learn keyboard shortcuts** - [Keyboard Shortcuts](keyboard-shortcuts.md)
+- **Want more control over thumbnails and galleries?** Set up [IMX.to](../guides/image-hosts.md) for gallery renaming, API key authentication, and more thumbnail options.
+- **Need download links?** Add [file hosts](../guides/multi-host-upload.md) to automatically create and upload archives.
+- **Customize your output?** Create [BBCode templates](../guides/bbcode-templates.md) with placeholders and conditional logic.
