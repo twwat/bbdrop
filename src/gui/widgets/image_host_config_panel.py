@@ -70,8 +70,8 @@ class ImageHostConfigPanel(QWidget):
         thumbnails_group = self._create_thumbnails_group()
         main_layout.addWidget(thumbnails_group)
 
-        # Section 4: Options (only for IMX)
-        if self.host_id == "imx":
+        # Section 4: Host-Specific Options
+        if self.host_id in ("imx", "pixhost"):
             options_group = self._create_options_group()
             main_layout.addWidget(options_group)
 
@@ -428,16 +428,43 @@ class ImageHostConfigPanel(QWidget):
         return group
 
     def _create_options_group(self) -> QGroupBox:
-        """Create the options group (IMX-specific)."""
+        """Create host-specific options group."""
         group = QGroupBox("Options")
         layout = QVBoxLayout(group)
 
-        self.auto_rename_check = QCheckBox("Automatically rename galleries on imx.to")
-        self.auto_rename_check.setChecked(
-            get_image_host_setting(self.host_id, 'auto_rename', 'bool')
-        )
-        self.auto_rename_check.toggled.connect(self._mark_modified)
-        layout.addWidget(self.auto_rename_check)
+        if self.host_id == "imx":
+            self.auto_rename_check = QCheckBox("Automatically rename galleries on imx.to")
+            self.auto_rename_check.setChecked(
+                get_image_host_setting(self.host_id, 'auto_rename', 'bool')
+            )
+            self.auto_rename_check.toggled.connect(self._mark_modified)
+            layout.addWidget(self.auto_rename_check)
+            
+        elif self.host_id == "pixhost":
+            # Auto finalize
+            self.auto_finalize_check = QCheckBox("Auto-finalize galleries (required for images to be visible)")
+            self.auto_finalize_check.setChecked(
+                get_image_host_setting(self.host_id, 'auto_finalize_gallery', 'bool')
+            )
+            self.auto_finalize_check.toggled.connect(self._mark_modified)
+            layout.addWidget(self.auto_finalize_check)
+            
+            # Error retry strategy (Fake 200s)
+            error_row = QHBoxLayout()
+            error_row.addWidget(QLabel("<b>API Error Strategy</b>:"))
+            self.error_strategy_combo = QComboBox()
+            self.error_strategy_combo.addItem("Retry single image (Saves bandwidth)", "retry_image")
+            self.error_strategy_combo.addItem("Corrupt gallery (Retries entire gallery, preserves Zip Download)", "retry_gallery")
+            
+            saved_strategy = get_image_host_setting(self.host_id, 'error_retry_strategy', 'str') or 'retry_image'
+            index = self.error_strategy_combo.findData(saved_strategy)
+            if index >= 0:
+                self.error_strategy_combo.setCurrentIndex(index)
+            
+            self.error_strategy_combo.currentIndexChanged.connect(self._mark_modified)
+            error_row.addWidget(self.error_strategy_combo)
+            error_row.addStretch()
+            layout.addLayout(error_row)
 
         return group
 
@@ -586,6 +613,9 @@ class ImageHostConfigPanel(QWidget):
 
         if self.host_id == "imx":
             save_image_host_setting(self.host_id, 'auto_rename', self.auto_rename_check.isChecked())
+        elif self.host_id == "pixhost":
+            save_image_host_setting(self.host_id, 'auto_finalize_gallery', self.auto_finalize_check.isChecked())
+            save_image_host_setting(self.host_id, 'error_retry_strategy', self.error_strategy_combo.currentData())
 
         save_image_host_setting(self.host_id, 'cover_gallery', self.cover_gallery_edit.text())
         self.cover_gallery_changed.emit(self.host_id, self.cover_gallery_edit.text())
