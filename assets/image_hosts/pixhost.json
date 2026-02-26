@@ -1,0 +1,35 @@
+{
+    "name": "Pixhost",
+    "icon": "pixhost_icon.png",
+    "logo": "pixhost.png",
+    "requires_auth": false,
+    "auth_type": "none",
+    "gallery_url_template": "https://pixhost.to/gallery/{gallery_id}",
+    "thumbnail_url_template": "https://t1.pixhost.to/thumbs/{img_id}",
+    "thumbnail_mode": "variable",
+    "thumbnail_range": {
+        "min": 150,
+        "max": 500,
+        "default": 300
+    },
+    "content_types": [
+        {"id": "0", "label": "Family Safe"},
+        {"id": "1", "label": "Adult Content"}
+    ],
+    "max_file_size_mb": 10,
+    "allowed_formats": ["jpg", "jpeg", "png", "gif"],
+    "gallery_name_max_length": 100,
+    "defaults": {
+        "max_retries": 3,
+        "parallel_batch_size": 4,
+        "upload_connect_timeout": 30,
+        "upload_read_timeout": 120,
+        "thumbnail_size": 300,
+        "content_type": "0",
+        "error_retry_strategy": "retry_image",
+        "auto_finalize_gallery": true,
+        "cover_gallery": "",
+        "cover_thumbnail_format": 2,
+        "cover_thumbnail_size": 600
+    }
+}
