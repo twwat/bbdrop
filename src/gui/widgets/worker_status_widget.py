@@ -1602,8 +1602,6 @@ class WorkerStatusWidget(QWidget):
                     icon_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                     icon_btn.setToolTip(f"Configure {worker.display_name}")
                     icon_btn.setProperty("worker_id", worker.worker_id)
-                    icon_btn.setProperty("worker_type", worker.worker_type)
-                    icon_btn.setProperty("hostname", worker.hostname)
                     icon_btn.clicked.connect(self._on_icon_button_clicked)
 
                     container = QWidget()
@@ -1612,6 +1610,9 @@ class WorkerStatusWidget(QWidget):
                     layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     layout.addWidget(icon_btn)
                     container.setProperty("worker_id", worker.worker_id)
+
+                    # Install event filter to handle double-clicks on cell widgets
+                    container.installEventFilter(self)
 
                     # Create an invisible item to store worker_id for tests/selection
                     icon_item = QTableWidgetItem()
@@ -1668,8 +1669,6 @@ class WorkerStatusWidget(QWidget):
 
                         # Store worker data on container for double-click handling
                         container.setProperty('worker_id', worker.worker_id)
-                        container.setProperty('worker_type', worker.worker_type)
-                        container.setProperty('hostname', worker.hostname)
 
                         # Install event filter to handle double-clicks on cell widgets
                         container.installEventFilter(self)
