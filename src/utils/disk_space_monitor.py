@@ -21,6 +21,8 @@ class DiskSpaceMonitor(QObject):
     # Emitted on every poll: (data_free_bytes, temp_free_bytes)
     space_updated = pyqtSignal(int, int)
 
+    HYSTERESIS_FACTOR = 1.2  # 20% margin to exit warning state
+
     # Adaptive polling intervals (ms)
     _INTERVAL_COMFORTABLE = 60_000  # > 2x warning
     _INTERVAL_APPROACHING = 15_000  # > warning
@@ -44,6 +46,7 @@ class DiskSpaceMonitor(QObject):
         self._emergency_bytes = emergency_mb * 1024 * 1024
 
         self._current_tier = "ok"
+        self._hysteresis_active = False  # True when in warning state
         self._current_interval_ms = self._INTERVAL_COMFORTABLE
         self._data_free = 0
         self._temp_free = 0
@@ -165,7 +168,17 @@ class DiskSpaceMonitor(QObject):
         elif free_bytes < self._critical_bytes:
             return "critical"
         elif free_bytes < self._warning_bytes:
+            self._hysteresis_active = True
             return "warning"
+        
+        # Hysteresis: to exit warning state, space must be > warning_bytes * factor
+        if self._hysteresis_active:
+            if free_bytes > self._warning_bytes * self.HYSTERESIS_FACTOR:
+                self._hysteresis_active = False
+                return "ok"
+            else:
+                return "warning"  # Remain in warning state
+
         return "ok"
 
     def _calculate_interval(self, free_bytes: int) -> int:

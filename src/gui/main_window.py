@@ -1156,23 +1156,19 @@ class BBDropGUI(QMainWindow):
 
     def _on_disk_space_updated(self, data_free: int, temp_free: int):
         """Update the status bar label with current free space."""
-        # Use the lower value for display
+        from src.utils.system_utils import format_bytes
         min_free = min(data_free, temp_free)
-        if min_free >= 1024 * 1024 * 1024:  # >= 1 GB
-            text = f"Disk: {min_free / (1024**3):.1f} GB"
-        else:
-            text = f"Disk: {min_free // (1024 * 1024)} MB"
-        self.disk_status_label.setText(text)
+        self.disk_status_label.setText(f"Disk: {format_bytes(min_free)}")
 
         # Tooltip with per-path breakdown
         if hasattr(self, '_disk_monitor') and self._disk_monitor and not self._disk_monitor._same_device:
             self.disk_status_label.setToolTip(
-                f"Data: {data_free / (1024**3):.1f} GB free\n"
-                f"Temp: {temp_free / (1024**3):.1f} GB free"
+                f"Data: {format_bytes(data_free)} free\n"
+                f"Temp: {format_bytes(temp_free)} free"
             )
         else:
             self.disk_status_label.setToolTip(
-                f"{min_free / (1024**3):.1f} GB free on disk"
+                f"{format_bytes(min_free)} free on disk"
             )
 
     def _set_status_cell_icon(self, row: int, status: str):
