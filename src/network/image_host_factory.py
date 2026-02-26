@@ -59,6 +59,10 @@ def create_image_host_client(host_id: str, proxy: Optional[ProxyEntry] = None) -
         from src.network.turbo_image_host_client import TurboImageHostClient
         return TurboImageHostClient(proxy=proxy)
 
+    elif host_id == "pixhost":
+        from src.network.pixhost_client import PixhostClient
+        return PixhostClient(proxy=proxy)
+
     else:
         # Host exists in config but no client implementation available
         raise ValueError(
@@ -88,5 +92,5 @@ def is_host_supported(host_id: str) -> bool:
     Returns:
         bool: True if the host has a client implementation, False otherwise.
     """
-    supported_hosts = {"imx", "turbo"}
+    supported_hosts = {"imx", "turbo", "pixhost"}
     return host_id in supported_hosts
