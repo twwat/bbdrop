@@ -34,13 +34,8 @@ class NotificationsTab(QWidget):
 
     def _scan_sounds(self) -> list[str]:
         """Return sorted list of .wav filenames in assets/sounds/."""
-        sounds_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(
-                os.path.abspath(__file__)
-            ))),
-            '..', 'assets', 'sounds',
-        )
-        sounds_dir = os.path.normpath(sounds_dir)
+        from src.utils.system_utils import get_resource_path
+        sounds_dir = str(get_resource_path('assets/sounds'))
         return sorted(
             os.path.basename(f)
             for f in glob.glob(os.path.join(sounds_dir, '*.wav'))
