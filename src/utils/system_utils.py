@@ -167,7 +167,7 @@ def format_bytes(bytes_count: int, precision: int = 2) -> str:
     Returns:
         str: Formatted string (e.g., "1.23 GB")
     """
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
+    for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']:
         if abs(bytes_count) < 1024.0:
             return f"{bytes_count:.{precision}f} {unit}"
         bytes_count /= 1024.0

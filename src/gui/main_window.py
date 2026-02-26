@@ -1135,16 +1135,17 @@ class BBDropGUI(QMainWindow):
             # Show dialog once per critical entry
             if self._disk_dialog_shown_for_tier != tier:
                 self._disk_dialog_shown_for_tier = tier
-                free_mb = min(
+                from src.utils.system_utils import format_bytes
+                free_space_str = format_bytes(min(
                     self._disk_monitor.data_free,
                     self._disk_monitor.temp_free
-                ) // (1024 * 1024)
+                ))
 
                 from PyQt6.QtWidgets import QMessageBox
                 QMessageBox.warning(
                     self,
                     "Low Disk Space",
-                    f"Only {free_mb} MB of disk space remaining.\n\n"
+                    f"Only {free_space_str} of disk space remaining.\n\n"
                     f"New uploads have been paused until more space is available.\n\n"
                     f"Free up disk space to resume uploading.",
                 )
