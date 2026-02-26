@@ -378,11 +378,15 @@ class WorkerSignalHandler(QObject):
             return  # Widget disabled, skip update
 
         worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
+        
+        # Use centralized BandwidthManager for smoothed speed instead of raw pycurl speed
+        smoothed_kbps = mw.bandwidth_manager.get_file_host_bandwidth(host_name)
+        
         mw.worker_status_widget.update_worker_status(
             worker_id=worker_id,
             worker_type="filehost",
             hostname=host_name,
-            speed_bps=speed_bps,
+            speed_bps=smoothed_kbps * 1024,  # convert KB/s back to bytes/s for the widget
             status="uploading",
             host_id=host_name.lower()
         )
