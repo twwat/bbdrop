@@ -90,10 +90,8 @@ class NotificationManager:
         self._settings: Dict[str, Any] = {'enabled': False}
         self._event_settings: Dict[str, Dict[str, Any]] = {}
         self._sound_effects: Dict[str, Any] = {}  # str -> QSoundEffect
-        self._sounds_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            'assets', 'sounds'
-        )
+        from src.utils.system_utils import get_resource_path
+        self._sounds_dir = str(get_resource_path('assets/sounds'))
         self.load_settings()
 
     def notify(self, event_type: str, detail: str = '') -> None:
