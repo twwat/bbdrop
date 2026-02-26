@@ -1904,34 +1904,12 @@ class WorkerStatusWidget(QWidget):
         self.status_table.blockSignals(False)
 
     def _on_icon_button_clicked(self):
-        """Handle icon button click using sender properties.
-
-        Retrieves worker info from the button's properties to avoid lambda
-        closure memory leak issues. This is called when any icon button in
-        the worker table is clicked.
-        """
+        """Handle icon button click using sender properties."""
         btn = self.sender()
         if btn:
             worker_id = btn.property("worker_id")
-            worker_type = btn.property("worker_type")
-            hostname = btn.property("hostname")
-            if worker_id and worker_type and hostname:
-                self._on_settings_clicked(worker_id, worker_type, hostname)
-
-    def _on_settings_clicked(self, worker_id: str, worker_type: str, hostname: str):
-        """Handle settings button click for a worker.
-
-        Args:
-            worker_id: Worker identifier
-            worker_type: 'imagehost' or 'filehost'
-            hostname: Host name (e.g., 'rapidgator', 'imx.to')
-        """
-        if worker_type == 'imagehost':
-            self._open_image_host_config(hostname)
-        else:
-            # Open file host config dialog for this host
-            # Normalize hostname to lowercase for config manager lookup
-            self.open_host_config_requested.emit(hostname.lower())
+            if worker_id:
+                self._handle_configure_request(worker_id)
 
     def _apply_filter(self) -> list[WorkerStatus]:
         """Apply current filter to worker list.
@@ -2130,47 +2108,21 @@ class WorkerStatusWidget(QWidget):
             self._selected_worker_id = None
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        """Handle events from cell widgets, particularly double-clicks.
-
-        When the hostname column uses setCellWidget() with a container holding
-        the logo and auto icon, those widgets intercept mouse events before the
-        table receives them. This event filter catches double-clicks on those
-        containers and opens the appropriate config dialog.
-
-        Args:
-            obj: The object that received the event (cell widget container)
-            event: The event to filter
-
-        Returns:
-            True if the event was handled, False to pass it on
-        """
+        """Handle events from cell widgets, particularly double-clicks."""
         if event.type() == QEvent.Type.MouseButtonDblClick:
-            # Check if this is a cell widget container with worker data
             worker_id = obj.property('worker_id')
             if worker_id:
-                worker_type = obj.property('worker_type')
-                hostname = obj.property('hostname')
-
-                # Open the appropriate dialog
-                if worker_type == 'imagehost':
-                    self._open_image_host_config(hostname)
-                elif hostname:
-                    self.open_host_config_requested.emit(hostname.lower())
-                return True  # Event handled
-
+                self._handle_configure_request(worker_id)
+                return True
         return super().eventFilter(obj, event)
 
     def _on_row_double_clicked(self, item):  # 'item' passed by itemDoubleClicked signal
-        """Handle double-click on table row to open host config.
-
-        ALWAYS opens a config dialog - no conditional guards that could fail silently.
-        Handles both active workers (in _workers dict) and placeholder workers.
-        """
+        """Handle double-click on table row to open host config."""
         row = self.status_table.currentRow()
         if row < 0:
             return
 
-        # Get worker_id from icon column - check cellWidget first (icon is now a QPushButton)
+        # Get worker_id from icon column
         worker_id = None
         icon_col_idx = self._get_column_index('icon')
         if icon_col_idx >= 0:
@@ -2178,40 +2130,12 @@ class WorkerStatusWidget(QWidget):
             if widget:
                 worker_id = widget.property("worker_id")
             else:
-                # Fallback to item (legacy or if widget not found)
                 icon_item = self.status_table.item(row, icon_col_idx)
                 if icon_item:
                     worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
 
-        if not worker_id:
-            log(f"Double-click: no worker_id found for row {row}", level="warning", category="ui")
-            return
-
-        # Handle placeholder workers (not in _workers dict)
-        # Placeholder IDs: "placeholder_{host_id}"
-        if worker_id.startswith("placeholder_"):
-            host_part = worker_id[len("placeholder_"):]
-            # Check if it's an image host placeholder
-            all_image_hosts = get_all_hosts()
-            if host_part in all_image_hosts:
-                self._open_image_host_config(host_part)
-            else:
-                # File host placeholder
-                self.open_host_config_requested.emit(host_part.lower())
-            return
-
-        # Thread-safe lookup for active workers in _workers dict
-        with QMutexLocker(self._workers_mutex):
-            if worker_id not in self._workers:
-                log(f"Double-click: worker_id={worker_id} not in active workers (row {row})", level="warning", category="ui")
-                return
-            worker = self._workers[worker_id]
-
-        # Open the appropriate dialog based on worker type
-        if worker.worker_type == 'imagehost':
-            self._open_image_host_config(worker.host_id or worker.hostname)
-        else:
-            self.open_host_config_requested.emit(worker.host_id or worker.hostname.lower())
+        if worker_id:
+            self._handle_configure_request(worker_id)
 
     # =========================================================================
     # Public API
@@ -2344,10 +2268,7 @@ class WorkerStatusWidget(QWidget):
 
         # Configure host
         configure_action = menu.addAction("Configure Host...")
-        if is_image_host:
-            configure_action.triggered.connect(lambda: self._open_image_host_config(host_id))
-        else:
-            configure_action.triggered.connect(lambda: self.open_host_config_requested.emit(host_id))
+        configure_action.triggered.connect(lambda: self._handle_configure_request(worker_id))
 
         menu.exec(self.status_table.viewport().mapToGlobal(position))
 
