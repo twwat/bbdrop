@@ -128,7 +128,7 @@ a = Analysis(
     ['bbdrop.py'],
     pathex=[],
     binaries=all_binaries,
-    datas=pycurl_datas,
+    datas=[('assets', 'assets')] + pycurl_datas,
     hiddenimports=['imghdr', 'requests', 'PyQt6', 'pycurl', 'certifi'] + pycurl_hiddenimports,
     hookspath=['hooks'],  # Use custom hooks directory
     hooksconfig={},
