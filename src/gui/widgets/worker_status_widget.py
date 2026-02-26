@@ -2390,6 +2390,31 @@ class WorkerStatusWidget(QWidget):
         # Refresh on close regardless of OK/Cancel — same as file hosts
         self.refresh_icons()
 
+    def _handle_configure_request(self, worker_id: str):
+        """Single source of truth for resolving and opening ANY host config."""
+        if not worker_id:
+            return
+
+        host_id = None
+        is_image = False
+
+        if worker_id.startswith("placeholder_"):
+            host_id = worker_id[len("placeholder_"):]
+            from src.core.image_host_config import get_all_hosts
+            is_image = host_id in get_all_hosts()
+        else:
+            with QMutexLocker(self._workers_mutex):
+                worker = self._workers.get(worker_id)
+                if worker:
+                    host_id = worker.host_id or worker.hostname
+                    is_image = (worker.worker_type == 'imagehost')
+
+        if host_id:
+            if is_image:
+                self._open_image_host_config(host_id)
+            else:
+                self.open_host_config_requested.emit(host_id.lower())
+
     def _set_host_trigger(self, host_id: str, trigger: str):
         """Set auto-upload trigger for a host and refresh the display."""
         save_file_host_setting(host_id, "trigger", trigger)
