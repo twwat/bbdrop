@@ -53,6 +53,14 @@ ADVANCED_SETTINGS = [
         "max": 0.5,
         "decimals": 2
     },
+    {
+        "key": "bandwidth/window_size",
+        "description": "Speed display rolling average window size (higher = smoother but delayed).",
+        "default": 10,
+        "type": "int",
+        "min": 1,
+        "max": 100
+    },
     # Disk space monitoring thresholds
     {
         "key": "disk_monitor/enabled",
@@ -311,10 +319,13 @@ class AdvancedSettingsWidget(QWidget):
         qsettings = QSettings("BBDropUploader", "Settings")
         alpha_up = qsettings.value("bandwidth/alpha_up", None)
         alpha_down = qsettings.value("bandwidth/alpha_down", None)
+        window_size = qsettings.value("bandwidth/window_size", None)
         if alpha_up is not None:
             values["bandwidth/alpha_up"] = float(alpha_up)
         if alpha_down is not None:
             values["bandwidth/alpha_down"] = float(alpha_down)
+        if window_size is not None:
+            values["bandwidth/window_size"] = int(window_size)
 
         if values:
             self.set_values(values)
@@ -359,15 +370,17 @@ class AdvancedSettingsWidget(QWidget):
         # Save bandwidth settings to QSettings (for BandwidthManager)
         alpha_up = all_values.get('bandwidth/alpha_up', 0.6)
         alpha_down = all_values.get('bandwidth/alpha_down', 0.15)
+        window_size = all_values.get('bandwidth/window_size', 10)
 
         qsettings = QSettings("BBDropUploader", "Settings")
         qsettings.setValue("bandwidth/alpha_up", alpha_up)
         qsettings.setValue("bandwidth/alpha_down", alpha_down)
+        qsettings.setValue("bandwidth/window_size", window_size)
 
         # Update the running BandwidthManager if available
         if parent_window and hasattr(parent_window, 'worker_signal_handler'):
             handler = parent_window.worker_signal_handler
             if hasattr(handler, 'bandwidth_manager'):
-                handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down)
+                handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down, window_size)
 
         return True

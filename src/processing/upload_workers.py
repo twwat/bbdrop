@@ -187,12 +187,16 @@ class UploadWorker(QThread):
         """Upload a single gallery"""
         # Start bandwidth polling thread for real-time updates
         import threading
+        from src.gui.bandwidth_manager import BandwidthManager
+        
         stop_polling = threading.Event()
-        observed_peak_kbps = 0.0  # Track peak speed during this upload
+        
+        # Use BandwidthManager to get a pre-configured BandwidthSource
+        bandwidth_source = BandwidthManager.create_source(name=getattr(item, 'image_host_id', 'imx'))
 
         def poll_bandwidth():
             """Background thread that polls byte counter and emits bandwidth updates"""
-            nonlocal observed_peak_kbps
+            nonlocal bandwidth_source
             poll_last_bytes = self.global_byte_counter.get()  # Start from current cumulative value
             poll_last_time = time.time()
 
@@ -208,11 +212,12 @@ class UploadWorker(QThread):
                         if time_diff > 0:
                             instant_kbps = ((current_bytes - poll_last_bytes) / time_diff) / 1024.0
                             self.bandwidth_updated.emit(instant_kbps)
-                            # Track peak speed
-                            if instant_kbps > observed_peak_kbps:
-                                observed_peak_kbps = instant_kbps
+                            # Update smoothed bandwidth and peak
+                            bandwidth_source.add_sample(instant_kbps)
                             poll_last_bytes = current_bytes
                             poll_last_time = current_time
+                except Exception:
+                    pass
                 except Exception:
                     pass
 
@@ -330,7 +335,7 @@ class UploadWorker(QThread):
                 return
 
             # Store observed peak speed on item for metrics recording
-            item.observed_peak_kbps = observed_peak_kbps
+            item.observed_peak_kbps = bandwidth_source.peak_value() if bandwidth_source.peak_value() > 0 else None
 
             # Process results
             self._process_upload_results(item, results)

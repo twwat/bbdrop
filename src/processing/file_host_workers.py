@@ -680,7 +680,10 @@ class FileHostWorker(QThread):
 
         # Initialize timing and size tracking for metrics
         upload_start_time = time.time()
-        observed_peak_kbps = 0.0  # Track peak speed during this upload
+        
+        # Use BandwidthManager to get a pre-configured BandwidthSource
+        from src.gui.bandwidth_manager import BandwidthManager
+        bandwidth_source = BandwidthManager.create_source(name=host_name)
 
         self._log(
             f"Starting upload to {host_name} for gallery {db_id} ({gallery_name})",
@@ -755,7 +758,7 @@ class FileHostWorker(QThread):
 
             def on_progress(uploaded: int, total: int, speed_bps: float = 0.0):
                 """Progress callback from pycurl with speed tracking."""
-                nonlocal observed_peak_kbps
+                nonlocal bandwidth_source
                 try:
                     # Throttle progress signal emissions to max 4 per second using instance-level state
                     current_time = time.time()
@@ -787,9 +790,8 @@ class FileHostWorker(QThread):
                     if speed_bps > 0:
                         kbps = speed_bps / 1024.0
                         self._emit_bandwidth_immediate(kbps)
-                        # Track peak speed observed during this upload
-                        if kbps > observed_peak_kbps:
-                            observed_peak_kbps = kbps
+                        # Use BandwidthSource to properly smooth peak speed
+                        bandwidth_source.add_sample(kbps)
                 except Exception as e:
                     self._log(f"Progress callback error: {e}\n{traceback.format_exc()}", level="error")
                     self._cleanup_upload_throttle_state(db_id, host_name)
@@ -879,7 +881,7 @@ class FileHostWorker(QThread):
                             bytes_uploaded=part_size,
                             transfer_time=upload_elapsed_time,
                             success=True,
-                            observed_peak_kbps=observed_peak_kbps if observed_peak_kbps > 0 else None
+                            observed_peak_kbps=bandwidth_source.peak_value() if bandwidth_source.peak_value() > 0 else None
                         )
                     self._log(
                         f"Successfully uploaded {gallery_name}"

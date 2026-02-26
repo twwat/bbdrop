@@ -99,15 +99,21 @@ class BandwidthSource:
 
         return self._smoothed_kbps
 
-    def set_alpha(self, alpha_up: float, alpha_down: float) -> None:
+    def set_smoothing(self, alpha_up: float, alpha_down: float, window_size: Optional[int] = None) -> None:
         """Update the smoothing parameters.
 
         Args:
             alpha_up: New EMA factor for increasing values (0-1).
             alpha_down: New EMA factor for decreasing values (0-1).
+            window_size: Optional new window size for the rolling average.
         """
         self._alpha_up = max(0.0, min(1.0, alpha_up))
         self._alpha_down = max(0.0, min(1.0, alpha_down))
+        if window_size is not None and window_size > 0:
+            self._window_size = window_size
+            # Recreate deque with new maxlen, preserving recent samples
+            old_samples = list(self._samples)
+            self._samples = deque(old_samples[-window_size:], maxlen=window_size)
 
     def reset(self) -> None:
         """Clear all samples and reset smoothed value to zero."""
@@ -158,14 +164,42 @@ class BandwidthManager(QObject):
     # Class constants
     DEFAULT_ALPHA_UP = 0.6
     DEFAULT_ALPHA_DOWN = 0.35
+    DEFAULT_WINDOW_SIZE = 10
     SETTINGS_KEY_ALPHA_UP = "bandwidth/alpha_up"
     SETTINGS_KEY_ALPHA_DOWN = "bandwidth/alpha_down"
+    SETTINGS_KEY_WINDOW_SIZE = "bandwidth/window_size"
 
     # Emit interval in milliseconds
     EMIT_INTERVAL_MS = 200
 
     # Cleanup delay for completed hosts in milliseconds
     HOST_CLEANUP_DELAY_MS = 5000
+
+    @classmethod
+    def create_source(cls, name: str) -> BandwidthSource:
+        """Create a new BandwidthSource initialized with the user's current settings.
+        
+        This factory method is thread-safe and allows background workers to instantiate
+        standalone bandwidth trackers without needing to manually parse QSettings or
+        hardcode smoothing parameters.
+        
+        Args:
+            name: Identifier for the bandwidth source.
+            
+        Returns:
+            A fully configured BandwidthSource instance.
+        """
+        settings = QSettings("BBDropUploader", "Settings")
+        alpha_up = settings.value(cls.SETTINGS_KEY_ALPHA_UP, cls.DEFAULT_ALPHA_UP, type=float)
+        alpha_down = settings.value(cls.SETTINGS_KEY_ALPHA_DOWN, cls.DEFAULT_ALPHA_DOWN, type=float)
+        window_size = settings.value(cls.SETTINGS_KEY_WINDOW_SIZE, cls.DEFAULT_WINDOW_SIZE, type=int)
+        
+        return BandwidthSource(
+            name=name,
+            window_size=window_size,
+            alpha_up=alpha_up,
+            alpha_down=alpha_down
+        )
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         """Initialize the bandwidth manager.
@@ -190,15 +224,22 @@ class BandwidthManager(QObject):
             self.DEFAULT_ALPHA_DOWN,
             type=float,
         )
+        self._window_size = settings.value(
+            self.SETTINGS_KEY_WINDOW_SIZE,
+            self.DEFAULT_WINDOW_SIZE,
+            type=int,
+        )
 
-        # Create primary sources
+        # Create primary sources using full settings
         self._upload_source = BandwidthSource(
             "",
+            window_size=self._window_size,
             alpha_up=self._alpha_up,
             alpha_down=self._alpha_down,
         )
         self._link_checker_source = BandwidthSource(
             "link_checker",
+            window_size=self._window_size,
             alpha_up=self._alpha_up,
             alpha_down=self._alpha_down,
         )
@@ -422,7 +463,7 @@ class BandwidthManager(QObject):
         locker.unlock()
         return active
 
-    def update_smoothing(self, alpha_up: float, alpha_down: float) -> None:
+    def update_smoothing(self, alpha_up: float, alpha_down: float, window_size: Optional[int] = None) -> None:
         """Update smoothing parameters for all sources.
 
         Persists the new values to QSettings.
@@ -430,23 +471,27 @@ class BandwidthManager(QObject):
         Args:
             alpha_up: New EMA factor for increasing values (0-1).
             alpha_down: New EMA factor for decreasing values (0-1).
+            window_size: Optional new window size for the rolling average.
         """
         self._alpha_up = max(0.0, min(1.0, alpha_up))
         self._alpha_down = max(0.0, min(1.0, alpha_down))
+        if window_size is not None and window_size > 0:
+            self._window_size = window_size
 
         # Update all sources
-        self._upload_source.set_alpha(self._alpha_up, self._alpha_down)
-        self._link_checker_source.set_alpha(self._alpha_up, self._alpha_down)
+        self._upload_source.set_smoothing(self._alpha_up, self._alpha_down, self._window_size)
+        self._link_checker_source.set_smoothing(self._alpha_up, self._alpha_down, self._window_size)
 
         locker = QMutexLocker(self._lock)
         for source in self._file_host_sources.values():
-            source.set_alpha(self._alpha_up, self._alpha_down)
+            source.set_smoothing(self._alpha_up, self._alpha_down, self._window_size)
         locker.unlock()
 
         # Persist to settings
         settings = QSettings("BBDropUploader", "Settings")
         settings.setValue(self.SETTINGS_KEY_ALPHA_UP, self._alpha_up)
         settings.setValue(self.SETTINGS_KEY_ALPHA_DOWN, self._alpha_down)
+        settings.setValue(self.SETTINGS_KEY_WINDOW_SIZE, self._window_size)
 
     def get_smoothing_settings(self) -> tuple[float, float]:
         """Get the current smoothing parameters.
