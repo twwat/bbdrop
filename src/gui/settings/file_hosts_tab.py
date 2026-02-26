@@ -280,12 +280,11 @@ class FileHostsSettingsWidget(QWidget):
 
                 # Install event filter to detect clicks
                 def open_referral_url(event):
-                    if event.type() == event.Type.MouseButtonPress:
+                    if event.button() == Qt.MouseButton.LeftButton:
                         from PyQt6.QtGui import QDesktopServices
                         from PyQt6.QtCore import QUrl
                         QDesktopServices.openUrl(QUrl(host_config.referral_url))
-                        return True
-                    return False
+                        event.accept()
 
                 logo_label.mousePressEvent = open_referral_url  # type: ignore[method-assign]
 

@@ -691,10 +691,9 @@ class FileHostConfigDialog(QDialog):
 
                 # Install event handler to detect clicks
                 def open_referral_url(event):
-                    if event.type() == event.Type.MouseButtonPress:
+                    if event.button() == Qt.MouseButton.LeftButton:
                         QDesktopServices.openUrl(QUrl(self.host_config.referral_url))
-                        return True
-                    return False
+                        event.accept()
 
                 logo_label.mousePressEvent = open_referral_url
 
