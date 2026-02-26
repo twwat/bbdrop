@@ -3425,13 +3425,11 @@ class BBDropGUI(QMainWindow):
                 item.total_images = total
                 item.progress = progress_percent
                 item.current_image = current_image
-                # Update live transfer speed based on progress and estimated bytes
+                # Update live transfer speed using centralized BandwidthManager
                 try:
-                    if item.start_time and item.total_size > 0:
-                        elapsed = max(time.time() - float(item.start_time), 0.001)
-                        # Estimate uploaded bytes from progress percentage and total size
-                        estimated_uploaded = (progress_percent / 100.0) * item.total_size
-                        item.current_kibps = (estimated_uploaded / elapsed) / 1024.0
+                    # Only update speed if it's currently uploading
+                    if item.status == "uploading":
+                        item.current_kibps = self.bandwidth_manager.get_imx_bandwidth()
                 except Exception as e:
                     log(f"Exception in main_window: {e}", level="error", category="ui")
                     raise
