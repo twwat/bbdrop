@@ -33,7 +33,6 @@ class HooksTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._setup_ui()
-        self.load_settings()
 
     # ------------------------------------------------------------------
     # UI Setup
@@ -750,11 +749,6 @@ class HooksTab(QWidget):
                 return
 
             if 'EXTERNAL_APPS' not in config:
-                log(
-                    "No EXTERNAL_APPS section in config, using defaults",
-                    level="debug",
-                    category="settings",
-                )
                 return
 
             # Block signals during loading
