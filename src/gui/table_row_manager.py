@@ -258,11 +258,12 @@ class TableRowManager(QObject):
         if not mw.gallery_table.isColumnHidden(_Col.STATUS_TEXT):
             self._set_status_text_cell(row, item.status)
 
-        # Cover indicator (rendered by CoverIndicatorDelegate via UserRole data)
+        # Cover indicator (rendered by CoverIndicatorDelegate via UserRole + UserRole+1)
         cover_item = QTableWidgetItem()
         cover_item.setFlags(cover_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         if getattr(item, 'cover_source_path', None):
             cover_item.setData(Qt.ItemDataRole.UserRole, item.cover_source_path)
+            cover_item.setData(Qt.ItemDataRole.UserRole + 1, getattr(item, 'cover_status', 'pending'))
         mw.gallery_table.setItem(row, _Col.COVER, cover_item)
 
         # Added time
