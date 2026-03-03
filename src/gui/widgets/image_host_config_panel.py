@@ -58,9 +58,10 @@ class ImageHostConfigPanel(QWidget):
         """Initialize the UI components."""
         main_layout = QVBoxLayout(self)
 
-        # Section 1: Credentials
-        credentials_group = self._create_credentials_group()
-        main_layout.addWidget(credentials_group)
+        # Section 1: Credentials (skip if host has no auth)
+        if self.config.auth_type != "none":
+            credentials_group = self._create_credentials_group()
+            main_layout.addWidget(credentials_group)
 
         # Section 2: Connection
         connection_group = self._create_connection_group()
@@ -75,9 +76,14 @@ class ImageHostConfigPanel(QWidget):
             options_group = self._create_options_group()
             main_layout.addWidget(options_group)
 
-        # Section 5: Cover Gallery (all hosts)
-        cover_group = self._create_cover_group()
-        main_layout.addWidget(cover_group)
+        # Section 5: Cover Gallery (skip if host doesn't support it, like Pixhost)
+        if self.host_id != "pixhost":
+            cover_group = self._create_cover_group()
+            main_layout.addWidget(cover_group)
+        else:
+            # Still need the edit object so save() doesn't crash, but it can be hidden
+            self.cover_gallery_edit = QLineEdit()
+            self.cover_create_btn = QPushButton()
 
     def _create_credentials_group(self) -> QGroupBox:
         """Create the credentials configuration group.
@@ -617,8 +623,9 @@ class ImageHostConfigPanel(QWidget):
             save_image_host_setting(self.host_id, 'auto_finalize_gallery', self.auto_finalize_check.isChecked())
             save_image_host_setting(self.host_id, 'error_retry_strategy', self.error_strategy_combo.currentData())
 
-        save_image_host_setting(self.host_id, 'cover_gallery', self.cover_gallery_edit.text())
-        self.cover_gallery_changed.emit(self.host_id, self.cover_gallery_edit.text())
+        if self.cover_gallery_edit.isVisible():
+            save_image_host_setting(self.host_id, 'cover_gallery', self.cover_gallery_edit.text())
+            self.cover_gallery_changed.emit(self.host_id, self.cover_gallery_edit.text())
 
         self._modified = False
         return (old_batch, self.batch_size_slider.value())
@@ -627,6 +634,9 @@ class ImageHostConfigPanel(QWidget):
 
     def load_current_credentials(self):
         """Load and display current credentials."""
+        if not hasattr(self, 'username_status_label') or self.username_status_label is None:
+            return
+
         # Username
         username = get_credential('username', self.host_id)
         if username:
