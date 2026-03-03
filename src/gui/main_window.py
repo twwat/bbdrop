@@ -3426,7 +3426,7 @@ class BBDropGUI(QMainWindow):
                 try:
                     # Only update speed if it's currently uploading
                     if item.status == "uploading":
-                        item.current_kibps = self.bandwidth_manager.get_imx_bandwidth()
+                        item.current_kibps = self.worker_signal_handler.bandwidth_manager.get_imx_bandwidth()
                 except Exception as e:
                     log(f"Exception in main_window: {e}", level="error", category="ui")
                     raise
