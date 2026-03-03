@@ -416,8 +416,14 @@ class UploadWorker(QThread):
             except Exception as e:
                 log(f"Failed to download cover from hook URL: {e}", level="warning", category="cover")
 
-    def _upload_cover(self, item: GalleryQueueItem, gallery_id: str = ""):
-        """Upload detected cover photo(s) using the configured host and settings."""
+    def _upload_cover(self, item: GalleryQueueItem, gallery_id: str = "") -> Optional[list]:
+        """Upload detected cover photo(s) using the configured host and settings.
+
+        Returns a list of per-cover result dicts:
+            [{status: 'success', bbcode, image_url, thumb_url, source_path}, ...]
+            [{status: 'failed', error, source_path}, ...]
+        Returns None if no covers to upload.
+        """
         if not item.cover_source_path:
             return None
 
@@ -431,89 +437,114 @@ class UploadWorker(QThread):
                              or settings.value('cover/host_id', '', type=str)
                              or item.image_host_id or "imx")
 
-            # Get host-specific settings
             from src.core.image_host_config import get_image_host_setting
-            cover_gallery_id = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ""
+            cover_gallery_id = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or gallery_id or ""
             cover_thumbnail_format = get_image_host_setting(cover_host_id, 'cover_thumbnail_format', 'int') or 2
             cover_thumbnail_size = get_image_host_setting(cover_host_id, 'cover_thumbnail_size', 'int') or 600
-            also_upload = settings.value('cover/also_upload_as_gallery', False, type=bool)
 
+            item.cover_status = "uploading"
             results = []
+
             if cover_host_id == "imx":
-                # IMX uses the specialized rename_worker for session-based cover upload
+                # IMX: upload each cover individually via session-based endpoint
                 if self.rename_worker and getattr(self.rename_worker, 'login_successful', False):
-                    res = self.rename_worker.upload_cover(
-                        image_path=paths[0],
-                        gallery_id=cover_gallery_id,
-                        thumbnail_format=cover_thumbnail_format,
-                    )
-                    if res:
-                        results.append(res)
-            elif cover_host_id == "pixhost":
-                # Pixhost supports dual-image covers (img_left, img_right)
-                from src.network.image_host_factory import create_image_host_client
-                cover_client = create_image_host_client(cover_host_id)
-                if len(paths) >= 2:
-                    res = cover_client.upload_cover(
-                        paths[0], gallery_id=cover_gallery_id, image_path_right=paths[1]
-                    )
-                else:
-                    res = cover_client.upload_cover(paths[0], gallery_id=cover_gallery_id)
-                if res:
-                    results.append(res)
-            else:
-                # Generic host: use upload_cover if available, else upload_image individually
-                from src.network.image_host_factory import create_image_host_client
-                cover_client = create_image_host_client(cover_host_id)
-                
-                if hasattr(cover_client, 'upload_cover'):
-                    res = cover_client.upload_cover(paths[0], gallery_id=cover_gallery_id)
-                    if res:
-                        results.append(res)
-                else:
-                    # Sequential fallback
                     for path in paths:
-                        normalized = cover_client.upload_image(
-                            path,
-                            gallery_id=cover_gallery_id if cover_gallery_id else None,
-                            thumbnail_size=cover_thumbnail_size,
-                        )
-                        if normalized and normalized.get('status') == 'success':
-                            data = normalized.get('data', {})
-                            results.append({
-                                'status': 'success',
-                                'bbcode': data.get('bbcode', ''),
-                                'image_url': data.get('image_url', ''),
-                                'thumb_url': data.get('thumb_url', ''),
-                            })
-                            # Individual progress update for sequential covers
-                            if not also_upload:
-                                completed = (item.uploaded_images or 0) + len(results)
-                                total = (item.total_images or 0) + len(paths)
-                                pct = int((completed / max(total, 1)) * 100)
-                                self.progress_updated.emit(item.path, completed, total, pct, os.path.basename(path))
+                        try:
+                            res = self.rename_worker.upload_cover(
+                                image_path=path,
+                                gallery_id=cover_gallery_id,
+                                thumbnail_format=cover_thumbnail_format,
+                            )
+                            if res:
+                                results.append({**res, 'source_path': path})
+                            else:
+                                results.append({'status': 'failed', 'error': 'Upload returned None', 'source_path': path})
+                        except Exception as e:
+                            results.append({'status': 'failed', 'error': str(e), 'source_path': path})
 
-            if results:
-                item.cover_result = results[0]
-                if len(results) > 1:
-                    item.cover_result['bbcode'] = "\n".join(r['bbcode'] for r in results)
-                
-                log(f"Cover photo(s) uploaded for {item.name} ({len(results)} images)", level="info", category="cover")
-                
-                # Final progress update for the cover phase
-                # For Pixhost dual, we count it as 1 upload operation
-                ops_count = 1 if cover_host_id == 'pixhost' and len(paths) >= 2 else len(results)
-                completed = (item.uploaded_images or 0) + ops_count
-                total = (item.total_images or 0) + (1 if cover_host_id == 'pixhost' and len(paths) >= 2 else len(paths))
-                pct = int((completed / max(total, 1)) * 100)
-                self.progress_updated.emit(item.path, completed, total, pct, os.path.basename(paths[0]))
+            elif cover_host_id == "pixhost":
+                # Pixhost: dual-image composite for first 2, then individual for extras
+                from src.network.image_host_factory import create_image_host_client
+                cover_client = create_image_host_client(cover_host_id)
+                try:
+                    if len(paths) >= 2:
+                        res = cover_client.upload_cover(paths[0], gallery_id=cover_gallery_id, image_path_right=paths[1])
+                    else:
+                        res = cover_client.upload_cover(paths[0], gallery_id=cover_gallery_id)
+                    if res:
+                        results.append({**res, 'source_path': paths[0]})
+                    else:
+                        results.append({'status': 'failed', 'error': 'Upload returned None', 'source_path': paths[0]})
+                except Exception as e:
+                    results.append({'status': 'failed', 'error': str(e), 'source_path': paths[0]})
+                # Upload any extras (3rd, 4th, etc.) individually
+                for path in paths[2:]:
+                    try:
+                        res = cover_client.upload_cover(path, gallery_id=cover_gallery_id)
+                        if res:
+                            results.append({**res, 'source_path': path})
+                        else:
+                            results.append({'status': 'failed', 'error': 'Upload returned None', 'source_path': path})
+                    except Exception as e:
+                        results.append({'status': 'failed', 'error': str(e), 'source_path': path})
+
             else:
-                log(f"Cover photo upload failed for {item.name}", level="warning", category="cover")
+                # Generic host: use upload_cover if available, else upload_image
+                from src.network.image_host_factory import create_image_host_client
+                cover_client = create_image_host_client(cover_host_id)
 
-            return item.cover_result if results else None
+                for path in paths:
+                    try:
+                        if hasattr(cover_client, 'upload_cover'):
+                            res = cover_client.upload_cover(path, gallery_id=cover_gallery_id)
+                            if res:
+                                results.append({**res, 'source_path': path})
+                            else:
+                                results.append({'status': 'failed', 'error': 'Upload returned None', 'source_path': path})
+                        else:
+                            normalized = cover_client.upload_image(
+                                path,
+                                gallery_id=cover_gallery_id if cover_gallery_id else None,
+                                thumbnail_size=cover_thumbnail_size,
+                            )
+                            if normalized and normalized.get('status') == 'success':
+                                data = normalized.get('data', {})
+                                results.append({
+                                    'status': 'success',
+                                    'bbcode': data.get('bbcode') or normalized.get('bbcode', ''),
+                                    'image_url': data.get('image_url') or normalized.get('image_url', ''),
+                                    'thumb_url': data.get('thumb_url') or normalized.get('thumb_url', ''),
+                                    'source_path': path,
+                                })
+                            else:
+                                error = (normalized or {}).get('error', 'Upload failed')
+                                results.append({'status': 'failed', 'error': error, 'source_path': path})
+                    except Exception as e:
+                        results.append({'status': 'failed', 'error': str(e), 'source_path': path})
+
+            # Store results on item
+            item.cover_result = results
+
+            # Determine cover_status from results
+            successes = sum(1 for r in results if r.get('status') == 'success')
+            if not results:
+                item.cover_status = "failed"
+                log(f"Cover photo upload failed for {item.name}: no results", level="warning", category="cover")
+            elif successes == len(results):
+                item.cover_status = "completed"
+                log(f"Cover photo(s) uploaded for {item.name} ({successes} images)", level="info", category="cover")
+            elif successes > 0:
+                item.cover_status = "partial"
+                log(f"Cover photo(s) partially uploaded for {item.name} ({successes}/{len(results)})", level="warning", category="cover")
+            else:
+                item.cover_status = "failed"
+                log(f"All cover photo uploads failed for {item.name}", level="error", category="cover")
+
+            return results if results else None
 
         except Exception as e:
             log(f"Cover upload error for {item.name}: {e}", level="error", category="cover")
+            item.cover_status = "failed"
             return None
 
     def _process_upload_results(self, item: GalleryQueueItem, results: Optional[Dict[str, Any]]):

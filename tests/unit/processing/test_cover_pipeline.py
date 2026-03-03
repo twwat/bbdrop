@@ -33,7 +33,10 @@ class TestCoverPipeline:
         result = worker._upload_cover(item, gallery_id="gal123")
 
         assert result is not None
-        assert result["status"] == "success"
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["status"] == "success"
+        assert result[0]["source_path"] == "/tmp/test/cover.jpg"
         worker.rename_worker.upload_cover.assert_called_once()
 
     @patch('src.processing.upload_workers.RenameWorker')
@@ -49,7 +52,7 @@ class TestCoverPipeline:
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_failure_does_not_propagate(self, mock_rw_class):
-        """Cover upload failure returns None but doesn't raise."""
+        """Cover upload failure returns list with failed entry but doesn't raise."""
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
@@ -65,7 +68,10 @@ class TestCoverPipeline:
         )
 
         result = worker._upload_cover(item, gallery_id="gal123")
-        assert result is None
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]['status'] == 'failed'
+        assert result[0]['source_path'] == '/tmp/test/cover.jpg'
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_skipped_when_no_rename_worker(self, mock_rw_class):
@@ -105,8 +111,8 @@ class TestCoverPipeline:
         assert result is None
 
     @patch('src.processing.upload_workers.RenameWorker')
-    def test_cover_exception_returns_none(self, mock_rw_class):
-        """Cover upload exception is caught and returns None."""
+    def test_cover_exception_returns_list_with_error(self, mock_rw_class):
+        """Cover upload exception is caught per-path and returns list with error entry."""
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
@@ -122,7 +128,11 @@ class TestCoverPipeline:
         )
 
         result = worker._upload_cover(item, gallery_id="gal123")
-        assert result is None
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]['status'] == 'failed'
+        assert 'network error' in result[0]['error']
+        assert result[0]['source_path'] == '/tmp/test/cover.jpg'
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_result_stored_on_item(self, mock_rw_class):
@@ -148,7 +158,12 @@ class TestCoverPipeline:
         )
 
         worker._upload_cover(item, gallery_id="gal123")
-        assert item.cover_result == cover_data
+        assert isinstance(item.cover_result, list)
+        assert len(item.cover_result) == 1
+        # Result dict should contain original fields plus source_path
+        assert item.cover_result[0]['status'] == cover_data['status']
+        assert item.cover_result[0]['bbcode'] == cover_data['bbcode']
+        assert item.cover_result[0]['source_path'] == '/tmp/test/cover.jpg'
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_uses_item_host_id_fallback(self, mock_rw_class):
@@ -175,6 +190,9 @@ class TestCoverPipeline:
 
         result = worker._upload_cover(item, gallery_id="gal123")
         assert result is not None
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]['status'] == 'success'
 
 
 class TestCoverProgressDecoupled:
@@ -277,3 +295,170 @@ class TestCoverProgressDecoupled:
         assert results['successful_count'] == 38
         # Gallery should be marked completed (38/38 success)
         worker.queue_manager.update_item_status.assert_called_with("/tmp/gallery38", "completed")
+
+
+class TestMultiCoverUpload:
+    """Tests for multi-cover upload behavior (Task 5)."""
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_upload_cover_imx_uploads_all_paths(self, mock_rw_class):
+        """IMX should upload each cover individually, not just paths[0]."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.rename_worker.login_successful = True
+        worker.rename_worker.upload_cover.return_value = {
+            "status": "success",
+            "bbcode": "[url=img][img]thumb[/img][/url]",
+            "image_url": "img",
+            "thumb_url": "thumb",
+        }
+
+        item = GalleryQueueItem(
+            path="/tmp/test",
+            name="test",
+            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg;/tmp/test/cover3.jpg",
+            cover_host_id="imx",
+        )
+
+        result = worker._upload_cover(item, gallery_id="gal123")
+
+        # All 3 paths should have been uploaded
+        assert worker.rename_worker.upload_cover.call_count == 3
+        assert isinstance(result, list)
+        assert len(result) == 3
+        # Each result should have its own source_path
+        assert result[0]['source_path'] == '/tmp/test/cover1.jpg'
+        assert result[1]['source_path'] == '/tmp/test/cover2.jpg'
+        assert result[2]['source_path'] == '/tmp/test/cover3.jpg'
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_upload_cover_returns_list_of_results(self, mock_rw_class):
+        """_upload_cover should return a list of per-cover result dicts."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.rename_worker.login_successful = True
+        worker.rename_worker.upload_cover.return_value = {
+            "status": "success",
+            "bbcode": "[url=img][img]thumb[/img][/url]",
+            "image_url": "img",
+            "thumb_url": "thumb",
+        }
+
+        item = GalleryQueueItem(
+            path="/tmp/test",
+            name="test",
+            cover_source_path="/tmp/test/cover.jpg",
+            cover_host_id="imx",
+        )
+
+        result = worker._upload_cover(item, gallery_id="gal123")
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert 'status' in result[0]
+        assert 'source_path' in result[0]
+        assert result[0]['status'] == 'success'
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_upload_cover_failed_returns_list_with_error(self, mock_rw_class):
+        """When a cover upload fails, return list with {status: 'failed', error, source_path}."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.rename_worker.login_successful = True
+        worker.rename_worker.upload_cover.side_effect = RuntimeError("connection refused")
+
+        item = GalleryQueueItem(
+            path="/tmp/test",
+            name="test",
+            cover_source_path="/tmp/test/cover.jpg",
+            cover_host_id="imx",
+        )
+
+        result = worker._upload_cover(item, gallery_id="gal123")
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]['status'] == 'failed'
+        assert 'connection refused' in result[0]['error']
+        assert result[0]['source_path'] == '/tmp/test/cover.jpg'
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_upload_cover_sets_cover_status_completed(self, mock_rw_class):
+        """After all covers succeed, item.cover_status should be 'completed'."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.rename_worker.login_successful = True
+        worker.rename_worker.upload_cover.return_value = {
+            "status": "success",
+            "bbcode": "bb",
+            "image_url": "img",
+            "thumb_url": "thumb",
+        }
+
+        item = GalleryQueueItem(
+            path="/tmp/test",
+            name="test",
+            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg",
+            cover_host_id="imx",
+        )
+
+        worker._upload_cover(item, gallery_id="gal123")
+        assert item.cover_status == "completed"
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_upload_cover_sets_cover_status_partial(self, mock_rw_class):
+        """When some covers fail, item.cover_status should be 'partial'."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.rename_worker.login_successful = True
+        # First call succeeds, second fails
+        worker.rename_worker.upload_cover.side_effect = [
+            {"status": "success", "bbcode": "bb", "image_url": "img", "thumb_url": "thumb"},
+            RuntimeError("timeout"),
+        ]
+
+        item = GalleryQueueItem(
+            path="/tmp/test",
+            name="test",
+            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg",
+            cover_host_id="imx",
+        )
+
+        result = worker._upload_cover(item, gallery_id="gal123")
+        assert item.cover_status == "partial"
+        assert len(result) == 2
+        assert result[0]['status'] == 'success'
+        assert result[1]['status'] == 'failed'
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_upload_cover_sets_cover_status_failed(self, mock_rw_class):
+        """When all covers fail, item.cover_status should be 'failed'."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.rename_worker.login_successful = True
+        worker.rename_worker.upload_cover.return_value = None  # All uploads return None
+
+        item = GalleryQueueItem(
+            path="/tmp/test",
+            name="test",
+            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg",
+            cover_host_id="imx",
+        )
+
+        result = worker._upload_cover(item, gallery_id="gal123")
+        assert item.cover_status == "failed"
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert all(r['status'] == 'failed' for r in result)
