@@ -996,6 +996,7 @@ class QueueManager(QObject):
                 'image_host_id': getattr(item, 'image_host_id', 'imx'),
                 'cover_source_path': getattr(item, 'cover_source_path', None),
                 'cover_host_id': getattr(item, 'cover_host_id', None),
+                'cover_status': getattr(item, 'cover_status', 'none'),
                 'cover_result': getattr(item, 'cover_result', None),
             }
 
@@ -1077,6 +1078,7 @@ class QueueManager(QObject):
             'file_dimensions': item.file_dimensions,
             'cover_source_path': item.cover_source_path,
             'cover_host_id': item.cover_host_id,
+            'cover_status': item.cover_status,
             'cover_result': item.cover_result,
         }
     
@@ -1166,7 +1168,7 @@ class QueueManager(QObject):
                      'source_archive_path', 'is_from_archive',
                      'imx_status', 'imx_status_checked', 'tab_id', 'image_host_id',
                      'file_dimensions',
-                     'cover_source_path', 'cover_host_id', 'cover_result']:
+                     'cover_source_path', 'cover_host_id', 'cover_status', 'cover_result']:
             if field in data:
                 setattr(item, field, data[field])
 

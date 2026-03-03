@@ -88,6 +88,30 @@ class TestCoverPersistence:
             assert item.cover_host_id == "imx"
             assert item.cover_result == [{"status": "success", "bbcode": "[img]x[/img]", "source_path": "/tmp/test/cover.jpg"}]
 
+    def test_cover_status_serialized_and_restored(self):
+        """cover_status survives save/restore round-trip."""
+        from unittest.mock import patch, MagicMock
+        with patch('src.storage.queue_manager.QueueStore'), \
+             patch('src.storage.queue_manager.QSettings'), \
+             patch('src.storage.queue_manager.QObject.__init__'):
+            qm = QueueManager.__new__(QueueManager)
+            qm.items = {}
+            qm.mutex = MagicMock()
+            qm._next_order = 0
+
+            item = GalleryQueueItem(path="/tmp/test", name="test")
+            item.cover_status = "completed"
+            item.cover_result = [
+                {'status': 'success', 'bbcode': '[url=x][img]y[/img][/url]', 'image_url': 'x', 'thumb_url': 'y', 'source_path': '/a.jpg'},
+            ]
+
+            # Round-trip through dict conversion
+            d = qm._item_to_dict(item)
+            assert d['cover_status'] == 'completed'
+            restored = qm._dict_to_item(d)
+            assert restored.cover_status == 'completed'
+            assert restored.cover_result == item.cover_result
+
     def test_dict_to_item_cover_defaults_none(self):
         from unittest.mock import patch
         with patch('src.storage.queue_manager.QueueStore'), \

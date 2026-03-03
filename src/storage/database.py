@@ -325,6 +325,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         for cover_col, cover_def in [
             ('cover_source_path', 'TEXT'),
             ('cover_host_id', 'TEXT'),
+            ('cover_status', 'TEXT'),
             ('cover_result', 'TEXT'),
         ]:
             if cover_col not in columns:
@@ -619,6 +620,7 @@ class QueueStore:
             'image_host_id': item.get('image_host_id', 'imx'),
             'cover_source_path': item.get('cover_source_path'),
             'cover_host_id': item.get('cover_host_id'),
+            'cover_status': item.get('cover_status', 'none'),
             'cover_result': json.dumps(item['cover_result']) if item.get('cover_result') is not None else None,
         }
 
@@ -741,7 +743,7 @@ class QueueStore:
                     g.custom1, g.custom2, g.custom3, g.custom4,
                     g.ext1, g.ext2, g.ext3, g.ext4,
                     g.imx_status, g.imx_status_checked, g.image_host_id,
-                    g.cover_source_path, g.cover_host_id, g.cover_result
+                    g.cover_source_path, g.cover_host_id, g.cover_status, g.cover_result
                 FROM galleries g
                 ORDER BY g.insertion_order ASC, g.added_ts ASC
                 """
@@ -784,7 +786,8 @@ class QueueStore:
                     'image_host_id': r[29] or 'imx',
                     'cover_source_path': r[30] or None,
                     'cover_host_id': r[31] or None,
-                    'cover_result': _safe_json_loads(r[32], None),
+                    'cover_status': r[32] or 'none',
+                    'cover_result': _safe_json_loads(r[33], None),
                     'uploaded_files': [],  # Load separately when needed, not in gallery list query
                 }
                 items.append(item)
