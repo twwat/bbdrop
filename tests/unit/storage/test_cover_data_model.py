@@ -22,11 +22,27 @@ class TestCoverFields:
             path="/tmp/test",
             cover_source_path="/tmp/test/cover.jpg",
             cover_host_id="imx",
-            cover_result={"bbcode": "[img]url[/img]", "image_url": "url", "thumb_url": "thumb"},
+            cover_result=[{"status": "success", "bbcode": "[img]url[/img]", "image_url": "url", "thumb_url": "thumb", "source_path": "/tmp/test/cover.jpg"}],
         )
         assert item.cover_source_path == "/tmp/test/cover.jpg"
         assert item.cover_host_id == "imx"
-        assert item.cover_result["bbcode"] == "[img]url[/img]"
+        assert item.cover_result[0]["bbcode"] == "[img]url[/img]"
+
+    def test_cover_status_default_is_none(self):
+        """cover_status defaults to 'none' (no covers detected)."""
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        assert item.cover_status == "none"
+
+    def test_cover_result_is_list_when_populated(self):
+        """cover_result stores a list of per-cover dicts."""
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        item.cover_result = [
+            {'status': 'success', 'bbcode': '[url=x][img]y[/img][/url]', 'image_url': 'x', 'thumb_url': 'y', 'source_path': '/a.jpg'},
+            {'status': 'failed', 'error': 'timeout', 'source_path': '/b.jpg'},
+        ]
+        assert len(item.cover_result) == 2
+        assert item.cover_result[0]['status'] == 'success'
+        assert item.cover_result[1]['status'] == 'failed'
 
 
 class TestCoverPersistence:
@@ -45,12 +61,12 @@ class TestCoverPersistence:
                 path="/tmp/test",
                 cover_source_path="/tmp/test/cover.jpg",
                 cover_host_id="imx",
-                cover_result={"bbcode": "[img]x[/img]", "image_url": "x", "thumb_url": "t"},
+                cover_result=[{"status": "success", "bbcode": "[img]x[/img]", "image_url": "x", "thumb_url": "t", "source_path": "/tmp/test/cover.jpg"}],
             )
             d = qm._item_to_dict(item)
             assert d["cover_source_path"] == "/tmp/test/cover.jpg"
             assert d["cover_host_id"] == "imx"
-            assert d["cover_result"]["bbcode"] == "[img]x[/img]"
+            assert d["cover_result"][0]["bbcode"] == "[img]x[/img]"
 
     def test_dict_to_item_restores_cover_fields(self):
         from unittest.mock import patch
@@ -65,12 +81,12 @@ class TestCoverPersistence:
                 "status": "ready",
                 "cover_source_path": "/tmp/test/cover.jpg",
                 "cover_host_id": "imx",
-                "cover_result": {"bbcode": "[img]x[/img]"},
+                "cover_result": [{"status": "success", "bbcode": "[img]x[/img]", "source_path": "/tmp/test/cover.jpg"}],
             }
             item = qm._dict_to_item(data)
             assert item.cover_source_path == "/tmp/test/cover.jpg"
             assert item.cover_host_id == "imx"
-            assert item.cover_result == {"bbcode": "[img]x[/img]"}
+            assert item.cover_result == [{"status": "success", "bbcode": "[img]x[/img]", "source_path": "/tmp/test/cover.jpg"}]
 
     def test_dict_to_item_cover_defaults_none(self):
         from unittest.mock import patch

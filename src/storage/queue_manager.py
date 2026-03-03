@@ -111,9 +111,10 @@ class GalleryQueueItem:
     file_dimensions: dict = field(default_factory=dict)
 
     # Cover photo support
-    cover_source_path: Optional[str] = None   # Absolute path to cover image file
+    cover_source_path: Optional[str] = None   # Absolute path(s) to cover image files (semicolon-delimited)
     cover_host_id: Optional[str] = None        # Which host uploads the cover
-    cover_result: Optional[dict] = None        # {bbcode, image_url, thumb_url} after upload
+    cover_status: str = "none"                 # "none" | "pending" | "uploading" | "completed" | "partial" | "failed"
+    cover_result: Optional[list] = None        # [{status, bbcode, image_url, thumb_url, source_path, error}, ...]
 
 
 class QueueManager(QObject):
