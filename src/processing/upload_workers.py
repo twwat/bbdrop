@@ -797,9 +797,9 @@ class UploadWorker(QThread):
         exclude_covers = []
         if item.cover_source_path:
             settings = QSettings("BBDropUploader", "BBDropGUI")
-            also_upload = settings.value(
-                'cover/also_upload_as_gallery', False, type=bool)
-            if not also_upload:
+            exclude_from_gallery = settings.value(
+                'cover/exclude_from_gallery', False, type=bool)
+            if exclude_from_gallery:
                 exclude_covers = [os.path.basename(p) for p in item.cover_source_path.split(';') if p.strip()]
 
         # -- run ---------------------------------------------------------------

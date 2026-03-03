@@ -45,3 +45,23 @@ class TestCoverDefaults:
             config = qm._get_cover_detection_config()
             assert config['patterns'] == DEFAULT_COVER_PATTERNS
             assert config['patterns'] != ''
+
+    def test_exclude_from_gallery_default_false(self):
+        """Default for 'exclude covers from gallery' should be False (= covers included)."""
+        from src.storage.queue_manager import QueueManager
+        with patch('src.storage.queue_manager.QueueStore'), \
+             patch('src.storage.queue_manager.QSettings') as MockSettings, \
+             patch('src.storage.queue_manager.QObject.__init__'):
+            mock_settings = MockSettings.return_value
+
+            def _return_default(key, default, **kw):
+                if key == 'cover/enabled':
+                    return True
+                return default
+
+            mock_settings.value.side_effect = _return_default
+            qm = QueueManager.__new__(QueueManager)
+            config = qm._get_cover_detection_config()
+            # also_upload derived from NOT exclude_from_gallery (default False)
+            # So also_upload should be True by default (covers included in gallery)
+            assert config['also_upload'] is True

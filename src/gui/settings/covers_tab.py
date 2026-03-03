@@ -254,11 +254,11 @@ class CoversTab(QWidget):
         logic_layout.addWidget(self.logic_all_radio)
         
         # Also upload as gallery image
-        self.covers_also_upload_check = QCheckBox("Also upload cover as gallery image")
+        self.covers_also_upload_check = QCheckBox("Exclude covers from gallery")
         self.covers_also_upload_check.setToolTip(
-            "When checked, the cover file is uploaded both as a cover photo\n"
-            "AND as a normal gallery image. When unchecked, it only goes\n"
-            "to the cover host/gallery and is excluded from the main gallery."
+            "When checked, cover files are uploaded ONLY to the cover host\n"
+            "and excluded from the main gallery. When unchecked (default),\n"
+            "covers are uploaded both as cover photos AND as gallery images."
         )
         self.covers_also_upload_check.toggled.connect(self._on_settings_changed)
         logic_layout.addWidget(self.covers_also_upload_check)
@@ -396,7 +396,7 @@ class CoversTab(QWidget):
                 self.logic_any_radio.setChecked(True)
 
             self.covers_also_upload_check.setChecked(
-                self.settings.value('cover/also_upload_as_gallery', False, type=bool)
+                self.settings.value('cover/exclude_from_gallery', False, type=bool)
             )
 
             # Unblock signals
@@ -431,7 +431,7 @@ class CoversTab(QWidget):
             logic = 'all' if self.logic_all_radio.isChecked() else 'any'
             self.settings.setValue('cover/rule_logic', logic)
 
-            self.settings.setValue('cover/also_upload_as_gallery', self.covers_also_upload_check.isChecked())
+            self.settings.setValue('cover/exclude_from_gallery', self.covers_also_upload_check.isChecked())
 
             return True
         except Exception:

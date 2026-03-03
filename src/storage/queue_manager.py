@@ -902,7 +902,7 @@ class QueueManager(QObject):
                 'max_per_gallery': settings.value('cover/max_per_gallery', 1, type=int),
                 'skip_duplicates': settings.value('cover/skip_duplicates', True, type=bool),
                 'rule_logic': settings.value('cover/rule_logic', 'any', type=str),
-                'also_upload': settings.value('cover/also_upload_as_gallery', False, type=bool),
+                'also_upload': not settings.value('cover/exclude_from_gallery', False, type=bool),
                 'host_id': settings.value('cover/host_id', '', type=str),
             }
         except Exception:
