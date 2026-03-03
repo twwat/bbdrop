@@ -6,7 +6,7 @@ from src.core.engine import UploadEngine
 
 
 class TestEngineCoverExclusion:
-    """Engine skips cover file when exclude_from_gallery is set."""
+    """Engine skips cover files when exclude_from_gallery is set."""
 
     def _make_mock_uploader(self):
         """Create a mock uploader with all required ABC methods."""
@@ -31,7 +31,7 @@ class TestEngineCoverExclusion:
         return mock_uploader
 
     def test_cover_file_excluded_from_upload(self, tmp_path):
-        """When exclude_cover_file is passed, that file is not uploaded as gallery image."""
+        """When exclude_cover_files is passed, those files are not uploaded as gallery images."""
         # Create dummy images
         for name in ["image001.jpg", "image002.jpg", "cover.jpg"]:
             (tmp_path / name).write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 100)
@@ -46,13 +46,12 @@ class TestEngineCoverExclusion:
             max_retries=0,
             parallel_batch_size=1,
             template_name="default",
-            exclude_cover_file="cover.jpg",
+            exclude_cover_files=["cover.jpg"],
         )
 
         # cover.jpg should NOT have been uploaded
         for call_args in mock_uploader.upload_image.call_args_list:
-            args, kwargs = call_args
-            # First positional arg is the image path
+            args, _ = call_args
             file_path = args[0] if args else ''
             assert 'cover.jpg' not in str(file_path), \
                 f"cover.jpg should have been excluded but was uploaded: {file_path}"
@@ -61,7 +60,7 @@ class TestEngineCoverExclusion:
         assert mock_uploader.upload_image.call_count == 2
 
     def test_no_exclusion_when_param_none(self, tmp_path):
-        """When exclude_cover_file is None, all files are uploaded."""
+        """When exclude_cover_files is None, all files are uploaded."""
         for name in ["image001.jpg", "cover.jpg"]:
             (tmp_path / name).write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 100)
 
@@ -75,13 +74,14 @@ class TestEngineCoverExclusion:
             max_retries=0,
             parallel_batch_size=1,
             template_name="default",
+            exclude_cover_files=None,
         )
 
         # Both files should have been uploaded
         assert mock_uploader.upload_image.call_count == 2
 
-    def test_no_exclusion_when_param_empty_string(self, tmp_path):
-        """When exclude_cover_file is empty string, all files are uploaded."""
+    def test_no_exclusion_when_param_empty_list(self, tmp_path):
+        """When exclude_cover_files is empty list, all files are uploaded."""
         for name in ["image001.jpg", "cover.jpg"]:
             (tmp_path / name).write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 100)
 
@@ -95,11 +95,41 @@ class TestEngineCoverExclusion:
             max_retries=0,
             parallel_batch_size=1,
             template_name="default",
-            exclude_cover_file="",
+            exclude_cover_files=[],
         )
 
         # Both files should have been uploaded
         assert mock_uploader.upload_image.call_count == 2
+
+    def test_multi_cover_exclusion(self, tmp_path):
+        """When multiple files are in exclude_cover_files, all are skipped."""
+        for name in ["image001.jpg", "cover1.jpg", "cover2.jpg"]:
+            (tmp_path / name).write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 100)
+
+        mock_uploader = self._make_mock_uploader()
+        engine = UploadEngine(mock_uploader)
+        engine.run(
+            folder_path=str(tmp_path),
+            gallery_name="test",
+            thumbnail_size=3,
+            thumbnail_format=2,
+            max_retries=0,
+            parallel_batch_size=1,
+            template_name="default",
+            exclude_cover_files=["cover1.jpg", "cover2.jpg"],
+        )
+
+        # Only image001.jpg should upload
+        assert mock_uploader.upload_image.call_count == 1
+        
+        uploaded_basenames = []
+        for call_args in mock_uploader.upload_image.call_args_list:
+            args, _ = call_args
+            uploaded_basenames.append(os.path.basename(args[0]))
+            
+        assert "cover1.jpg" not in uploaded_basenames
+        assert "cover2.jpg" not in uploaded_basenames
+        assert "image001.jpg" in uploaded_basenames
 
     def test_exclude_only_matching_filename(self, tmp_path):
         """Exclusion only removes the exact filename, not partial matches."""
@@ -116,7 +146,7 @@ class TestEngineCoverExclusion:
             max_retries=0,
             parallel_batch_size=1,
             template_name="default",
-            exclude_cover_file="cover.jpg",
+            exclude_cover_files=["cover.jpg"],
         )
 
         # Only cover.jpg excluded; my_cover.jpg and cover2.jpg should upload
@@ -124,7 +154,7 @@ class TestEngineCoverExclusion:
 
         uploaded_basenames = []
         for call_args in mock_uploader.upload_image.call_args_list:
-            args, kwargs = call_args
+            args, _ = call_args
             file_path = args[0] if args else ''
             uploaded_basenames.append(os.path.basename(file_path))
 
@@ -147,7 +177,7 @@ class TestEngineCoverExclusion:
             max_retries=0,
             parallel_batch_size=1,
             template_name="default",
-            exclude_cover_file="cover.jpg",
+            exclude_cover_files=["cover.jpg"],
         )
 
         # The engine should report 2 total images, not 3
@@ -155,7 +185,7 @@ class TestEngineCoverExclusion:
         assert results['successful_count'] == 2
 
     def test_cover_file_not_in_folder_is_harmless(self, tmp_path):
-        """If exclude_cover_file names a file that doesn't exist, nothing breaks."""
+        """If exclude_cover_files names a file that doesn't exist, nothing breaks."""
         for name in ["image001.jpg", "image002.jpg"]:
             (tmp_path / name).write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 100)
 
@@ -169,7 +199,7 @@ class TestEngineCoverExclusion:
             max_retries=0,
             parallel_batch_size=1,
             template_name="default",
-            exclude_cover_file="nonexistent_cover.jpg",
+            exclude_cover_files=["nonexistent_cover.jpg"],
         )
 
         # All 2 files should still upload fine

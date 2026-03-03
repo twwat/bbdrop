@@ -128,8 +128,8 @@ class UploadEngine:
         existing_gallery_id: Optional[str] = None,
         # Pre-calculated dimensions from scanning (optional, will calculate if not provided)
         precalculated_dimensions: Optional[Dict[str, float]] = None,
-        # Cover photo exclusion: filename (basename) to skip from gallery upload
-        exclude_cover_file: Optional[str] = None,
+        # Cover photo exclusion: filenames (basenames) to skip from gallery upload
+        exclude_cover_files: Optional[List[str]] = None,
         # Callbacks (all optional)
         on_progress: Optional[ProgressCallback] = None,
         should_soft_stop: Optional[SoftStopCallback] = None,
@@ -172,9 +172,10 @@ class UploadEngine:
             if f.lower().endswith(image_extensions) and os.path.isfile(os.path.join(folder_path, f))
         ])
 
-        # Exclude cover file from gallery upload (cover-only, not also-upload)
-        if exclude_cover_file:
-            all_image_files = [f for f in all_image_files if f != exclude_cover_file]
+        # Exclude cover files from gallery upload (cover-only, not also-upload)
+        if exclude_cover_files:
+            exclude_set = set(exclude_cover_files)
+            all_image_files = [f for f in all_image_files if f not in exclude_set]
 
         if not all_image_files:
             raise ValueError(f"No image files found in {folder_path}")
@@ -306,12 +307,8 @@ class UploadEngine:
             current_file = (first_file if 'first_file' in locals() else image_files[0] if image_files else "")
             on_progress(initial_completed, original_total_images, percent_once, current_file)
 
-        # Use dynamic gallery URL from uploader (multi-host support)
-        gallery_url = self.uploader.get_gallery_url(gallery_id, gallery_name=gallery_name)
-
         # Container for results
         results: Dict[str, Any] = {
-            'gallery_url': gallery_url,
             'images': list(preseed_images),
         }
 
@@ -454,27 +451,38 @@ class UploadEngine:
         for _, image_data in uploaded_images:
             results['images'].append(image_data)
 
+        # Use dynamic gallery URL from uploader (multi-host support)
+        # Calculate now after loop in case gallery_id was set during uploads
+        if gallery_id:
+            gallery_url = self.uploader.get_gallery_url(gallery_id, gallery_name=gallery_name)
+            results['gallery_url'] = gallery_url
+        else:
+            gallery_url = results.get('gallery_url', '')
+
         # Batch result fetch: hosts like Turbo upload per-image (JSON success only)
         # then fetch the result page ONCE at the end for all BBCode/URLs/gallery_id.
         if hasattr(self.uploader, 'fetch_batch_results'):
             try:
                 batch = self.uploader.fetch_batch_results()
-                if batch.get('gallery_id') and not gallery_id:
-                    gallery_id = batch['gallery_id']
-                    gallery_url = self.uploader.get_gallery_url(gallery_id, gallery_name=gallery_name)
-                    results['gallery_url'] = gallery_url
-                # Merge per-image BBCode/URLs by filename
-                batch_by_name = {
-                    img['original_filename'].lower(): img
-                    for img in batch.get('images', [])
-                }
-                for image_data in results['images']:
-                    fname = (image_data.get('original_filename') or '').lower()
-                    if fname in batch_by_name:
-                        b = batch_by_name[fname]
-                        image_data['bbcode'] = b.get('bbcode') or image_data.get('bbcode')
-                        image_data['image_url'] = b.get('image_url') or image_data.get('image_url')
-                        image_data['thumb_url'] = b.get('thumb_url') or image_data.get('thumb_url')
+                if batch:
+                    if batch.get('gallery_id') and not gallery_id:
+                        gallery_id = batch['gallery_id']
+                        gallery_url = self.uploader.get_gallery_url(gallery_id, gallery_name=gallery_name)
+                        results['gallery_url'] = gallery_url
+                    # Merge per-image BBCode/URLs by filename
+                    batch_by_name = {
+                        img['original_filename'].lower(): img
+                        for img in batch.get('images', [])
+                        if img.get('original_filename')
+                    }
+                    if batch_by_name:
+                        for image_data in results['images']:
+                            fname = (image_data.get('original_filename') or image_data.get('filename') or '').lower()
+                            if fname in batch_by_name:
+                                b = batch_by_name[fname]
+                                image_data['bbcode'] = b.get('bbcode') or image_data.get('bbcode')
+                                image_data['image_url'] = b.get('image_url') or image_data.get('image_url')
+                                image_data['thumb_url'] = b.get('thumb_url') or image_data.get('thumb_url')
             except Exception as e:
                 log(f"Failed to fetch batch results: {e}", level="error", category="uploads")
 
