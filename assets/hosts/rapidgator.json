@@ -1,7 +1,7 @@
 {
   "name": "Rapidgator",
   "icon": "rapidgator.png",
-  "referral_url": "https://rapidgator.net/article/resource/ref/4058796",
+  "referral_url": "https://rapidgator.net/account/registration/ref/4058796",
   "requires_auth": true,
   "auth_type": "token_login",
 
