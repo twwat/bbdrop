@@ -99,7 +99,7 @@ class PixhostClient(ImageHostClient):
             curl.setopt(pycurl.POST, 1)
 
             import urllib.parse
-            post_data = f"name={urllib.parse.quote(sanitized)}"
+            post_data = f"gallery_name={urllib.parse.quote(sanitized)}"
             curl.setopt(pycurl.POSTFIELDS, post_data)
 
             curl.setopt(pycurl.HTTPHEADER, [
@@ -124,8 +124,9 @@ class PixhostClient(ImageHostClient):
 
             log(f"Created Pixhost gallery: {self._gallery_hash}", level="debug", category="uploads")
             return self._gallery_hash
-        finally:
-            curl.close()
+        except Exception as e:
+            log(f"Failed to create Pixhost gallery: {e}", level="error", category="uploads")
+            raise
 
     def upload_image(
         self,
@@ -269,8 +270,15 @@ class PixhostClient(ImageHostClient):
             curl.setopt(pycurl.URL, f"{self.api_url}/galleries/{self._gallery_hash}/finalize")
             curl.setopt(pycurl.WRITEDATA, response_buffer)
             curl.setopt(pycurl.POST, 1)
-            curl.setopt(pycurl.POSTFIELDS, "")
-            curl.setopt(pycurl.HTTPHEADER, ['Accept: application/json'])
+
+            import urllib.parse
+            post_data = f"gallery_upload_hash={urllib.parse.quote(self._gallery_upload_hash or '')}"
+            curl.setopt(pycurl.POSTFIELDS, post_data)
+
+            curl.setopt(pycurl.HTTPHEADER, [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: application/json'
+            ])
             
             curl.perform()
             response_code = curl.getinfo(pycurl.RESPONSE_CODE)
@@ -278,7 +286,8 @@ class PixhostClient(ImageHostClient):
             if response_code == 200:
                 log(f"Successfully finalized Pixhost gallery {self._gallery_hash}", level="info", category="uploads")
             else:
-                log(f"Failed to finalize Pixhost gallery {self._gallery_hash}, status: {response_code}", level="warning", category="uploads")
+                response_text = response_buffer.getvalue().decode('utf-8')
+                log(f"Failed to finalize Pixhost gallery {self._gallery_hash}, status: {response_code}, response: {response_text}", level="warning", category="uploads")
         except Exception as e:
             log(f"Error finalizing Pixhost gallery: {e}", level="warning", category="uploads")
         finally:
@@ -304,18 +313,36 @@ class PixhostClient(ImageHostClient):
     def get_default_headers(self) -> dict:
         return {'Accept': 'application/json'}
 
-    def upload_cover(self, image_path: str, gallery_id: str = "") -> Optional[dict]:
+    def upload_cover(self, image_path: str, gallery_id: str = "", image_path_right: Optional[str] = None) -> Optional[dict]:
         """Upload a cover image to Pixhost's dedicated cover endpoint via pycurl."""
         if not os.path.exists(image_path):
             return None
 
         content_type = get_image_host_setting('pixhost', 'content_type', 'str') or '0'
-        filename = os.path.basename(image_path)
 
+        # Prepare first image
+        filename = os.path.basename(image_path)
         with open(image_path, 'rb') as f:
             file_data = f.read()
-
         content_type_mime = mimetypes.guess_type(image_path)[0] or 'image/jpeg'
+
+        form_fields = [
+            ('img_left', (pycurl.FORM_BUFFER, filename,
+                         pycurl.FORM_BUFFERPTR, file_data,
+                         pycurl.FORM_CONTENTTYPE, content_type_mime)),
+            ('content_type', content_type),
+        ]
+
+        # Prepare second image if provided
+        file_data_right = None
+        if image_path_right and os.path.exists(image_path_right):
+            filename_right = os.path.basename(image_path_right)
+            with open(image_path_right, 'rb') as f:
+                file_data_right = f.read()
+            content_type_mime_right = mimetypes.guess_type(image_path_right)[0] or 'image/jpeg'
+            form_fields.append(('img_right', (pycurl.FORM_BUFFER, filename_right,
+                                             pycurl.FORM_BUFFERPTR, file_data_right,
+                                             pycurl.FORM_CONTENTTYPE, content_type_mime_right)))
 
         curl = self._get_thread_curl()
         response_buffer = BytesIO()
@@ -329,13 +356,6 @@ class PixhostClient(ImageHostClient):
 
             curl.setopt(pycurl.HTTPHEADER, ['Accept: application/json'])
 
-            form_fields = [
-                ('img_left', (pycurl.FORM_BUFFER, filename,
-                         pycurl.FORM_BUFFERPTR, file_data,
-                         pycurl.FORM_CONTENTTYPE, content_type_mime)),
-                ('content_type', content_type),
-            ]
-            
             # Pixhost doesn't natively attach cover to a specific gallery via API (no parameter documented),
             # but we can provide the BBCode for it.
 
@@ -371,8 +391,6 @@ class PixhostClient(ImageHostClient):
         except Exception as e:
             log(f"Pixhost cover upload error: {e}", level="error", category="cover")
             return None
-        finally:
-            curl.close()
 
     def clear_api_cookies(self):
         """Clear batch state for new gallery uploads."""

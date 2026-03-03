@@ -31,6 +31,11 @@ def test_pixhost_create_gallery(pixhost_client):
         
         success_hash = pixhost_client.create_gallery('Test Gallery')
         
+        # Verify gallery_name was passed correctly
+        post_fields_call = [call for call in mock_curl.setopt.call_args_list if call[0][0] == 10015] # pycurl.POSTFIELDS
+        assert len(post_fields_call) > 0
+        assert 'gallery_name=Test%20Gallery' in post_fields_call[0][0][1]
+        
         assert success_hash == 'hash123'
         assert pixhost_client._gallery_hash == 'hash123'
         assert pixhost_client._gallery_upload_hash == 'upload_hash123'
