@@ -277,17 +277,19 @@ class QueueManager(QObject):
                         )
 
                         log(f"Scan Worker: Cover detection running for '{gallery_name}' ({len(files)} files)", level="info", category="scan")
-                        candidates: list[str] = []
+                        
+                        rule_logic = cover_config.get('rule_logic', 'any')
+                        enabled_rule_results = [] # List of sets of filenames
 
                         # Filename-based detection
                         if cover_config.get('filename_enabled', True) and cover_config.get('patterns'):
                             fn_matches = detect_covers_by_filename(files, patterns=cover_config['patterns'])
                             log(f"Scan Worker: Filename detection: pattern='{cover_config['patterns']}', matched={fn_matches}", level="debug", category="scan")
-                            candidates.extend(fn_matches)
+                            enabled_rule_results.append(set(fn_matches))
                         elif cover_config.get('filename_enabled', True):
                             log("Scan Worker: Filename detection enabled but no patterns configured", level="debug", category="scan")
 
-                        # Dimension-based detection (only if scan_result has dimension data)
+                        # Dimension-based detection
                         if cover_config.get('dimension_enabled', False):
                             file_dimensions = scan_result.get('file_dimensions', {})
                             if file_dimensions:
@@ -295,16 +297,18 @@ class QueueManager(QObject):
                                 if cover_config.get('dimension_differs_enabled', False):
                                     dim_kwargs['differs_percent'] = cover_config.get('dimension_differs_percent', 30)
                                 if cover_config.get('dimension_min_enabled', False):
-                                    dim_kwargs['min_shortest_side'] = cover_config.get('dimension_min_shortest_side', 0)
+                                    min_w = cover_config.get('dimension_min_width', 0)
+                                    min_h = cover_config.get('dimension_min_height', 0)
+                                    dim_kwargs['min_shortest_side'] = min(min_w, min_h) if min_w and min_h else (min_w or min_h)
                                 if cover_config.get('dimension_max_enabled', False):
-                                    dim_kwargs['max_longest_side'] = cover_config.get('dimension_max_longest_side', 0)
+                                    max_w = cover_config.get('dimension_max_width', 0)
+                                    max_h = cover_config.get('dimension_max_height', 0)
+                                    dim_kwargs['max_longest_side'] = max(max_w, max_h)
                                 if dim_kwargs:
                                     dim_matches = detect_cover_by_dimensions(file_dimensions, **dim_kwargs)
-                                    for f in dim_matches:
-                                        if f not in candidates:
-                                            candidates.append(f)
+                                    enabled_rule_results.append(set(dim_matches))
 
-                        # Filesize-based detection (only if scan_result has size data)
+                        # Filesize-based detection
                         if cover_config.get('filesize_enabled', False):
                             file_sizes = scan_result.get('file_sizes', {})
                             if file_sizes:
@@ -315,9 +319,26 @@ class QueueManager(QObject):
                                     size_kwargs['max_kb'] = cover_config.get('filesize_max_kb', 0)
                                 if size_kwargs:
                                     size_matches = detect_cover_by_file_size(file_sizes, **size_kwargs)
-                                    for f in size_matches:
-                                        if f not in candidates:
-                                            candidates.append(f)
+                                    enabled_rule_results.append(set(size_matches))
+
+                        # Combine results based on logic
+                        candidates: list[str] = []
+                        if not enabled_rule_results:
+                            candidates = []
+                        elif rule_logic == 'all':
+                            # Intersection: must match ALL enabled rules
+                            final_set = enabled_rule_results[0]
+                            for s in enabled_rule_results[1:]:
+                                final_set = final_set.intersection(s)
+                            # Preserve original order (explorer sort)
+                            candidates = [f for f in files if f in final_set]
+                        else:
+                            # Union: must match ANY enabled rule (existing behavior)
+                            final_set = set()
+                            for s in enabled_rule_results:
+                                final_set = final_set.union(s)
+                            # Preserve original order (explorer sort)
+                            candidates = [f for f in files if f in final_set]
 
                         # Deduplication (requires file_sizes)
                         if cover_config.get('skip_duplicates', True) and candidates:
@@ -330,16 +351,21 @@ class QueueManager(QObject):
                         if max_covers > 0:
                             candidates = apply_max_covers(candidates, max_covers)
 
-                        # Use first candidate as cover (multi-cover is future)
+                        # Use detected candidates as covers
                         if candidates:
-                            cover_file = candidates[0]
-                            item.cover_source_path = os.path.join(path, cover_file)
+                            # Store multiple covers as a semicolon-separated string for compatibility
+                            cover_paths = [os.path.join(path, f) for f in candidates]
+                            item.cover_source_path = ";".join(cover_paths)
+                            
                             item.cover_host_id = cover_config.get('host_id') or None
                             also_upload = cover_config.get('also_upload', False)
-                            log(f"Scan Worker: Cover detected: '{cover_file}' for '{gallery_name}' (also_upload={also_upload})", level="info", category="scan")
+                            
+                            cover_desc = f"{len(candidates)} covers" if len(candidates) > 1 else f"cover '{candidates[0]}'"
+                            log(f"Scan Worker: {cover_desc} detected for '{gallery_name}' (also_upload={also_upload})", level="info", category="scan")
+                            
                             if not also_upload:
                                 # Cover-only: exclude from gallery image count
-                                item.total_images = max(0, item.total_images - 1)
+                                item.total_images = max(0, item.total_images - len(candidates))
                         else:
                             log(f"Scan Worker: No cover candidates found for '{gallery_name}'", level="info", category="scan")
 
@@ -873,6 +899,7 @@ class QueueManager(QObject):
                 'filesize_max_kb': settings.value('cover/filesize_max_kb', 0, type=int),
                 'max_per_gallery': settings.value('cover/max_per_gallery', 1, type=int),
                 'skip_duplicates': settings.value('cover/skip_duplicates', True, type=bool),
+                'rule_logic': settings.value('cover/rule_logic', 'any', type=str),
                 'also_upload': settings.value('cover/also_upload_as_gallery', False, type=bool),
                 'host_id': settings.value('cover/host_id', '', type=str),
             }
