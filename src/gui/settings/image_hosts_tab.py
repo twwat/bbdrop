@@ -2,9 +2,10 @@
 """Image Hosts Settings Widget - List of hosts with config dialogs"""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QGroupBox, QSizePolicy, QCheckBox
+    QFrame, QScrollArea, QGroupBox, QSizePolicy, QCheckBox,
+    QRadioButton, QButtonGroup
 )
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QSettings
 from PyQt6.QtGui import QPixmap
 from typing import Dict, Any, Optional
 import os
@@ -22,10 +23,14 @@ class ImageHostsSettingsWidget(QWidget):
     """Widget for configuring image host settings - displays list of hosts with config dialogs"""
     settings_changed = pyqtSignal()
     cover_gallery_changed = pyqtSignal(str, str)  # host_id, gallery_id
+    cover_host_changed = pyqtSignal(str)          # host_id
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.settings = QSettings("BBDropUploader", "BBDropGUI")
         self.host_widgets: Dict[str, Dict[str, Any]] = {}
+        self.cover_host_group = QButtonGroup(self)
+        self.cover_host_group.setExclusive(True)
         self.setup_ui()
 
     def setup_ui(self):
@@ -43,6 +48,29 @@ class ImageHostsSettingsWidget(QWidget):
         # Available Hosts Group
         hosts_group = QGroupBox("Available Hosts")
         hosts_layout = QVBoxLayout(hosts_group)
+
+        # Add header row
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(18, 0, 8, 4)
+        header_layout.setSpacing(8)
+        
+        enabled_header = QLabel("Enabled")
+        enabled_header.setFixedWidth(50)
+        enabled_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        enabled_header.setProperty("class", "status-muted")
+        header_layout.addWidget(enabled_header)
+
+        cover_header = QLabel("Use for Covers")
+        cover_header.setFixedWidth(100)
+        cover_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cover_header.setProperty("class", "status-muted")
+        header_layout.addWidget(cover_header)
+
+        host_header = QLabel("Host")
+        host_header.setProperty("class", "status-muted")
+        header_layout.addWidget(host_header, 1)
+        
+        hosts_layout.addLayout(header_layout)
 
         # Create scrollable area for hosts list
         scroll_area = QScrollArea()
@@ -83,17 +111,38 @@ class ImageHostsSettingsWidget(QWidget):
         row_layout.setContentsMargins(8, 4, 8, 4)
         row_layout.setSpacing(8)
 
-        # Enable/Disable checkbox
+        # Enable/Disable checkbox (50px width centered)
         enabled = is_image_host_enabled(host_id)
+        enable_container = QWidget()
+        enable_container.setFixedWidth(50)
+        enable_cont_layout = QHBoxLayout(enable_container)
+        enable_cont_layout.setContentsMargins(0, 0, 0, 0)
         enable_checkbox = QCheckBox()
         enable_checkbox.setChecked(enabled)
         enable_checkbox.setToolTip(f"Enable/Disable {config.name}")
         enable_checkbox.stateChanged.connect(
             lambda state: self._toggle_host(host_id, state == Qt.CheckState.Checked.value)
         )
-        row_layout.addWidget(enable_checkbox)
+        enable_cont_layout.addWidget(enable_checkbox, 0, Qt.AlignmentFlag.AlignCenter)
+        row_layout.addWidget(enable_container)
 
-        # Logo or name (160px fixed width)
+        # Cover Host radio button (100px width centered)
+        cover_container = QWidget()
+        cover_container.setFixedWidth(100)
+        cover_cont_layout = QHBoxLayout(cover_container)
+        cover_cont_layout.setContentsMargins(0, 0, 0, 0)
+        cover_radio = QRadioButton()
+        current_cover_host = self.settings.value('cover/host_id', 'imx', type=str)
+        cover_radio.setChecked(host_id == current_cover_host)
+        cover_radio.setToolTip(f"Use {config.name} for cover photo uploads")
+        cover_radio.toggled.connect(
+            lambda checked, hid=host_id: self._on_cover_host_toggled(hid, checked)
+        )
+        self.cover_host_group.addButton(cover_radio)
+        cover_cont_layout.addWidget(cover_radio, 0, Qt.AlignmentFlag.AlignCenter)
+        row_layout.addWidget(cover_container)
+
+        # Logo or name (150px fixed width)
         logo_container = QWidget()
         logo_container.setFixedWidth(150)
         logo_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
@@ -132,6 +181,7 @@ class ImageHostsSettingsWidget(QWidget):
             "status": status_label,
             "logo_label": logo_label,
             "enable_checkbox": enable_checkbox,
+            "cover_radio": cover_radio,
             "logo_container": logo_container,
             "configure_btn": configure_btn
         }
@@ -142,6 +192,13 @@ class ImageHostsSettingsWidget(QWidget):
 
         # Add to layout
         self.hosts_layout.addWidget(frame)
+
+    def _on_cover_host_toggled(self, host_id: str, checked: bool):
+        """Handle cover host radio button toggle."""
+        if checked:
+            self.settings.setValue('cover/host_id', host_id)
+            self.cover_host_changed.emit(host_id)
+            self.settings_changed.emit()
 
     def _load_host_logo(self, host_id: str, config, height: int = 22) -> Optional[QLabel]:
         """Load and create a QLabel with the host's logo.

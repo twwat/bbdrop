@@ -253,10 +253,13 @@ class ComprehensiveSettingsDialog(QDialog):
         self.covers_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.COVERS))
         self._add_settings_page(self.covers_tab, "Cover Photos")
 
-        # Sync cover gallery changes between Image Hosts tab and Covers tab
+        # Sync cover changes between Image Hosts tab and Covers tab
         if hasattr(self, 'image_hosts_widget'):
             self.image_hosts_widget.cover_gallery_changed.connect(
                 self.covers_tab.on_external_cover_gallery_change
+            )
+            self.image_hosts_widget.cover_host_changed.connect(
+                self.covers_tab.on_external_cover_host_change
             )
 
     def setup_external_apps_tab(self):
