@@ -139,3 +139,23 @@ class TestCoverScanIntegration:
             # 3 files found, cover also uploaded as gallery image => total_images stays 3
             assert item.total_images == 3
             assert item.cover_source_path == os.path.join(tmpdir, "cover.jpg")
+
+    def test_scan_sets_cover_status_pending_when_covers_detected(self):
+        """When covers are detected during scan, cover_status should be 'pending'."""
+        qm = _make_queue_manager()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _create_image_files(tmpdir, ["image001.jpg", "cover.jpg", "image002.jpg"])
+            item = GalleryQueueItem(path=tmpdir, name="test", status="validating")
+            qm.items[tmpdir] = item
+            _run_scan(qm, tmpdir, {'patterns': 'cover*', 'also_upload': False})
+            assert item.cover_status == "pending"
+
+    def test_scan_leaves_cover_status_none_when_no_covers(self):
+        """When no covers detected, cover_status stays 'none'."""
+        qm = _make_queue_manager()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _create_image_files(tmpdir, ["image001.jpg", "image002.jpg"])
+            item = GalleryQueueItem(path=tmpdir, name="test", status="validating")
+            qm.items[tmpdir] = item
+            _run_scan(qm, tmpdir, {'patterns': 'cover*', 'also_upload': False})
+            assert item.cover_status == "none"

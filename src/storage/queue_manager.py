@@ -357,7 +357,8 @@ class QueueManager(QObject):
                             # Store multiple covers as a semicolon-separated string for compatibility
                             cover_paths = [os.path.join(path, f) for f in candidates]
                             item.cover_source_path = ";".join(cover_paths)
-                            
+                            item.cover_status = "pending"
+
                             item.cover_host_id = cover_config.get('host_id') or None
                             also_upload = cover_config.get('also_upload', False)
                             
