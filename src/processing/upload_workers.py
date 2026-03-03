@@ -187,16 +187,11 @@ class UploadWorker(QThread):
         """Upload a single gallery"""
         # Start bandwidth polling thread for real-time updates
         import threading
-        from src.gui.bandwidth_manager import BandwidthManager
         
         stop_polling = threading.Event()
-        
-        # Use BandwidthManager to get a pre-configured BandwidthSource
-        bandwidth_source = BandwidthManager.create_source(name=getattr(item, 'image_host_id', 'imx'))
 
         def poll_bandwidth():
             """Background thread that polls byte counter and emits bandwidth updates"""
-            nonlocal bandwidth_source
             poll_last_bytes = self.global_byte_counter.get()  # Start from current cumulative value
             poll_last_time = time.time()
 
@@ -212,12 +207,8 @@ class UploadWorker(QThread):
                         if time_diff > 0:
                             instant_kbps = ((current_bytes - poll_last_bytes) / time_diff) / 1024.0
                             self.bandwidth_updated.emit(instant_kbps)
-                            # Update smoothed bandwidth and peak
-                            bandwidth_source.add_sample(instant_kbps)
                             poll_last_bytes = current_bytes
                             poll_last_time = current_time
-                except Exception:
-                    pass
                 except Exception:
                     pass
 
@@ -335,7 +326,16 @@ class UploadWorker(QThread):
                 return
 
             # Store observed peak speed on item for metrics recording
-            item.observed_peak_kbps = bandwidth_source.peak_value() if bandwidth_source.peak_value() > 0 else None
+            # Query centralized manager for the peak value of this upload source
+            try:
+                # The UploadWorker should have its signal_handler connected which has bandwidth_manager
+                # In GUI mode, it's safer to get it via the signal_handler linked to main window
+                from src.gui.bandwidth_manager import BandwidthManager
+                # If we're on the GUI thread or have reference to manager:
+                item.observed_peak_kbps = self.queue_manager._main_window.worker_signal_handler.bandwidth_manager._upload_source.peak_value
+            except (AttributeError, Exception):
+                # Fallback: BandwidthManager itself has a factory or tracker
+                item.observed_peak_kbps = None
 
             # Process results
             self._process_upload_results(item, results)
@@ -417,71 +417,100 @@ class UploadWorker(QThread):
                 log(f"Failed to download cover from hook URL: {e}", level="warning", category="cover")
 
     def _upload_cover(self, item: GalleryQueueItem, gallery_id: str = ""):
-        """Upload cover photo if configured. Returns result dict or None.
-
-        Cover failure never blocks gallery completion.
-        """
+        """Upload detected cover photo(s) using the configured host and settings."""
         if not item.cover_source_path:
+            return None
+
+        paths = [p for p in item.cover_source_path.split(';') if p.strip()]
+        if not paths:
             return None
 
         try:
             settings = QSettings("BBDropUploader", "BBDropGUI")
-
             cover_host_id = (item.cover_host_id
                              or settings.value('cover/host_id', '', type=str)
                              or item.image_host_id or "imx")
 
-            # Per-host cover settings from INI
-            cover_gallery = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ''
+            # Get host-specific settings
+            from src.core.image_host_config import get_image_host_setting
+            cover_gallery_id = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ""
             cover_thumbnail_format = get_image_host_setting(cover_host_id, 'cover_thumbnail_format', 'int') or 2
             cover_thumbnail_size = get_image_host_setting(cover_host_id, 'cover_thumbnail_size', 'int') or 600
+            also_upload = settings.value('cover/also_upload_as_gallery', False, type=bool)
 
-            # Determine gallery attachment
-            if cover_gallery:
-                cover_gallery_id = cover_gallery  # explicit cover gallery set
-            elif item.image_host_id == cover_host_id:
-                cover_gallery_id = gallery_id  # same host, no explicit: use current gallery
-            else:
-                cover_gallery_id = ''  # different host, no explicit: no gallery
-
-            # Route to appropriate upload method
+            results = []
             if cover_host_id == "imx":
-                if not self.rename_worker or not getattr(self.rename_worker, 'login_successful', False):
-                    log("Cover upload skipped: no authenticated IMX session", level="debug", category="cover")
-                    return None
-                result = self.rename_worker.upload_cover(
-                    image_path=item.cover_source_path,
-                    gallery_id=cover_gallery_id,
-                    thumbnail_format=cover_thumbnail_format,
-                )
-            else:
+                # IMX uses the specialized rename_worker for session-based cover upload
+                if self.rename_worker and getattr(self.rename_worker, 'login_successful', False):
+                    res = self.rename_worker.upload_cover(
+                        image_path=paths[0],
+                        gallery_id=cover_gallery_id,
+                        thumbnail_format=cover_thumbnail_format,
+                    )
+                    if res:
+                        results.append(res)
+            elif cover_host_id == "pixhost":
+                # Pixhost supports dual-image covers (img_left, img_right)
+                from src.network.image_host_factory import create_image_host_client
                 cover_client = create_image_host_client(cover_host_id)
-                # upload_image() already returns a normalized response dict
-                normalized = cover_client.upload_image(
-                    item.cover_source_path,
-                    gallery_id=cover_gallery_id if cover_gallery_id else None,
-                    thumbnail_size=cover_thumbnail_size,
-                )
-                # Flatten so cover_result has bbcode/image_url/thumb_url at top
-                # level (matching the flat shape IMX's upload_cover returns)
-                if normalized and normalized.get('status') == 'success':
-                    data = normalized.get('data', {})
-                    result = {
-                        'status': 'success',
-                        'bbcode': data.get('bbcode', ''),
-                        'image_url': data.get('image_url', ''),
-                        'thumb_url': data.get('thumb_url', ''),
-                    }
+                if len(paths) >= 2:
+                    res = cover_client.upload_cover(
+                        paths[0], gallery_id=cover_gallery_id, image_path_right=paths[1]
+                    )
                 else:
-                    result = None
+                    res = cover_client.upload_cover(paths[0], gallery_id=cover_gallery_id)
+                if res:
+                    results.append(res)
+            else:
+                # Generic host: use upload_cover if available, else upload_image individually
+                from src.network.image_host_factory import create_image_host_client
+                cover_client = create_image_host_client(cover_host_id)
+                
+                if hasattr(cover_client, 'upload_cover'):
+                    res = cover_client.upload_cover(paths[0], gallery_id=cover_gallery_id)
+                    if res:
+                        results.append(res)
+                else:
+                    # Sequential fallback
+                    for path in paths:
+                        normalized = cover_client.upload_image(
+                            path,
+                            gallery_id=cover_gallery_id if cover_gallery_id else None,
+                            thumbnail_size=cover_thumbnail_size,
+                        )
+                        if normalized and normalized.get('status') == 'success':
+                            data = normalized.get('data', {})
+                            results.append({
+                                'status': 'success',
+                                'bbcode': data.get('bbcode', ''),
+                                'image_url': data.get('image_url', ''),
+                                'thumb_url': data.get('thumb_url', ''),
+                            })
+                            # Individual progress update for sequential covers
+                            if not also_upload:
+                                completed = (item.uploaded_images or 0) + len(results)
+                                total = (item.total_images or 0) + len(paths)
+                                pct = int((completed / max(total, 1)) * 100)
+                                self.progress_updated.emit(item.path, completed, total, pct, os.path.basename(path))
 
-            if result:
-                item.cover_result = result
-                log(f"Cover photo uploaded for {item.name}", level="info", category="cover")
+            if results:
+                item.cover_result = results[0]
+                if len(results) > 1:
+                    item.cover_result['bbcode'] = "\n".join(r['bbcode'] for r in results)
+                
+                log(f"Cover photo(s) uploaded for {item.name} ({len(results)} images)", level="info", category="cover")
+                
+                # Final progress update for the cover phase
+                # For Pixhost dual, we count it as 1 upload operation
+                ops_count = 1 if cover_host_id == 'pixhost' and len(paths) >= 2 else len(results)
+                completed = (item.uploaded_images or 0) + ops_count
+                total = (item.total_images or 0) + (1 if cover_host_id == 'pixhost' and len(paths) >= 2 else len(paths))
+                pct = int((completed / max(total, 1)) * 100)
+                self.progress_updated.emit(item.path, completed, total, pct, os.path.basename(paths[0]))
             else:
                 log(f"Cover photo upload failed for {item.name}", level="warning", category="cover")
 
-            return result
+            return item.cover_result if results else None
 
         except Exception as e:
             log(f"Cover upload error for {item.name}: {e}", level="error", category="cover")
@@ -533,22 +562,54 @@ class UploadWorker(QThread):
             return
 
         # Upload cover photo if configured (after gallery exists)
-        self._upload_cover(item, gallery_id=results.get('gallery_id', ''))
+        cover_res = self._upload_cover(item, gallery_id=results.get('gallery_id', ''))
+        
+        # Inject cover result into results dict for BBCode/Artifacts
+        if cover_res:
+            results['cover_result'] = cover_res
 
-        # Save artifacts
+        # Adjust results to include cover upload for final status/UI
+        # This ensures 45 gallery + 1 cover = 46/46 total
+        num_cover_ops = 0
+        if item.cover_source_path:
+            paths = [p for p in item.cover_source_path.split(';') if p.strip()]
+            if paths:
+                settings = QSettings("BBDropUploader", "BBDropGUI")
+                cover_host_id = (item.cover_host_id or settings.value('cover/host_id', '', type=str) or item.image_host_id or "imx")
+                if cover_host_id == 'pixhost' and len(paths) >= 2:
+                    num_cover_ops = 1
+                else:
+                    num_cover_ops = len(paths)
+
+        if num_cover_ops > 0:
+            results['total_images'] = results.get('total_images', 0) + num_cover_ops
+            if cover_res:
+                 results['successful_count'] = results.get('successful_count', 0) + num_cover_ops
+
+        # Save artifacts (always save even on partial failure to allow partial BBCode)
         artifact_paths = self._save_artifacts_for_result(item, results)
 
         # Determine final status
         failed_count = results.get('failed_count', 0)
-        if failed_count and results.get('successful_count', 0) > 0:
+        successful_count = results.get('successful_count', 0)
+        total_images = results.get('total_images', 0)
+
+        if failed_count and successful_count > 0:
             # Partial failure - some images uploaded successfully but others failed
             failed_files = results.get('failed_details', [])
             self.queue_manager.mark_upload_failed(item.path, f"Partial upload failure: {failed_count} images failed", failed_files)
+        elif successful_count < total_images and not failed_count:
+            # Incomplete (e.g. stopped)
+            self.queue_manager.update_item_status(item.path, "incomplete")
+        elif successful_count == 0 and total_images > 0:
+             # Total failure
+             self.queue_manager.mark_upload_failed(item.path, "Upload failed")
         else:
-            # Complete success
+            # Complete success (including cover)
             self.queue_manager.update_item_status(item.path, "completed")
 
-            # Execute "completed" hook in background
+        # Execute "completed" hook in background (if any successes)
+        if results.get('successful_count', 0) > 0:
             def run_completed_hook():
                 try:
                     # Get artifact paths
@@ -689,7 +750,26 @@ class UploadWorker(QThread):
         )
 
         # -- callbacks ---------------------------------------------------------
+        # Calculate how many extra upload operations we will perform for covers
+        num_extra_cover_ops = 0
+        if item.cover_source_path:
+            paths = [p for p in item.cover_source_path.split(';') if p.strip()]
+            if paths:
+                settings = QSettings("BBDropUploader", "BBDropGUI")
+                cover_host_id = (item.cover_host_id 
+                                 or settings.value('cover/host_id', '', type=str) 
+                                 or item.image_host_id or "imx")
+                
+                if cover_host_id == 'pixhost' and len(paths) >= 2:
+                    num_extra_cover_ops = 1  # Pixhost dual-image cover is 1 upload operation
+                else:
+                    num_extra_cover_ops = len(paths)
+
         def on_progress(completed: int, total: int, percent: int, current_image: str):
+            # Always adjust for extra cover uploads in the total count
+            total += num_extra_cover_ops
+            percent = int((completed / max(total, 1)) * 100)
+            
             self.progress_updated.emit(folder_path, completed, total, percent, current_image)
             try:
                 self._emit_current_bandwidth()
@@ -712,15 +792,15 @@ class UploadWorker(QThread):
                         level="error", category="uploads")
 
         # -- cover exclusion ---------------------------------------------------
-        # When a cover file is set and "also upload as gallery image" is off,
-        # exclude the cover from the normal gallery upload.
-        exclude_cover = None
+        # When cover files are set and "also upload as gallery image" is off,
+        # exclude them from the normal gallery upload.
+        exclude_covers = []
         if item.cover_source_path:
             settings = QSettings("BBDropUploader", "BBDropGUI")
             also_upload = settings.value(
                 'cover/also_upload_as_gallery', False, type=bool)
             if not also_upload:
-                exclude_cover = os.path.basename(item.cover_source_path)
+                exclude_covers = [os.path.basename(p) for p in item.cover_source_path.split(';') if p.strip()]
 
         # -- run ---------------------------------------------------------------
         results = engine.run(
@@ -734,7 +814,7 @@ class UploadWorker(QThread):
             already_uploaded=already_uploaded,
             existing_gallery_id=existing_gallery_id,
             precalculated_dimensions=item,
-            exclude_cover_file=exclude_cover,
+            exclude_cover_files=exclude_covers if exclude_covers else None,
             on_progress=on_progress,
             should_soft_stop=should_soft_stop,
             on_image_uploaded=on_image_uploaded,
