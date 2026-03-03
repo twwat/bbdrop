@@ -1388,12 +1388,15 @@ def save_gallery_artifacts(
         host_links = get_file_host_links_for_template(queue_store, folder_path)
     except (sqlite3.Error, OSError) as e:
         log(f"Failed to get file host links: {e}", level="warning", category="template")
-    # Get cover info from results if available
-    cover_info = results.get('cover_result', {})
-    c_url = cover_info.get('image_url', '')
-    c_thumb = cover_info.get('thumb_url', '')
-    if not cover_bbcode and cover_info.get('bbcode'):
-        cover_bbcode = cover_info.get('bbcode')
+    # Get cover info from results if available (cover_result is a list of per-cover dicts)
+    cover_results = results.get('cover_result', []) or []
+    c_url = next((r.get('image_url', '') for r in cover_results if r.get('status') == 'success'), '')
+    c_thumb = next((r.get('thumb_url', '') for r in cover_results if r.get('status') == 'success'), '')
+    if not cover_bbcode:
+        cover_bbcode = "\n".join(
+            r['bbcode'] for r in cover_results
+            if r.get('status') == 'success' and r.get('bbcode')
+        )
 
     template_data = {
         'folder_name': gallery_name,
@@ -1453,7 +1456,7 @@ def save_gallery_artifacts(
             'transfer_speed_mb_s': (results.get('transfer_speed', 0) / (1024*1024)) if results.get('transfer_speed', 0) else 0,
         },
         'images': results.get('images', []),
-        'cover_result': cover_info,
+        'cover_result': cover_results,
         'failures': [
             {
                 'filename': fname,

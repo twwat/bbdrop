@@ -54,3 +54,50 @@ class TestCoverPlaceholder:
         result = apply_template(template, data)
         assert "Cover:" not in result
         assert "Test" in result
+
+
+class TestCoverTemplateDataFromListResults:
+    """Cover data extraction from list-type cover_result."""
+
+    def test_cover_urls_from_list_results(self):
+        """cover_url and cover_thumb_url extracted from first successful entry."""
+        cover_results = [
+            {'status': 'success', 'bbcode': '[url=X][img]Y[/img][/url]', 'image_url': 'X', 'thumb_url': 'Y'},
+            {'status': 'success', 'bbcode': '[url=A][img]B[/img][/url]', 'image_url': 'A', 'thumb_url': 'B'},
+        ]
+        c_url = next((r.get('image_url', '') for r in cover_results if r.get('status') == 'success'), '')
+        c_thumb = next((r.get('thumb_url', '') for r in cover_results if r.get('status') == 'success'), '')
+        assert c_url == 'X'
+        assert c_thumb == 'Y'
+
+    def test_cover_bbcode_joins_successful_entries(self):
+        """cover_bbcode joins all successful bbcodes with newline."""
+        cover_results = [
+            {'status': 'success', 'bbcode': 'A', 'image_url': 'X', 'thumb_url': 'Y'},
+            {'status': 'failed', 'error': 'timeout'},
+            {'status': 'success', 'bbcode': 'B', 'image_url': 'A', 'thumb_url': 'B'},
+        ]
+        cover_bbcode = "\n".join(
+            r['bbcode'] for r in cover_results
+            if r.get('status') == 'success' and r.get('bbcode')
+        )
+        assert cover_bbcode == "A\nB"
+
+    def test_cover_empty_when_all_failed(self):
+        """All failures produce empty cover data."""
+        cover_results = [
+            {'status': 'failed', 'error': 'timeout'},
+        ]
+        c_url = next((r.get('image_url', '') for r in cover_results if r.get('status') == 'success'), '')
+        cover_bbcode = "\n".join(
+            r['bbcode'] for r in cover_results
+            if r.get('status') == 'success' and r.get('bbcode')
+        )
+        assert c_url == ''
+        assert cover_bbcode == ''
+
+    def test_cover_empty_when_none_result(self):
+        """None or empty cover_result produces empty cover data."""
+        cover_results = None
+        c_url = next((r.get('image_url', '') for r in (cover_results or []) if r.get('status') == 'success'), '')
+        assert c_url == ''
