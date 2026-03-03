@@ -568,24 +568,6 @@ class UploadWorker(QThread):
         if cover_res:
             results['cover_result'] = cover_res
 
-        # Adjust results to include cover upload for final status/UI
-        # This ensures 45 gallery + 1 cover = 46/46 total
-        num_cover_ops = 0
-        if item.cover_source_path:
-            paths = [p for p in item.cover_source_path.split(';') if p.strip()]
-            if paths:
-                settings = QSettings("BBDropUploader", "BBDropGUI")
-                cover_host_id = (item.cover_host_id or settings.value('cover/host_id', '', type=str) or item.image_host_id or "imx")
-                if cover_host_id == 'pixhost' and len(paths) >= 2:
-                    num_cover_ops = 1
-                else:
-                    num_cover_ops = len(paths)
-
-        if num_cover_ops > 0:
-            results['total_images'] = results.get('total_images', 0) + num_cover_ops
-            if cover_res:
-                 results['successful_count'] = results.get('successful_count', 0) + num_cover_ops
-
         # Save artifacts (always save even on partial failure to allow partial BBCode)
         artifact_paths = self._save_artifacts_for_result(item, results)
 
@@ -750,26 +732,7 @@ class UploadWorker(QThread):
         )
 
         # -- callbacks ---------------------------------------------------------
-        # Calculate how many extra upload operations we will perform for covers
-        num_extra_cover_ops = 0
-        if item.cover_source_path:
-            paths = [p for p in item.cover_source_path.split(';') if p.strip()]
-            if paths:
-                settings = QSettings("BBDropUploader", "BBDropGUI")
-                cover_host_id = (item.cover_host_id 
-                                 or settings.value('cover/host_id', '', type=str) 
-                                 or item.image_host_id or "imx")
-                
-                if cover_host_id == 'pixhost' and len(paths) >= 2:
-                    num_extra_cover_ops = 1  # Pixhost dual-image cover is 1 upload operation
-                else:
-                    num_extra_cover_ops = len(paths)
-
         def on_progress(completed: int, total: int, percent: int, current_image: str):
-            # Always adjust for extra cover uploads in the total count
-            total += num_extra_cover_ops
-            percent = int((completed / max(total, 1)) * 100)
-            
             self.progress_updated.emit(folder_path, completed, total, percent, current_image)
             try:
                 self._emit_current_bandwidth()

@@ -175,3 +175,105 @@ class TestCoverPipeline:
 
         result = worker._upload_cover(item, gallery_id="gal123")
         assert result is not None
+
+
+class TestCoverProgressDecoupled:
+    """Cover operations must NOT inflate gallery progress or final results."""
+
+    @patch('src.processing.upload_workers.UploadEngine')
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_progress_callback_excludes_cover_ops(self, mock_rw_class, mock_engine_class):
+        """Progress callback should report gallery-only counts, not inflate with cover ops."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.current_item = None
+        worker.global_byte_counter = MagicMock()
+        worker.current_gallery_counter = MagicMock()
+        worker.progress_updated = MagicMock()
+        worker._bw_last_bytes = 0
+        worker._bw_last_time = 0
+
+        # Item has 2 cover source paths, but gallery has 38 images
+        item = GalleryQueueItem(
+            path="/tmp/gallery38",
+            name="gallery38",
+            cover_source_path="/tmp/gallery38/cover1.jpg;/tmp/gallery38/cover2.jpg",
+            cover_host_id="imx",
+            image_host_id="imx",
+        )
+        item.template_name = None
+
+        # When engine.run() is called, invoke on_progress with gallery-only counts
+        def fake_run(**kwargs):
+            on_progress = kwargs['on_progress']
+            on_progress(38, 38, 100, "last.jpg")
+            return {'successful_count': 38, 'total_images': 38, 'gallery_id': 'g1'}
+
+        mock_engine_instance = mock_engine_class.return_value
+        mock_engine_instance.run.side_effect = fake_run
+
+        result = worker._run_upload_engine(
+            item, thumbnail_size=350, thumbnail_format=2,
+            max_retries=3, parallel_batch_size=5,
+        )
+
+        # The progress_updated signal should have received gallery-only total (38),
+        # NOT 40 (which would be 38 gallery + 2 covers)
+        worker.progress_updated.emit.assert_called_once_with(
+            "/tmp/gallery38", 38, 38, 100, "last.jpg"
+        )
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_final_results_exclude_cover_ops_from_total(self, mock_rw_class):
+        """Final total_images should reflect gallery-only count, not inflated with cover ops."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        worker.rename_worker = MagicMock()
+        worker.rename_worker.login_successful = True
+        worker.rename_worker.upload_cover.return_value = {
+            "status": "success",
+            "bbcode": "[url=img][img]thumb[/img][/url]",
+            "image_url": "img",
+            "thumb_url": "thumb",
+        }
+        worker.queue_manager = MagicMock()
+        worker.gallery_completed = MagicMock()
+        worker.gallery_failed = MagicMock()
+        worker._soft_stop_requested_for = None
+        worker._emit_queue_stats = MagicMock()
+
+        # Item has 2 cover paths but gallery has 38 images
+        item = GalleryQueueItem(
+            path="/tmp/gallery38",
+            name="gallery38",
+            cover_source_path="/tmp/gallery38/cover1.jpg;/tmp/gallery38/cover2.jpg",
+            cover_host_id="imx",
+            image_host_id="imx",
+        )
+        item.start_time = 1000.0
+        item.uploaded_bytes = 0
+
+        results = {
+            'successful_count': 38,
+            'total_images': 38,
+            'failed_count': 0,
+            'gallery_id': 'g1',
+            'gallery_url': 'https://imx.to/g/g1',
+        }
+
+        with patch('src.utils.metrics_store.get_metrics_store', return_value=None), \
+             patch.object(worker, '_upload_cover', return_value={
+                 'status': 'success', 'bbcode': 'bb', 'image_url': 'img', 'thumb_url': 'thumb',
+             }), \
+             patch.object(worker, '_save_artifacts_for_result', return_value={}), \
+             patch('src.processing.upload_workers.execute_gallery_hooks', return_value={}):
+            worker._process_upload_results(item, results)
+
+        # total_images should stay 38 (gallery only), NOT 40 (38 + 2 covers)
+        assert results['total_images'] == 38
+        assert results['successful_count'] == 38
+        # Gallery should be marked completed (38/38 success)
+        worker.queue_manager.update_item_status.assert_called_with("/tmp/gallery38", "completed")
