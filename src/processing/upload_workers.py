@@ -648,7 +648,10 @@ class UploadWorker(QThread):
                         bbcode_path=bbcode_path,
                         zip_path='',  # ZIP support not implemented yet
                         cover_path=item.cover_source_path or '',
-                        cover_url=(item.cover_result or {}).get('image_url', ''),
+                        cover_url=next(
+                            (r.get('image_url', '') for r in (item.cover_result or []) if r.get('status') == 'success'),
+                            ''
+                        ),
                     )
                     # Update ext fields if hook returned any
                     if ext_fields:
@@ -690,7 +693,10 @@ class UploadWorker(QThread):
                 results=results,
                 template_name=item.template_name or "default",
                 custom_fields=custom_fields,
-                cover_bbcode=(item.cover_result or {}).get('bbcode', ''),
+                cover_bbcode="\n".join(
+                    r['bbcode'] for r in (item.cover_result or [])
+                    if r.get('status') == 'success' and r.get('bbcode')
+                ),
             )
             # Artifact save successful, no need to log details here
             return written

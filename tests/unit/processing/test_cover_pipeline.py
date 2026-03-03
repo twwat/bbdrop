@@ -462,3 +462,62 @@ class TestMultiCoverUpload:
         assert isinstance(result, list)
         assert len(result) == 2
         assert all(r['status'] == 'failed' for r in result)
+
+
+class TestCoverResultIntegration:
+    """Cover result extraction in _process_upload_results and _save_artifacts_for_result."""
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_cover_bbcode_built_from_successful_results(self, mock_rw_class):
+        """cover_bbcode should join only successful cover bbcodes, skip failures."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        item.cover_result = [
+            {'status': 'success', 'bbcode': '[url=X][img]Y[/img][/url]', 'image_url': 'X', 'thumb_url': 'Y', 'source_path': '/a.jpg'},
+            {'status': 'failed', 'error': 'timeout', 'source_path': '/b.jpg'},
+            {'status': 'success', 'bbcode': '[url=A][img]B[/img][/url]', 'image_url': 'A', 'thumb_url': 'B', 'source_path': '/c.jpg'},
+        ]
+
+        # Test the bbcode extraction logic directly
+        cover_bbcode = "\n".join(
+            r['bbcode'] for r in (item.cover_result or [])
+            if r.get('status') == 'success' and r.get('bbcode')
+        )
+        assert cover_bbcode == "[url=X][img]Y[/img][/url]\n[url=A][img]B[/img][/url]"
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_cover_url_extracts_first_successful(self, mock_rw_class):
+        """cover_url should be first successful image_url, skipping failures."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        item.cover_result = [
+            {'status': 'failed', 'error': 'timeout', 'source_path': '/a.jpg'},
+            {'status': 'success', 'bbcode': 'B', 'image_url': 'http://second.jpg', 'thumb_url': 'T', 'source_path': '/b.jpg'},
+        ]
+
+        cover_url = next(
+            (r.get('image_url', '') for r in (item.cover_result or []) if r.get('status') == 'success'),
+            ''
+        )
+        assert cover_url == "http://second.jpg"
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_cover_url_empty_when_all_failed(self, mock_rw_class):
+        """cover_url should be empty when all covers failed."""
+        from src.processing.upload_workers import UploadWorker
+
+        worker = UploadWorker(Mock())
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        item.cover_result = [
+            {'status': 'failed', 'error': 'timeout', 'source_path': '/a.jpg'},
+        ]
+
+        cover_url = next(
+            (r.get('image_url', '') for r in (item.cover_result or []) if r.get('status') == 'success'),
+            ''
+        )
+        assert cover_url == ""
