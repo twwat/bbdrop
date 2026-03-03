@@ -103,7 +103,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY,
             path TEXT NOT NULL UNIQUE,
             name TEXT,
-            status TEXT NOT NULL CHECK (status IN ('validating','scanning','ready','queued','uploading','paused','incomplete','completed','failed')),
+            status TEXT NOT NULL CHECK (status IN ('validating','scanning','ready','queued','uploading','paused','incomplete','completed','failed','scan_failed','upload_failed')),
             added_ts INTEGER NOT NULL,
             finished_ts INTEGER,
             template TEXT,
