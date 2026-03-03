@@ -1257,28 +1257,28 @@ def apply_template(template_content, data):
         '#cover#': data.get('cover', ''),
     }
     for placeholder, value in composite_replacements.items():
-        result = result.replace(placeholder, value)
+        result = result.replace(placeholder, str(value or ''))
 
     replacements = {
-        '#folderName#': data.get('folder_name', ''),
+        '#folderName#': str(data.get('folder_name') or ''),
         '#width#': str(data.get('width', 0)),
         '#height#': str(data.get('height', 0)),
         '#longest#': str(data.get('longest', 0)),
-        '#extension#': data.get('extension', ''),
+        '#extension#': str(data.get('extension') or ''),
         '#pictureCount#': str(data.get('picture_count', 0)),
-        '#folderSize#': data.get('folder_size', ''),
-        '#galleryLink#': data.get('gallery_link', ''),
-        '#custom1#': data.get('custom1', ''),
-        '#custom2#': data.get('custom2', ''),
-        '#custom3#': data.get('custom3', ''),
-        '#custom4#': data.get('custom4', ''),
-        '#ext1#': data.get('ext1', ''),
-        '#ext2#': data.get('ext2', ''),
-        '#ext3#': data.get('ext3', ''),
-        '#ext4#': data.get('ext4', '')
+        '#folderSize#': str(data.get('folder_size') or ''),
+        '#galleryLink#': str(data.get('gallery_link') or ''),
+        '#custom1#': str(data.get('custom1') or ''),
+        '#custom2#': str(data.get('custom2') or ''),
+        '#custom3#': str(data.get('custom3') or ''),
+        '#custom4#': str(data.get('custom4') or ''),
+        '#ext1#': str(data.get('ext1') or ''),
+        '#ext2#': str(data.get('ext2') or ''),
+        '#ext3#': str(data.get('ext3') or ''),
+        '#ext4#': str(data.get('ext4') or '')
     }
     for placeholder, value in replacements.items():
-        result = result.replace(placeholder, value)
+        result = result.replace(placeholder, str(value or ''))
     
     return result
 
@@ -1388,6 +1388,13 @@ def save_gallery_artifacts(
         host_links = get_file_host_links_for_template(queue_store, folder_path)
     except (sqlite3.Error, OSError) as e:
         log(f"Failed to get file host links: {e}", level="warning", category="template")
+    # Get cover info from results if available
+    cover_info = results.get('cover_result', {})
+    c_url = cover_info.get('image_url', '')
+    c_thumb = cover_info.get('thumb_url', '')
+    if not cover_bbcode and cover_info.get('bbcode'):
+        cover_bbcode = cover_info.get('bbcode')
+
     template_data = {
         'folder_name': gallery_name,
         'width': avg_width,
@@ -1400,6 +1407,8 @@ def save_gallery_artifacts(
         'all_images': all_images_bbcode,
         'host_links': host_links,
         'cover': cover_bbcode,
+        'cover_url': c_url,
+        'cover_thumb_url': c_thumb,
         'custom1': (custom_fields or {}).get('custom1', ''),
         'custom2': (custom_fields or {}).get('custom2', ''),
         'custom3': (custom_fields or {}).get('custom3', ''),
@@ -1444,6 +1453,7 @@ def save_gallery_artifacts(
             'transfer_speed_mb_s': (results.get('transfer_speed', 0) / (1024*1024)) if results.get('transfer_speed', 0) else 0,
         },
         'images': results.get('images', []),
+        'cover_result': cover_info,
         'failures': [
             {
                 'filename': fname,
