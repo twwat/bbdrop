@@ -1343,43 +1343,48 @@ class BBDropGUI(QMainWindow):
         """
         self.table_row_manager._apply_icon_to_cell(row, col, icon, tooltip, status)
 
-    def _show_failed_gallery_details(self, row: int):
-        """Show detailed error information for a failed gallery."""
+    def _show_error_details(self, path: str):
+        """Show detailed error information for a failed/incomplete gallery."""
         try:
-            path = self.gallery_table.item(row, GalleryTableWidget.COL_NAME).data(Qt.ItemDataRole.UserRole)
-            if not path or path not in self.queue_manager.items:
+            if path not in self.queue_manager.items:
                 return
-            
+
             item = self.queue_manager.items[path]
-            if item.status != "failed":
-                return
-            
+
             # Build detailed error message
             error_details = f"Gallery: {item.name or 'Unknown'}\n"
             error_details += f"Path: {item.path}\n"
             error_details += f"Status: {item.status}\n\n"
-            
+
             if item.error_message:
                 error_details += f"Error: {item.error_message}\n\n"
-            
+
             if hasattr(item, 'failed_files') and item.failed_files:
                 error_details += f"Failed Files ({len(item.failed_files)}):\n"
                 for filename, error in item.failed_files:
-                    error_details += f"\n• {filename}\n  {error}\n"
-            else:
-                error_details += "No specific file error details available."
-            
-            # Show in a dialog
+                    error_details += f"\n  {filename}\n    {error}\n"
+
+            # Include cover failure info
+            cover_status = getattr(item, 'cover_status', 'none')
+            if cover_status in ('failed', 'partial'):
+                error_details += f"\nCover Upload: {cover_status}\n"
+                for r in (item.cover_result or []):
+                    if r.get('status') == 'failed':
+                        source = os.path.basename(r.get('source_path', 'unknown'))
+                        error_details += f"  {source}: {r.get('error', 'Unknown error')}\n"
+
+            if not item.error_message and not (hasattr(item, 'failed_files') and item.failed_files) and cover_status not in ('failed', 'partial'):
+                error_details += "No specific error details available."
+
             from PyQt6.QtWidgets import QMessageBox
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Icon.Information)
-            msg_box.setWindowTitle("Failed Gallery Details")
+            msg_box.setWindowTitle("Gallery Error Details")
             msg_box.setText(error_details)
             msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg_box.exec()
-            
+
         except Exception as e:
-            # Fallback to simple error message
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Error", f"Failed to show error details: {str(e)}")
 
