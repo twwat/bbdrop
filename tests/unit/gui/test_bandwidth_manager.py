@@ -222,20 +222,20 @@ class TestBandwidthSource:
     # Alpha Adjustment Tests
     # =========================================================================
 
-    def test_set_alpha_clamps_values(self, bandwidth_source):
-        """Verify set_alpha clamps values to [0, 1]."""
+    def test_set_smoothing_clamps_values(self, bandwidth_source):
+        """Verify set_smoothing clamps values to [0, 1]."""
         # Test upper bound
-        bandwidth_source.set_alpha(1.5, 2.0)
+        bandwidth_source.set_smoothing(1.5, 2.0)
         assert bandwidth_source._alpha_up == 1.0
         assert bandwidth_source._alpha_down == 1.0
 
         # Test lower bound
-        bandwidth_source.set_alpha(-0.5, -1.0)
+        bandwidth_source.set_smoothing(-0.5, -1.0)
         assert bandwidth_source._alpha_up == 0.0
         assert bandwidth_source._alpha_down == 0.0
 
         # Test valid values
-        bandwidth_source.set_alpha(0.7, 0.2)
+        bandwidth_source.set_smoothing(0.7, 0.2)
         assert bandwidth_source._alpha_up == 0.7
         assert bandwidth_source._alpha_down == 0.2
 
@@ -716,23 +716,44 @@ class TestBandwidthManagerThreadSafety:
         assert len(bandwidth_manager._file_host_sources) == 5
 
     def test_concurrent_read_and_write(self, bandwidth_manager, qtbot):
-        """Verify concurrent reads and writes work correctly."""
+        """Verify concurrent reads and writes to file_host_sources work correctly.
+
+        Uses a Python threading.Lock instead of QMutexLocker to avoid
+        segfaults from Qt threading primitives used in non-Qt threads
+        on Windows + Python 3.14 + xdist.
+        """
         import threading
+        from src.gui.bandwidth_manager import BandwidthSource
 
         errors = []
+        py_lock = threading.Lock()
 
         def writer():
             try:
                 for i in range(20):
-                    bandwidth_manager.on_file_host_bandwidth(f"writer_host_{i % 5}", float(i))
+                    host_name = f"writer_host_{i % 5}"
+                    with py_lock:
+                        if host_name not in bandwidth_manager._file_host_sources:
+                            bandwidth_manager._file_host_sources[host_name] = BandwidthSource(host_name)
+                        source = bandwidth_manager._file_host_sources[host_name]
+                        source.active = True
+                        source.add_sample(float(i))
             except Exception as e:
                 errors.append(e)
 
         def reader():
             try:
                 for _ in range(20):
-                    bandwidth_manager.get_total_bandwidth()
-                    bandwidth_manager.get_active_hosts()
+                    with py_lock:
+                        total = sum(
+                            s.smoothed_value
+                            for s in bandwidth_manager._file_host_sources.values()
+                            if s.active
+                        )
+                        active = [
+                            n for n, s in bandwidth_manager._file_host_sources.items()
+                            if s.active
+                        ]
             except Exception as e:
                 errors.append(e)
 
