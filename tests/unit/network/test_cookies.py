@@ -56,31 +56,13 @@ class TestGetFirefoxCookies:
         return profile_dir, db_path
 
     @pytest.fixture(autouse=True)
-    def clear_cache(self, monkeypatch):
-        """Clear cookie cache before each test.
-
-        Due to a Python scoping bug in cookies.py, _firefox_cache_time is treated
-        as a local variable (since it's assigned on lines 137 & 148), causing
-        UnboundLocalError when reading it on line 49 if the cache was previously cleared.
-
-        Workaround: Instead of clearing the cache (which causes the bug), we reset
-        the cache dict to empty but use a different approach for _firefox_cache_time.
-        """
+    def clear_cache(self):
+        """Clear cookie cache before each test."""
         import src.network.cookies as cookies_module
-        # Clear the cache to ensure fresh data for each test
+        from src.utils.logger import _get_app_logger
+        _get_app_logger()
         cookies_module._firefox_cookie_cache.clear()
-        # CRITICAL: We cannot modify _firefox_cache_time due to scoping bug.
-        # Intead, monkey-patch the entire get_firefox_cookies function to use
-        # a wrapper that handles the cache properly.
-        original_get_firefox_cookies = cookies_module.get_firefox_cookies
-
-        def patched_get_firefox_cookies(domain="imx.to", cookie_names=None):
-            # First, make sure _firefox_cache_time is initialized before calling
-            # the original function. This works around the scoping bug.
-            cookies_module._firefox_cache_time  # Just access it to initialize
-            return original_get_firefox_cookies(domain=domain, cookie_names=cookie_names)
-
-        monkeypatch.setattr('src.network.cookies.get_firefox_cookies', patched_get_firefox_cookies)
+        cookies_module._firefox_cache_time = 0.0
         yield
 
     def test_extract_all_cookies_success(self, mock_firefox_db, monkeypatch):
@@ -180,32 +162,49 @@ class TestGetFirefoxCookies:
             # And secure flag should be False (since isSecure=0 in database)
             assert cookies['preferences']['secure'] is False
 
-    @pytest.mark.skip(reason="Python scoping bug in cookies.py prevents testing with cleared cache. "
-                             "The _firefox_cache_time variable is treated as local due to assignments "
-                             "in the function body, causing UnboundLocalError on second call "
-                             "after clear_cache fixture clears the cache dict.")
     def test_cache_mechanism_reduces_database_access(self, mock_firefox_db, monkeypatch):
-        """Test that cookie cache prevents repeated database access.
+        """Test that cookie cache prevents repeated database access."""
+        profile_dir, db_path = mock_firefox_db
+        firefox_dir = profile_dir.parent
 
-        SKIPPED: This test cannot run without fixing the scoping bug in cookies.py.
-        It would verify that when get_firefox_cookies is called twice with
-        the same parameters, the second call uses the cached results instead
-        of querying the database again.
-        """
-        pass
+        monkeypatch.setattr('src.network.cookies.platform.system', lambda: 'Linux')
+        monkeypatch.setattr('src.network.cookies.os.path.expanduser', lambda x: str(firefox_dir) if '~' in x else x)
+        monkeypatch.setattr('src.network.cookies.os.listdir', lambda x: ['test.default-release'] if 'firefox' in str(x) else [])
+        monkeypatch.setattr('src.network.cookies.os.path.exists', lambda x: True)
+        monkeypatch.setattr('src.network.cookies.os.path.isdir', lambda x: 'test.default-release' in str(x))
 
-    @pytest.mark.skip(reason="Python scoping bug in cookies.py prevents testing with cleared cache. "
-                             "The _firefox_cache_time variable is treated as local due to assignments "
-                             "in the function body, causing UnboundLocalError on subsequent cache checks "
-                             "after clear_cache fixture clears the dict.")
+        # First call populates cache
+        cookies1 = get_firefox_cookies(domain="imx.to")
+        assert len(cookies1) == 3
+
+        # Second call should use cache (even if we break the DB path)
+        monkeypatch.setattr('src.network.cookies.os.path.exists', lambda x: False)
+        cookies2 = get_firefox_cookies(domain="imx.to")
+        assert cookies2 == cookies1
+
     def test_cache_expiration_after_ttl(self, mock_firefox_db, monkeypatch):
-        """Test that cache expires after TTL duration.
+        """Test that cache expires after TTL duration."""
+        import src.network.cookies as cookies_module
+        profile_dir, db_path = mock_firefox_db
+        firefox_dir = profile_dir.parent
 
-        SKIPPED: This test cannot run without fixing the scoping bug in cookies.py.
-        The cache TTL is 300 seconds. This test would verify that making requests
-        beyond the TTL triggers a fresh database query instead of using cached data.
-        """
-        pass
+        monkeypatch.setattr('src.network.cookies.platform.system', lambda: 'Linux')
+        monkeypatch.setattr('src.network.cookies.os.path.expanduser', lambda x: str(firefox_dir) if '~' in x else x)
+        monkeypatch.setattr('src.network.cookies.os.listdir', lambda x: ['test.default-release'] if 'firefox' in str(x) else [])
+        monkeypatch.setattr('src.network.cookies.os.path.exists', lambda x: True)
+        monkeypatch.setattr('src.network.cookies.os.path.isdir', lambda x: 'test.default-release' in str(x))
+
+        # First call populates cache
+        cookies1 = get_firefox_cookies(domain="imx.to")
+        assert len(cookies1) == 3
+
+        # Simulate cache expiration by setting cache time far in the past
+        cookies_module._firefox_cache_time = 0.0
+
+        # Now break the DB path so a fresh query returns empty
+        monkeypatch.setattr('src.network.cookies.os.path.exists', lambda x: False)
+        cookies2 = get_firefox_cookies(domain="imx.to")
+        assert cookies2 == {}
 
     def test_firefox_directory_not_found(self, monkeypatch):
         """Test handling when Firefox directory doesn't exist."""
