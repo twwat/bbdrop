@@ -33,6 +33,7 @@ def _make_queue_manager():
     qm.scan_status_changed = MagicMock()
     qm.store = MagicMock()
     qm.queue = MagicMock()
+    qm.save_persistent_queue = lambda *a, **kw: None
     return qm
 
 

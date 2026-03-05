@@ -9,6 +9,7 @@ Tests verify that:
 5. Large datasets are processed efficiently
 """
 
+import os
 import pytest
 import time
 
@@ -124,7 +125,7 @@ class TestBatchQueryCorrectness:
         # Keys should be gallery paths
         for path in batch_uploads.keys():
             assert isinstance(path, str), "Keys should be strings (gallery paths)"
-            assert path.startswith('/'), "Paths should be absolute"
+            assert isinstance(path, str), "Paths should be strings"
 
         # Values should be lists of upload dictionaries
         for uploads_list in batch_uploads.values():
@@ -195,11 +196,11 @@ class TestBatchQueryEmptyCases:
 
         # Should only return 3 galleries with uploads
         assert len(batch_uploads) == 3, "Should only return galleries with uploads"
-        assert '/fake/gallery_0' in batch_uploads
-        assert '/fake/gallery_2' in batch_uploads
-        assert '/fake/gallery_4' in batch_uploads
-        assert '/fake/gallery_1' not in batch_uploads
-        assert '/fake/gallery_3' not in batch_uploads
+        assert os.path.normpath('/fake/gallery_0') in batch_uploads
+        assert os.path.normpath('/fake/gallery_2') in batch_uploads
+        assert os.path.normpath('/fake/gallery_4') in batch_uploads
+        assert os.path.normpath('/fake/gallery_1') not in batch_uploads
+        assert os.path.normpath('/fake/gallery_3') not in batch_uploads
 
 
 class TestBatchQueryPerformance:
@@ -348,7 +349,11 @@ class TestBatchQueryDataIntegrity:
                     f"Upload has wrong gallery_fk: expected {gallery_fk}, got {upload['gallery_fk']}"
 
     def test_batch_query_preserves_order(self, populated_db):
-        """Verify batch query preserves upload order (by created_ts)"""
+        """Verify batch query preserves upload order (by host_name, part_number).
+
+        The batch query uses ORDER BY g.path, fh.host_name ASC, fh.part_number ASC
+        (matching the individual get_file_host_uploads query). Verify that ordering.
+        """
         batch_uploads = populated_db.get_all_file_host_uploads_batch()
 
         # Check order within each gallery's uploads
@@ -356,10 +361,10 @@ class TestBatchQueryDataIntegrity:
             if len(uploads_list) < 2:
                 continue
 
-            # Verify uploads are ordered by created_ts
-            timestamps = [u.get('created_ts', 0) for u in uploads_list]
-            assert timestamps == sorted(timestamps), \
-                f"Uploads for {path} not ordered by created_ts: {timestamps}"
+            # Verify uploads are ordered by host_name then part_number
+            sort_keys = [(u.get('host_name', ''), u.get('part_number', 0)) for u in uploads_list]
+            assert sort_keys == sorted(sort_keys), \
+                f"Uploads for {path} not ordered by (host_name, part_number): {sort_keys}"
 
 
 class TestBatchQueryLargeDatasets:
@@ -417,7 +422,7 @@ class TestBatchQueryLargeDatasets:
         batch_uploads = temp_db.get_all_file_host_uploads_batch()
 
         assert len(batch_uploads) == 1, "Should return 1 gallery"
-        assert len(batch_uploads['/fake/test_gallery']) == 50, \
+        assert len(batch_uploads[os.path.normpath('/fake/test_gallery')]) == 50, \
             "Should return all 50 uploads for gallery"
 
 

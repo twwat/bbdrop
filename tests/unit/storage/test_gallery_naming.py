@@ -113,8 +113,9 @@ class TestGalleryNameGenerator:
 
     def test_from_folder_name_with_special_chars(self, generator, tmp_path):
         """Test folder name with special characters."""
-        folder = tmp_path / "Photos:2024|New"
-        folder.mkdir()
+        # Don't create the folder -- these chars are invalid on Windows paths.
+        # from_folder_name only reads Path.name, no existence check needed.
+        folder = tmp_path / "Photos<2024>New"
         result = generator.from_folder_name(folder)
         assert result == "Photos_2024_New"
 
