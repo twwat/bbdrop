@@ -204,6 +204,8 @@ class TestFileHostClientUploadStandard:
         config.get_server = None
         config.upload_init_url = None
         config.auth_type = None
+        config.upload_timeout = 300
+        config.inactivity_timeout = 60
         return config
 
     @pytest.fixture
@@ -290,7 +292,7 @@ class TestFileHostClientUploadStandard:
         # Track progress calls
         progress_calls = []
 
-        def on_progress(uploaded, total):
+        def on_progress(uploaded, total, speed_bps):
             progress_calls.append((uploaded, total))
 
         client = FileHostClient(
@@ -670,18 +672,6 @@ class TestFileHostClientAuthentication:
         config.login_fields = {"username": "{username}", "password": "{password}"}
         config.captcha_regex = None
 
-        # Mock curl instances for GET and POST
-        curl_instances = []
-
-        curl_instances = []
-        
-        def create_mock_curl():
-            mock_curl = MagicMock()
-            curl_instances.append(mock_curl)
-            return mock_curl
-
-        mock_curl_class.side_effect = create_mock_curl
-
         # GET response (login page with hidden fields)
         get_response = b'<input type="hidden" name="csrf_token" value="abc123" />'
         get_headers = b'HTTP/1.1 200 OK\r\nSet-Cookie: PHPSESSID=session123; path=/\r\n\r\n'
@@ -689,25 +679,41 @@ class TestFileHostClientAuthentication:
         # POST response (login success)
         post_headers = b'HTTP/1.1 302 Found\r\nSet-Cookie: user_token=token456; path=/\r\n\r\n'
 
-        def mock_get_perform():
-            curl = curl_instances[0]
-            for call_item in curl.setopt.call_args_list:
-                if call_item[0][0] == pycurl.WRITEDATA:
-                    call_item[0][1].write(get_response)
-                elif call_item[0][0] == pycurl.HEADERFUNCTION:
-                    call_item[0][1](get_headers)
+        call_count = [0]
 
-        def mock_post_perform():
-            curl = curl_instances[1]
-            curl.getinfo.return_value = 302
-            for call_item in curl.setopt.call_args_list:
-                if call_item[0][0] == pycurl.WRITEDATA:
-                    call_item[0][1].write(b'Redirect')
-                elif call_item[0][0] == pycurl.HEADERFUNCTION:
-                    call_item[0][1](post_headers)
+        def create_mock_curl():
+            mock_curl = MagicMock()
+            idx = call_count[0]
+            call_count[0] += 1
 
-        curl_instances[0].perform.side_effect = mock_get_perform
-        curl_instances[1].perform.side_effect = mock_post_perform
+            if idx == 0:
+                # GET curl -- serves the login page
+                mock_curl.getinfo.return_value = 200
+
+                def mock_get_perform():
+                    for call_item in mock_curl.setopt.call_args_list:
+                        if call_item[0][0] == pycurl.WRITEDATA:
+                            call_item[0][1].write(get_response)
+                        elif call_item[0][0] == pycurl.HEADERFUNCTION:
+                            call_item[0][1](get_headers)
+
+                mock_curl.perform.side_effect = mock_get_perform
+            else:
+                # POST curl -- login submission
+                mock_curl.getinfo.return_value = 302
+
+                def mock_post_perform():
+                    for call_item in mock_curl.setopt.call_args_list:
+                        if call_item[0][0] == pycurl.WRITEDATA:
+                            call_item[0][1].write(b'Redirect')
+                        elif call_item[0][0] == pycurl.HEADERFUNCTION:
+                            call_item[0][1](post_headers)
+
+                mock_curl.perform.side_effect = mock_post_perform
+
+            return mock_curl
+
+        mock_curl_class.side_effect = create_mock_curl
 
         client = FileHostClient(
             host_config=config,
