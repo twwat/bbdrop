@@ -935,9 +935,9 @@ class QueueManager(QObject):
         try:
             yield
         finally:
+            self._batch_mode = old_batch
             if self._batched_changes:
                 self.save_persistent_queue(list(self._batched_changes))
-            self._batch_mode = old_batch
             self._batched_changes.clear()
     
     def _save_single_item(self, item):
