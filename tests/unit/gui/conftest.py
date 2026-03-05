@@ -116,6 +116,12 @@ def mock_bbdrop_functions(monkeypatch, tmp_path):
     # Mock version function
     monkeypatch.setattr('bbdrop.get_version', lambda: '1.0.0-test')
 
+    # Prevent Tor probe background thread from running during tests
+    monkeypatch.setattr(
+        'src.gui.settings.proxy_tab.ProxySettingsWidget._check_tor_status',
+        lambda self: None
+    )
+
 
 @pytest.fixture
 def default_settings():
@@ -204,6 +210,12 @@ def mock_qmessagebox_for_unit_tests(monkeypatch):
     monkeypatch.setattr(QMessageBox, 'question', mock_question)
     monkeypatch.setattr(QMessageBox, 'information', mock_information)
     monkeypatch.setattr(QMessageBox, 'critical', mock_critical)
+
+    # Patch instance methods to prevent blocking modal dialogs during teardown.
+    # ComprehensiveSettingsDialog.closeEvent -> save_current_tab -> general_tab.save_settings()
+    # uses QMessageBox().exec() which blocks indefinitely in offscreen/headless mode.
+    monkeypatch.setattr(QMessageBox, 'exec', lambda self: 0)
+    monkeypatch.setattr(QMessageBox, 'open', lambda self: None)
 
     yield
 
