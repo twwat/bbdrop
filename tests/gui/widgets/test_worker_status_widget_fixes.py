@@ -265,8 +265,28 @@ class TestSelectionAccuracy:
         emitted_signals = []
         widget.worker_selected.connect(lambda wid, wtype: emitted_signals.append((wid, wtype)))
 
-        # Select first row
-        widget.status_table.selectRow(0)
+        # Find a row that corresponds to a real worker (not a placeholder)
+        # The default filter (All Hosts) may add placeholder rows for configured
+        # hosts that don't have active workers.
+        icon_col = widget._get_column_index('icon')
+        target_row = None
+        for row in range(widget.status_table.rowCount()):
+            worker_id = None
+            cell_widget = widget.status_table.cellWidget(row, icon_col)
+            if cell_widget:
+                worker_id = cell_widget.property("worker_id")
+            else:
+                item = widget.status_table.item(row, icon_col)
+                if item:
+                    worker_id = item.data(Qt.ItemDataRole.UserRole)
+            if worker_id and worker_id in sample_workers:
+                target_row = row
+                break
+
+        assert target_row is not None, "No real worker row found in table"
+
+        # Select the row with a real worker
+        widget.status_table.selectRow(target_row)
 
         # Verify signal was emitted
         assert len(emitted_signals) == 1, "worker_selected signal not emitted"
