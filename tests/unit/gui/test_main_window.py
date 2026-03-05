@@ -374,6 +374,45 @@ def mock_dependencies(monkeypatch, tmp_path):
     mock_artifact_handler.stop = Mock()
     monkeypatch.setattr('src.gui.main_window.ArtifactHandler', lambda x: mock_artifact_handler)
 
+    # Mock WorkerStatusWidget to prevent real Qt widget creation
+    mock_worker_status_widget = Mock()
+    mock_worker_status_widget.update_worker_storage = Mock()
+    monkeypatch.setattr('src.gui.main_window.WorkerStatusWidget', lambda: mock_worker_status_widget)
+
+    # Mock WorkerSignalHandler to prevent real bandwidth timers that cause
+    # "wrapped C/C++ object has been deleted" errors in parallel test runs
+    mock_worker_signal_handler = Mock()
+    mock_worker_signal_handler.register_image_host_workers = Mock()
+    mock_worker_signal_handler.on_queue_item_status_changed = Mock()
+    mock_worker_signal_handler._on_filehost_worker_started = Mock()
+    mock_worker_signal_handler._on_filehost_worker_progress = Mock()
+    mock_worker_signal_handler._on_filehost_worker_completed = Mock()
+    mock_worker_signal_handler._on_filehost_worker_failed = Mock()
+    mock_worker_signal_handler.on_file_host_test_completed = Mock()
+    mock_worker_signal_handler.on_file_host_upload_started = Mock()
+    mock_worker_signal_handler.on_file_host_upload_progress = Mock()
+    mock_worker_signal_handler.on_file_host_upload_completed = Mock()
+    mock_worker_signal_handler.on_file_host_upload_failed = Mock()
+    mock_worker_signal_handler.on_file_host_bandwidth_updated = Mock()
+    monkeypatch.setattr('src.gui.main_window.WorkerSignalHandler', lambda x: mock_worker_signal_handler)
+
+    # Mock ProgressTracker, TableRowManager, SettingsManager, ThemeManager
+    # to prevent real objects with Qt parents that outlive the test window
+    mock_progress_tracker = Mock()
+    monkeypatch.setattr('src.gui.main_window.ProgressTracker', lambda x: mock_progress_tracker)
+
+    mock_table_row_manager = Mock()
+    monkeypatch.setattr('src.gui.main_window.TableRowManager', lambda x: mock_table_row_manager)
+
+    mock_settings_manager = Mock()
+    monkeypatch.setattr('src.gui.main_window.SettingsManager', lambda x: mock_settings_manager)
+
+    mock_theme_manager = Mock()
+    monkeypatch.setattr('src.gui.main_window.ThemeManager', lambda x: mock_theme_manager)
+
+    mock_gallery_queue_controller = Mock()
+    monkeypatch.setattr('src.gui.main_window.GalleryQueueController', lambda x: mock_gallery_queue_controller)
+
     return {
         'icon_mgr': mock_icon_mgr,
         'queue_mgr': mock_queue_mgr,
@@ -383,6 +422,7 @@ def mock_dependencies(monkeypatch, tmp_path):
         'completion_worker': mock_completion_worker,
         'server': mock_server,
         'artifact_handler': mock_artifact_handler,
+        'worker_signal_handler': mock_worker_signal_handler,
     }
 
 
