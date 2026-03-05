@@ -1350,21 +1350,31 @@ class BBDropGUI(QMainWindow):
                 return
 
             item = self.queue_manager.items[path]
+            uploaded = getattr(item, 'uploaded_images', 0) or 0
+            total = getattr(item, 'total_images', 0) or 0
 
             # Build detailed error message
             error_details = f"Gallery: {item.name or 'Unknown'}\n"
             error_details += f"Path: {item.path}\n"
-            error_details += f"Status: {item.status}\n\n"
+            error_details += f"Status: {item.status}\n"
+
+            # Always show upload progress summary
+            if total > 0:
+                if uploaded < total:
+                    error_details += f"Images: {uploaded}/{total} uploaded ({total - uploaded} failed)\n"
+                else:
+                    error_details += f"Images: {uploaded}/{total} uploaded\n"
 
             if item.error_message:
-                error_details += f"Error: {item.error_message}\n\n"
+                error_details += f"\nError: {item.error_message}\n"
 
+            # Per-file failure details
             if hasattr(item, 'failed_files') and item.failed_files:
-                error_details += f"Failed Files ({len(item.failed_files)}):\n"
+                error_details += f"\nFailed Files ({len(item.failed_files)}):\n"
                 for filename, error in item.failed_files:
-                    error_details += f"\n  {filename}\n    {error}\n"
+                    error_details += f"  {filename}: {error}\n"
 
-            # Include cover failure info
+            # Cover failure info
             cover_status = getattr(item, 'cover_status', 'none')
             if cover_status in ('failed', 'partial'):
                 error_details += f"\nCover Upload: {cover_status}\n"
@@ -1373,8 +1383,13 @@ class BBDropGUI(QMainWindow):
                         source = os.path.basename(r.get('source_path', 'unknown'))
                         error_details += f"  {source}: {r.get('error', 'Unknown error')}\n"
 
-            if not item.error_message and not (hasattr(item, 'failed_files') and item.failed_files) and cover_status not in ('failed', 'partial'):
-                error_details += "No specific error details available."
+            # If we have absolutely nothing useful, say so
+            has_any_detail = (item.error_message or
+                              (hasattr(item, 'failed_files') and item.failed_files) or
+                              cover_status in ('failed', 'partial') or
+                              (total > 0 and uploaded < total))
+            if not has_any_detail:
+                error_details += "\nNo specific error details recorded for this failure.\n"
 
             from PyQt6.QtWidgets import QMessageBox
             msg_box = QMessageBox(self)
@@ -3569,10 +3584,19 @@ class BBDropGUI(QMainWindow):
                 success = int(results.get('successful_count') or len(results.get('images', [])))
                 item.total_images = total or item.total_images
                 item.uploaded_images = success
-                item.status = "completed" if success >= (total or success) else "failed"
-                item.progress = 100 if success >= (total or success) else int((success / max(total, 1)) * 100)
+                is_success = success >= (total or success)
+                item.status = "completed" if is_success else "failed"
+                item.progress = 100 if is_success else int((success / max(total, 1)) * 100)
                 item.gallery_url = results.get('gallery_url', '')
                 item.gallery_id = results.get('gallery_id', '')
+                # Ensure failed galleries have error details from engine results
+                if not is_success:
+                    failed_details = results.get('failed_details', [])
+                    failed_count = int(results.get('failed_count') or 0)
+                    if failed_details and not item.failed_files:
+                        item.failed_files = failed_details
+                    if not item.error_message and failed_count:
+                        item.error_message = f"{failed_count} of {total} images failed to upload"
                 item.finished_time = time.time()
                 # Quick transfer rate calculation
                 try:
