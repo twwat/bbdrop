@@ -1024,32 +1024,38 @@ class TestCoverIndicatorDelegatePaint:
             mock_icon_manager = Mock()
             mock_icon = Mock(spec=QIcon)
             mock_icon.isNull.return_value = False
-            mock_pixmap = Mock(spec=QPixmap)
-            mock_icon.pixmap.return_value = mock_pixmap
+            # Use a real QPixmap so _ensure_pixmaps can create QPainter on it
+            real_pixmap = QPixmap(18, 18)
+            real_pixmap.fill(Qt.GlobalColor.transparent)
+            mock_icon.pixmap.return_value = real_pixmap
             mock_icon_manager.get_icon.return_value = mock_icon
             mock_get_icon.return_value = mock_icon_manager
 
             from src.gui.delegates.cover_indicator_delegate import CoverIndicatorDelegate
             delegate = CoverIndicatorDelegate()
-            yield delegate, mock_icon_manager, mock_pixmap
+            yield delegate, mock_icon_manager, real_pixmap
 
     def test_paint_draws_icon_when_cover_present(self, delegate_with_mocks):
-        delegate, _, mock_pixmap = delegate_with_mocks
-        mock_painter = Mock(spec=QPainter)
+        delegate, _, real_pixmap = delegate_with_mocks
+        # Use mock without spec=QPainter so drawPixmap accepts real QPixmap args
+        mock_painter = Mock()
         mock_option = Mock(spec=QStyleOptionViewItem)
         mock_option.rect = QRect(0, 0, 28, 22)
         mock_style = Mock()
         mock_option.widget = Mock()
         mock_option.widget.style.return_value = mock_style
         mock_index = Mock(spec=QModelIndex)
-        mock_index.data.return_value = "/gallery/cover.jpg"
+        # paint() calls index.data(UserRole) then index.data(UserRole+1)
+        mock_index.data.side_effect = lambda role: (
+            "/gallery/cover.jpg" if role == Qt.ItemDataRole.UserRole else "pending"
+        )
 
         delegate.paint(mock_painter, mock_option, mock_index)
         mock_painter.drawPixmap.assert_called_once()
 
     def test_paint_skips_when_no_cover(self, delegate_with_mocks):
         delegate, mock_icon_manager, _ = delegate_with_mocks
-        mock_painter = Mock(spec=QPainter)
+        mock_painter = Mock()
         mock_option = Mock(spec=QStyleOptionViewItem)
         mock_option.rect = QRect(0, 0, 28, 22)
         mock_style = Mock()
@@ -1063,14 +1069,16 @@ class TestCoverIndicatorDelegatePaint:
 
     def test_pixmap_cached_across_calls(self, delegate_with_mocks):
         delegate, mock_icon_manager, _ = delegate_with_mocks
-        mock_painter = Mock(spec=QPainter)
+        mock_painter = Mock()
         mock_option = Mock(spec=QStyleOptionViewItem)
         mock_option.rect = QRect(0, 0, 28, 22)
         mock_style = Mock()
         mock_option.widget = Mock()
         mock_option.widget.style.return_value = mock_style
         mock_index = Mock(spec=QModelIndex)
-        mock_index.data.return_value = "/gallery/cover.jpg"
+        mock_index.data.side_effect = lambda role: (
+            "/gallery/cover.jpg" if role == Qt.ItemDataRole.UserRole else "pending"
+        )
 
         delegate.paint(mock_painter, mock_option, mock_index)
         delegate.paint(mock_painter, mock_option, mock_index)
