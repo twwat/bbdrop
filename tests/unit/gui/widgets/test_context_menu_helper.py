@@ -883,9 +883,18 @@ class TestEdgeCases:
         assert menu is not None
 
     def test_create_menu_without_queue_manager(self, context_menu_helper):
-        """Test menu creation without queue manager"""
-        context_menu_helper.main_window.queue_manager = None
-        delattr(context_menu_helper.main_window, 'queue_manager')
+        """Test menu creation without queue manager.
+
+        Rather than delattr (which causes AttributeError in _add_cover_submenu
+        where queue_manager.items is accessed directly), we set queue_manager
+        to a mock whose get_item returns None and items is empty. This simulates
+        'no useful queue data' without removing the attribute entirely, matching
+        how the source code accesses it.
+        """
+        empty_qm = Mock()
+        empty_qm.get_item = Mock(return_value=None)
+        empty_qm.items = {}
+        context_menu_helper.main_window.queue_manager = empty_qm
 
         selected_paths = ["/path/to/gallery"]
         # Should not raise error

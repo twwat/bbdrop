@@ -312,9 +312,14 @@ class TestThemeSwitching:
         assert 'light' in light_file
         assert 'dark' in dark_file
 
-    def test_auto_detect_theme_without_app(self, icon_manager):
+    def test_auto_detect_theme_without_app(self, qtbot, icon_manager):
         """Test theme detection falls back to dark when no QApplication."""
-        pytest.skip("Mocking QApplication can cause worker crash")
+        with patch('PyQt6.QtWidgets.QApplication.instance', return_value=None):
+            icon = icon_manager.get_icon('status_uploading', theme_mode=None)
+            assert isinstance(icon, QIcon)
+            # Verify it used 'dark' fallback by checking cache key
+            dark_key = 'status_uploading_dark_False_32'
+            assert dark_key in icon_manager._icon_cache
 
     def test_selection_state_creates_separate_cache_entry(self, qtbot, icon_manager):
         """Verify selection state creates separate cache entries."""
@@ -806,9 +811,11 @@ class TestCacheStatistics:
 
         captured = capsys.readouterr()
 
-        assert 'ICON CACHE STATISTICS' in captured.out
-        assert 'Cache hits' in captured.out
-        assert 'Cache misses' in captured.out
+        # print_cache_stats uses log() which outputs a single-line format:
+        # "Icon cache stats: hits=N, misses=N, disk_loads=N, cached=N, hit_rate=N%"
+        assert 'Icon cache stats' in captured.out
+        assert 'hits=' in captured.out
+        assert 'misses=' in captured.out
 
     def test_cache_stats_values_are_correct_types(self, qtbot, icon_manager):
         """Test cache stats have correct value types."""
