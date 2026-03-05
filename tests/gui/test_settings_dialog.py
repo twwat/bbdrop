@@ -14,12 +14,15 @@ from src.gui.settings import ComprehensiveSettingsDialog
 class TestSettingsDialogInit:
     """Test ComprehensiveSettingsDialog initialization"""
 
-    @patch('src.gui.settings.settings_dialog.load_user_defaults')
-    def test_settings_dialog_creates(self, mock_load, qtbot, mock_config_file, mock_bbdrop_functions):
+    def test_settings_dialog_creates(self, qtbot, mock_config_file, mock_bbdrop_functions):
         """Test ComprehensiveSettingsDialog instantiation"""
-        mock_load.return_value = {}
+        config_path = str(mock_config_file)
 
-        with patch('src.gui.settings.settings_dialog.get_config_path', return_value=str(mock_config_file.parent)):
+        with patch('src.gui.settings.general_tab.load_user_defaults', return_value={}), \
+             patch('src.gui.settings.general_tab.get_config_path', return_value=config_path), \
+             patch('src.gui.settings.scanning_tab.get_config_path', return_value=config_path), \
+             patch('src.gui.settings.hooks_tab.get_config_path', return_value=config_path), \
+             patch.object(ComprehensiveSettingsDialog, 'load_settings'):
             dialog = ComprehensiveSettingsDialog()
             qtbot.addWidget(dialog)
 
