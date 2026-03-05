@@ -9,9 +9,18 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-from PyQt6.QtWidgets import QDialog, QListWidgetItem, QMessageBox, QFileDialog
+from PyQt6.QtWidgets import QDialog, QListWidgetItem, QTreeWidgetItem, QMessageBox, QFileDialog
 from PyQt6.QtCore import Qt, QMimeData, QUrl
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+
+
+def _make_tree_item(name: str) -> QTreeWidgetItem:
+    """Create a QTreeWidgetItem with UserRole data set, matching dialog conventions."""
+    # Strip ' (new)' suffix to get the real filename for UserRole
+    real_name = name.replace(" (new)", "")
+    item = QTreeWidgetItem([name, "", "", ""])
+    item.setData(0, Qt.ItemDataRole.UserRole, real_name)
+    return item
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
@@ -30,19 +39,14 @@ def temp_gallery_dir(tmp_path):
     gallery_dir = tmp_path / "test_gallery"
     gallery_dir.mkdir()
 
-    # Create valid test images
+    # Create valid test images using PIL
+    from PIL import Image
+    import io
     for i in range(5):
         img_path = gallery_dir / f"image_{i}.jpg"
-        # Create minimal valid JPEG (1x1 pixel)
-        img_path.write_bytes(
-            b'\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00'
-            b'\xFF\xDB\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14'
-            b'\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $'
-            b'\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\xFF\xC0\x00\x0b\x08\x00\x01\x00\x01'
-            b'\x01\x01\x11\x00\xFF\xC4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00'
-            b'\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xFF\xDA'
-            b'\x00\x08\x01\x01\x00\x00?\x00\xFF\xD9'
-        )
+        buf = io.BytesIO()
+        Image.new('RGB', (1, 1), color='red').save(buf, format='JPEG')
+        img_path.write_bytes(buf.getvalue())
 
     yield gallery_dir
     # Cleanup handled by tmp_path
@@ -295,10 +299,10 @@ class TestFileOperations:
         qtbot.addWidget(dialog)
 
         with patch.object(QFileDialog, 'getOpenFileNames', return_value=([], "")):
-            initial_count = dialog.file_list.count()
+            initial_count = dialog.file_list.topLevelItemCount()
             dialog.add_files()
 
-            assert dialog.file_list.count() == initial_count
+            assert dialog.file_list.topLevelItemCount() == initial_count
             assert dialog.modified is False
 
     def test_add_files_single_file(self, qtbot, temp_gallery_dir, mock_queue_manager, tmp_path):
@@ -367,8 +371,8 @@ class TestFileOperations:
         qtbot.addWidget(dialog)
 
         # Add item to list
-        item = QListWidgetItem("image_0.jpg")
-        dialog.file_list.addItem(item)
+        item = _make_tree_item("image_0.jpg")
+        dialog.file_list.addTopLevelItem(item)
         dialog.file_status["image_0.jpg"] = (True, "")
         item.setSelected(True)
 
@@ -384,8 +388,8 @@ class TestFileOperations:
         dialog = GalleryFileManagerDialog(str(temp_gallery_dir), mock_queue_manager)
         qtbot.addWidget(dialog)
 
-        item = QListWidgetItem("image_0.jpg")
-        dialog.file_list.addItem(item)
+        item = _make_tree_item("image_0.jpg")
+        dialog.file_list.addTopLevelItem(item)
         item.setSelected(True)
 
         with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.No):
@@ -400,8 +404,8 @@ class TestFileOperations:
         qtbot.addWidget(dialog)
 
         dialog.added_files.add("new_file.jpg")
-        item = QListWidgetItem("new_file.jpg (new)")
-        dialog.file_list.addItem(item)
+        item = _make_tree_item("new_file.jpg (new)")
+        dialog.file_list.addTopLevelItem(item)
         item.setSelected(True)
 
         # Create the file
@@ -424,8 +428,8 @@ class TestFileSelection:
 
         # Add items
         for i in range(3):
-            item = QListWidgetItem(f"image_{i}.jpg")
-            dialog.file_list.addItem(item)
+            item = _make_tree_item(f"image_{i}.jpg")
+            dialog.file_list.addTopLevelItem(item)
 
         dialog.select_all()
 
@@ -438,8 +442,8 @@ class TestFileSelection:
 
         # Add valid files
         for i in range(3):
-            item = QListWidgetItem(f"image_{i}.jpg")
-            dialog.file_list.addItem(item)
+            item = _make_tree_item(f"image_{i}.jpg")
+            dialog.file_list.addTopLevelItem(item)
             dialog.file_status[f"image_{i}.jpg"] = (True, "")
 
         dialog.select_invalid()
@@ -453,8 +457,8 @@ class TestFileSelection:
 
         # Add files with mixed validity
         for i in range(3):
-            item = QListWidgetItem(f"image_{i}.jpg")
-            dialog.file_list.addItem(item)
+            item = _make_tree_item(f"image_{i}.jpg")
+            dialog.file_list.addTopLevelItem(item)
             is_valid = i != 1  # Make second file invalid
             dialog.file_status[f"image_{i}.jpg"] = (is_valid, "" if is_valid else "Invalid")
 
@@ -462,15 +466,15 @@ class TestFileSelection:
 
         selected = dialog.file_list.selectedItems()
         assert len(selected) == 1
-        assert selected[0].text() == "image_1.jpg"
+        assert selected[0].text(0) == "image_1.jpg"
 
     def test_on_selection_changed_single_file(self, qtbot, temp_gallery_dir, mock_queue_manager):
         """Test selection change with single file"""
         dialog = GalleryFileManagerDialog(str(temp_gallery_dir), mock_queue_manager)
         qtbot.addWidget(dialog)
 
-        item = QListWidgetItem("image_0.jpg")
-        dialog.file_list.addItem(item)
+        item = _make_tree_item("image_0.jpg")
+        dialog.file_list.addTopLevelItem(item)
         dialog.file_status["image_0.jpg"] = (True, "")
         item.setSelected(True)
 
@@ -484,8 +488,8 @@ class TestFileSelection:
         qtbot.addWidget(dialog)
 
         for i in range(3):
-            item = QListWidgetItem(f"image_{i}.jpg")
-            dialog.file_list.addItem(item)
+            item = _make_tree_item(f"image_{i}.jpg")
+            dialog.file_list.addTopLevelItem(item)
             item.setSelected(True)
 
         dialog.on_selection_changed()
@@ -738,7 +742,7 @@ class TestCompletedGallery:
         dialog.is_completed = True
         dialog.load_from_artifact()
 
-        assert dialog.file_list.count() == 2
+        assert dialog.file_list.topLevelItemCount() == 2
         assert "image_0.jpg" in dialog.original_files
         assert "image_1.jpg" in dialog.original_files
         assert not dialog.add_btn.isEnabled()
@@ -841,8 +845,8 @@ class TestErrorHandling:
         dialog = GalleryFileManagerDialog(str(temp_gallery_dir), mock_queue_manager)
         qtbot.addWidget(dialog)
 
-        item = QListWidgetItem("image_0.jpg")
-        dialog.file_list.addItem(item)
+        item = _make_tree_item("image_0.jpg")
+        dialog.file_list.addTopLevelItem(item)
         item.setSelected(True)
 
         with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes):
@@ -875,7 +879,7 @@ class TestFileStatusTracking:
 
         assert "image_0.jpg" in dialog.file_status
         assert dialog.file_status["image_0.jpg"] == (True, "")
-        assert dialog.file_list.count() == 1
+        assert dialog.file_list.topLevelItemCount() == 1
 
     def test_on_file_scanned_invalid(self, qtbot, temp_gallery_dir, mock_queue_manager):
         """Test handling invalid file scan result"""
@@ -886,8 +890,8 @@ class TestFileStatusTracking:
 
         assert "bad_file.jpg" in dialog.file_status
         assert dialog.file_status["bad_file.jpg"] == (False, "Corrupted")
-        item = dialog.file_list.item(0)
-        assert "Corrupted" in item.toolTip()
+        item = dialog.file_list.topLevelItem(0)
+        assert "Corrupted" in item.toolTip(0)
 
     def test_on_file_scanned_marks_new_files(self, qtbot, temp_gallery_dir, mock_queue_manager):
         """Test that new files are marked as (new)"""
@@ -897,8 +901,8 @@ class TestFileStatusTracking:
         dialog.added_files.add("new_file.jpg")
         dialog.on_file_scanned("new_file.jpg", True, "")
 
-        item = dialog.file_list.item(0)
-        assert "(new)" in item.text()
+        item = dialog.file_list.topLevelItem(0)
+        assert "(new)" in item.text(0)
 
 
 if __name__ == '__main__':
