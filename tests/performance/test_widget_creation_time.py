@@ -9,14 +9,7 @@ Run with: python -m tests.performance.test_widget_creation_time
 import pytest
 import sys
 import time
-import os
 from pathlib import Path
-
-# Skip under xdist - these performance tests create too many widgets
-pytestmark = pytest.mark.skipif(
-    'PYTEST_XDIST_WORKER' in os.environ,
-    reason="Performance tests with 1000+ widgets crash xdist workers"
-)
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -34,23 +27,21 @@ def ensure_qapp():
 
 
 @pytest.fixture(autouse=True)
-def cleanup_widgets():
-    """Cleanup all widgets after each test to prevent segfaults."""
+def cleanup_widgets(qapp):
+    """Ensure QApplication exists and cleanup all widgets after each test."""
     yield
-    app = QApplication.instance()
-    if app:
-        # Close all top-level widgets
-        for widget in app.topLevelWidgets():
-            try:
-                widget.close()
-                widget.deleteLater()
-            except:
-                pass
-        # Process events to ensure cleanup
-        app.processEvents()
+    # Close all top-level widgets
+    for widget in qapp.topLevelWidgets():
+        try:
+            widget.close()
+            widget.deleteLater()
+        except Exception:
+            pass
+    # Process events to ensure cleanup
+    qapp.processEvents()
 
 
-def test_progress_widget_creation(num_rows: int = 1144) -> dict:
+def test_progress_widget_creation(num_rows: int = 100):
     """Measure TableProgressWidget creation time.
 
     Returns:
@@ -74,17 +65,10 @@ def test_progress_widget_creation(num_rows: int = 1144) -> dict:
         table.setCellWidget(row, 3, w)
     set_time = (time.perf_counter() - start_set) * 1000
 
-    return {
-        'widget_type': 'TableProgressWidget',
-        'num_rows': num_rows,
-        'creation_ms': create_time,
-        'setCellWidget_ms': set_time,
-        'total_ms': create_time + set_time,
-        'per_widget_ms': (create_time + set_time) / num_rows
-    }
+    assert create_time + set_time < num_rows * 5, "Widget creation too slow"
 
 
-def test_filehosts_status_widget_creation(num_rows: int = 1144) -> dict:
+def test_filehosts_status_widget_creation(num_rows: int = 100):
     """Measure FileHostsStatusWidget creation time.
 
     Note: This widget is more complex - it loads icon manager, config, etc.
@@ -110,17 +94,10 @@ def test_filehosts_status_widget_creation(num_rows: int = 1144) -> dict:
         table.setCellWidget(row, 11, w)
     set_time = (time.perf_counter() - start_set) * 1000
 
-    return {
-        'widget_type': 'FileHostsStatusWidget (no update_hosts)',
-        'num_rows': num_rows,
-        'creation_ms': create_time,
-        'setCellWidget_ms': set_time,
-        'total_ms': create_time + set_time,
-        'per_widget_ms': (create_time + set_time) / num_rows
-    }
+    assert create_time + set_time < num_rows * 5, "Widget creation too slow"
 
 
-def test_filehosts_with_update(num_rows: int = 1144) -> dict:
+def test_filehosts_with_update(num_rows: int = 100):
     """Measure FileHostsStatusWidget with update_hosts() call.
 
     This is the ACTUAL cost since update_hosts loads icons and config.
@@ -143,15 +120,10 @@ def test_filehosts_with_update(num_rows: int = 1144) -> dict:
         table.setCellWidget(i, 11, w)
     total_time = (time.perf_counter() - start) * 1000
 
-    return {
-        'widget_type': 'FileHostsStatusWidget (with update_hosts)',
-        'num_rows': num_rows,
-        'total_ms': total_time,
-        'per_widget_ms': total_time / num_rows
-    }
+    assert total_time < num_rows * 10, "Widget creation with update too slow"
 
 
-def test_filehosts_action_widget_creation(num_rows: int = 1144) -> dict:
+def test_filehosts_action_widget_creation(num_rows: int = 100):
     """Measure FileHostsActionWidget creation time.
 
     Returns:
@@ -167,15 +139,10 @@ def test_filehosts_action_widget_creation(num_rows: int = 1144) -> dict:
         table.setCellWidget(i, 12, w)
     total_time = (time.perf_counter() - start) * 1000
 
-    return {
-        'widget_type': 'FileHostsActionWidget',
-        'num_rows': num_rows,
-        'total_ms': total_time,
-        'per_widget_ms': total_time / num_rows
-    }
+    assert total_time < num_rows * 5, "Action widget creation too slow"
 
 
-def test_action_button_widget_creation(num_rows: int = 1144) -> dict:
+def test_action_button_widget_creation(num_rows: int = 100):
     """Measure ActionButtonWidget creation time.
 
     Returns:
@@ -191,15 +158,10 @@ def test_action_button_widget_creation(num_rows: int = 1144) -> dict:
         table.setCellWidget(i, 8, w)
     total_time = (time.perf_counter() - start) * 1000
 
-    return {
-        'widget_type': 'ActionButtonWidget',
-        'num_rows': num_rows,
-        'total_ms': total_time,
-        'per_widget_ms': total_time / num_rows
-    }
+    assert total_time < num_rows * 5, "Button widget creation too slow"
 
 
-def test_viewport_first(num_rows: int = 1144, visible_rows: int = 25) -> dict:
+def test_viewport_first(num_rows: int = 100, visible_rows: int = 25):
     """Measure time-to-first-usable with viewport prioritization.
 
     Args:
@@ -227,18 +189,10 @@ def test_viewport_first(num_rows: int = 1144, visible_rows: int = 25) -> dict:
         table.setCellWidget(row, 3, w)
     remaining_time = (time.perf_counter() - start_remaining) * 1000
 
-    return {
-        'scenario': 'Viewport-First (TableProgressWidget)',
-        'num_rows': num_rows,
-        'visible_rows': visible_rows,
-        'visible_rows_ms': visible_time,
-        'remaining_rows_ms': remaining_time,
-        'total_ms': visible_time + remaining_time,
-        'user_perceived_improvement_pct': ((num_rows - visible_rows) / num_rows) * 100
-    }
+    assert visible_time < remaining_time * 2, "Viewport-first should be fast"
 
 
-def test_text_only_row_creation(num_rows: int = 1144) -> dict:
+def test_text_only_row_creation(num_rows: int = 100):
     """Measure time to create text-only rows (no widgets).
 
     This is the baseline for Phase 1 of phased loading.
@@ -256,15 +210,10 @@ def test_text_only_row_creation(num_rows: int = 1144) -> dict:
             table.setItem(row, col, item)
     total_time = (time.perf_counter() - start) * 1000
 
-    return {
-        'scenario': 'Text-only rows (no widgets)',
-        'num_rows': num_rows,
-        'total_ms': total_time,
-        'per_row_ms': total_time / num_rows
-    }
+    assert total_time < num_rows * 5, "Text-only row creation too slow"
 
 
-def test_setUpdatesEnabled_impact(num_rows: int = 1144) -> dict:
+def test_setUpdatesEnabled_impact(num_rows: int = 100):
     """Measure impact of setUpdatesEnabled(False) during bulk insert.
 
     Returns:
@@ -290,16 +239,10 @@ def test_setUpdatesEnabled_impact(num_rows: int = 1144) -> dict:
     table2.setUpdatesEnabled(True)
     disabled_time = (time.perf_counter() - start_disabled) * 1000
 
-    return {
-        'scenario': 'setUpdatesEnabled impact',
-        'num_rows': num_rows,
-        'updates_enabled_ms': enabled_time,
-        'updates_disabled_ms': disabled_time,
-        'speedup_factor': enabled_time / disabled_time if disabled_time > 0 else 0
-    }
+    assert enabled_time > 0 and disabled_time > 0, "Both scenarios should complete"
 
 
-def run_all_tests(num_rows: int = 1144):
+def run_all_tests(num_rows: int = 100):
     """Run all performance tests and print results."""
     print(f"\n{'='*70}")
     print(f"WIDGET CREATION PERFORMANCE TESTS ({num_rows} rows)")
@@ -316,69 +259,19 @@ def run_all_tests(num_rows: int = 1144):
         ("setUpdatesEnabled Impact", test_setUpdatesEnabled_impact),
     ]
 
-    results = []
     for name, test_func in tests:
         print(f"Running: {name}...")
         try:
-            result = test_func(num_rows)
-            results.append((name, result))
+            test_func(num_rows)
             print("  [OK] Complete")
         except Exception as e:
             print(f"  [ERROR] {e}")
-            results.append((name, {'error': str(e)}))
-
-    # Print summary
-    print(f"\n{'='*70}")
-    print("RESULTS SUMMARY")
-    print(f"{'='*70}\n")
-
-    for name, result in results:
-        print(f"\n{name}:")
-        if 'error' in result:
-            print(f"  ERROR: {result['error']}")
-        else:
-            for key, value in result.items():
-                if isinstance(value, float):
-                    print(f"  {key}: {value:.2f}")
-                else:
-                    print(f"  {key}: {value}")
-
-    # Calculate totals
-    print(f"\n{'='*70}")
-    print("KEY INSIGHTS")
-    print(f"{'='*70}\n")
-
-    # Find the most expensive widget
-    widget_times = []
-    for name, result in results:
-        if 'per_widget_ms' in result:
-            widget_times.append((name, result['per_widget_ms']))
-
-    if widget_times:
-        widget_times.sort(key=lambda x: x[1], reverse=True)
-        print("Widget creation cost (per widget):")
-        for name, time_ms in widget_times:
-            print(f"  {name}: {time_ms:.3f} ms/widget")
-
-    # Viewport benefit
-    for name, result in results:
-        if 'user_perceived_improvement_pct' in result:
-            print("\nViewport-first approach:")
-            print(f"  Visible rows ({result['visible_rows']}): {result['visible_rows_ms']:.1f} ms")
-            print(f"  Remaining rows: {result['remaining_rows_ms']:.1f} ms")
-            print(f"  Perceived improvement: {result['user_perceived_improvement_pct']:.1f}%")
-
-    # setUpdatesEnabled benefit
-    for name, result in results:
-        if 'speedup_factor' in result:
-            print("\nsetUpdatesEnabled(False) benefit:")
-            print(f"  Speedup factor: {result['speedup_factor']:.1f}x")
 
 
 if __name__ == '__main__':
     app = ensure_qapp()
 
-    # Use command line arg for row count, default to 1144
-    num_rows = int(sys.argv[1]) if len(sys.argv) > 1 else 1144
+    # Use command line arg for row count, default to 100
+    num_rows = int(sys.argv[1]) if len(sys.argv) > 1 else 100
 
     run_all_tests(num_rows)
