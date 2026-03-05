@@ -451,14 +451,6 @@ class QueueManager(QObject):
         
         # Scan files
         if use_fast:
-            # Try to import imghdr, fall back to PIL-only if unavailable
-            try:
-                import imghdr
-                has_imghdr = True
-            except ImportError:
-                has_imghdr = False
-                log("imghdr not available, using PIL-only validation", level="debug", category="scan")
-
             from PIL import Image
 
             for i, f in enumerate(files):
@@ -468,24 +460,11 @@ class QueueManager(QObject):
                     result['total_size'] += file_size
                     result['file_sizes'][f] = file_size
 
-                    # Validate with imghdr if available, otherwise use PIL directly
-                    if has_imghdr:
-                        with open(fp, 'rb') as img:
-                            if not imghdr.what(img):
-                                # imghdr failed - verify with PIL (more robust for some formats)
-                                try:
-                                    with Image.open(fp) as pil_img:
-                                        pil_img.verify()  # Checks image integrity
-                                except Exception as pil_error:
-                                    # Both imghdr and PIL failed - mark as invalid
-                                    result['failed_files'].append((f, f"Invalid image: {str(pil_error)}"))
-                    else:
-                        # No imghdr - use PIL-only validation
-                        try:
-                            with Image.open(fp) as pil_img:
-                                pil_img.verify()  # Checks image integrity
-                        except Exception as pil_error:
-                            result['failed_files'].append((f, f"Invalid image: {str(pil_error)}"))
+                    try:
+                        with Image.open(fp) as pil_img:
+                            pil_img.verify()
+                    except Exception as pil_error:
+                        result['failed_files'].append((f, f"Invalid image: {str(pil_error)}"))
 
                 except Exception as e:
                     result['failed_files'].append((f, str(e)))
