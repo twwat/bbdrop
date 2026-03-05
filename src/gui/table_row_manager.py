@@ -829,6 +829,16 @@ class TableRowManager(QObject):
                         if existing_item:
                             existing_item.setText(size_text)
 
+                    # Update cover column (delegate reads UserRole data)
+                    cover_item = mw.gallery_table.item(row, _Col.COVER)
+                    if cover_item is None:
+                        cover_item = QTableWidgetItem()
+                        cover_item.setFlags(cover_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        mw.gallery_table.setItem(row, _Col.COVER, cover_item)
+                    if getattr(item, 'cover_source_path', None):
+                        cover_item.setData(Qt.ItemDataRole.UserRole, item.cover_source_path)
+                        cover_item.setData(Qt.ItemDataRole.UserRole + 1, getattr(item, 'cover_status', 'pending'))
+
                     # Update status column
                     self._set_status_cell_icon(row, item.status)
                     self._set_status_text_cell(row, item.status)
