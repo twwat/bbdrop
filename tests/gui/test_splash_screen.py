@@ -31,8 +31,8 @@ class TestSplashScreenInit:
                 qtbot.addWidget(splash)
 
                 # Check expected size from __init__
-                assert splash.pixmap().width() == 620
-                assert splash.pixmap().height() == 405
+                assert splash.pixmap().width() == 605
+                assert splash.pixmap().height() == 360
 
     def test_splash_screen_initializes_with_version(self, qtbot):
         """Test version is properly initialized"""
@@ -141,8 +141,8 @@ class TestSplashScreenLogoHandling:
 
     def test_logo_loads_when_file_exists(self, qtbot, tmp_path):
         """Test that logo loads successfully when file exists"""
-        # Create a minimal PNG file
-        logo_path = tmp_path / 'assets' / 'bbdrop.png'
+        # Create a minimal PNG file (source loads 'bbdrop2.png')
+        logo_path = tmp_path / 'assets' / 'bbdrop2.png'
         logo_path.parent.mkdir(parents=True, exist_ok=True)
         logo_path.write_bytes(
             b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'

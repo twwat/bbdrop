@@ -493,7 +493,11 @@ class TestUploadFolderCallbacks:
     def test_gallery_started_signal(
         self, mock_engine_class, mock_parent_init, temp_folder_with_images, mock_worker_thread
     ):
-        """Test that gallery_started signal is emitted."""
+        """Test that upload_folder delegates to engine without emitting gallery_started directly.
+
+        GUIImxToUploader.upload_folder does not emit gallery_started itself;
+        that signal is managed by the worker/engine layer, not the uploader.
+        """
         mock_engine_instance = Mock()
         mock_engine_instance.run.return_value = {
             'images': [],
@@ -509,7 +513,8 @@ class TestUploadFolderCallbacks:
             gallery_name="test_gallery"
         )
 
-        mock_worker_thread.gallery_started.emit.assert_called()
+        # upload_folder does not emit gallery_started - it delegates to engine.run()
+        mock_worker_thread.gallery_started.emit.assert_not_called()
 
 
 class TestUploadFolderEdgeCases:

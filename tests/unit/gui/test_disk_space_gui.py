@@ -58,4 +58,4 @@ class TestDiskSpaceFormatting:
         BBDropGUI._on_disk_space_updated(mw, 5_368_709_120, 5_368_709_120)  # 5 GB
         label_text = mw.disk_status_label.setText.call_args[0][0]
         assert "5" in label_text
-        assert "GB" in label_text or "gb" in label_text.lower()
+        assert "GiB" in label_text or "gib" in label_text.lower()

@@ -40,6 +40,7 @@ def worker_status_widget(qapp):
     """Create a WorkerStatusWidget instance for testing."""
     with patch('src.gui.widgets.worker_status_widget.get_icon_manager') as mock_mgr_fn, \
          patch('src.gui.widgets.worker_status_widget.get_config_manager') as mock_config_fn, \
+         patch('src.gui.widgets.worker_status_widget.get_image_host_config_manager', return_value=None), \
          patch('src.gui.widgets.worker_status_widget.QSettings') as mock_settings_cls:
         # Mock icon manager
         mock_mgr = MagicMock()

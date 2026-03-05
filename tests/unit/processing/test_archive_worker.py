@@ -3,6 +3,7 @@ Comprehensive test suite for src/processing/archive_worker.py
 Tests archive extraction worker with threading and signal mocking.
 """
 
+import os
 from pathlib import Path
 from unittest.mock import Mock
 from PyQt6.QtCore import QObject
@@ -180,7 +181,7 @@ class TestArchiveExtractionWorkerRunSuccess:
 
         args = finished_spy.call_args[0]
         assert len(args[1]) == 1
-        assert args[1][0] == "/single_folder"
+        assert args[1][0] == str(Path("/single_folder"))
 
     def test_run_with_many_folders(self):
         """Test extraction with many folders"""
@@ -567,8 +568,8 @@ class TestArchiveExtractionWorkerIntegration:
         args = finished_spy.call_args[0]
         assert args[0] == "/large_archive.cbz"
         assert len(args[1]) == 2
-        assert "/extracted/manga" in args[1]
-        assert "/extracted/images" in args[1]
+        assert str(Path("/extracted/manga")) in args[1]
+        assert str(Path("/extracted/images")) in args[1]
 
     def test_worker_resilience_to_partial_failure(self):
         """Test worker handles partial failures gracefully"""

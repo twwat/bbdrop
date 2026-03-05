@@ -172,7 +172,8 @@ class TestDirectoryOperations:
 
         with patch('pathlib.Path.mkdir') as mock_mkdir:
             app_dir = get_app_data_directory('testapp')
-            assert 'Library/Application Support/testapp' in str(app_dir)
+            expected = os.path.join('Library', 'Application Support', 'testapp')
+            assert expected in str(app_dir)
             mock_mkdir.assert_called_once()
 
     @patch('platform.system')
@@ -186,7 +187,8 @@ class TestDirectoryOperations:
 
         with patch('pathlib.Path.mkdir') as mock_mkdir:
             app_dir = get_app_data_directory('testapp')
-            assert '.config/testapp' in str(app_dir)
+            expected = os.path.join('.config', 'testapp')
+            assert expected in str(app_dir)
             mock_mkdir.assert_called_once()
 
     @patch('tempfile.gettempdir')
@@ -242,7 +244,7 @@ class TestExecutablePaths:
         with patch.object(sys, 'frozen', False, create=True):
             path = get_resource_path('resources/config.json')
             assert isinstance(path, Path)
-            assert 'resources/config.json' in str(path)
+            assert str(Path('resources/config.json')) in str(path)
 
     def test_get_resource_path_frozen_mode(self):
         """Test getting resource path in frozen mode."""
@@ -250,7 +252,7 @@ class TestExecutablePaths:
             with patch.object(sys, '_MEIPASS', '/tmp/app_bundle', create=True):
                 path = get_resource_path('resources/data.txt')
                 assert isinstance(path, Path)
-                assert '/tmp/app_bundle' in str(path)
+                assert str(Path('/tmp/app_bundle')) in str(path)
 
 
 class TestDiskSpaceOperations:
@@ -275,33 +277,33 @@ class TestDiskSpaceOperations:
 
     def test_format_bytes_kilobytes(self):
         """Test formatting kilobytes."""
-        assert format_bytes(1024) == "1.00 KB"
-        assert format_bytes(1536) == "1.50 KB"
+        assert format_bytes(1024) == "1.00 KiB"
+        assert format_bytes(1536) == "1.50 KiB"
 
     def test_format_bytes_megabytes(self):
         """Test formatting megabytes."""
-        assert format_bytes(1024 * 1024) == "1.00 MB"
-        assert format_bytes(1024 * 1024 * 2.5) == "2.50 MB"
+        assert format_bytes(1024 * 1024) == "1.00 MiB"
+        assert format_bytes(1024 * 1024 * 2.5) == "2.50 MiB"
 
     def test_format_bytes_gigabytes(self):
         """Test formatting gigabytes."""
-        assert format_bytes(1024 * 1024 * 1024) == "1.00 GB"
-        assert format_bytes(1024 * 1024 * 1024 * 5) == "5.00 GB"
+        assert format_bytes(1024 * 1024 * 1024) == "1.00 GiB"
+        assert format_bytes(1024 * 1024 * 1024 * 5) == "5.00 GiB"
 
     def test_format_bytes_terabytes(self):
         """Test formatting terabytes."""
-        assert format_bytes(1024 * 1024 * 1024 * 1024) == "1.00 TB"
+        assert format_bytes(1024 * 1024 * 1024 * 1024) == "1.00 TiB"
 
     def test_format_bytes_precision(self):
         """Test format_bytes with different precision."""
-        value = 1536  # 1.5 KB
-        assert "KB" in format_bytes(value, precision=0)
-        assert "1.5 KB" == format_bytes(value, precision=1)
-        assert "1.500 KB" == format_bytes(value, precision=3)
+        value = 1536  # 1.5 KiB
+        assert "KiB" in format_bytes(value, precision=0)
+        assert "1.5 KiB" == format_bytes(value, precision=1)
+        assert "1.500 KiB" == format_bytes(value, precision=3)
 
     def test_format_bytes_negative(self):
         """Test formatting negative byte values."""
-        assert format_bytes(-1024) == "-1.00 KB"
+        assert format_bytes(-1024) == "-1.00 KiB"
 
 
 class TestFileOperations:
@@ -539,6 +541,7 @@ class TestPrivilegeChecks:
         mock_import.side_effect = import_side_effect
         assert is_admin() is False
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="os.geteuid not available on Windows")
     @patch('platform.system')
     @patch('os.geteuid')
     def test_is_admin_unix_root(self, mock_geteuid, mock_system):
@@ -548,6 +551,7 @@ class TestPrivilegeChecks:
 
         assert is_admin() is True
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="os.geteuid not available on Windows")
     @patch('platform.system')
     @patch('os.geteuid')
     def test_is_admin_unix_user(self, mock_geteuid, mock_system):
@@ -623,7 +627,7 @@ class TestEdgeCases:
         """Test formatting very large byte values."""
         petabytes = 1024 ** 5
         result = format_bytes(petabytes * 2)
-        assert "PB" in result
+        assert "PiB" in result
 
     def test_ensure_directory_exists_path_string(self, tmp_path):
         """Test ensure_directory_exists with string path."""

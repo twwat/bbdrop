@@ -256,7 +256,7 @@ class TestFileHostStatsLoading:
         with patch('src.utils.metrics_store.get_metrics_store') as mock_get:
             mock_store = MagicMock()
             mock_get.return_value = mock_store
-            mock_store.get_hosts_with_history.return_value = {}
+            mock_store.get_hosts_for_period.return_value = {}
 
             from src.gui.dialogs.statistics_dialog import StatisticsDialog
             dlg = StatisticsDialog()

@@ -42,7 +42,7 @@ class TestHeaderFontSizing:
         for line in header_section:
             if 'QTableWidget QHeaderView::section' in line or 'QHeaderView::section' in line:
                 if 'font-size: 9px' in line:
-                    return True
+                    return
 
         # Alternative check - find the rule block
         in_header_rule = False

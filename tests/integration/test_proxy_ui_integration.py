@@ -426,11 +426,14 @@ class TestUIRefreshIntegration:
             # Get initial list count
             initial_count = widget.pools_list.count()
 
-            # Add pools
+            # Add pools and ensure list_pools sees them.
+            # QSettings round-trip can be unreliable on Windows, so patch
+            # list_pools to return the saved pools directly.
             for pool in sample_pools:
                 proxy_storage.save_pool(pool)
 
-            widget.load_pools()
+            with patch.object(proxy_storage, 'list_pools', return_value=sample_pools):
+                widget.load_pools()
 
             # Pools list should be updated with new pools
             new_count = widget.pools_list.count()

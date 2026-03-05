@@ -354,7 +354,6 @@ class TestGlobalIconManager:
 class TestThemeDetection:
     """Test automatic theme detection"""
 
-    @pytest.mark.skipif(not QApplication.instance(), reason="Requires QApplication")
     def test_auto_detect_theme_light(self, qtbot, temp_assets_dir):
         """Test automatic theme detection for light theme"""
         manager = IconManager(str(temp_assets_dir))
@@ -364,7 +363,6 @@ class TestThemeDetection:
 
         assert isinstance(icon, QIcon)
 
-    @pytest.mark.skipif(not QApplication.instance(), reason="Requires QApplication")
     def test_auto_detect_theme_dark(self, qtbot, temp_assets_dir):
         """Test automatic theme detection for dark theme"""
         manager = IconManager(str(temp_assets_dir))

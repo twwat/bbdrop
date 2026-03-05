@@ -997,14 +997,14 @@ class TestEdgeCases:
         mock_credentials['api_key'] = 'corrupted_data'
 
         def failing_decrypt(encrypted):
-            raise Exception("Decryption failed")
+            raise RuntimeError("Decryption failed")
 
         monkeypatch.setattr('src.gui.dialogs.credential_setup.decrypt_password', failing_decrypt)
 
         dialog = CredentialSetupDialog()
         qtbot.addWidget(dialog)
 
-        # Should show SET even if decryption fails
+        # Should show SET even if decryption fails (caught by AttributeError/RuntimeError handler)
         assert dialog.api_key_status_label.text() == 'SET'
 
 

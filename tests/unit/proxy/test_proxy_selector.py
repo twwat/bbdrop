@@ -108,9 +108,9 @@ class TestProxySelectorArgumentOrder:
 
             selector._on_selection_changed()
 
-            # For direct: set_assignment(__direct__), clear pool
-            mock_storage.set_assignment.assert_called_with("__direct__", "file_hosts", "rapidgator")
-            mock_storage.set_pool_assignment.assert_called_with(None, "file_hosts", "rapidgator")
+            # For direct: set_pool_assignment(__direct__), clear profile assignment
+            mock_storage.set_pool_assignment.assert_called_with("__direct__", "file_hosts", "rapidgator")
+            mock_storage.set_assignment.assert_called_with(None, "file_hosts", "rapidgator")
 
     def test_set_pool_assignment_on_pool_selection(self, mock_storage, mock_qwidget):
         """Test that set_pool_assignment uses (pool_id, category, service_id) order."""

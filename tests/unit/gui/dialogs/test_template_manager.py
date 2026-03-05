@@ -133,7 +133,7 @@ class TestConditionalInsertDialog:
         expected_items = [
             "folderName", "pictureCount", "width", "height", "longest",
             "extension", "folderSize", "galleryLink", "allImages", "hostLinks",
-            "custom1", "custom2", "custom3", "custom4",
+            "cover", "custom1", "custom2", "custom3", "custom4",
             "ext1", "ext2", "ext3", "ext4"
         ]
 
