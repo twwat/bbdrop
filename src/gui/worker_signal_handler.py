@@ -45,11 +45,22 @@ class WorkerSignalHandler(QObject):
         self._filehost_base_files: Dict[str, int] = {}
 
 
+    @property
+    def _mw(self):
+        """Get main window reference, or None if C++ object was deleted."""
+        try:
+            self._main_window.objectName()
+            return self._main_window
+        except (RuntimeError, AttributeError):
+            return None
+
     def start_worker(self):
         """Start the upload worker thread."""
         from src.processing.upload_workers import UploadWorker
 
-        mw = self._main_window
+        mw = self._mw
+        if not mw:
+            return
         if mw.worker is None or not mw.worker.isRunning():
             mw.worker = UploadWorker(mw.queue_manager)
             log(f"UploadWorker created ({id(mw.worker)})", level="debug", category="uploads")
@@ -78,7 +89,7 @@ class WorkerSignalHandler(QObject):
 
     def on_queue_item_status_changed(self, path: str, old_status: str, new_status: str):
         """Handle individual queue item status changes."""
-        mw = self._main_window
+        mw = self._mw
 
         # When an item goes from scanning to ready, just update tab counts
         if old_status == "scanning" and new_status == "ready":
@@ -94,7 +105,7 @@ class WorkerSignalHandler(QObject):
 
         Example: "1 uploading (100 images / 111 MB) - 12 queued (912 images / 1.9 GB) - ..."
         """
-        mw = self._main_window
+        mw = self._mw
         try:
             def fmt_section(label: str, s: dict) -> str:
                 count = int(s.get('count', 0) or 0)
@@ -137,7 +148,7 @@ class WorkerSignalHandler(QObject):
         log(f"File host upload started: {host_name} for gallery {db_id}",
             level="debug", category="file_hosts")
         # Defer UI refresh to avoid blocking signal emission
-        QTimer.singleShot(0, lambda: self._main_window._refresh_file_host_widgets_for_db_id(db_id))
+        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id))
         # Update queue display for this host so bytes column populates immediately
         self._update_filehost_queue_for_host(host_name)
 
@@ -168,7 +179,7 @@ class WorkerSignalHandler(QObject):
         """Handle file host upload completed - ASYNC to prevent blocking main thread."""
         log(f"File host upload completed: {host_name} for gallery {db_id}",
             level="info", category="file_hosts")
-        mw = self._main_window
+        mw = self._mw
         # Defer UI refresh to avoid blocking signal emission
         # Use QTimer.singleShot(0) to schedule on next event loop iteration
         QTimer.singleShot(0, lambda: mw._refresh_file_host_widgets_for_db_id(db_id))
@@ -178,7 +189,7 @@ class WorkerSignalHandler(QObject):
         self._update_filehost_queue_for_host(host_name)
 
         # Fire notification
-        mw = self._main_window
+        mw = self._mw
         if hasattr(mw, 'notification_manager'):
             mw.notification_manager.notify('filehost_upload_completed')
 
@@ -187,12 +198,12 @@ class WorkerSignalHandler(QObject):
         log(f"File host upload failed: {host_name} for gallery {db_id}: {error_message}",
             level="warning", category="file_hosts")
         # Defer UI refresh to avoid blocking signal emission
-        QTimer.singleShot(0, lambda: self._main_window._refresh_file_host_widgets_for_db_id(db_id))
+        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id))
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
         # Fire notification
-        mw = self._main_window
+        mw = self._mw
         if hasattr(mw, 'notification_manager'):
             mw.notification_manager.notify('filehost_upload_failed', detail=error_message[:80])
 
@@ -205,7 +216,7 @@ class WorkerSignalHandler(QObject):
         Args:
             host_name: Name of the file host (e.g., 'rapidgator', 'keep2share')
         """
-        mw = self._main_window
+        mw = self._mw
         try:
             if mw.queue_manager and mw.queue_manager.store:
                 stats = mw.queue_manager.store.get_file_host_pending_stats(host_name)
@@ -271,7 +282,7 @@ class WorkerSignalHandler(QObject):
         weren't stored in _workers, so update_queue_columns() could never
         find them.
         """
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return
         from src.core.image_host_config import get_all_hosts, is_image_host_enabled
@@ -287,7 +298,7 @@ class WorkerSignalHandler(QObject):
 
     def _get_upload_worker_host_info(self):
         """Get host_id and display name from the current upload worker."""
-        mw = self._main_window
+        mw = self._mw
         host_id = getattr(mw.worker, '_current_host_id', 'imx') if mw.worker else 'imx'
         from src.core.image_host_config import get_image_host_config_manager
         cfg = get_image_host_config_manager().get_host(host_id)
@@ -296,7 +307,7 @@ class WorkerSignalHandler(QObject):
 
     def _on_upload_worker_started(self, path: str, total_images: int):
         """Handle upload worker started (any image host)."""
-        mw = self._main_window
+        mw = self._mw
         host_id, host_name = self._get_upload_worker_host_info()
         # Update bandwidth source name to reflect the active host
         self.bandwidth_manager._upload_source.name = host_name
@@ -313,7 +324,7 @@ class WorkerSignalHandler(QObject):
 
     def _on_upload_worker_speed(self, speed_kbps: float):
         """Handle upload worker speed update (any image host)."""
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return
         host_id, host_name = self._get_upload_worker_host_info()
@@ -331,7 +342,7 @@ class WorkerSignalHandler(QObject):
         self.bandwidth_manager._upload_source.active = False
         self.bandwidth_manager._upload_source.reset()
 
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return
         host_id, host_name = self._get_upload_worker_host_info()
@@ -356,7 +367,7 @@ class WorkerSignalHandler(QObject):
 
     def _on_filehost_worker_started(self, db_id: int, host_name: str):
         """Handle file host worker upload started."""
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
 
@@ -373,7 +384,7 @@ class WorkerSignalHandler(QObject):
     def _on_filehost_worker_progress(self, db_id: int, host_name: str,
                                       uploaded: int, total: int, speed_bps: float):
         """Handle file host worker upload progress."""
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
 
@@ -412,7 +423,7 @@ class WorkerSignalHandler(QObject):
         # Deactivate file host bandwidth source so monitor shows 0
         self.bandwidth_manager.on_host_completed(host_name)
 
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
 
@@ -428,7 +439,7 @@ class WorkerSignalHandler(QObject):
 
     def _on_filehost_worker_failed(self, db_id: int, host_name: str, error: str):
         """Handle file host worker upload failure."""
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
 
@@ -437,7 +448,7 @@ class WorkerSignalHandler(QObject):
 
     def _on_file_host_startup_spinup(self, host_id: str, error: str):
         """Track worker spinup during startup to know when all are ready."""
-        mw = self._main_window
+        mw = self._mw
 
         with QMutexLocker(mw._file_host_startup_mutex):
             # Progress tracking is internal - final result logged by manager
@@ -459,13 +470,13 @@ class WorkerSignalHandler(QObject):
 
         # Fire notification on successful spinup (outside mutex)
         if not error:
-            mw = self._main_window
+            mw = self._mw
             if hasattr(mw, 'notification_manager'):
                 mw.notification_manager.notify('filehost_spinup_complete')
 
     def _on_worker_status_updated(self, host_id: str, status_text: str):
         """Handle worker status updates during spinup."""
-        mw = self._main_window
+        mw = self._mw
         # Skip verbose status logging during startup - final result is logged by manager
 
         worker_id = f"filehost_{host_id.lower().replace(' ', '_')}"
@@ -497,7 +508,7 @@ class WorkerSignalHandler(QObject):
         Args:
             enabled_host_ids: List of currently enabled file host IDs
         """
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'worker_status_widget') or not mw.worker_status_widget:
             return
 
@@ -522,7 +533,7 @@ class WorkerSignalHandler(QObject):
 
         Called by QTimer every 2 seconds.
         """
-        mw = self._main_window
+        mw = self._mw
         if not hasattr(mw, 'queue_manager') or not hasattr(mw, 'worker_status_widget'):
             return
 
@@ -569,9 +580,8 @@ class WorkerSignalHandler(QObject):
         Args:
             total_kbps: Total bandwidth in KB/s from all sources
         """
-        mw = self._main_window
-        # Guard against early calls before UI is fully initialized
-        if not hasattr(mw, 'speed_current_value_label'):
+        mw = self._mw
+        if not mw or not hasattr(mw, 'speed_current_value_label'):
             return
         try:
             total_mib = total_kbps / 1024.0
