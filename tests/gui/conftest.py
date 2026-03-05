@@ -395,10 +395,10 @@ def mock_bbdrop_functions(monkeypatch):
     Mock core bbdrop functions to avoid external dependencies.
     Patches common functions from the bbdrop module.
     """
-    # Mock credential functions
-    monkeypatch.setattr('bbdrop.get_credential', lambda x: None)
-    monkeypatch.setattr('bbdrop.set_credential', lambda x, y: True)
-    monkeypatch.setattr('bbdrop.remove_credential', lambda x: True)
+    # Mock credential functions (accept optional host_id parameter)
+    monkeypatch.setattr('bbdrop.get_credential', lambda x, host_id=None: None)
+    monkeypatch.setattr('bbdrop.set_credential', lambda x, y, host_id=None: True)
+    monkeypatch.setattr('bbdrop.remove_credential', lambda x, host_id=None: True)
     monkeypatch.setattr('bbdrop.encrypt_password', lambda x: f"encrypted_{x}")
     monkeypatch.setattr('bbdrop.decrypt_password', lambda x: x.replace("encrypted_", ""))
 
