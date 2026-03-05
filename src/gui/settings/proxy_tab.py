@@ -233,7 +233,10 @@ class ProxySettingsWidget(QWidget):
         def _probe():
             from src.proxy.tor import is_tor_running
             running = is_tor_running(timeout=1.5)
-            self._tor_status_ready.emit(running)
+            try:
+                self._tor_status_ready.emit(running)
+            except RuntimeError:
+                pass  # Widget deleted before probe finished
 
         threading.Thread(target=_probe, daemon=True).start()
 
