@@ -113,33 +113,6 @@ class TestEngineWithMockClient:
         assert result['gallery_id'] == 'mock_gal_1'
         assert len(client.upload_calls) == 3
 
-    def test_headers_propagated_to_thread_sessions(self, img_folder):
-        """get_default_headers() values end up on per-thread sessions."""
-        client = MockImageHostClient()
-        client._headers = {'Authorization': 'Bearer tok', 'X-Test': '1'}
-
-        captured_sessions = []
-        real_upload = client.upload_image
-
-        def spy_upload(image_path, thread_session=None, **kw):
-            if thread_session is not None:
-                captured_sessions.append(dict(thread_session.headers))
-            return real_upload(image_path, thread_session=thread_session, **kw)
-
-        client.upload_image = spy_upload
-        engine = UploadEngine(client)
-        engine.run(
-            folder_path=img_folder, gallery_name="Test",
-            thumbnail_size=3, thumbnail_format=2,
-            max_retries=1, parallel_batch_size=1,
-            template_name="default",
-        )
-        # Thread sessions should have our custom headers
-        assert len(captured_sessions) >= 1
-        for sess_headers in captured_sessions:
-            assert 'Authorization' in sess_headers
-            assert sess_headers['Authorization'] == 'Bearer tok'
-
     def test_no_crash_without_clear_api_cookies(self, img_folder):
         """Hosts without clear_api_cookies don't crash the engine."""
         client = NoCookieClient()

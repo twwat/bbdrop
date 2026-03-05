@@ -355,6 +355,7 @@ class TestGalleryCreation:
     def test_engine_creates_new_gallery_with_first_image(self, temp_image_folder):
         """Test engine creates new gallery by uploading first image."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         # CRITICAL: Mock headers as a real dict, not a Mock property
         # The engine accesses uploader.headers in thread sessions
@@ -362,6 +363,9 @@ class TestGalleryCreation:
 
         # CRITICAL: Mock web_url attribute used for gallery URLs
         mock_uploader.configure_mock(web_url='https://imx.to')
+
+        # CRITICAL: get_gallery_url must return a real string, not a Mock
+        mock_uploader.get_gallery_url.return_value = 'https://imx.to/g/gal123'
 
         # FIXED: Use callable that handles infinite calls (including retries)
         def mock_upload(image_path, gallery_id=None, create_gallery=False, **kwargs):
@@ -396,6 +400,7 @@ class TestGalleryCreation:
     def test_engine_resumes_to_existing_gallery(self, temp_image_folder):
         """Test engine resumes upload to existing gallery."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         # FIXED: Configure mock attributes for threading
         mock_uploader.configure_mock(headers={})
@@ -458,6 +463,7 @@ class TestUploadOperations:
     def test_engine_handles_upload_failures(self, temp_image_folder):
         """Test engine handles individual upload failures gracefully."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         # FIXED: Configure mock attributes for threading
         mock_uploader.configure_mock(headers={})
@@ -498,6 +504,7 @@ class TestUploadOperations:
     def test_engine_retries_failed_uploads(self, temp_image_folder):
         """Test engine retries failed uploads up to max_retries."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         # FIXED: Configure mock attributes for threading
         mock_uploader.configure_mock(headers={})
@@ -565,6 +572,7 @@ class TestCallbacks:
     def test_progress_callback_is_called(self, temp_image_folder):
         """Test on_progress callback is invoked during upload."""
         mock_uploader = Mock()
+        mock_uploader.config = None
         mock_uploader.upload_image.return_value = {
             'status': 'success',
             'data': {'gallery_id': 'gal123', 'image_url': 'http://test.com/img'}
@@ -594,6 +602,7 @@ class TestCallbacks:
     def test_soft_stop_halts_upload(self, temp_image_folder):
         """Test should_soft_stop callback halts upload gracefully."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         upload_count = 0
 
@@ -631,6 +640,7 @@ class TestCallbacks:
     def test_image_uploaded_callback_is_called(self, temp_image_folder):
         """Test on_image_uploaded callback is invoked for each upload."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         # FIXED: Configure mock attributes for threading
         mock_uploader.configure_mock(headers={})
@@ -692,6 +702,7 @@ class TestStatisticsAndResults:
     def test_result_contains_required_fields(self, temp_image_folder):
         """Test result dictionary contains all required fields."""
         mock_uploader = Mock()
+        mock_uploader.config = None
         mock_uploader.upload_image.return_value = {
             'status': 'success',
             'data': {'gallery_id': 'gal123', 'image_url': 'http://test.com/img'}
@@ -723,6 +734,7 @@ class TestStatisticsAndResults:
     def test_result_calculates_upload_statistics(self, temp_image_folder):
         """Test result includes accurate upload statistics."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         # FIXED: Configure mock attributes for threading
         mock_uploader.configure_mock(headers={})
@@ -762,6 +774,7 @@ class TestStatisticsAndResults:
     def test_precalculated_dimensions_are_used(self, temp_image_folder):
         """Test precalculated dimensions are included in results."""
         mock_uploader = Mock()
+        mock_uploader.config = None
         mock_uploader.upload_image.return_value = {
             'status': 'success',
             'data': {'gallery_id': 'gal123', 'image_url': 'http://test.com/img'}
@@ -812,6 +825,7 @@ class TestEdgeCasesAndErrors:
                 f.write(b'x' * 1024)
 
             mock_uploader = Mock()
+            mock_uploader.config = None
             mock_uploader.upload_image.return_value = {
                 'status': 'error',
                 'message': 'Failed to create gallery'
@@ -841,6 +855,7 @@ class TestEdgeCasesAndErrors:
                 f.write(b'x' * 1024)
 
             mock_uploader = Mock()
+            mock_uploader.config = None
             mock_uploader.upload_image.return_value = {
                 'status': 'success',
                 'data': {'gallery_id': 'gal123', 'image_url': 'http://test.com/img'}
@@ -873,6 +888,7 @@ class TestEdgeCasesAndErrors:
                     f.write(b'x' * 1024)
 
             mock_uploader = Mock()
+            mock_uploader.config = None
 
             # First creates gallery, rest fail
             mock_uploader.upload_image.side_effect = [
@@ -927,6 +943,7 @@ class TestIntegration:
     def test_complete_upload_workflow(self, temp_image_folder):
         """Test complete upload workflow from start to finish."""
         mock_uploader = Mock()
+        mock_uploader.config = None
 
         # FIXED: Configure mock attributes for threading
         mock_uploader.configure_mock(headers={})
