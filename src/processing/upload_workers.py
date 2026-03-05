@@ -437,8 +437,13 @@ class UploadWorker(QThread):
                              or settings.value('cover/host_id', '', type=str)
                              or item.image_host_id or "imx")
 
-            from src.core.image_host_config import get_image_host_setting
-            cover_gallery_id = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or gallery_id or ""
+            cover_gallery_setting = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ""
+            if cover_gallery_setting:
+                cover_gallery_id = cover_gallery_setting
+            elif cover_host_id == item.image_host_id:
+                cover_gallery_id = gallery_id
+            else:
+                cover_gallery_id = ""
             cover_thumbnail_format = get_image_host_setting(cover_host_id, 'cover_thumbnail_format', 'int') or 2
             cover_thumbnail_size = get_image_host_setting(cover_host_id, 'cover_thumbnail_size', 'int') or 600
 
@@ -464,7 +469,6 @@ class UploadWorker(QThread):
 
             elif cover_host_id == "pixhost":
                 # Pixhost: dual-image composite for first 2, then individual for extras
-                from src.network.image_host_factory import create_image_host_client
                 cover_client = create_image_host_client(cover_host_id)
                 try:
                     if len(paths) >= 2:
@@ -490,7 +494,6 @@ class UploadWorker(QThread):
 
             else:
                 # Generic host: use upload_cover if available, else upload_image
-                from src.network.image_host_factory import create_image_host_client
                 cover_client = create_image_host_client(cover_host_id)
 
                 for path in paths:
