@@ -146,7 +146,7 @@ class TestUploadWorkerInitialization:
 
         assert worker.uploader == mock_uploader
         assert worker.rename_worker == mock_rename_worker
-        mock_factory.assert_called_once_with("imx")
+        mock_factory.assert_called_once_with("imx", proxy=None)
 
     @patch('src.processing.upload_workers.create_image_host_client')
     @patch('src.processing.upload_workers.RenameWorker')
@@ -651,6 +651,7 @@ class TestUploadWorkerArtifacts:
         mock_item.ext2 = "ext2"
         mock_item.ext3 = "ext3"
         mock_item.ext4 = "ext4"
+        mock_item.cover_result = None
 
         results = {'gallery_id': 'gal123'}
 

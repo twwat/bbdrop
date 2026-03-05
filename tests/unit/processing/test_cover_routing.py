@@ -2,6 +2,7 @@
 """Tests for cover upload routing based on gallery host."""
 from unittest.mock import patch, MagicMock, Mock
 
+from src.network.image_host_client import ImageHostClient
 from src.storage.queue_manager import GalleryQueueItem
 
 
@@ -135,7 +136,7 @@ class TestCoverRouting:
             cover_host_id="turbo",
         )
 
-        mock_client = MagicMock()
+        mock_client = MagicMock(spec=ImageHostClient)
         # upload_image returns a normalized response (status + data dict)
         mock_client.upload_image.return_value = {
             "status": "success",
@@ -157,8 +158,9 @@ class TestCoverRouting:
             thumbnail_size=600,
         )
         assert result is not None
-        assert result["status"] == "success"
-        assert result["bbcode"] == "[img]x[/img]"
+        assert len(result) == 1
+        assert result[0]["status"] == "success"
+        assert result[0]["bbcode"] == "[img]x[/img]"
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_host_id_defaults_to_image_host_id(self, mock_rw_class):
@@ -252,7 +254,7 @@ class TestCoverRouting:
             cover_host_id="turbo",
         )
 
-        mock_client = MagicMock()
+        mock_client = MagicMock(spec=ImageHostClient)
         mock_client.upload_image.return_value = {
             "status": "success",
             "data": {"image_url": "img", "thumb_url": "thumb", "bbcode": "[img]x[/img]"},
@@ -284,7 +286,7 @@ class TestCoverRouting:
             cover_host_id="other_host",
         )
 
-        mock_client = MagicMock()
+        mock_client = MagicMock(spec=ImageHostClient)
         mock_client.upload_image.return_value = {
             "status": "success",
             "data": {"image_url": "img", "thumb_url": "thumb", "bbcode": "bb"},

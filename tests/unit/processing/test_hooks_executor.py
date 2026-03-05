@@ -306,7 +306,7 @@ class TestHooksExecutorTempZip:
     """Test temporary ZIP creation for hooks"""
 
     @patch('src.processing.hooks_executor.subprocess.run')
-    @patch('src.processing.hooks_executor.create_temp_zip')
+    @patch('src.processing.upload_to_filehost.create_temp_zip')
     @patch('src.processing.hooks_executor.os.path.isdir')
     def test_execute_hook_creates_temp_zip(self, mock_isdir, mock_create_zip, mock_run):
         """Test hook creates temporary ZIP when needed"""

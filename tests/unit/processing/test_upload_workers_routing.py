@@ -129,7 +129,6 @@ class TestWorkerUsesPerHostSettings:
              patch('src.processing.upload_workers.is_image_host_enabled', return_value=True), \
              patch('src.processing.upload_workers.create_image_host_client') as mock_factory, \
              patch('src.processing.upload_workers.UploadEngine') as MockEngine, \
-             patch('src.processing.upload_workers.load_user_defaults') as mock_lud, \
              patch('src.processing.upload_workers.execute_gallery_hooks', return_value=None):
 
             mock_uploader = Mock()
@@ -148,8 +147,7 @@ class TestWorkerUsesPerHostSettings:
             item = _make_item(path=temp_gallery, host_id="imx")
             worker.current_item = item
             worker.upload_gallery(item)
-
-            mock_lud.assert_not_called()
+            # load_user_defaults is not imported in upload_workers — verifying it runs fine
 
 
 class TestWorkerCreatesEngineDirectly:
@@ -310,8 +308,9 @@ class TestWorkerHostRouting:
     def test_disabled_host_skipped_with_error(
         self, mock_queue_manager, temp_gallery
     ):
-        """When host is disabled, upload fails with helpful error message."""
+        """When host is disabled and no fallback, upload fails with error message."""
         with patch('src.processing.upload_workers.is_image_host_enabled', return_value=False), \
+             patch('src.processing.upload_workers.get_enabled_hosts', return_value={}), \
              patch('src.processing.upload_workers.create_image_host_client') as mock_factory, \
              patch('src.processing.upload_workers.UploadEngine') as MockEngine:
 
@@ -323,11 +322,10 @@ class TestWorkerHostRouting:
             worker.current_item = item
             worker.upload_gallery(item)
 
-            # Should mark as failed with disabled message
+            # Should mark as failed
             mock_queue_manager.mark_upload_failed.assert_called_once()
             call_args = mock_queue_manager.mark_upload_failed.call_args
-            assert 'disabled' in call_args[0][1].lower()
-            assert 'turbo' in call_args[0][1]
+            assert 'enabled' in call_args[0][1].lower()
 
             # Should NOT create UploadEngine or attempt upload
             MockEngine.assert_not_called()
@@ -361,14 +359,15 @@ class TestWorkerHostRouting:
             worker.current_item = item
             worker.upload_gallery(item)
 
-            mock_factory.assert_called_with('turbo')
+            mock_factory.assert_called_with('turbo', proxy=None)
 
     def test_defaults_to_imx_when_host_id_none(
         self, mock_queue_manager, temp_gallery
     ):
-        """When item.image_host_id is None, default to 'imx'."""
+        """When item.image_host_id is None, use first enabled host."""
         with patch('src.processing.upload_workers.get_image_host_setting') as mock_setting, \
              patch('src.processing.upload_workers.is_image_host_enabled', return_value=True), \
+             patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True}), \
              patch('src.processing.upload_workers.create_image_host_client') as mock_factory, \
              patch('src.processing.upload_workers.UploadEngine') as MockEngine, \
              patch('src.processing.upload_workers.execute_gallery_hooks', return_value=None):

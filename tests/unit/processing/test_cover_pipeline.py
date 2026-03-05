@@ -188,7 +188,11 @@ class TestCoverPipeline:
             image_host_id="imx",
         )
 
-        result = worker._upload_cover(item, gallery_id="gal123")
+        mock_qs = MagicMock()
+        mock_qs.value.return_value = ''
+        with patch('src.processing.upload_workers.QSettings', return_value=mock_qs), \
+             patch('src.processing.upload_workers.get_image_host_setting', return_value=None):
+            result = worker._upload_cover(item, gallery_id="gal123")
         assert result is not None
         assert isinstance(result, list)
         assert len(result) == 1
