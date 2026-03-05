@@ -121,7 +121,7 @@ class CoverIndicatorDelegate(QStyledItemDelegate):
                 paths = [p.strip() for p in cover_path.split(';') if p.strip()]
                 names = [os.path.basename(p) for p in paths]
                 status_labels = {
-                    'none': 'No covers',
+                    'none': 'Detected',
                     'pending': 'Pending upload',
                     'uploading': 'Uploading...',
                     'completed': 'Uploaded',
