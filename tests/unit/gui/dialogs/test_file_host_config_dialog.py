@@ -799,10 +799,10 @@ class TestEnableDisableActions:
 
         assert "Disable" in dialog.enable_button.text()
 
-    def test_test_connection_disabled_when_host_disabled(self, qtbot, mock_host_config,
-                                                         mock_worker_manager, mock_main_widgets,
-                                                         dialog_patches):
-        """Test connection button is disabled when host is not enabled"""
+    def test_test_connection_always_enabled_on_init(self, qtbot, mock_host_config,
+                                                     mock_worker_manager, mock_main_widgets,
+                                                     dialog_patches):
+        """Test connection button is always enabled on init (runs standalone test when host disabled)"""
         mock_worker_manager.is_enabled.return_value = False
 
         dialog = FileHostConfigDialog(
@@ -811,7 +811,7 @@ class TestEnableDisableActions:
         )
         qtbot.addWidget(dialog)
 
-        assert not dialog.test_connection_btn.isEnabled()
+        assert dialog.test_connection_btn.isEnabled()
 
     def test_test_connection_enabled_when_host_enabled(self, qtbot, mock_host_config,
                                                        mock_worker_manager, mock_main_widgets,
@@ -935,10 +935,10 @@ class TestConnectionTesting:
 
         assert "No credentials" in dialog.test_timestamp_label.text()
 
-    def test_test_connection_requires_enabled_worker(self, qtbot, mock_host_config,
-                                                     mock_worker_manager, mock_main_widgets,
-                                                     dialog_patches):
-        """Test connection test requires host to be enabled"""
+    def test_test_connection_runs_standalone_when_no_worker(self, qtbot, mock_host_config,
+                                                           mock_worker_manager, mock_main_widgets,
+                                                           dialog_patches):
+        """Test connection runs standalone test when host is disabled (no worker)"""
         mock_worker_manager.is_enabled.return_value = False
 
         dialog = FileHostConfigDialog(
@@ -952,11 +952,12 @@ class TestConnectionTesting:
         dialog.creds_username_input.setText("user")
         dialog.creds_password_input.setText("pass")
 
-        # Mock the unsaved changes check
-        with patch.object(dialog, '_check_unsaved_changes', return_value=True):
+        # Mock the unsaved changes check and standalone test
+        with patch.object(dialog, '_check_unsaved_changes', return_value=True), \
+             patch.object(dialog, '_run_standalone_test'):
             dialog.run_full_test()
 
-        assert "Host not enabled" in dialog.test_timestamp_label.text()
+        assert "host disabled" in dialog.test_timestamp_label.text()
 
     def test_test_connection_queues_test_request(self, qtbot, mock_host_config,
                                                   mock_worker_manager, mock_main_widgets,
@@ -1096,32 +1097,33 @@ class TestStorageDisplay:
 class TestGetterMethods:
     """Test getter methods for retrieving values"""
 
-    def test_get_credentials_returns_cached_value(self, qtbot, mock_host_config,
-                                                   mock_worker_manager, mock_main_widgets,
-                                                   dialog_patches):
-        """Test get_credentials returns cached value after save"""
+    def test_get_credentials_reads_from_widgets(self, qtbot, mock_host_config,
+                                                 mock_worker_manager, mock_main_widgets,
+                                                 dialog_patches):
+        """Test get_credentials always reads from widget fields, not cached value"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
             mock_main_widgets, mock_worker_manager
         )
         qtbot.addWidget(dialog)
 
+        # Setting saved_credentials has no effect on get_credentials() -
+        # it always reads from the widget fields
         dialog.saved_credentials = "cached:credentials"
-        assert dialog.get_credentials() == "cached:credentials"
+        dialog.creds_username_input.setText("widgetuser")
+        dialog.creds_password_input.setText("widgetpass")
+        assert dialog.get_credentials() == "widgetuser:widgetpass"
 
-    def test_get_credentials_returns_widget_value(self, qtbot, mock_host_config,
-                                                   mock_worker_manager, mock_main_widgets,
-                                                   dialog_patches):
-        """Test get_credentials returns widget value if no cached value"""
+    def test_get_credentials_combines_username_password(self, qtbot, mock_host_config,
+                                                        mock_worker_manager, mock_main_widgets,
+                                                        dialog_patches):
+        """Test get_credentials combines username and password from widgets"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
             mock_main_widgets, mock_worker_manager
         )
         qtbot.addWidget(dialog)
 
-        # Delete saved_credentials attribute to force reading from widgets
-        # Note: Setting to None is not enough because hasattr() still returns True
-        del dialog.saved_credentials
         # For token_login, set username and password separately
         dialog.creds_username_input.setText("widget")
         # For AsteriskPasswordEdit, unmask first to set text properly
@@ -1131,23 +1133,26 @@ class TestGetterMethods:
         # get_credentials() should combine them as "username:password"
         assert dialog.get_credentials() == "widget:credentials"
 
-    def test_get_trigger_settings_returns_cached_value(self, qtbot, mock_host_config,
-                                                        mock_worker_manager, mock_main_widgets,
-                                                        dialog_patches):
-        """Test get_trigger_settings returns cached value after save"""
+    def test_get_trigger_settings_reads_from_combo(self, qtbot, mock_host_config,
+                                                    mock_worker_manager, mock_main_widgets,
+                                                    dialog_patches):
+        """Test get_trigger_settings always reads from combo widget, not cached value"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
             mock_main_widgets, mock_worker_manager
         )
         qtbot.addWidget(dialog)
 
+        # Setting saved_trigger has no effect on get_trigger_settings() -
+        # it always reads from trigger_combo.currentData()
         dialog.saved_trigger = "on_completed"
+        dialog.trigger_combo.setCurrentIndex(3)  # on_completed
         assert dialog.get_trigger_settings() == "on_completed"
 
-    def test_get_trigger_settings_returns_widget_value(self, qtbot, mock_host_config,
-                                                        mock_worker_manager, mock_main_widgets,
-                                                        dialog_patches):
-        """Test get_trigger_settings returns widget value if no cached value"""
+    def test_get_trigger_settings_returns_on_started(self, qtbot, mock_host_config,
+                                                      mock_worker_manager, mock_main_widgets,
+                                                      dialog_patches):
+        """Test get_trigger_settings reads from combo when set to On Started"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
             mock_main_widgets, mock_worker_manager
@@ -1155,28 +1160,30 @@ class TestGetterMethods:
         qtbot.addWidget(dialog)
 
         dialog.trigger_combo.setCurrentIndex(2)  # On Started
-        # Delete cached value to force widget read
-        del dialog.saved_trigger
         assert dialog.get_trigger_settings() == "on_started"
 
-    def test_get_enabled_state_returns_cached_value(self, qtbot, mock_host_config,
-                                                     mock_worker_manager, mock_main_widgets,
-                                                     dialog_patches):
-        """Test get_enabled_state returns cached value"""
+    def test_get_enabled_state_ignores_saved_enabled(self, qtbot, mock_host_config,
+                                                      mock_worker_manager, mock_main_widgets,
+                                                      dialog_patches):
+        """Test get_enabled_state always queries worker_manager, not saved_enabled"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
             mock_main_widgets, mock_worker_manager
         )
         qtbot.addWidget(dialog)
 
+        # Setting saved_enabled has no effect on get_enabled_state() -
+        # it always queries worker_manager.is_enabled()
         dialog.saved_enabled = True
-        assert dialog.get_enabled_state() is True
-
-    def test_get_enabled_state_queries_manager(self, qtbot, mock_host_config,
-                                                mock_worker_manager, mock_main_widgets,
-                                                dialog_patches):
-        """Test get_enabled_state queries manager if no cached value"""
         mock_worker_manager.is_enabled.return_value = True
+        assert dialog.get_enabled_state() is True
+        mock_worker_manager.is_enabled.assert_called_with("testhost")
+
+    def test_get_enabled_state_returns_false_when_disabled(self, qtbot, mock_host_config,
+                                                            mock_worker_manager, mock_main_widgets,
+                                                            dialog_patches):
+        """Test get_enabled_state returns False when manager reports disabled"""
+        mock_worker_manager.is_enabled.return_value = False
 
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
@@ -1184,9 +1191,7 @@ class TestGetterMethods:
         )
         qtbot.addWidget(dialog)
 
-        # Delete cached value
-        del dialog.saved_enabled
-        assert dialog.get_enabled_state() is True
+        assert dialog.get_enabled_state() is False
         mock_worker_manager.is_enabled.assert_called_with("testhost")
 
 
