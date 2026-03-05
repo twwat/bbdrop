@@ -37,6 +37,7 @@ def get_firefox_cookies(domain: str = "imx.to", cookie_names: list[str] | None =
     Returns:
         Dictionary of cookies: {name: {value: str, domain: str, path: str, secure: bool}}
     """
+    global _firefox_cache_time
     start_time = time.time()
 
     # Create cache key from domain and cookie_names
