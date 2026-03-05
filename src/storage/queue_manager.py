@@ -1121,17 +1121,18 @@ class QueueManager(QObject):
     def _dict_to_item(self, data: dict) -> GalleryQueueItem:
         """Create item from dictionary"""
         status = data.get('status', QUEUE_STATE_READY)
-        if status in [QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING]:
+        if status in [QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,
+                      QUEUE_STATE_SCANNING, QUEUE_STATE_VALIDATING]:
             status = QUEUE_STATE_READY
         
         # Ensure completed items have 100% progress
         progress = data.get('progress', 0)
+        uploaded_images = data.get('uploaded_images', 0)
+        total_images = data.get('total_images', 0)
         if status == 'completed':
             progress = 100
-        elif status == QUEUE_STATE_INCOMPLETE:
-            # For incomplete items, recalculate progress from uploaded/total images
-            uploaded_images = data.get('uploaded_images', 0)
-            total_images = data.get('total_images', 0)
+        elif status in [QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED, QUEUE_STATE_UPLOAD_FAILED]:
+            # Recalculate progress from uploaded/total images
             if total_images > 0 and uploaded_images > 0:
                 progress = int((uploaded_images / total_images) * 100)
             else:
