@@ -1,6 +1,6 @@
 # BBDrop
 
-Cross-platform desktop app for uploading content to multiple image and file hosts, generating BBcode for forums, monitoring content links, and much more. 
+Batch-upload image galleries to multiple image and file hosts, generate BBCode, and manage persistent upload queues.
 
 ![GitHub Release](https://img.shields.io/github/v/release/twwat/bbdrop)
 [![Windows](https://custom-icon-badges.demolab.com/badge/-blue.svg?logo=windows11&logoColor=white)](#)
@@ -18,15 +18,15 @@ Cross-platform desktop app for uploading content to multiple image and file host
 
 ### Binary _(recommended)_
 
-[![Windows](https://custom-icon-badges.demolab.com/badge/Windows-blue.svg?logo=windows11&logoColor=white&style=for-the-badge)](#)
-[![Linux](https://img.shields.io/badge/Linux-f1c232.svg?logo=linux&logoColor=black&style=for-the-badge)](#)
-[![macOS](https://img.shields.io/badge/macOS-444444.svg?logo=apple&logoColor=F0F0F0&style=for-the-badge)](#) 
+[![Windows](https://custom-icon-badges.demolab.com/badge/Windows-blue.svg?logo=windows11&logoColor=white)](#)
+[![macOS](https://img.shields.io/badge/macOS-444444.svg?logo=apple&logoColor=F0F0F0)](#)
+[![Linux](https://img.shields.io/badge/Linux-f1c232.svg?logo=linux&logoColor=black)](#)
 
 1. Go to the [latest release](https://github.com/twwat/bbdrop/releases/latest) page
 2. Download the version for your operating system
-3. Extract and run the executable (e.g. `bbdrop.exe`)
+3. Extract the archive and run the executable (e.g. `bbdrop.exe`)
 
-_**Note**: portable versions don't require installation, just unpack and run_
+_**Note**: portable versions need no installation -- unpack and run._
 
 ### From source
 
@@ -51,9 +51,9 @@ python bbdrop.py --gui
 python bbdrop.py --gui
 ```
 
-Drag folders into the upload queue, configure settings, and click Start All. Results appear in the BBCode viewer.
+Drag folders into the queue, configure hosts, and click Start All. Results appear in the BBCode viewer.
 
-To add a folder to an already-running instance:
+To send a folder to a running instance:
 
 ```bash
 python bbdrop.py --gui /path/to/gallery
@@ -94,7 +94,7 @@ python bbdrop.py /path/to/images --name "Gallery Name" --template "Forum Post"
 python bbdrop.py --install-context-menu
 ```
 
-Right-click any folder and select **Upload to imx.to (GUI)** to add it to the queue. Remove with `--remove-context-menu`.
+Right-click any folder and select **Add to BBDrop** to add it to the queue. Remove with `--remove-context-menu`.
 
 ---
 
@@ -105,6 +105,7 @@ Right-click any folder and select **Upload to imx.to (GUI)** to add it to the qu
 | Host | Auth | Max File Size | Storage | Notes |
 |------|------|---------------|---------|-------|
 | **IMX.to** | API / Session | Unlimited | Unlimited | Gallery/thumbnail hosting, status checking, gallery rename |
+| **Pixhost** | None | 10 MB | Unlimited | Gallery hosting, pycurl-based, family/adult content types |
 | **TurboImageHost** | Session | Unlimited | Unlimited | Gallery hosting, pycurl-based uploads |
 
 ### File Hosts
@@ -121,37 +122,32 @@ Right-click any folder and select **Upload to imx.to (GUI)** to add it to the qu
 
 \* 20 TiB combined storage shared between FileBoom, Keep2Share, and TezFiles.
 
-All hosts support automatic retry, connection pooling, and token caching.
+Every host supports automatic retry, connection pooling, and token caching.
 
 ---
 
 ## Features
 
-- **Upload engine** -- concurrent workers, batch processing, drag-and-drop queue, resume, duplicate detection, progress tracking
-- **Multi-host pipeline** -- upload to 2 image hosts and 7 file hosts with host-agnostic ABC architecture
-- **BBCode templates** -- 18 placeholders, multiple templates, switch on the fly
-- **Cover photos** -- automatic cover detection by filename pattern, dimension, and file size; per-host cover gallery support
-- **Archive management** -- create ZIP/7Z archives with configurable compression and split support; extract ZIP, 7Z, RAR, TAR
-- **Disk space monitoring** -- tiered warnings with adaptive polling, pre-flight checks before uploads and archive creation
-- **Proxy system** -- per-host SOCKS5/HTTP proxy support with 3-level resolver (global, category, service)
-- **Statistics** -- upload history, bandwidth tracking, per-host metrics
-- **Online monitoring** -- check availability of previously uploaded files
-- **Credential storage** -- OS keyring with CSPRNG-based Fernet encryption
-- **Hook system** -- run external scripts on upload events with positional placeholders and JSON output parsing
-- **GUI** -- PyQt6, dark/light themes, system tray, single-instance mode, keyboard shortcuts, custom tabs
+- 🚀 **Upload engine** — concurrent workers, drag-and-drop queue, batch processing, resume, duplicate detection, and real-time progress tracking
+- 🌐 **Multi-host pipeline** — 3 image hosts and 7 file hosts through a host-agnostic architecture; queue a gallery once, upload everywhere
+- 📝 **BBCode templates** — 18 placeholders, conditional blocks (`[if]...[else]...[/if]`), multiple templates, hot-swap without restarting
+- 🖼️ **Cover photos** — automatic detection by filename pattern, dimensions, or file size; multi-cover support with deduplication, max-cover limiting, and per-host cover galleries
+- 📦 **Archive management** — create ZIP/7Z archives with configurable compression and split sizes; extract ZIP, 7Z, RAR, TAR
+- 💾 **Disk space monitoring** — tiered warnings with adaptive polling, pre-flight checks before uploads and archive creation
+- 🛡️ **Proxy & Tor** — HTTP, HTTPS, SOCKS4, and SOCKS5 proxies with a 3-level resolver (global → category → per-service); built-in Tor integration with one-click pool creation and circuit rotation
+- 📊 **Statistics** — upload history, bandwidth tracking, per-host metrics
+- 🔍 **Link scanner** — check image availability across IMX.to galleries with configurable age thresholds
+- ⚡ **Hook system** — run external scripts on upload events with positional placeholders and JSON output parsing
+- 🖥️ **GUI** — PyQt6 with dark/light themes, system tray, single-instance mode, keyboard shortcuts, and audio + toast notifications
 
 ---
 
-## Configuration
+## BBCode Placeholders
 
-Config file: `~/.bbdrop/bbdrop.ini`
-Data directory: `~/.bbdrop/`
-Templates: `~/.bbdrop/*.template.txt`
-
-File host credentials are configured in Settings > File Hosts. Use **Test Connection** to verify.
+Templates support 18 placeholders and `[if placeholder]...[else]...[/if]` conditional blocks.
 
 <details>
-<summary>BBCode placeholders (18)</summary>
+<summary>All placeholders</summary>
 
 | Placeholder | Description |
 |-------------|-------------|
@@ -170,6 +166,12 @@ File host credentials are configured in Settings > File Hosts. Use **Test Connec
 | `#ext1#` -- `#ext4#` | External link fields (from hooks) |
 
 </details>
+
+---
+
+## Configuration
+
+All settings live in the **Settings** dialog. The default data directory is `~/.bbdrop/`; change it under Settings > General.
 
 ---
 

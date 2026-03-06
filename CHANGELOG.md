@@ -4,6 +4,40 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.1] - 2026-03-04 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.0...v0.9.1))
+
+### Added
+- **Hash-based deduplication**: Keep2Share, TezFiles, and FileBoom skip uploads when the server already has the file, using MD5 hash matching
+- **Unified host status icons**: Single icon per host shows active/enabled/disabled state and cover host at a glance
+- **Pixhost support**: Upload galleries to Pixhost as a third image host option
+- **Multi-cover uploads**: Detect and upload multiple cover photos per gallery with any/all matching rules
+  - Per-cover success/failure tracking with visual states in the gallery table
+  - Option to exclude cover images from the gallery upload
+- **Cover host selector**: Choose which image host handles your cover uploads (independent of gallery host)
+- **Gallery file manager**: Upgraded to tree view with better file browsing
+- **Error details dialog**: Shows per-file upload failures and overall progress
+- File host data (hashes, sizes, dedup status) included in gallery JSON artifacts
+
+### Changed
+- Bandwidth display uses smoothed values for steadier readings
+- Cover settings simplified with rule logic radio buttons
+- Settings panels now hide options that don't apply to the selected host
+- Windows context menu renamed from "IMX Uploader" to "Add to BBDrop"
+- Disabled hosts appear dimmed in the worker table
+- Updated TurboImageHost logo
+
+### Fixed
+- **IMX galleries with broken thumbnail URLs**: API-provided BBCode was being dropped and incorrectly reconstructed
+- **Windows context menu requires admin**: Now writes to per-user registry — no elevation needed
+- **Settings crash on launch**: Empty values in config file caused "Not a boolean" error
+- **Disk space display**: Overflow in calculations and alarm flapping between warning states
+- **Crash on host logo click** in the gallery table
+- **Notification sounds missing** in frozen (.exe) builds
+- **Queue restore**: Galleries stuck in scanning/validating state after restart
+- **Cover progress**: Cover uploads no longer interfere with gallery progress counters
+- Cover uploads on TurboImageHost now fetch batch results correctly
+- Assorted stability fixes for proxy tab, worker signals, and Firefox cookie caching
+
 ## [0.9.0] - 2026-02-24
 
 ### Added
@@ -582,6 +616,7 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.9.1  | 2026-03-04 | Pixhost support, multi-cover pipeline, context menu fix, 20+ bug fixes |
 | 0.9.0  | 2026-02-24 | Notifications, Tor support, image host proxies, disk space monitoring |
 | 0.8.3  | 2026-02-14 | Multi-host uploads, cover redesign, CSPRNG credentials, hooks |
 | 0.8.2  | 2026-02-03 | Multi-format archives, split uploads, tooltips |
