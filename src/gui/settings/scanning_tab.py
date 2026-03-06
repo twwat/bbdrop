@@ -305,6 +305,13 @@ class ScanningTab(QWidget):
             if os.path.exists(config_file):
                 config.read(config_file, encoding='utf-8')
 
+            def _getbool(section, key, fallback=False):
+                """getboolean that treats empty/unparseable values as fallback."""
+                raw = config.get(section, key, fallback=None)
+                if raw is None or raw.strip() == '':
+                    return fallback
+                return config.getboolean(section, key, fallback=fallback)
+
             # Block ALL signals during loading to prevent marking tab as dirty
             controls_to_block = [
                 self.fast_scan_check,
@@ -320,10 +327,9 @@ class ScanningTab(QWidget):
                 control.blockSignals(True)
 
             # Load fast scan setting
-            fast_scan = config.getboolean(
-                'SCANNING', 'fast_scanning', fallback=True
+            self.fast_scan_check.setChecked(
+                _getbool('SCANNING', 'fast_scanning', fallback=True)
             )
-            self.fast_scan_check.setChecked(fast_scan)
 
             # Load sampling method and values
             sampling_method = config.getint(
@@ -351,18 +357,12 @@ class ScanningTab(QWidget):
 
             # Load exclusion settings
             self.exclude_first_check.setChecked(
-                config.getboolean(
-                    'SCANNING', 'exclude_first', fallback=False
-                )
+                _getbool('SCANNING', 'exclude_first', fallback=False)
             )
             self.exclude_last_check.setChecked(
-                config.getboolean(
-                    'SCANNING', 'exclude_last', fallback=False
-                )
+                _getbool('SCANNING', 'exclude_last', fallback=False)
             )
-            exclude_small = config.getboolean(
-                'SCANNING', 'exclude_small_images', fallback=False
-            )
+            exclude_small = _getbool('SCANNING', 'exclude_small_images', fallback=False)
             self.exclude_small_check.setChecked(exclude_small)
             self.exclude_small_spin.setEnabled(exclude_small)
             self.exclude_small_spin.setValue(
@@ -371,9 +371,7 @@ class ScanningTab(QWidget):
                 )
             )
             self.exclude_patterns_check.setChecked(
-                config.getboolean(
-                    'SCANNING', 'exclude_patterns', fallback=False
-                )
+                _getbool('SCANNING', 'exclude_patterns', fallback=False)
             )
             self.exclude_patterns_edit.setText(
                 config.get(
@@ -383,15 +381,11 @@ class ScanningTab(QWidget):
 
             # Load statistics calculation setting
             self.stats_exclude_outliers_check.setChecked(
-                config.getboolean(
-                    'SCANNING', 'stats_exclude_outliers', fallback=False
-                )
+                _getbool('SCANNING', 'stats_exclude_outliers', fallback=False)
             )
 
             # Load average method setting
-            use_median = config.getboolean(
-                'SCANNING', 'use_median', fallback=True
-            )
+            use_median = _getbool('SCANNING', 'use_median', fallback=True)
             if use_median:
                 self.avg_median_radio.setChecked(True)
             else:
