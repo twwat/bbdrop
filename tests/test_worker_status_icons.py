@@ -97,27 +97,8 @@ def imx_worker():
 class TestLoadIcons:
     """Test suite for _load_icons method"""
 
-    def test_load_icons_adds_host_enabled_to_cache(self, worker_status_widget, qapp):
-        """Verify _load_icons adds host_enabled icon to _icon_cache"""
-        mock_icon = QIcon()
-        with patch('src.gui.widgets.worker_status_widget.get_icon_manager') as mock_mgr_fn:
-            mock_mgr = MagicMock()
-            mock_mgr_fn.return_value = mock_mgr
-            mock_mgr.get_icon.return_value = mock_icon
-
-            worker_status_widget._load_icons()
-
-            # Verify the icon manager was called with 'host_enabled'
-            calls = [str(call_obj) for call_obj in mock_mgr.get_icon.call_args_list]
-            assert any('host_enabled' in str(c) for c in calls), \
-                f"get_icon('host_enabled') not called. Calls: {calls}"
-
-            # Verify it's in the cache
-            assert 'host_enabled' in worker_status_widget._icon_cache, \
-                "host_enabled not in _icon_cache"
-
-    def test_load_icons_adds_host_disabled_to_cache(self, worker_status_widget, qapp):
-        """Verify _load_icons adds host_disabled icon to _icon_cache"""
+    def test_load_icons_adds_unified_status_icons_to_cache(self, worker_status_widget, qapp):
+        """Verify _load_icons adds unified host status icons to _icon_cache"""
         mock_icon = QIcon()
         with patch('src.gui.widgets.worker_status_widget.get_icon_manager') as mock_mgr_fn:
             mock_mgr = MagicMock()
@@ -127,45 +108,26 @@ class TestLoadIcons:
             worker_status_widget._load_icons()
 
             calls = [str(call_obj) for call_obj in mock_mgr.get_icon.call_args_list]
-            assert any('host_disabled' in str(c) for c in calls), \
-                f"get_icon('host_disabled') not called. Calls: {calls}"
-
-            assert 'host_disabled' in worker_status_widget._icon_cache, \
-                "host_disabled not in _icon_cache"
-
-    def test_load_icons_adds_auto_to_cache(self, worker_status_widget, qapp):
-        """Verify _load_icons adds auto icon to _icon_cache"""
-        mock_icon = QIcon()
-        with patch('src.gui.widgets.worker_status_widget.get_icon_manager') as mock_mgr_fn:
-            mock_mgr = MagicMock()
-            mock_mgr_fn.return_value = mock_mgr
-            mock_mgr.get_icon.return_value = mock_icon
-
-            worker_status_widget._load_icons()
-
-            calls = [str(call_obj) for call_obj in mock_mgr.get_icon.call_args_list]
-            assert any('auto' in str(c) for c in calls), \
-                f"get_icon('auto') not called. Calls: {calls}"
-
-            assert 'auto' in worker_status_widget._icon_cache, \
-                "auto not in _icon_cache"
+            for key in ['status-active', 'status-active-cover', 'status-enabled',
+                        'status-enabled-cover', 'status-disabled-cover', 'status-disabled']:
+                assert any(key in str(c) for c in calls), \
+                    f"get_icon('{key}') not called. Calls: {calls}"
+                assert key in worker_status_widget._icon_cache, \
+                    f"'{key}' not in _icon_cache"
 
     def test_load_icons_creates_icon_cache_entries(self, worker_status_widget):
         """Verify _load_icons properly initializes icon cache"""
-        # The fixture already calls _load_icons during init
-        # Just verify the cache has the expected keys
         assert hasattr(worker_status_widget, '_icon_cache')
         assert isinstance(worker_status_widget._icon_cache, dict)
 
-        # Should have loaded status icons (from base implementation)
-        # and the new host state icons
-        expected_keys = ['host_enabled', 'host_disabled', 'auto']
+        expected_keys = ['status-active', 'status-active-cover', 'status-enabled',
+                         'status-enabled-cover', 'status-disabled-cover', 'status-disabled']
         for key in expected_keys:
             assert key in worker_status_widget._icon_cache, \
                 f"Expected key '{key}' not in _icon_cache"
 
-    def test_load_icons_all_three_icons_cached(self, worker_status_widget, qapp):
-        """Verify all three new icons are loaded into cache"""
+    def test_load_icons_all_unified_icons_cached(self, worker_status_widget, qapp):
+        """Verify all unified status icons are loaded into cache"""
         mock_icon = QIcon()
         with patch('src.gui.widgets.worker_status_widget.get_icon_manager') as mock_mgr_fn:
             mock_mgr = MagicMock()
@@ -174,8 +136,8 @@ class TestLoadIcons:
 
             worker_status_widget._load_icons()
 
-            # All three should be present
-            required_icons = ['host_enabled', 'host_disabled', 'auto']
+            required_icons = ['status-active', 'status-active-cover', 'status-enabled',
+                              'status-enabled-cover', 'status-disabled-cover', 'status-disabled']
             for icon_key in required_icons:
                 assert icon_key in worker_status_widget._icon_cache, \
                     f"Icon '{icon_key}' not in _icon_cache"

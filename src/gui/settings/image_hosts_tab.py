@@ -31,6 +31,7 @@ class ImageHostsSettingsWidget(QWidget):
         self.host_widgets: Dict[str, Dict[str, Any]] = {}
         self.cover_host_group = QButtonGroup(self)
         self.cover_host_group.setExclusive(True)
+        self._active_image_host = self.settings.value('image_host/default', 'imx', type=str)
         self.setup_ui()
 
     def setup_ui(self):
@@ -111,6 +112,12 @@ class ImageHostsSettingsWidget(QWidget):
         row_layout.setContentsMargins(8, 4, 8, 4)
         row_layout.setSpacing(8)
 
+        # Status icon (20x20px)
+        status_icon = QLabel()
+        status_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_icon.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        row_layout.addWidget(status_icon)
+
         # Enable/Disable checkbox (50px width centered)
         enabled = is_image_host_enabled(host_id)
         enable_container = QWidget()
@@ -179,6 +186,7 @@ class ImageHostsSettingsWidget(QWidget):
         self.host_widgets[host_id] = {
             "frame": frame,
             "status": status_label,
+            "status_icon": status_icon,
             "logo_label": logo_label,
             "enable_checkbox": enable_checkbox,
             "cover_radio": cover_radio,
@@ -186,9 +194,10 @@ class ImageHostsSettingsWidget(QWidget):
             "configure_btn": configure_btn
         }
 
-        # Update status and visual state
+        # Update status, visual state, and status icon
         self._update_status(host_id)
         self._update_visual_state(host_id, enabled)
+        self._update_status_icon(host_id)
 
         # Add to layout
         self.hosts_layout.addWidget(frame)
@@ -199,6 +208,43 @@ class ImageHostsSettingsWidget(QWidget):
             self.settings.setValue('cover/host_id', host_id)
             self.cover_host_changed.emit(host_id)
             self.settings_changed.emit()
+            self._update_all_status_icons()
+
+    def set_active_image_host(self, host_id: str):
+        """Update which host is the active upload target."""
+        self._active_image_host = host_id
+        self._update_all_status_icons()
+
+    def _update_status_icon(self, host_id: str):
+        """Update a single host's status icon."""
+        widgets = self.host_widgets.get(host_id)
+        if not widgets or not widgets.get('status_icon'):
+            return
+
+        from src.gui.icon_manager import get_icon_manager
+        icon_mgr = get_icon_manager()
+        if not icon_mgr:
+            return
+
+        enabled = is_image_host_enabled(host_id)
+        is_active = (host_id == self._active_image_host)
+        cover_host = self.settings.value('cover/host_id', 'imx', type=str)
+        is_cover = (host_id == cover_host)
+
+        if enabled and is_active:
+            key = 'status-active-cover' if is_cover else 'status-active'
+        elif enabled:
+            key = 'status-enabled-cover' if is_cover else 'status-enabled'
+        else:
+            key = 'status-disabled-cover' if is_cover else 'status-disabled'
+
+        icon = icon_mgr.get_icon(key, theme_mode=None)
+        widgets['status_icon'].setPixmap(icon.pixmap(20, 20))
+
+    def _update_all_status_icons(self):
+        """Refresh status icons for all hosts."""
+        for host_id in self.host_widgets:
+            self._update_status_icon(host_id)
 
     def _load_host_logo(self, host_id: str, config, height: int = 22) -> Optional[QLabel]:
         """Load and create a QLabel with the host's logo.
@@ -313,6 +359,7 @@ class ImageHostsSettingsWidget(QWidget):
         save_image_host_enabled(host_id, enabled)
         self._update_visual_state(host_id, enabled)
         self._update_status(host_id)
+        self._update_status_icon(host_id)
         self._refresh_host_selector()
         self.settings_changed.emit()
 

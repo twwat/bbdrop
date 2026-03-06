@@ -293,7 +293,7 @@ class FileHostsSettingsWidget(QWidget):
             return None
 
     def _update_status_icon(self, host_id: str):
-        """Update status icon pixmap based on enabled state and theme.
+        """Update status icon based on enabled state and auto-trigger.
 
         Args:
             host_id: Host identifier
@@ -303,20 +303,21 @@ class FileHostsSettingsWidget(QWidget):
             return
 
         status_icon = widgets['status_icon']
-
-        # Get current enabled state from worker_manager (source of truth)
         is_enabled = self.worker_manager.is_enabled(host_id) if self.worker_manager else False
 
-        # Get appropriate icon (IconManager auto-detects theme from palette)
-        icon_key = 'host_enabled' if is_enabled else 'host_disabled'
-        icon = self.icon_manager.get_icon(icon_key, theme_mode=None)  # None = auto-detect
+        if is_enabled:
+            from src.core.file_host_config import get_file_host_setting
+            trigger = get_file_host_setting(host_id, "trigger", "str")
+            has_auto = trigger and trigger != "disabled"
+            icon_key = 'status-active' if has_auto else 'status-enabled'
+            tooltip = f"Auto-upload: {trigger}" if has_auto else "Enabled"
+        else:
+            icon_key = 'status-disabled'
+            tooltip = "Disabled"
 
-        # Set pixmap (20x20 size for inline status indicator)
+        icon = self.icon_manager.get_icon(icon_key, theme_mode=None)
         pixmap = icon.pixmap(20, 20)
         status_icon.setPixmap(pixmap)
-
-        # Set tooltip
-        tooltip = "Host enabled" if is_enabled else "Host disabled"
         status_icon.setToolTip(tooltip)
 
     def _get_status_text(self, host_id: str, host_config) -> str:

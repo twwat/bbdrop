@@ -54,7 +54,15 @@ class IconManager:
         'status_online':        'check.png',           # Green checkmark for "online"
         'status_offline':       'disabledhost.png',    # X/disabled for "offline"
 
-        # File host
+        # Host status icons (unified)
+        'status-active':        'status/status-green-circle.png',
+        'status-active-cover':  'status/status-green-circle-transparent-c.png',
+        'status-enabled':       'status/status-green-outline.png',
+        'status-enabled-cover': 'status/status-green-outline-green-c.png',
+        'status-disabled-cover':'status/status-thin-grey-outline-green-c.png',
+        'status-disabled':      'status/status-thin-grey-outline.png',
+
+        # Legacy host icons (keep for any remaining refs)
         'host_enabled':         'host_enabled.png',
         'host_disabled':        'host_disabled.png',
         'imx':                  'imx.png',

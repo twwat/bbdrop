@@ -509,6 +509,7 @@ class WorkerStatusWidget(QWidget):
         self._workers: Dict[str, WorkerStatus] = {}
         self._workers_mutex = QMutex()  # Thread-safe access to _workers
         self._icon_cache: Dict[str, QIcon] = {}
+        self._active_image_host: str = 'imx'  # Updated by main window combo
         # Worker ID → row index mapping for O(1) row lookups
         # IMPORTANT: Only valid between full refreshes (_full_table_rebuild)
         # Becomes stale when workers are added/removed until next refresh
@@ -637,14 +638,44 @@ class WorkerStatusWidget(QWidget):
         self._filter_btn.clicked.connect(self._show_filter_menu_from_button)
         self._position_filter_button()
 
+    def reparent_filter_button(self, group_box) -> Optional[QToolButton]:
+        """Reparent filter button to a QGroupBox, positioned next to the title.
+
+        Args:
+            group_box: QGroupBox to place the filter button in
+
+        Returns:
+            The filter button (now a child of group_box), or None
+        """
+        if not hasattr(self, '_filter_btn'):
+            return None
+        self._filter_btn.setParent(group_box)
+        self._filter_group_box = group_box
+        self._position_filter_button()
+        self._filter_btn.show()
+        return self._filter_btn
+
     def _position_filter_button(self):
-        """Position filter button at the top-left corner of the table header."""
-        header = self.status_table.horizontalHeader()
-        header_height = header.height()
-        btn_x = 2
-        btn_y = max(0, (header_height - self._filter_btn.height()) // 2)
-        self._filter_btn.move(btn_x, btn_y)
-        self._filter_btn.raise_()
+        """Position filter button next to the group box title (or table header fallback)."""
+        if hasattr(self, '_filter_group_box') and self._filter_group_box:
+            # Position next to group box title text
+            gb = self._filter_group_box
+            title = gb.title()
+            fm = gb.fontMetrics()
+            title_width = fm.horizontalAdvance(title)
+            # Group box title is inset ~10px from left, vertically centered in the top margin
+            btn_x = 10 + title_width + 4
+            btn_y = max(0, (fm.height() - self._filter_btn.height()) // 2)
+            self._filter_btn.move(btn_x, btn_y)
+            self._filter_btn.raise_()
+        else:
+            # Fallback: top-left of table header
+            header = self.status_table.horizontalHeader()
+            header_height = header.height()
+            btn_x = 2
+            btn_y = max(0, (header_height - self._filter_btn.height()) // 2)
+            self._filter_btn.move(btn_x, btn_y)
+            self._filter_btn.raise_()
 
     def resizeEvent(self, event):
         """Reposition filter button on resize."""
@@ -708,12 +739,82 @@ class WorkerStatusWidget(QWidget):
         self._icon_cache['failed'] = icon_mgr.get_icon('status_error')
         self._icon_cache['network_error'] = icon_mgr.get_icon('status_error')
 
-        # Enabled/disabled/auto state icons
-        self._icon_cache['host_enabled'] = icon_mgr.get_icon('host_enabled')
-        self._icon_cache['host_disabled'] = icon_mgr.get_icon('host_disabled')
-        self._icon_cache['auto'] = icon_mgr.get_icon('auto')
+        # Host status icons (unified)
+        self._icon_cache['status-active'] = icon_mgr.get_icon('status-active')
+        self._icon_cache['status-active-cover'] = icon_mgr.get_icon('status-active-cover')
+        self._icon_cache['status-enabled'] = icon_mgr.get_icon('status-enabled')
+        self._icon_cache['status-enabled-cover'] = icon_mgr.get_icon('status-enabled-cover')
+        self._icon_cache['status-disabled-cover'] = icon_mgr.get_icon('status-disabled-cover')
+        self._icon_cache['status-disabled'] = icon_mgr.get_icon('status-disabled')
 
         # Host type icons (will load dynamically based on host)
+
+    def set_active_image_host(self, host_id: str):
+        """Update active image host and refresh image host worker status icons."""
+        self._active_image_host = host_id
+        # Refresh all rows — only image host rows will visually change
+        for worker_id, worker in self._workers.items():
+            if worker.worker_type == 'imagehost':
+                row = self._worker_row_map.get(worker_id, -1)
+                if row >= 0:
+                    self._update_status_icon_for_row(row, worker)
+
+    def _resolve_status_icon(self, worker) -> tuple:
+        """Return (icon_key, tooltip) for a worker's status column."""
+        cover_host = QSettings("BBDropUploader", "BBDropGUI").value('cover/host_id', 'imx', type=str)
+
+        if worker.worker_type == 'imagehost':
+            host_id = worker.host_id or worker.hostname
+            enabled = is_image_host_enabled(host_id)
+            is_active = (host_id == self._active_image_host)
+            is_cover = (host_id == cover_host)
+
+            if enabled and is_active:
+                key = 'status-active-cover' if is_cover else 'status-active'
+                tip = f"Active{' + Cover host' if is_cover else ''}"
+            elif enabled:
+                key = 'status-enabled-cover' if is_cover else 'status-enabled'
+                tip = f"Enabled{' (Cover host)' if is_cover else ''}"
+            else:
+                key = 'status-disabled-cover' if is_cover else 'status-disabled'
+                tip = f"Disabled{' (Cover host)' if is_cover else ''}"
+
+        elif worker.worker_type == 'filehost':
+            fh_id = worker.host_id or worker.hostname.lower()
+            enabled = get_file_host_setting(fh_id, "enabled", "bool")
+            trigger = get_file_host_setting(fh_id, "trigger", "str")
+            has_auto = enabled and trigger and trigger != "disabled"
+
+            if has_auto:
+                key = 'status-active'
+                tip = f"Auto-upload: {trigger}"
+            elif enabled:
+                key = 'status-enabled'
+                tip = "Enabled"
+            else:
+                key = 'status-disabled'
+                tip = "Disabled"
+        else:
+            key = 'status-enabled'
+            tip = "Enabled"
+
+        return key, tip
+
+    def _update_status_icon_for_row(self, row: int, worker):
+        """Update the status icon cell for a single row."""
+        icon_col_idx = self._get_column_index('status')
+        if icon_col_idx < 0:
+            return
+        icon_key, tooltip = self._resolve_status_icon(worker)
+        icon = self._icon_cache.get(icon_key, QIcon())
+
+        # Remove any cell widget (old auto pixmap label)
+        self.status_table.removeCellWidget(row, icon_col_idx)
+
+        icon_item = self.status_table.item(row, icon_col_idx)
+        if icon_item:
+            icon_item.setIcon(icon)
+            icon_item.setToolTip(tooltip)
 
     def _get_column_index(self, col_id: str) -> int:
         """Get the index of a column by its ID.
@@ -746,17 +847,18 @@ class WorkerStatusWidget(QWidget):
         }
         return formatters.get(col_type)
 
-    def _get_host_icon(self, hostname: str, worker_type: str) -> QIcon:
+    def _get_host_icon(self, hostname: str, worker_type: str, dimmed: bool = False) -> QIcon:
         """Get icon for a specific host.
 
         Args:
             hostname: Host name (e.g., 'rapidgator', 'imx.to')
             worker_type: 'imx' or 'filehost'
+            dimmed: If True, return greyscale variant for disabled hosts
 
         Returns:
             QIcon for the host, or fallback icon
         """
-        cache_key = f"host_{hostname}"
+        cache_key = f"host_{hostname}_{'dim' if dimmed else 'color'}"
         if cache_key in self._icon_cache:
             return self._icon_cache[cache_key]
 
@@ -765,30 +867,63 @@ class WorkerStatusWidget(QWidget):
             return QIcon()
 
         if worker_type == 'imagehost':
-            # Look up image host config to get icon filename
-            # hostname is the host_id for image hosts (e.g., 'imx', 'turboimagehost')
             all_hosts = get_all_hosts()
             host_config = all_hosts.get(hostname)
 
             if host_config and host_config.icon:
-                # Construct path to image host icon
                 icon_filename = host_config.icon
                 icon_path = os.path.join(icon_mgr.assets_dir, 'image_hosts', icon_filename)
 
                 if os.path.exists(icon_path):
-                    icon = QIcon(icon_path)
+                    if dimmed:
+                        icon = self._make_dimmed_icon(icon_path)
+                    else:
+                        icon = QIcon(icon_path)
                     if not icon.isNull():
                         self._icon_cache[cache_key] = icon
                         return icon
 
-            # No icon found — return empty so the display name text shows instead
             return QIcon()
         else:
-            # Use icon manager's file host icon loading (with fallback chain)
-            icon = icon_mgr.get_file_host_icon(hostname.lower(), dimmed=False)
+            # File hosts have pre-made dimmed variants
+            icon = icon_mgr.get_file_host_icon(hostname.lower(), dimmed=dimmed)
 
         self._icon_cache[cache_key] = icon
         return icon
+
+    @staticmethod
+    def _make_dimmed_icon(icon_path: str) -> QIcon:
+        """Create a partially desaturated icon, preserving some colour.
+
+        Blends 35% of the original over the greyscale version so
+        disabled hosts look muted rather than fully B&W.
+
+        Args:
+            icon_path: Path to the icon file
+
+        Returns:
+            QIcon with partially desaturated pixmap
+        """
+        from PyQt6.QtGui import QPainter
+        original = QPixmap(icon_path)
+        if original.isNull():
+            return QIcon()
+        # Get Qt's built-in greyscale (Disabled mode)
+        grey = QIcon(original).pixmap(original.size(), QIcon.Mode.Disabled)
+        # Paint original on top at 35 % opacity to restore some colour
+        painter = QPainter(grey)
+        painter.setOpacity(0.35)
+        painter.drawPixmap(0, 0, original)
+        painter.end()
+        return QIcon(grey)
+
+    def _is_host_enabled(self, worker) -> bool:
+        """Check if a worker's host is currently enabled."""
+        if worker.worker_type == 'imagehost':
+            return is_image_host_enabled(worker.host_id or worker.hostname)
+        elif worker.worker_type == 'filehost':
+            return get_file_host_setting(worker.host_id or worker.hostname.lower(), "enabled", "bool")
+        return True
 
     def _should_show_worker_logos(self) -> bool:
         """Check if file host logos should be shown instead of text.
@@ -1353,54 +1488,12 @@ class WorkerStatusWidget(QWidget):
         elif base_status == 'paused':
             status_color = QColor("#B8860B")  # Dark goldenrod
 
-        # Update icon column - show enabled/disabled/auto state
+        # Update icon column - show unified status icon
         icon_col_idx = self._get_column_index('status')
         if icon_col_idx >= 0:
-            icon_item = self.status_table.item(row, icon_col_idx)
-            if icon_item:
-                worker = self._workers.get(worker_id)
-                is_auto = False
-                if worker and worker.worker_type == 'filehost':
-                    fh_id = worker.host_id or worker.hostname.lower()
-                    enabled = get_file_host_setting(fh_id, "enabled", "bool")
-                    trigger = get_file_host_setting(fh_id, "trigger", "str")
-                    has_auto = enabled and trigger and trigger != "disabled"
-                    if has_auto:
-                        status_icon = self._icon_cache.get('auto', QIcon())
-                        tooltip_text = f"Auto-upload: {trigger}"
-                        is_auto = True
-                    elif enabled:
-                        status_icon = self._icon_cache.get('host_enabled', QIcon())
-                        tooltip_text = "Enabled"
-                    else:
-                        status_icon = self._icon_cache.get('host_disabled', QIcon())
-                        tooltip_text = "Disabled"
-                elif worker and worker.worker_type == 'imagehost':
-                    ih_id = worker.host_id or worker.hostname
-                    enabled = is_image_host_enabled(ih_id)
-                    if enabled:
-                        status_icon = self._icon_cache.get('host_enabled', QIcon())
-                        tooltip_text = "Enabled"
-                    else:
-                        status_icon = self._icon_cache.get('host_disabled', QIcon())
-                        tooltip_text = "Disabled"
-                else:
-                    status_icon = self._icon_cache.get('host_enabled', QIcon())
-                    tooltip_text = "Enabled"
-
-                if is_auto:
-                    # Use pixmap label at same size as hostname auto icon (32x14)
-                    auto_label = QLabel()
-                    auto_label.setPixmap(status_icon.pixmap(32, 14))
-                    auto_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    auto_label.setToolTip(tooltip_text)
-                    self.status_table.setCellWidget(row, icon_col_idx, auto_label)
-                    icon_item.setIcon(QIcon())  # Clear the item icon
-                else:
-                    # Remove any previous cell widget
-                    self.status_table.removeCellWidget(row, icon_col_idx)
-                    icon_item.setIcon(status_icon)
-                    icon_item.setToolTip(tooltip_text)
+            worker = self._workers.get(worker_id)
+            if worker:
+                self._update_status_icon_for_row(row, worker)
 
         # Update text column
         text_col_idx = self._get_column_index('status_text')
@@ -1589,8 +1682,9 @@ class WorkerStatusWidget(QWidget):
             for col_idx, col_config in enumerate(self._active_columns):
                 if col_config.id == 'icon':
                     # Icon column - clickable button that opens host settings
+                    host_enabled = self._is_host_enabled(worker)
                     icon_btn = QPushButton()
-                    icon_btn.setIcon(self._get_host_icon(worker.host_id or worker.hostname, worker.worker_type))
+                    icon_btn.setIcon(self._get_host_icon(worker.host_id or worker.hostname, worker.worker_type, dimmed=not host_enabled))
                     icon_btn.setFixedSize(26, 26)
                     icon_btn.setIconSize(QSize(20, 20))
                     icon_btn.setFlat(True)
@@ -1622,6 +1716,8 @@ class WorkerStatusWidget(QWidget):
 
                 elif col_config.id == 'hostname':
                     # Hostname column with auto-upload indicator and optional logo
+                    host_enabled = self._is_host_enabled(worker)
+
                     # Check if this host has automatic uploads enabled
                     has_auto_upload = False
                     if worker.worker_type == 'filehost':
@@ -1636,6 +1732,12 @@ class WorkerStatusWidget(QWidget):
                         # Try to load host logo
                         logo_host_id = worker.host_id or worker.hostname.lower()
                         logo_label = self._load_host_logo(logo_host_id, height=22, worker_type=worker.worker_type)
+                        # Dim logo for disabled hosts (partial opacity, keeps some colour)
+                        if logo_label and not host_enabled:
+                            from PyQt6.QtWidgets import QGraphicsOpacityEffect
+                            opacity = QGraphicsOpacityEffect(logo_label)
+                            opacity.setOpacity(0.35)
+                            logo_label.setGraphicsEffect(opacity)
 
                     # Decide whether to use widget (logo) or plain text
                     use_widget = (show_logos and logo_label is not None)
@@ -1711,55 +1813,14 @@ class WorkerStatusWidget(QWidget):
                     self.status_table.setItem(row_idx, col_idx, speed_item)
 
                 elif col_config.id == 'status':
-                    # Status icon column - shows enabled/disabled/auto state
-                    # Determine enabled/disabled/auto state
-                    is_auto = False
-                    if worker.worker_type == 'filehost':
-                        fh_id = worker.host_id or worker.hostname.lower()
-                        enabled = get_file_host_setting(fh_id, "enabled", "bool")
-                        trigger = get_file_host_setting(fh_id, "trigger", "str")
-                        has_auto = enabled and trigger and trigger != "disabled"
-                        if has_auto:
-                            icon = self._icon_cache.get('auto', QIcon())
-                            tooltip = f"Auto-upload: {trigger}"
-                            is_auto = True
-                        elif enabled:
-                            icon = self._icon_cache.get('host_enabled', QIcon())
-                            tooltip = "Enabled"
-                        else:
-                            icon = self._icon_cache.get('host_disabled', QIcon())
-                            tooltip = "Disabled"
-                    elif worker.worker_type == 'imagehost':
-                        ih_id = worker.host_id or worker.hostname
-                        enabled = is_image_host_enabled(ih_id)
-                        if enabled:
-                            icon = self._icon_cache.get('host_enabled', QIcon())
-                            tooltip = "Enabled"
-                        else:
-                            icon = self._icon_cache.get('host_disabled', QIcon())
-                            tooltip = "Disabled"
-                    else:
-                        icon = self._icon_cache.get('host_enabled', QIcon())
-                        tooltip = "Enabled"
-
-                    if is_auto:
-                        # Use pixmap label at same size as hostname auto icon (32x14)
-                        auto_label = QLabel()
-                        auto_label.setPixmap(icon.pixmap(32, 14))
-                        auto_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        auto_label.setToolTip(tooltip)
-                        self.status_table.setCellWidget(row_idx, col_idx, auto_label)
-                        # Still need an item for data storage
-                        status_icon_item = QTableWidgetItem()
-                        status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
-                        self.status_table.setItem(row_idx, col_idx, status_icon_item)
-                    else:
-                        status_icon_item = QTableWidgetItem()
-                        status_icon_item.setIcon(icon)
-                        status_icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        status_icon_item.setToolTip(tooltip)
-                        status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
-                        self.status_table.setItem(row_idx, col_idx, status_icon_item)
+                    icon_key, tooltip = self._resolve_status_icon(worker)
+                    icon = self._icon_cache.get(icon_key, QIcon())
+                    status_icon_item = QTableWidgetItem()
+                    status_icon_item.setIcon(icon)
+                    status_icon_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    status_icon_item.setToolTip(tooltip)
+                    status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
+                    self.status_table.setItem(row_idx, col_idx, status_icon_item)
 
                 elif col_config.id == 'status_text':
                     # Status text column (text only with color coding)
