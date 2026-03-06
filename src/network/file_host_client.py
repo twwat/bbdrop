@@ -758,7 +758,8 @@ class FileHostClient:
         self,
         file_path: Path,
         on_progress: Optional[Callable[[int, int, float], None]] = None,
-        should_stop: Optional[Callable[[], bool]] = None
+        should_stop: Optional[Callable[[], bool]] = None,
+        md5_hash: Optional[str] = None
     ) -> Dict[str, Any]:
         """Upload file to file host.
 
@@ -784,7 +785,7 @@ class FileHostClient:
 
         # Handle multi-step uploads (like RapidGator) with automatic token retry
         if self.config.upload_init_url:
-            return self._with_token_retry(self._upload_multistep, file_path)
+            return self._with_token_retry(self._upload_multistep, file_path, md5_hash=md5_hash)
 
         # Standard upload
         return self._upload_standard(file_path)
@@ -941,11 +942,103 @@ class FileHostClient:
         finally:
             curl.close()
 
-    def _upload_multistep(self, file_path: Path, **kwargs) -> Dict[str, Any]:
+    def _try_create_by_hash(self, md5_hash: str, filename: str) -> Optional[Dict[str, Any]]:
+        """Try to create a file by MD5 hash (K2S-family deduplication).
+
+        Posts to the host's createFileByHash endpoint. If the hash exists
+        on the server, a new file entry is created instantly without upload.
+
+        Returns:
+            Result dict with url/file_id/deduplication on success,
+            None if hash not found on server (caller should upload normally)
+
+        Raises:
+            Exception: On auth errors (code 10) or quota exceeded (code 64)
+        """
+        if not self.config.dedupe_endpoint:
+            return None
+
+        base_url = self.config.upload_init_url
+        if not base_url:
+            return None
+        api_base = base_url.rsplit('/', 1)[0]
+        dedupe_url = f"{api_base}/{self.config.dedupe_endpoint}"
+
+        body = json.dumps({
+            "auth_token": self.auth_token or "",
+            "hash": md5_hash,
+            "name": filename
+        }).encode('utf-8')
+
+        curl = pycurl.Curl()
+        response_buffer = BytesIO()
+        try:
+            self._configure_ssl(curl)
+            self._configure_proxy(curl)
+            curl.setopt(pycurl.URL, dedupe_url)
+            curl.setopt(pycurl.POST, 1)
+            curl.setopt(pycurl.POSTFIELDS, body.decode('utf-8'))
+            curl.setopt(pycurl.HTTPHEADER, ['Content-Type: application/json'])
+            curl.setopt(pycurl.WRITEDATA, response_buffer)
+            curl.setopt(pycurl.TIMEOUT, 30)
+            curl.perform()
+
+            http_code = curl.getinfo(pycurl.HTTP_CODE)
+            response_text = response_buffer.getvalue().decode('utf-8', errors='replace')
+
+            try:
+                data = json.loads(response_text)
+            except json.JSONDecodeError:
+                if self._log_callback:
+                    self._log_callback(f"createFileByHash: invalid JSON response", "warning")
+                return None
+
+            status = data.get('status', '')
+            error_code = data.get('errorCode', 0)
+
+            if status == 'success' and http_code in (200, 201):
+                file_id = data.get('id', '')
+                link = data.get('link', '')
+                if self._log_callback:
+                    self._log_callback(
+                        f"Hash match found — file created without upload: {link}", "info")
+                return {
+                    "status": "success",
+                    "url": link,
+                    "file_id": file_id,
+                    "deduplication": True,
+                    "raw_response": data
+                }
+
+            if error_code == 20:
+                if self._log_callback:
+                    self._log_callback(f"No hash match on server — will upload normally", "debug")
+                return None
+
+            if error_code == 10:
+                raise Exception(f"createFileByHash auth error: {data.get('message', 'Unauthorized')}")
+
+            if error_code == 64:
+                raise Exception(f"Disk quota exceeded: {data.get('message', '')}")
+
+            if self._log_callback:
+                self._log_callback(
+                    f"createFileByHash error (code {error_code}): {data.get('message', '')}", "warning")
+            return None
+
+        except pycurl.error as e:
+            if self._log_callback:
+                self._log_callback(f"createFileByHash network error: {e}", "warning")
+            return None
+        finally:
+            curl.close()
+
+    def _upload_multistep(self, file_path: Path, md5_hash: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Perform multi-step upload (init → upload → poll).
 
         Args:
             file_path: Path to file
+            md5_hash: Pre-computed MD5 hash (avoids recomputation)
             **kwargs: Additional arguments (including _retry_attempted flag)
 
         Returns:
@@ -953,11 +1046,18 @@ class FileHostClient:
         """
         file_size = file_path.stat().st_size
 
-        # Step 1: Calculate hash if required
-        file_hash = None
-        if self.config.require_file_hash:
+        # Step 1: Use pre-computed hash or calculate if needed
+        file_hash = md5_hash
+        if not file_hash and self.config.require_file_hash:
             file_hash = self._calculate_file_hash(file_path)
             if self._log_callback: self._log_callback(f"Calculated file hash for {file_path.name}: {file_hash}", "debug")
+
+        # Try hash-based deduplication (K2S-family)
+        if md5_hash and self.config.dedupe_endpoint:
+            clean_name = self._get_clean_filename(file_path.name)
+            dedup_result = self._try_create_by_hash(md5_hash, clean_name)
+            if dedup_result:
+                return dedup_result
 
         # Step 2: Initialize upload
         init_url = self.config.upload_init_url
