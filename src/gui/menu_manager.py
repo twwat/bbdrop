@@ -378,10 +378,10 @@ class MenuManager(QObject):
             from bbdrop import create_windows_context_menu
             ok = create_windows_context_menu()
             if ok:
-                QMessageBox.information(mw, "Context Menu", "Windows Explorer context menu installed successfully.")
+                QMessageBox.information(mw, "Context Menu", "'Add to BBDrop' context menu installed successfully.")
                 log("Installed Windows context menu", category="ui", level="debug")
             else:
-                QMessageBox.warning(mw, "Context Menu", "Failed to install Windows Explorer context menu.")
+                QMessageBox.warning(mw, "Context Menu", "Failed to install 'Add to BBDrop' context menu.")
                 log("Failed to install Windows context menu", category="ui", level="debug")
         except Exception as e:
             QMessageBox.warning(mw, "Context Menu", f"Error installing context menu: {e}")
@@ -394,10 +394,10 @@ class MenuManager(QObject):
             from bbdrop import remove_windows_context_menu
             ok = remove_windows_context_menu()
             if ok:
-                QMessageBox.information(mw, "Context Menu", "Windows Explorer context menu removed successfully.")
+                QMessageBox.information(mw, "Context Menu", "'Add to BBDrop' context menu removed successfully.")
                 log("Removed Windows context menu", category="ui", level="debug")
             else:
-                QMessageBox.warning(mw, "Context Menu", "Failed to remove Windows Explorer context menu.")
+                QMessageBox.warning(mw, "Context Menu", "Failed to remove 'Add to BBDrop' context menu.")
                 log("Failed to remove Windows context menu", category="ui", level="warning")
         except Exception as e:
             QMessageBox.warning(mw, "Context Menu", f"Error removing context menu: {e}")
