@@ -328,11 +328,14 @@ class WorkerSignalHandler(QObject):
         if not hasattr(mw, 'worker_status_widget'):
             return
         host_id, host_name = self._get_upload_worker_host_info()
+        # Use EMA-smoothed value from bandwidth manager (fed by parallel
+        # connection on the same signal, which fires first)
+        smoothed_kbps = self.bandwidth_manager.get_imx_bandwidth()
         mw.worker_status_widget.update_worker_status(
             worker_id=f"upload_worker_{host_id}",
             worker_type="imagehost",
             hostname=host_name,
-            speed_bps=speed_kbps * 1024,
+            speed_bps=smoothed_kbps * 1024,
             status="uploading",
             host_id=host_id
         )
@@ -586,12 +589,6 @@ class WorkerSignalHandler(QObject):
         try:
             total_mib = total_kbps / 1024.0
             speed_str = f"{total_mib:.3f} MiB/s"
-
-            # Dim the text if speed is essentially zero
-            if total_mib < 0.001:
-                mw.speed_current_value_label.setStyleSheet("color: rgba(128, 128, 128, 100);")
-            else:
-                mw.speed_current_value_label.setStyleSheet("")
 
             mw.speed_current_value_label.setText(speed_str)
 
