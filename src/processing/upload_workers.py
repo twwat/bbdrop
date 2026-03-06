@@ -512,11 +512,28 @@ class UploadWorker(QThread):
                             )
                             if normalized and normalized.get('status') == 'success':
                                 data = normalized.get('data', {})
+                                bbcode = data.get('bbcode') or ''
+                                image_url = data.get('image_url') or ''
+                                thumb_url = data.get('thumb_url') or ''
+
+                                # Hosts like Turbo return no URLs per-image;
+                                # the real data comes from fetch_batch_results().
+                                if not bbcode and hasattr(cover_client, 'fetch_batch_results'):
+                                    try:
+                                        batch = cover_client.fetch_batch_results()
+                                        if batch:
+                                            for img in batch.get('images', []):
+                                                bbcode = img.get('bbcode', '') or bbcode
+                                                image_url = img.get('image_url', '') or image_url
+                                                thumb_url = img.get('thumb_url', '') or thumb_url
+                                    except Exception:
+                                        pass
+
                                 results.append({
                                     'status': 'success',
-                                    'bbcode': data.get('bbcode') or normalized.get('bbcode', ''),
-                                    'image_url': data.get('image_url') or normalized.get('image_url', ''),
-                                    'thumb_url': data.get('thumb_url') or normalized.get('thumb_url', ''),
+                                    'bbcode': bbcode,
+                                    'image_url': image_url,
+                                    'thumb_url': thumb_url,
                                     'source_path': path,
                                 })
                             else:
