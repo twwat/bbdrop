@@ -1959,7 +1959,7 @@ class BBDropGUI(QMainWindow):
 
         # Worker Status section (add between settings and log)
         # Note: worker_status_widget was created early in __init__ before FileHostWorkerManager
-        worker_status_group = QGroupBox("Upload Workers")
+        worker_status_group = QGroupBox("Hosts")
         worker_status_layout = QVBoxLayout(worker_status_group)
         worker_status_layout.setContentsMargins(5, 5, 5, 5)
 
@@ -1968,6 +1968,12 @@ class BBDropGUI(QMainWindow):
         self.worker_status_widget.layout().setSpacing(0)
         # Remove table border so it blends with the group box
         self.worker_status_widget.status_table.setFrameShape(QFrame.Shape.NoFrame)
+
+        # Move filter button from table overlay to group box title area
+        filter_btn = self.worker_status_widget.reparent_filter_button(worker_status_group)
+        if filter_btn:
+            filter_btn.setIconSize(QSize(12, 12))
+            filter_btn.setFixedSize(16, 16)
 
         # Add the already-created worker status widget to the layout
         worker_status_layout.addWidget(self.worker_status_widget)
@@ -3013,6 +3019,10 @@ class BBDropGUI(QMainWindow):
                 self.thumbnail_format_combo.setCurrentIndex(idx)
             self.thumbnail_format_combo.setEnabled(False)
             self.thumbnail_format_combo.blockSignals(False)
+
+        # Update worker status widget with active host
+        if hasattr(self, 'worker_status_widget') and host_id:
+            self.worker_status_widget.set_active_image_host(host_id)
 
     def _on_thumb_spinbox_changed(self, value: int):
         """Persist variable thumb size when spinbox changes."""
