@@ -465,7 +465,7 @@ class UploadEngine:
             try:
                 batch = self.uploader.fetch_batch_results()
                 if batch:
-                    if batch.get('gallery_id') and not gallery_id:
+                    if batch.get('gallery_id'):
                         gallery_id = batch['gallery_id']
                         gallery_url = self.uploader.get_gallery_url(gallery_id, gallery_name=gallery_name)
                         results['gallery_url'] = gallery_url
