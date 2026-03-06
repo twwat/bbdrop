@@ -1896,6 +1896,7 @@ class ImxToUploader(ImageHostClient):
                     thumb_url=data.get('thumb_url', ''),
                     gallery_id=data.get('gallery_id'),
                     original_filename=data.get('original_filename', os.path.basename(image_path)),
+                    bbcode=data.get('bbcode'),
                 )
             else:
                 response_text = response_buffer.getvalue().decode('utf-8', errors='replace')
