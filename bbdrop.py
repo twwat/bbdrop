@@ -64,7 +64,7 @@ except ImportError:
 import mimetypes
 from src.network.cookies import get_firefox_cookies, load_cookies_from_file  # noqa: F401  # re-exported
 
-__version__ = "0.9.0"  # Application version number
+__version__ = "0.9.1"  # Application version number
 
 # GitHub repository info for update checker
 GITHUB_OWNER = "twwat"
@@ -355,57 +355,44 @@ def create_windows_context_menu():
         is_frozen = getattr(sys, 'frozen', False)
 
         if is_frozen:
-            # Running as .exe - use the executable directly
-            script_dir = os.path.dirname(os.path.abspath(sys.executable))
             exe_path = sys.executable
-            # For frozen exe, both CLI and GUI use the same exe with different flags
             gui_script = f'"{exe_path}" --gui'
-            python_exe = None  # Not needed for .exe
-            pythonw_exe = None
         else:
-            # Running as Python script - use .py files with python.exe
-            script_dir = get_project_root()
-            os.path.join(script_dir, 'bbdrop.py')
-            gui_script = os.path.join(script_dir, 'bbdrop.py')  # Use bbdrop.py --gui for consistency
-            # Prefer python.exe for CLI and pythonw.exe for GUI
+            gui_script = os.path.join(get_project_root(), 'bbdrop.py')
             python_exe = sys.executable or 'python.exe'
             if python_exe.lower().endswith('pythonw.exe'):
                 pythonw_exe = python_exe
-                python_cli_exe = python_exe[:-1]  # replace 'w' -> ''
-                if not os.path.exists(python_cli_exe):
-                    python_cli_exe = python_exe  # best effort
             else:
-                python_cli_exe = python_exe
                 pythonw_exe = python_exe.replace('python.exe', 'pythonw.exe')
                 if not os.path.exists(pythonw_exe):
-                    pythonw_exe = python_exe  # fallback to python.exe if pythonw not present
+                    pythonw_exe = python_exe
 
-        # Create registry entries for GUI uploader (directory right-click)
-        gui_key_path_dir = r"Directory\shell\UploadToImxGUI"
-        gui_key_dir = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_dir)
-        winreg.SetValue(gui_key_dir, "", winreg.REG_SZ, "IMX Uploader")
+        # Per-user registry (no admin required) — HKCU\Software\Classes
+        hkcu_classes = r"Software\Classes"
+        gui_key_path_dir = hkcu_classes + r"\Directory\shell\BBDrop"
+        gui_key_dir = winreg.CreateKey(winreg.HKEY_CURRENT_USER, gui_key_path_dir)
+        winreg.SetValue(gui_key_dir, "", winreg.REG_SZ, "Add to BBDrop")
         try:
             winreg.SetValueEx(gui_key_dir, "MultiSelectModel", 0, winreg.REG_SZ, "Document")
         except Exception:
             pass
+        # Set icon to the exe/script so the menu entry shows the BBDrop icon
+        if is_frozen:
+            winreg.SetValueEx(gui_key_dir, "Icon", 0, winreg.REG_SZ, exe_path)
         gui_command_key_dir = winreg.CreateKey(gui_key_dir, "command")
 
         # Build command based on frozen/unfrozen state
         if is_frozen:
-            # For .exe, pass folder path as argument (--gui flag already in gui_script variable)
             gui_command = f'{gui_script} "%V"'
         else:
-            # For Python script, use pythonw.exe with bbdrop.py --gui
             gui_command = f'"{pythonw_exe}" "{gui_script}" --gui "%V"'
 
         winreg.SetValue(gui_command_key_dir, "", winreg.REG_SZ, gui_command)
         winreg.CloseKey(gui_command_key_dir)
         winreg.CloseKey(gui_key_dir)
-        
+
         print("Context menu created successfully!")
-        print("Right-click on any folder (or background) and select:")
-        print("  - 'Upload to imx.to' for command line mode")
-        print("  - 'Upload to imx.to (GUI)' for graphical interface")
+        print("Right-click any folder and select 'Add to BBDrop'.")
         return True
         
     except Exception as e:
@@ -419,35 +406,35 @@ def remove_windows_context_menu():
         return False
 
     try:
-        # Remove command line context menu (background)
-        try:
-            key_path_bg = r"Directory\Background\shell\UploadToImx"
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path_bg + r"\command")
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path_bg)
-        except FileNotFoundError:
-            pass  # Key doesn't exist
-        
-        # Remove GUI context menu (background)
-        try:
-            gui_key_path_bg = r"Directory\Background\shell\UploadToImxGUI"
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_bg + r"\command")
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_bg)
-        except FileNotFoundError:
-            pass  # Key doesn't exist
+        hkcu_classes = r"Software\Classes"
 
-        # Remove command line context menu (directory items)
-        try:
-            key_path_dir = r"Directory\shell\UploadToImx"
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path_dir + r"\command")
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path_dir)
-        except FileNotFoundError:
-            pass
+        # Clean up old HKCR keys (from previous installs that required admin)
+        old_keys = [
+            r"Directory\Background\shell\UploadToImx",
+            r"Directory\Background\shell\UploadToImxGUI",
+            r"Directory\shell\UploadToImx",
+            r"Directory\shell\UploadToImxGUI",
+        ]
+        for key_path in old_keys:
+            try:
+                winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path + r"\command")
+                winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path)
+            except (FileNotFoundError, OSError):
+                pass
 
-        # Remove GUI context menu (directory items)
+        # Clean up old HKCU keys (same old names, in case they ended up here)
+        for key_path in old_keys:
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, hkcu_classes + "\\" + key_path + r"\command")
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, hkcu_classes + "\\" + key_path)
+            except (FileNotFoundError, OSError):
+                pass
+
+        # Remove current BBDrop key
         try:
-            gui_key_path_dir = r"Directory\shell\UploadToImxGUI"
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_dir + r"\command")
-            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, gui_key_path_dir)
+            bbdrop_key = hkcu_classes + r"\Directory\shell\BBDrop"
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, bbdrop_key + r"\command")
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, bbdrop_key)
         except FileNotFoundError:
             pass
         
