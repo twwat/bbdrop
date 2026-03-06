@@ -7,6 +7,7 @@ upload to hosts, and emit progress signals to the GUI.
 
 import time
 import json
+import hashlib
 import threading
 import traceback
 from typing import Optional, Dict, Any
@@ -51,6 +52,15 @@ class FileHostWorker(QThread):
     spinup_complete = pyqtSignal(str, str)  # host_id, error_message (empty = success)
     credentials_update_requested = pyqtSignal(str)  # credentials (for updating credentials from dialog)
     status_updated = pyqtSignal(str, str)  # host_id, status_text
+
+    @staticmethod
+    def _compute_md5(file_path) -> str:
+        """Compute MD5 hash of a file."""
+        md5 = hashlib.md5()
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                md5.update(chunk)
+        return md5.hexdigest()
 
     def __init__(self, host_id: str, queue_store: QueueStore):
         """Initialize file host worker for a specific host.
@@ -834,6 +844,16 @@ class FileHostWorker(QThread):
                         f"({part_size / (1024*1024):.1f} MB): {archive_path.name}",
                         level="info")
 
+                # Compute MD5 hash and persist before upload
+                md5_hash = self._compute_md5(archive_path)
+                file_size = archive_path.stat().st_size
+                self.queue_store.update_file_host_upload(
+                    current_upload_id,
+                    md5_hash=md5_hash,
+                    file_size=file_size
+                )
+                self._log(f"MD5: {md5_hash} ({file_size / (1024*1024):.1f} MB)", level="debug")
+
                 # Reset upload timing just before actual transfer
                 upload_start_time = time.time()
 
@@ -841,7 +861,8 @@ class FileHostWorker(QThread):
                 result = client.upload_file(
                     file_path=archive_path,
                     on_progress=on_progress,
-                    should_stop=should_stop
+                    should_stop=should_stop,
+                    md5_hash=md5_hash
                 )
 
                 # Calculate transfer time for metrics
@@ -865,16 +886,28 @@ class FileHostWorker(QThread):
                             uploaded_bytes=part_size
                         )
 
+                    # Mark deduplication status
+                    if result.get('deduplication') and current_upload_id:
+                        self.queue_store.update_file_host_upload(
+                            current_upload_id,
+                            deduped=1
+                        )
+
                     # Record metrics for successful transfer
                     from src.utils.metrics_store import get_metrics_store
                     metrics_store = get_metrics_store()
                     if metrics_store:
+                        try:
+                            peak_kbps = self.queue_store._main_window.worker_signal_handler.bandwidth_manager.get_file_host_bandwidth(host_name)
+                        except AttributeError:
+                            peak_kbps = None
                         metrics_store.record_transfer(
                             host_name=self.host_id,
                             bytes_uploaded=part_size,
                             transfer_time=upload_elapsed_time,
                             success=True,
-                            observed_peak_kbps=self.queue_store._main_window.worker_signal_handler.bandwidth_manager.get_file_host_bandwidth(host_name)
+                            observed_peak_kbps=peak_kbps,
+                            deduped=bool(result.get('deduplication'))
                         )
                     self._log(
                         f"Successfully uploaded {gallery_name}"
