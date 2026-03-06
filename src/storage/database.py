@@ -352,6 +352,13 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             )
             log("Added part_number column and gallery_host_part index", level="info", category="database")
 
+        # Migration: Add md5_hash, file_size, deduped columns to file_host_uploads
+        if 'md5_hash' not in fh_columns:
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN md5_hash TEXT")
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN file_size INTEGER")
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN deduped INTEGER DEFAULT 0")
+            log("Added md5_hash, file_size, deduped columns to file_host_uploads", level="info", category="database")
+
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
         # Continue anyway - the app should still work
@@ -1554,7 +1561,8 @@ class QueueStore:
                     fh.uploaded_bytes, fh.total_bytes,
                     fh.download_url, fh.file_id, fh.file_name, fh.error_message,
                     fh.raw_response, fh.retry_count, fh.created_ts,
-                    COALESCE(fh.part_number, 0)
+                    COALESCE(fh.part_number, 0),
+                    fh.md5_hash, fh.file_size, COALESCE(fh.deduped, 0)
                 FROM file_host_uploads fh
                 JOIN galleries g ON fh.gallery_fk = g.id
                 WHERE g.path = ?
@@ -1583,6 +1591,9 @@ class QueueStore:
                     'retry_count': row[14],
                     'created_ts': row[15],
                     'part_number': row[16],
+                    'md5_hash': row[17],
+                    'file_size': row[18],
+                    'deduped': bool(row[19]),
                 })
 
             return uploads
@@ -1615,7 +1626,8 @@ class QueueStore:
                     fh.uploaded_bytes, fh.total_bytes,
                     fh.download_url, fh.file_id, fh.file_name, fh.error_message,
                     fh.raw_response, fh.retry_count, fh.created_ts,
-                    COALESCE(fh.part_number, 0)
+                    COALESCE(fh.part_number, 0),
+                    fh.md5_hash, fh.file_size, COALESCE(fh.deduped, 0)
                 FROM file_host_uploads fh
                 JOIN galleries g ON fh.gallery_fk = g.id
                 ORDER BY g.path, fh.host_name ASC, fh.part_number ASC
@@ -1642,6 +1654,9 @@ class QueueStore:
                     'retry_count': row[15],
                     'created_ts': row[16],
                     'part_number': row[17],
+                    'md5_hash': row[18],
+                    'file_size': row[19],
+                    'deduped': bool(row[20]),
                 }
 
                 if path not in uploads_by_path:
@@ -1674,7 +1689,8 @@ class QueueStore:
             allowed_fields = {
                 'status', 'zip_path', 'started_ts', 'finished_ts',
                 'uploaded_bytes', 'total_bytes', 'download_url',
-                'file_id', 'file_name', 'error_message', 'raw_response', 'retry_count'
+                'file_id', 'file_name', 'error_message', 'raw_response', 'retry_count',
+                'md5_hash', 'file_size', 'deduped'
             }
 
             updates = []
