@@ -1366,15 +1366,43 @@ def save_gallery_artifacts(
             bbcode_parts.append(bb)
     all_images_bbcode = "  ".join(bbcode_parts)
 
-    # Get file host download links (if available)
-    host_links = ''
+    # Get file host data from database
+    queue_store = None
     try:
         from src.storage.database import QueueStore
-        from src.utils.template_utils import get_file_host_links_for_template
         queue_store = QueueStore()
-        host_links = get_file_host_links_for_template(queue_store, folder_path)
-    except (sqlite3.Error, OSError) as e:
-        log(f"Failed to get file host links: {e}", level="warning", category="template")
+    except Exception as e:
+        log(f"Failed to open queue store for artifacts: {e}", level="warning", category="artifact")
+
+    # Get file host download links for BBCode template
+    host_links = ''
+    if queue_store:
+        try:
+            from src.utils.template_utils import get_file_host_links_for_template
+            host_links = get_file_host_links_for_template(queue_store, folder_path)
+        except Exception as e:
+            log(f"Failed to get file host links: {e}", level="warning", category="template")
+
+    # Build file_hosts array for JSON artifact
+    file_hosts_data = []
+    if queue_store:
+        try:
+            fh_uploads = queue_store.get_file_host_uploads(folder_path)
+            for u in fh_uploads:
+                if u['status'] == 'completed' and u.get('download_url'):
+                    file_hosts_data.append({
+                        'host': u['host_name'],
+                        'download_url': u['download_url'],
+                        'file_id': u.get('file_id', ''),
+                        'file_name': u.get('file_name', ''),
+                        'md5_hash': u.get('md5_hash', ''),
+                        'file_size': u.get('file_size', 0),
+                        'deduped': u.get('deduped', False),
+                        'part': u.get('part_number', 0) + 1,
+                    })
+        except Exception as e:
+            log(f"Failed to build file_hosts artifact data: {e}", level="warning", category="artifact")
+
     # Get cover info from results if available (cover_result is a list of per-cover dicts)
     cover_results = results.get('cover_result', []) or []
     c_url = next((r.get('image_url', '') for r in cover_results if r.get('status') == 'success'), '')
@@ -1444,6 +1472,7 @@ def save_gallery_artifacts(
         },
         'images': results.get('images', []),
         'cover_result': cover_results,
+        'file_hosts': file_hosts_data,
         'failures': [
             {
                 'filename': fname,
