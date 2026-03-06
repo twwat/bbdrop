@@ -240,6 +240,7 @@ class MetricsStore:
                         bytes_uploaded INTEGER DEFAULT 0,
                         files_uploaded INTEGER DEFAULT 0,
                         files_failed INTEGER DEFAULT 0,
+                        files_deduped INTEGER DEFAULT 0,
                         total_transfer_time REAL DEFAULT 0,
                         peak_speed REAL DEFAULT 0,
                         peak_speed_date TEXT,
@@ -260,15 +261,18 @@ class MetricsStore:
                         ON host_metrics(host_name, period_type, period_date);
                 """)
 
-                # Migrate: add peak_speed_date column if missing (existing DBs)
+                # Migrate: add columns if missing (existing DBs)
                 try:
                     cursor = conn.execute("PRAGMA table_info(host_metrics)")
                     columns = {row[1] for row in cursor.fetchall()}
                     if 'peak_speed_date' not in columns:
                         conn.execute("ALTER TABLE host_metrics ADD COLUMN peak_speed_date TEXT")
                         logger.info("Migrated host_metrics: added peak_speed_date column")
+                    if 'files_deduped' not in columns:
+                        conn.execute("ALTER TABLE host_metrics ADD COLUMN files_deduped INTEGER DEFAULT 0")
+                        logger.info("Migrated host_metrics: added files_deduped column")
                 except Exception as e:
-                    logger.warning(f"Migration check for peak_speed_date: {e}")
+                    logger.warning(f"Migration check: {e}")
 
             except Exception as e:
                 logger.error(f"Failed to create metrics schema: {e}")
@@ -279,7 +283,8 @@ class MetricsStore:
     def record_transfer(self, host_name: str, bytes_uploaded: int,
                        transfer_time: float, success: bool,
                        observed_peak_kbps: Optional[float] = None,
-                       files_count: int = 1) -> None:
+                       files_count: int = 1,
+                       deduped: bool = False) -> None:
         """
         Record a completed transfer.
 
@@ -296,6 +301,7 @@ class MetricsStore:
                                average speed from bytes/time.
             files_count: Number of files in this transfer (default 1). For image hosts,
                         this should be the number of images uploaded in the gallery.
+            deduped: Whether the server deduplicated the file (already had it).
         """
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
@@ -323,6 +329,7 @@ class MetricsStore:
                     'bytes_uploaded': 0,
                     'files_uploaded': 0,
                     'files_failed': 0,
+                    'files_deduped': 0,
                     'total_transfer_time': 0.0,
                     'peak_speed': 0.0,
                     'peak_speed_date': None,
@@ -332,6 +339,8 @@ class MetricsStore:
             cache = self._session_cache[host_name]
             cache['bytes_uploaded'] += bytes_uploaded
             cache['total_transfer_time'] += transfer_time
+            if deduped:
+                cache['files_deduped'] += files_count
 
             if success:
                 cache['files_uploaded'] += files_count
@@ -366,6 +375,7 @@ class MetricsStore:
                         'bytes_uploaded': db_metrics.get('bytes_uploaded', 0),
                         'files_uploaded': db_metrics.get('files_uploaded', 0),
                         'files_failed': db_metrics.get('files_failed', 0),
+                        'files_deduped': db_metrics.get('files_deduped', 0),
                         'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
                         'peak_speed': db_metrics.get('peak_speed', 0.0),
                         'peak_speed_date': db_metrics.get('peak_speed_date'),
@@ -377,6 +387,7 @@ class MetricsStore:
                         'bytes_uploaded': 0,
                         'files_uploaded': 0,
                         'files_failed': 0,
+                        'files_deduped': 0,
                         'total_transfer_time': 0.0,
                         'peak_speed': 0.0,
                         'peak_speed_date': None,
@@ -387,6 +398,8 @@ class MetricsStore:
             today_cache = self._today_cache[host_name]
             today_cache['bytes_uploaded'] += bytes_uploaded
             today_cache['total_transfer_time'] += transfer_time
+            if deduped:
+                today_cache['files_deduped'] += files_count
             if success:
                 today_cache['files_uploaded'] += files_count
             else:
@@ -412,6 +425,7 @@ class MetricsStore:
                         'bytes_uploaded': db_metrics.get('bytes_uploaded', 0),
                         'files_uploaded': db_metrics.get('files_uploaded', 0),
                         'files_failed': db_metrics.get('files_failed', 0),
+                        'files_deduped': db_metrics.get('files_deduped', 0),
                         'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
                         'peak_speed': db_metrics.get('peak_speed', 0.0),
                         'peak_speed_date': db_metrics.get('peak_speed_date'),
@@ -423,6 +437,7 @@ class MetricsStore:
                         'bytes_uploaded': 0,
                         'files_uploaded': 0,
                         'files_failed': 0,
+                        'files_deduped': 0,
                         'total_transfer_time': 0.0,
                         'peak_speed': 0.0,
                         'peak_speed_date': None,
@@ -433,6 +448,8 @@ class MetricsStore:
             all_time_cache = self._all_time_cache[host_name]
             all_time_cache['bytes_uploaded'] += bytes_uploaded
             all_time_cache['total_transfer_time'] += transfer_time
+            if deduped:
+                all_time_cache['files_deduped'] += files_count
             if success:
                 all_time_cache['files_uploaded'] += files_count
             else:
@@ -461,6 +478,7 @@ class MetricsStore:
             'bytes_uploaded': bytes_uploaded,
             'transfer_time': transfer_time,
             'success': success,
+            'deduped': deduped,
             'speed': speed,
             'timestamp': time.time()
         })
@@ -487,6 +505,7 @@ class MetricsStore:
             'bytes_uploaded': cache.get('bytes_uploaded', 0),
             'files_uploaded': files_uploaded,
             'files_failed': files_failed,
+            'files_deduped': cache.get('files_deduped', 0),
             'total_transfer_time': cache.get('total_transfer_time', 0.0),
             'peak_speed': cache.get('peak_speed', 0.0),
             'peak_speed_date': cache.get('peak_speed_date'),
@@ -513,6 +532,7 @@ class MetricsStore:
                     'bytes_uploaded': 0,
                     'files_uploaded': 0,
                     'files_failed': 0,
+                    'files_deduped': 0,
                     'total_transfer_time': 0.0,
                     'peak_speed': 0.0,
                     'avg_speed': 0.0,
@@ -545,6 +565,7 @@ class MetricsStore:
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
+                            COALESCE(SUM(files_deduped), 0) as files_deduped,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
                             COALESCE(MAX(peak_speed), 0) as peak_speed,
                             (SELECT peak_speed_date FROM host_metrics
@@ -562,6 +583,7 @@ class MetricsStore:
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
+                            COALESCE(SUM(files_deduped), 0) as files_deduped,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
                             COALESCE(MAX(peak_speed), 0) as peak_speed,
                             (SELECT peak_speed_date FROM host_metrics
@@ -579,6 +601,7 @@ class MetricsStore:
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
+                            COALESCE(SUM(files_deduped), 0) as files_deduped,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
                             COALESCE(MAX(peak_speed), 0) as peak_speed,
                             (SELECT peak_speed_date FROM host_metrics
@@ -594,6 +617,7 @@ class MetricsStore:
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
+                            COALESCE(SUM(files_deduped), 0) as files_deduped,
                             COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
                             COALESCE(MAX(peak_speed), 0) as peak_speed,
                             peak_speed_date
@@ -615,6 +639,7 @@ class MetricsStore:
                         'bytes_uploaded': row['bytes_uploaded'],
                         'files_uploaded': row['files_uploaded'],
                         'files_failed': row['files_failed'],
+                        'files_deduped': row['files_deduped'],
                         'total_transfer_time': row['total_transfer_time'],
                         'peak_speed': row['peak_speed'],
                         'peak_speed_date': row['peak_speed_date'],
@@ -632,6 +657,7 @@ class MetricsStore:
             'bytes_uploaded': 0,
             'files_uploaded': 0,
             'files_failed': 0,
+            'files_deduped': 0,
             'total_transfer_time': 0.0,
             'peak_speed': 0.0,
             'peak_speed_date': None,
@@ -732,6 +758,7 @@ class MetricsStore:
                         'bytes_uploaded': row['bytes_uploaded'],
                         'files_uploaded': row['files_uploaded'],
                         'files_failed': row['files_failed'],
+                        'files_deduped': row['files_deduped'],
                         'total_transfer_time': row['total_transfer_time'],
                         'peak_speed': row['peak_speed'],
                         'peak_speed_date': row['peak_speed_date'],
@@ -824,6 +851,7 @@ class MetricsStore:
         bytes_uploaded = item['bytes_uploaded']
         transfer_time = item['transfer_time']
         success = item['success']
+        is_deduped = item.get('deduped', False)
         speed = item['speed']
         today = datetime.now().strftime('%Y-%m-%d')
 
@@ -837,13 +865,14 @@ class MetricsStore:
                 # Update daily metrics
                 conn.execute("""
                     INSERT INTO host_metrics
-                        (host_name, bytes_uploaded, files_uploaded, files_failed,
+                        (host_name, bytes_uploaded, files_uploaded, files_failed, files_deduped,
                          total_transfer_time, peak_speed, peak_speed_date, period_type, period_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'daily', ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'daily', ?)
                     ON CONFLICT(host_name, period_type, period_date) DO UPDATE SET
                         bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
                         files_uploaded = files_uploaded + excluded.files_uploaded,
                         files_failed = files_failed + excluded.files_failed,
+                        files_deduped = files_deduped + excluded.files_deduped,
                         total_transfer_time = total_transfer_time + excluded.total_transfer_time,
                         peak_speed = MAX(peak_speed, excluded.peak_speed),
                         peak_speed_date = CASE WHEN excluded.peak_speed > peak_speed THEN excluded.peak_speed_date ELSE peak_speed_date END,
@@ -853,6 +882,7 @@ class MetricsStore:
                     bytes_uploaded,
                     1 if success else 0,
                     0 if success else 1,
+                    1 if is_deduped else 0,
                     transfer_time,
                     speed,
                     now_str,
@@ -862,13 +892,14 @@ class MetricsStore:
                 # Update all-time metrics
                 conn.execute("""
                     INSERT INTO host_metrics
-                        (host_name, bytes_uploaded, files_uploaded, files_failed,
+                        (host_name, bytes_uploaded, files_uploaded, files_failed, files_deduped,
                          total_transfer_time, peak_speed, peak_speed_date, period_type, period_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'all_time', NULL)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'all_time', NULL)
                     ON CONFLICT(host_name, period_type, period_date) DO UPDATE SET
                         bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
                         files_uploaded = files_uploaded + excluded.files_uploaded,
                         files_failed = files_failed + excluded.files_failed,
+                        files_deduped = files_deduped + excluded.files_deduped,
                         total_transfer_time = total_transfer_time + excluded.total_transfer_time,
                         peak_speed = MAX(peak_speed, excluded.peak_speed),
                         peak_speed_date = CASE WHEN excluded.peak_speed > peak_speed THEN excluded.peak_speed_date ELSE peak_speed_date END,
@@ -878,6 +909,7 @@ class MetricsStore:
                     bytes_uploaded,
                     1 if success else 0,
                     0 if success else 1,
+                    1 if is_deduped else 0,
                     transfer_time,
                     speed,
                     now_str
@@ -976,6 +1008,7 @@ class MetricsStore:
                         'bytes_uploaded': row['bytes_uploaded'],
                         'files_uploaded': row['files_uploaded'],
                         'files_failed': row['files_failed'],
+                        'files_deduped': row['files_deduped'],
                         'total_transfer_time': row['total_transfer_time'],
                         'peak_speed': row['peak_speed'],
                         'peak_speed_date': row['peak_speed_date'],
