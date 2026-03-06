@@ -32,7 +32,8 @@
     "form_data_path": ["form_data"],
     "poll_delay": 0,
     "poll_retries": 0,
-    "require_hash": false
+    "require_hash": false,
+    "dedupe_endpoint": "createFileByHash"
   },
 
   "defaults": {

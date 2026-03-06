@@ -73,6 +73,7 @@ class HostConfig:
     upload_poll_delay: float = 1.0
     upload_poll_retries: int = 10
     require_file_hash: bool = False
+    dedupe_endpoint: Optional[str] = None  # API endpoint for hash-based dedup (e.g., "createFileByHash")
 
     # K2S-specific multi-step enhancements
     init_method: str = "GET"  # "GET" or "POST"
@@ -175,6 +176,7 @@ class HostConfig:
             upload_poll_delay=multistep_config.get('poll_delay', 1.0),
             upload_poll_retries=multistep_config.get('poll_retries', 10),
             require_file_hash=multistep_config.get('require_hash', False),
+            dedupe_endpoint=multistep_config.get('dedupe_endpoint'),
 
             # K2S-specific multi-step enhancements
             init_method=multistep_config.get('init_method', 'GET'),
