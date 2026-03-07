@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from bbdrop import (
+from src.utils.paths import (
     load_user_defaults, get_config_path,
     get_central_store_base_path, get_default_central_store_base_path,
     get_project_root, get_base_path,

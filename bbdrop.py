@@ -60,7 +60,6 @@ try:
 except ImportError:
     winreg = None  # Not available on Linux/Mac
 import mimetypes
-from src.network.cookies import get_firefox_cookies, load_cookies_from_file  # noqa: F401  # re-exported
 
 from src.network.imx_uploader import ImxToUploader
 
@@ -71,23 +70,17 @@ from src.utils.credentials import (
     setup_secure_password,
 )
 
-# Re-exported for backward compatibility — will be removed after import sweep
-from src.utils.paths import (  # noqa: F401
+from src.utils.paths import (
     __version__,
     get_project_root,
-    get_base_path,
     get_config_path,
     read_config,
-    get_user_agent,
-    get_version,
-    get_default_central_store_base_path,
     get_central_store_base_path,
     get_central_storage_path,
     load_user_defaults,
     migrate_from_imxup,
-    _unique_destination_path,
 )
-from src.utils.format_utils import timestamp  # noqa: F401 — re-exported (was duplicate)
+from src.utils.format_utils import timestamp
 
 # GitHub repository info for update checker
 GITHUB_OWNER = "twwat"
