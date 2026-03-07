@@ -43,6 +43,12 @@ python bbdrop.py --gui
 
 ---
 
+## Configuration
+
+All settings live in the **Settings** dialog. The default data directory is `~/.bbdrop/`; change it under Settings > General.
+
+---
+
 ## Usage
 
 ### GUI
@@ -166,12 +172,6 @@ Templates support 18 placeholders and `[if placeholder]...[else]...[/if]` condit
 | `#ext1#` -- `#ext4#` | External link fields (from hooks) |
 
 </details>
-
----
-
-## Configuration
-
-All settings live in the **Settings** dialog. The default data directory is `~/.bbdrop/`; change it under Settings > General.
 
 ---
 

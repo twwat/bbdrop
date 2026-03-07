@@ -4,7 +4,7 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.9.1] - 2026-03-04 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.0...v0.9.1))
+## [0.9.1] - 2026-03-06 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.0...v0.9.1))
 
 ### Added
 - **Hash-based deduplication**: Keep2Share, TezFiles, and FileBoom skip uploads when the server already has the file, using MD5 hash matching
@@ -616,7 +616,7 @@ v0.7.1: Statistics dialog, IMX status scanner performance, comprehensive tests
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| 0.9.1  | 2026-03-04 | Pixhost support, multi-cover pipeline, context menu fix, 20+ bug fixes |
+| 0.9.1  | 2026-03-06 | Pixhost support, multi-cover pipeline, context menu fix, 20+ bug fixes |
 | 0.9.0  | 2026-02-24 | Notifications, Tor support, image host proxies, disk space monitoring |
 | 0.8.3  | 2026-02-14 | Multi-host uploads, cover redesign, CSPRNG credentials, hooks |
 | 0.8.2  | 2026-02-03 | Multi-format archives, split uploads, tooltips |
