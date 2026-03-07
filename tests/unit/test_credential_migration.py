@@ -45,55 +45,55 @@ class TestGetEncryptionKey:
 
     def test_returns_cached_key_on_second_call(self):
         """Second call returns cached key without hitting keyring."""
-        import bbdrop
-        original_cached = bbdrop._cached_master_key
+        import src.utils.credentials as creds
+        original_cached = creds._cached_master_key
         try:
-            bbdrop._cached_master_key = "cached_test_key"
-            result = bbdrop.get_encryption_key()
+            creds._cached_master_key = "cached_test_key"
+            result = creds.get_encryption_key()
             assert result == "cached_test_key"
         finally:
-            bbdrop._cached_master_key = original_cached
+            creds._cached_master_key = original_cached
 
     @patch('keyring.get_password')
     def test_reads_master_key_from_keyring(self, mock_get):
         """Reads _master_key from keyring when not cached."""
-        import bbdrop
-        original_cached = bbdrop._cached_master_key
+        import src.utils.credentials as creds
+        original_cached = creds._cached_master_key
         try:
-            bbdrop._cached_master_key = None
+            creds._cached_master_key = None
             mock_get.return_value = "keyring_master_key"
-            result = bbdrop.get_encryption_key()
+            result = creds.get_encryption_key()
             assert result == "keyring_master_key"
             mock_get.assert_called_with("bbdrop", "_master_key")
         finally:
-            bbdrop._cached_master_key = original_cached
+            creds._cached_master_key = original_cached
 
     @patch('keyring.get_password', side_effect=Exception("No backend"))
     def test_raises_on_keyring_failure(self, mock_get):
         """Raises CredentialDecryptionError when keyring is unavailable."""
-        import bbdrop
-        original_cached = bbdrop._cached_master_key
+        import src.utils.credentials as creds
+        original_cached = creds._cached_master_key
         try:
-            bbdrop._cached_master_key = None
-            with pytest.raises(bbdrop.CredentialDecryptionError, match="OS keyring is not available"):
-                bbdrop.get_encryption_key()
+            creds._cached_master_key = None
+            with pytest.raises(creds.CredentialDecryptionError, match="OS keyring is not available"):
+                creds.get_encryption_key()
         finally:
-            bbdrop._cached_master_key = original_cached
+            creds._cached_master_key = original_cached
 
-    @patch('bbdrop._migrate_encryption_keys')
+    @patch('src.utils.credentials._migrate_encryption_keys')
     @patch('keyring.get_password', return_value=None)
     def test_triggers_migration_when_no_master_key(self, mock_get, mock_migrate):
         """Triggers migration when keyring has no _master_key entry."""
-        import bbdrop
-        original_cached = bbdrop._cached_master_key
+        import src.utils.credentials as creds
+        original_cached = creds._cached_master_key
         try:
-            bbdrop._cached_master_key = None
+            creds._cached_master_key = None
             mock_migrate.return_value = "new_migrated_key"
-            result = bbdrop.get_encryption_key()
+            result = creds.get_encryption_key()
             assert result == "new_migrated_key"
             mock_migrate.assert_called_once()
         finally:
-            bbdrop._cached_master_key = original_cached
+            creds._cached_master_key = original_cached
 
 
 class TestCredentialStorageKeyringOnly:
@@ -280,16 +280,16 @@ class TestMigrateEncryptionKeys:
     @patch('keyring.get_password')
     def test_migration_idempotent_via_master_key_check(self, mock_get):
         """When master key exists, get_encryption_key returns it — migration never runs."""
-        import bbdrop
-        original_cached = bbdrop._cached_master_key
+        import src.utils.credentials as creds
+        original_cached = creds._cached_master_key
         try:
-            bbdrop._cached_master_key = None
+            creds._cached_master_key = None
             mock_get.return_value = "existing_master_key"
 
-            with patch('bbdrop._migrate_encryption_keys') as mock_migrate:
-                result = bbdrop.get_encryption_key()
+            with patch('src.utils.credentials._migrate_encryption_keys') as mock_migrate:
+                result = creds.get_encryption_key()
 
             assert result == "existing_master_key"
             mock_migrate.assert_not_called()
         finally:
-            bbdrop._cached_master_key = original_cached
+            creds._cached_master_key = original_cached
