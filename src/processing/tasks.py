@@ -340,7 +340,7 @@ class TableUpdateQueue:
 def check_stored_credentials() -> bool:
     """Check if credentials are stored in OS keyring."""
     try:
-        from bbdrop import get_credential
+        from src.utils.credentials import get_credential
 
         username = get_credential('username')
         password = get_credential('password')
@@ -356,7 +356,7 @@ def check_stored_credentials() -> bool:
 def api_key_is_set() -> bool:
     """Check if API key is configured in QSettings (Registry)"""
     try:
-        from bbdrop import get_credential
+        from src.utils.credentials import get_credential
         encrypted_api_key = get_credential('api_key')
         return bool(encrypted_api_key)
     except Exception as e:

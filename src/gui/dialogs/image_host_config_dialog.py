@@ -12,7 +12,7 @@ from src.core.image_host_config import (
 from src.gui.widgets.image_host_config_panel import (
     ImageHostConfigPanel, _CredentialTestThread
 )
-from bbdrop import get_credential, decrypt_password
+from src.utils.credentials import get_credential, decrypt_password
 
 
 class ImageHostConfigDialog(QDialog):

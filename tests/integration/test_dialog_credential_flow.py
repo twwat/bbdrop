@@ -6,7 +6,7 @@ from unittest.mock import Mock
 from PyQt6.QtWidgets import QLineEdit
 from PyQt6.QtGui import QIcon
 
-from bbdrop import encrypt_password, remove_credential
+from src.utils.credentials import encrypt_password, remove_credential
 from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog, AsteriskPasswordEdit
 from src.core.file_host_config import HostConfig
 
@@ -107,7 +107,7 @@ class TestDialogCredentialFlow:
         mock_icon_manager.get_icon = Mock(return_value=QIcon())
         monkeypatch.setattr('src.gui.icon_manager.get_icon_manager', lambda: mock_icon_manager)
         monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp"))
-        monkeypatch.setattr('bbdrop.get_credential', Mock(return_value=None))
+        monkeypatch.setattr('src.utils.credentials.get_credential', Mock(return_value=None))
 
         # Create dialog with no stored credentials
         dialog = FileHostConfigDialog(
@@ -130,7 +130,7 @@ class TestDialogCredentialFlow:
         monkeypatch.setattr('src.gui.icon_manager.get_icon_manager', lambda: mock_icon_manager)
         monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp"))
         # Return old encrypted credentials
-        monkeypatch.setattr('bbdrop.get_credential', Mock(return_value=encrypt_password("olduser:oldpass")))
+        monkeypatch.setattr('src.utils.credentials.get_credential', Mock(return_value=encrypt_password("olduser:oldpass")))
 
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config, {}, mock_worker_manager

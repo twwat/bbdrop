@@ -85,7 +85,8 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup, QDrag
 
 # Import the core uploader functionality
-from bbdrop import get_project_root, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from bbdrop import get_project_root, load_user_defaults, sanitize_gallery_name, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from src.utils.credentials import encrypt_password, decrypt_password
 from bbdrop import create_windows_context_menu, remove_windows_context_menu
 from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
 from src.utils.logger import log, set_main_window
@@ -219,7 +220,7 @@ def check_stored_credentials():
         Credentials are stored encrypted in Windows Registry under
         HKEY_CURRENT_USER\\Software\\BBDropUploader\\BBDropGUI
     """
-    from bbdrop import get_credential
+    from src.utils.credentials import get_credential
 
     username = get_credential('username')
     encrypted_password = get_credential('password')
@@ -239,7 +240,7 @@ def api_key_is_set() -> bool:
     Note:
         API key authentication is preferred over username/password.
     """
-    from bbdrop import get_credential
+    from src.utils.credentials import get_credential
     encrypted_api_key = get_credential('api_key')
     return bool(encrypted_api_key)
 

@@ -14,7 +14,7 @@ from typing import Optional, Dict, Any
 
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings
 
-from bbdrop import get_credential, decrypt_password
+from src.utils.credentials import get_credential, decrypt_password
 from src.core.engine import AtomicCounter
 from src.core.file_host_config import get_config_manager, HostConfig, get_file_host_setting
 from src.network.file_host_client import FileHostClient

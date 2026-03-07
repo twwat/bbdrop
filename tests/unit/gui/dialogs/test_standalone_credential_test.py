@@ -73,10 +73,10 @@ def mock_main_widgets():
 @pytest.fixture
 def dialog_patches(monkeypatch):
     """Apply common patches needed for dialog creation"""
-    monkeypatch.setattr('bbdrop.get_credential', Mock(return_value=None))
-    monkeypatch.setattr('bbdrop.set_credential', Mock(return_value=True))
-    monkeypatch.setattr('bbdrop.encrypt_password', lambda x: f"encrypted_{x}")
-    monkeypatch.setattr('bbdrop.decrypt_password', lambda x: x.replace("encrypted_", ""))
+    monkeypatch.setattr('src.utils.credentials.get_credential', Mock(return_value=None))
+    monkeypatch.setattr('src.utils.credentials.set_credential', Mock(return_value=True))
+    monkeypatch.setattr('src.utils.credentials.encrypt_password', lambda x: f"encrypted_{x}")
+    monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
     monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp/bbdrop"))
 
     mock_icon_manager = Mock()

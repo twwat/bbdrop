@@ -9,8 +9,7 @@ import time
 from typing import Optional, Dict, Any
 from PyQt6.QtCore import QSettings
 
-# Import encryption functions from bbdrop module
-from bbdrop import encrypt_password, decrypt_password
+from src.utils.credentials import encrypt_password, decrypt_password
 
 
 class TokenCache:

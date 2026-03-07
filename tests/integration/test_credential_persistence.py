@@ -2,7 +2,7 @@
 """Integration test for credential persistence - tests REAL storage, no mocks."""
 
 import pytest
-from bbdrop import get_credential, set_credential, encrypt_password, decrypt_password, remove_credential
+from src.utils.credentials import get_credential, set_credential, encrypt_password, decrypt_password, remove_credential
 
 
 def _has_real_keyring():

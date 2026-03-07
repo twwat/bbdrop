@@ -152,7 +152,7 @@ class FileHostConfigDialog(QDialog):
             creds_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
             # Load current credentials from encrypted storage
-            from bbdrop import get_credential, decrypt_password
+            from src.utils.credentials import get_credential, decrypt_password
             from src.utils.logger import log
 
             encrypted_creds = get_credential(f"file_host_{self.host_id}_credentials")
@@ -1561,7 +1561,7 @@ class FileHostConfigDialog(QDialog):
         if credentials:
                 try:
                     # Bug fix: Correct function name is set_credential, not store_credential
-                    from bbdrop import set_credential, encrypt_password
+                    from src.utils.credentials import set_credential, encrypt_password
                     encrypted = encrypt_password(credentials)
                     set_credential(f"file_host_{self.host_id}_credentials", encrypted)
 

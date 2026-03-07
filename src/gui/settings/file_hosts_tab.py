@@ -727,7 +727,8 @@ class FileHostsSettingsWidget(QWidget):
             import os
             import configparser
             from src.core.file_host_config import get_config_manager, get_file_host_setting
-            from bbdrop import get_config_path, get_credential, decrypt_password
+            from bbdrop import get_config_path
+            from src.utils.credentials import get_credential, decrypt_password
 
             config = configparser.ConfigParser()
             config_file = get_config_path()
@@ -779,7 +780,8 @@ class FileHostsSettingsWidget(QWidget):
             import os
             import configparser
             from src.core.file_host_config import save_file_host_setting
-            from bbdrop import get_config_path, set_credential, encrypt_password
+            from bbdrop import get_config_path
+            from src.utils.credentials import set_credential, encrypt_password
 
             config = configparser.ConfigParser()
             config_file = get_config_path()

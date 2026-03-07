@@ -16,7 +16,7 @@ class TestRenameWorkerInit:
 
     @patch('threading.Thread')
     @patch('requests.Session')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_init_with_credentials(self, mock_get_cred, mock_session_class, mock_thread_class):
         """Test initialization with stored credentials"""
         mock_get_cred.side_effect = lambda key: {
@@ -27,7 +27,7 @@ class TestRenameWorkerInit:
         mock_session = Mock()
         mock_session_class.return_value = mock_session
 
-        with patch('bbdrop.decrypt_password', return_value='plain_pass'):
+        with patch('src.utils.credentials.decrypt_password', return_value='plain_pass'):
             worker = RenameWorker()
 
         assert worker.username == 'testuser'
@@ -39,7 +39,7 @@ class TestRenameWorkerInit:
 
     @patch('threading.Thread')
     @patch('requests.Session')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_init_without_credentials(self, mock_get_cred, mock_session_class, mock_thread_class):
         """Test initialization without credentials"""
         mock_get_cred.return_value = None
@@ -53,7 +53,7 @@ class TestRenameWorkerInit:
 
     @patch('threading.Thread')
     @patch('requests.Session')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_init_creates_session(self, mock_get_cred, mock_session_class, mock_thread_class):
         """Test session creation with proper configuration"""
         mock_get_cred.return_value = None
@@ -71,7 +71,7 @@ class TestRenameWorkerLogin:
     """Test RenameWorker login functionality"""
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_login_with_cookies_success(self, mock_get_cred, mock_thread_class):
         """Test successful login using cookies"""
         mock_get_cred.return_value = None
@@ -103,7 +103,7 @@ class TestRenameWorkerLogin:
             worker.session.get.assert_called_with("https://imx.to/user/gallery/manage")
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_login_with_credentials_success(self, mock_get_cred, mock_thread_class):
         """Test successful login using credentials"""
         mock_get_cred.side_effect = lambda key: {
@@ -111,7 +111,7 @@ class TestRenameWorkerLogin:
             'password': 'encrypted_pass'
         }.get(key)
 
-        with patch('bbdrop.decrypt_password', return_value='plain_pass'), \
+        with patch('src.utils.credentials.decrypt_password', return_value='plain_pass'), \
              patch('src.network.cookies.get_firefox_cookies', return_value={}), \
              patch('src.network.cookies.load_cookies_from_file', return_value={}), \
              patch('src.processing.rename_worker.load_session_cookies_from_keyring', return_value={}):
@@ -141,7 +141,7 @@ class TestRenameWorkerLogin:
             )
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_login_ddos_guard_detected(self, mock_get_cred, mock_thread_class):
         """Test login failure when DDoS-Guard detected"""
         mock_get_cred.side_effect = lambda key: {
@@ -149,7 +149,7 @@ class TestRenameWorkerLogin:
             'password': 'encrypted'
         }.get(key)
 
-        with patch('bbdrop.decrypt_password', return_value='pass'), \
+        with patch('src.utils.credentials.decrypt_password', return_value='pass'), \
              patch('src.network.cookies.get_firefox_cookies', return_value={}), \
              patch('src.network.cookies.load_cookies_from_file', return_value={}):
 
@@ -165,7 +165,7 @@ class TestRenameWorkerLogin:
             assert result is False
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_login_no_credentials(self, mock_get_cred, mock_thread_class):
         """Test login failure without credentials"""
         mock_get_cred.return_value = None
@@ -186,7 +186,7 @@ class TestRenameWorkerGalleryRename:
     """Test gallery renaming functionality"""
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_rename_gallery_success(self, mock_get_cred, mock_thread_class):
         """Test successful gallery rename"""
         mock_get_cred.return_value = None
@@ -219,7 +219,7 @@ class TestRenameWorkerGalleryRename:
         )
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_rename_gallery_403_reauth(self, mock_get_cred, mock_thread_class):
         """Test rename with 403 triggers re-authentication"""
         mock_get_cred.return_value = None
@@ -250,7 +250,7 @@ class TestRenameWorkerGalleryRename:
         assert result is True
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_rename_gallery_sanitize_name(self, mock_get_cred, mock_thread_class):
         """Test gallery name sanitization"""
         mock_get_cred.return_value = None
@@ -276,7 +276,7 @@ class TestRenameWorkerGalleryRename:
         worker.session.post.assert_called_once()
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_rename_gallery_login_redirect(self, mock_get_cred, mock_thread_class):
         """Test rename when redirected to login page"""
         mock_get_cred.return_value = None
@@ -302,7 +302,7 @@ class TestRenameWorkerQueueProcessing:
     """Test queue processing"""
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_queue_rename(self, mock_get_cred, mock_thread_class):
         """Test queuing rename request"""
         mock_get_cred.return_value = None
@@ -317,7 +317,7 @@ class TestRenameWorkerQueueProcessing:
         assert item['gallery_name'] == "Test Gallery"
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_queue_rename_empty_values(self, mock_get_cred, mock_thread_class):
         """Test queuing with empty values"""
         mock_get_cred.return_value = None
@@ -335,7 +335,7 @@ class TestRenameWorkerLifecycle:
     """Test worker lifecycle management"""
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_stop_worker(self, mock_get_cred, mock_thread_class):
         """Test stopping worker"""
         mock_thread = Mock()
@@ -355,7 +355,7 @@ class TestRenameWorkerLifecycle:
         worker.session.close.assert_called_once()
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_is_running_true(self, mock_get_cred, mock_thread_class):
         """Test is_running when worker active"""
         mock_thread = Mock()
@@ -368,7 +368,7 @@ class TestRenameWorkerLifecycle:
         assert worker.is_running() is True
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_is_running_false(self, mock_get_cred, mock_thread_class):
         """Test is_running when worker stopped"""
         mock_thread = Mock()
@@ -382,7 +382,7 @@ class TestRenameWorkerLifecycle:
         assert worker.is_running() is False
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_queue_size(self, mock_get_cred, mock_thread_class):
         """Test queue size reporting"""
         mock_get_cred.return_value = None
@@ -398,7 +398,7 @@ class TestRenameWorkerReauthRateLimit:
     """Test re-authentication rate limiting"""
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_reauth_rate_limit_blocks_rapid_attempts(self, mock_get_cred, mock_thread_class):
         """Test that rapid re-auth attempts are blocked"""
         mock_get_cred.return_value = None
@@ -411,7 +411,7 @@ class TestRenameWorkerReauthRateLimit:
         assert result is False
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_reauth_rate_limit_allows_after_interval(self, mock_get_cred, mock_thread_class):
         """Test re-auth allowed after interval"""
         mock_get_cred.return_value = None
@@ -425,7 +425,7 @@ class TestRenameWorkerReauthRateLimit:
         assert result is True
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_reauth_prevents_concurrent_attempts(self, mock_get_cred, mock_thread_class):
         """Test concurrent re-auth attempts are prevented"""
         mock_get_cred.return_value = None
@@ -443,7 +443,7 @@ class TestRenameWorkerProcessing:
     """Test rename processing loop (without actually running thread)"""
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_process_renames_waits_for_login(self, mock_get_cred, mock_thread_class):
         """Test that processing waits for initial login"""
         mock_get_cred.return_value = None
@@ -470,7 +470,7 @@ class TestRenameWorkerProcessing:
         mock_save.assert_called_once_with('123', 'Test')
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_process_renames_handles_failure(self, mock_get_cred, mock_thread_class):
         """Test rename failure saves to unnamed gallery"""
         mock_get_cred.return_value = None
@@ -504,7 +504,7 @@ class TestRenameWorkerErrorHandling:
     """Test error handling"""
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_rename_gallery_network_error(self, mock_get_cred, mock_thread_class):
         """Test handling of network errors during rename"""
         mock_get_cred.return_value = None
@@ -517,7 +517,7 @@ class TestRenameWorkerErrorHandling:
         assert result is False
 
     @patch('threading.Thread')
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_stop_with_session_close_error(self, mock_get_cred, mock_thread_class):
         """Test stop handles session close errors gracefully"""
         mock_thread = Mock()

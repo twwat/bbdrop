@@ -54,7 +54,7 @@ class TestModuleFunctions:
         assert isinstance(display, str)
         assert isinstance(tooltip, str)
 
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_check_stored_credentials_with_username_password(self, mock_get_cred):
         """Test credential check with username and password"""
         mock_get_cred.side_effect = lambda x: {
@@ -65,7 +65,7 @@ class TestModuleFunctions:
 
         assert check_stored_credentials() is True
 
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_check_stored_credentials_with_api_key(self, mock_get_cred):
         """Test credential check with API key only"""
         mock_get_cred.side_effect = lambda x: {
@@ -76,19 +76,19 @@ class TestModuleFunctions:
 
         assert check_stored_credentials() is True
 
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_check_stored_credentials_none(self, mock_get_cred):
         """Test credential check with no credentials"""
         mock_get_cred.return_value = None
         assert check_stored_credentials() is False
 
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_api_key_is_set_true(self, mock_get_cred):
         """Test API key check when set"""
         mock_get_cred.return_value = 'encrypted_api_key'
         assert api_key_is_set() is True
 
-    @patch('bbdrop.get_credential')
+    @patch('src.utils.credentials.get_credential')
     def test_api_key_is_set_false(self, mock_get_cred):
         """Test API key check when not set"""
         mock_get_cred.return_value = None
@@ -294,7 +294,7 @@ def mock_dependencies(monkeypatch, tmp_path):
     monkeypatch.setattr('bbdrop.get_project_root', lambda: str(tmp_path))
     monkeypatch.setattr('bbdrop.get_config_path', lambda: str(tmp_path / '.bbdrop'))
     monkeypatch.setattr('bbdrop.load_user_defaults', lambda: {})
-    monkeypatch.setattr('bbdrop.get_credential', lambda x: None)
+    monkeypatch.setattr('src.utils.credentials.get_credential', lambda x: None)
     monkeypatch.setattr('src.utils.logger.set_main_window', lambda x: None)
 
     # Mock IconManager

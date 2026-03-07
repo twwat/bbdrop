@@ -3,7 +3,7 @@
 from typing import Optional
 
 try:
-    from bbdrop import get_credential, set_credential, remove_credential, encrypt_password, decrypt_password
+    from src.utils.credentials import get_credential, set_credential, remove_credential, encrypt_password, decrypt_password
     _BBDROP_AVAILABLE = True
 except ImportError:
     # Allow module to load without pycurl (for unit testing)

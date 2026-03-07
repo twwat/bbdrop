@@ -9,7 +9,7 @@ def worker():
     """Create a RenameWorker with mocked dependencies."""
     with patch('threading.Thread'), \
          patch('requests.Session'), \
-         patch('bbdrop.get_credential', return_value=None):
+         patch('src.utils.credentials.get_credential', return_value=None):
         from src.processing.rename_worker import RenameWorker
         w = RenameWorker()
         # Replace the session with a fresh mock for test control

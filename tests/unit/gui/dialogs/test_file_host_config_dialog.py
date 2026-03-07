@@ -169,11 +169,11 @@ def mock_qsettings(monkeypatch):
 @pytest.fixture
 def dialog_patches(mock_qsettings, monkeypatch):
     """Apply common patches needed for dialog creation"""
-    # Mock bbdrop functions
-    monkeypatch.setattr('bbdrop.get_credential', Mock(return_value=None))
-    monkeypatch.setattr('bbdrop.set_credential', Mock(return_value=True))
-    monkeypatch.setattr('bbdrop.encrypt_password', lambda x: f"encrypted_{x}")
-    monkeypatch.setattr('bbdrop.decrypt_password', lambda x: x.replace("encrypted_", ""))
+    # Mock credential functions
+    monkeypatch.setattr('src.utils.credentials.get_credential', Mock(return_value=None))
+    monkeypatch.setattr('src.utils.credentials.set_credential', Mock(return_value=True))
+    monkeypatch.setattr('src.utils.credentials.encrypt_password', lambda x: f"encrypted_{x}")
+    monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
     monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp/imxup"))
     monkeypatch.setattr('bbdrop.get_central_store_base_path', Mock(return_value="/tmp/.imxup"))
 
@@ -584,10 +584,10 @@ class TestSaveApplyActions:
             return True
 
         # Apply all necessary patches via monkeypatch (avoids conflict with dialog_patches)
-        monkeypatch.setattr('bbdrop.get_credential', Mock(return_value=None))
-        monkeypatch.setattr('bbdrop.set_credential', mock_set_cred)
-        monkeypatch.setattr('bbdrop.encrypt_password', lambda x: f"encrypted_{x}")
-        monkeypatch.setattr('bbdrop.decrypt_password', lambda x: x.replace("encrypted_", ""))
+        monkeypatch.setattr('src.utils.credentials.get_credential', Mock(return_value=None))
+        monkeypatch.setattr('src.utils.credentials.set_credential', mock_set_cred)
+        monkeypatch.setattr('src.utils.credentials.encrypt_password', lambda x: f"encrypted_{x}")
+        monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
         monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp/imxup"))
         monkeypatch.setattr('bbdrop.get_central_store_base_path', Mock(return_value="/tmp/.imxup"))
 

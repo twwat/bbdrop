@@ -173,7 +173,7 @@ class ImxToUploader(ImageHostClient):
 
     def _get_credentials(self):
         """Get credentials from stored config (username/password or API key)"""
-        from bbdrop import get_credential, decrypt_password
+        from src.utils.credentials import get_credential, decrypt_password
         # Read from QSettings (Registry) - migration happens at app startup
         username = get_credential('username')
         encrypted_password = get_credential('password')

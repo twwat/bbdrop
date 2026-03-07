@@ -80,8 +80,8 @@ def comprehensive_mock_dependencies(monkeypatch, temp_assets_dir, tmp_path):
         'thumbnail_size': 180,
         'thumbnail_format': 1
     })
-    monkeypatch.setattr('bbdrop.get_credential', lambda x: None)
-    monkeypatch.setattr('bbdrop.set_credential', lambda x, y: True)
+    monkeypatch.setattr('src.utils.credentials.get_credential', lambda x: None)
+    monkeypatch.setattr('src.utils.credentials.set_credential', lambda x, y: True)
     monkeypatch.setattr('bbdrop.get_central_storage_path', lambda: str(tmp_path / 'storage'))
     monkeypatch.setattr('src.utils.logger.set_main_window', lambda x: None)
 

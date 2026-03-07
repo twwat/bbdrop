@@ -396,11 +396,11 @@ def mock_bbdrop_functions(monkeypatch):
     Patches common functions from the bbdrop module.
     """
     # Mock credential functions (accept optional host_id parameter)
-    monkeypatch.setattr('bbdrop.get_credential', lambda x, host_id=None: None)
-    monkeypatch.setattr('bbdrop.set_credential', lambda x, y, host_id=None: True)
-    monkeypatch.setattr('bbdrop.remove_credential', lambda x, host_id=None: True)
-    monkeypatch.setattr('bbdrop.encrypt_password', lambda x: f"encrypted_{x}")
-    monkeypatch.setattr('bbdrop.decrypt_password', lambda x: x.replace("encrypted_", ""))
+    monkeypatch.setattr('src.utils.credentials.get_credential', lambda x, host_id=None: None)
+    monkeypatch.setattr('src.utils.credentials.set_credential', lambda x, y, host_id=None: True)
+    monkeypatch.setattr('src.utils.credentials.remove_credential', lambda x, host_id=None: True)
+    monkeypatch.setattr('src.utils.credentials.encrypt_password', lambda x: f"encrypted_{x}")
+    monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
 
     # Mock path functions
     monkeypatch.setattr('bbdrop.get_config_path', lambda: '/tmp/.bbdrop')
