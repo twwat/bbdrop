@@ -11,7 +11,7 @@ import concurrent.futures
 import time
 import sys
 from typing import Any, Dict, List, Optional, Tuple
-from bbdrop import get_config_path
+from src.utils.paths import get_config_path
 from src.utils.logger import log
 from src.processing.hook_output_parser import detect_stdout_values, resolve_placeholder
 

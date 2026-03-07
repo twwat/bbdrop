@@ -735,7 +735,7 @@ class TestTemplateUpdate:
         paths = ["/path/to/gallery"]
         template_name = "NewTemplate"
 
-        with patch('bbdrop.timestamp', return_value="12:00"):
+        with patch('src.utils.format_utils.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         context_menu_helper.main_window.queue_manager.store.update_item_template.assert_called_with(
@@ -754,7 +754,7 @@ class TestTemplateUpdate:
         context_menu_helper.main_window.queue_manager.items = {paths[0]: sample_queue_item}
         context_menu_helper.main_window.queue_manager.mutex = QMutex()
 
-        with patch('bbdrop.timestamp', return_value="12:00"):
+        with patch('src.utils.format_utils.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         assert sample_queue_item.template_name == template_name
@@ -771,7 +771,7 @@ class TestTemplateUpdate:
         context_menu_helper.main_window.queue_manager.items = {paths[0]: sample_queue_item}
         context_menu_helper.main_window.queue_manager.mutex = QMutex()
 
-        with patch('bbdrop.timestamp', return_value="12:00"):
+        with patch('src.utils.format_utils.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         context_menu_helper.main_window.regenerate_gallery_bbcode.assert_called_with(
@@ -783,7 +783,7 @@ class TestTemplateUpdate:
         paths = ["/path/to/gallery"]
         template_name = "NewTemplate"
 
-        with patch('bbdrop.timestamp', return_value="12:00"):
+        with patch('src.utils.format_utils.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
         context_menu_helper.main_window.add_log_message.assert_called()

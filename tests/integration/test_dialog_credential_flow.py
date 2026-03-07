@@ -106,7 +106,7 @@ class TestDialogCredentialFlow:
         mock_icon_manager = Mock()
         mock_icon_manager.get_icon = Mock(return_value=QIcon())
         monkeypatch.setattr('src.gui.icon_manager.get_icon_manager', lambda: mock_icon_manager)
-        monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp"))
+        monkeypatch.setattr('src.utils.paths.get_project_root', Mock(return_value="/tmp"))
         monkeypatch.setattr('src.utils.credentials.get_credential', Mock(return_value=None))
 
         # Create dialog with no stored credentials
@@ -128,7 +128,7 @@ class TestDialogCredentialFlow:
         mock_icon_manager = Mock()
         mock_icon_manager.get_icon = Mock(return_value=QIcon())
         monkeypatch.setattr('src.gui.icon_manager.get_icon_manager', lambda: mock_icon_manager)
-        monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp"))
+        monkeypatch.setattr('src.utils.paths.get_project_root', Mock(return_value="/tmp"))
         # Return old encrypted credentials
         monkeypatch.setattr('src.utils.credentials.get_credential', Mock(return_value=encrypt_password("olduser:oldpass")))
 

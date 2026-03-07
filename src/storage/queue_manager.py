@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, QSettings, QTimer
 
 from src.storage.database import QueueStore
-from bbdrop import load_user_defaults
+from src.utils.paths import load_user_defaults
 from src.utils.logger import log
 from src.core.constants import (
     QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_UPLOADING,

@@ -95,7 +95,7 @@ class ImageHostConfigDialog(QDialog):
         layout.addLayout(button_layout)
 
     def _load_logo(self):
-        from bbdrop import get_project_root
+        from src.utils.paths import get_project_root
         import os
 
         if not self.host_config.logo:

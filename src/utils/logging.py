@@ -161,7 +161,7 @@ class AppLogger:
 
     def __init__(self) -> None:
         # Lazy imports to avoid circular deps
-        from bbdrop import get_config_path, get_central_store_base_path  # type: ignore
+        from src.utils.paths import get_config_path, get_central_store_base_path  # type: ignore
         self._get_config_path = get_config_path
         self._get_central_base = get_central_store_base_path
 

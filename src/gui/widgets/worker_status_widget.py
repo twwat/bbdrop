@@ -619,7 +619,7 @@ class WorkerStatusWidget(QWidget):
 
         main_layout.addWidget(self.status_table)
 
-        # Filter button — small icon overlaid on top-left corner of header
+        # Filter button — centered in the first column (host icon) header
         self._filter_btn = QToolButton(self.status_table)
         icon_mgr = get_icon_manager()
         filter_icon = icon_mgr.get_icon('filter') if icon_mgr else None
@@ -638,44 +638,20 @@ class WorkerStatusWidget(QWidget):
         self._filter_btn.clicked.connect(self._show_filter_menu_from_button)
         self._position_filter_button()
 
-    def reparent_filter_button(self, group_box) -> Optional[QToolButton]:
-        """Reparent filter button to a QGroupBox, positioned next to the title.
-
-        Args:
-            group_box: QGroupBox to place the filter button in
-
-        Returns:
-            The filter button (now a child of group_box), or None
-        """
-        if not hasattr(self, '_filter_btn'):
-            return None
-        self._filter_btn.setParent(group_box)
-        self._filter_group_box = group_box
-        self._position_filter_button()
-        self._filter_btn.show()
-        return self._filter_btn
-
     def _position_filter_button(self):
-        """Position filter button next to the group box title (or table header fallback)."""
-        if hasattr(self, '_filter_group_box') and self._filter_group_box:
-            # Position next to group box title text
-            gb = self._filter_group_box
-            title = gb.title()
-            fm = gb.fontMetrics()
-            title_width = fm.horizontalAdvance(title)
-            # Group box title is inset ~10px from left, vertically centered in the top margin
-            btn_x = 10 + title_width + 4
-            btn_y = max(0, (fm.height() - self._filter_btn.height()) // 2)
-            self._filter_btn.move(btn_x, btn_y)
-            self._filter_btn.raise_()
-        else:
-            # Fallback: top-left of table header
-            header = self.status_table.horizontalHeader()
-            header_height = header.height()
-            btn_x = 2
-            btn_y = max(0, (header_height - self._filter_btn.height()) // 2)
-            self._filter_btn.move(btn_x, btn_y)
-            self._filter_btn.raise_()
+        """Position filter button centered in the first column header."""
+        header = self.status_table.horizontalHeader()
+        # First visual column position and width
+        visual_0_logical = header.logicalIndex(0)
+        col_x = header.sectionViewportPosition(visual_0_logical)
+        col_w = header.sectionSize(visual_0_logical)
+        header_h = header.height()
+        btn_w = self._filter_btn.width()
+        btn_h = self._filter_btn.height()
+        btn_x = col_x + (col_w - btn_w) // 2
+        btn_y = max(0, (header_h - btn_h) // 2)
+        self._filter_btn.move(btn_x, btn_y)
+        self._filter_btn.raise_()
 
     def resizeEvent(self, event):
         """Reposition filter button on resize."""

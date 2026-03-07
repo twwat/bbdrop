@@ -710,7 +710,7 @@ class FileHostWorker(QThread):
         try:
             # Step 1: Create or reuse archive (with WSL2 path conversion)
             from src.utils.system_utils import convert_to_wsl_path
-            from bbdrop import load_user_defaults
+            from src.utils.paths import load_user_defaults
             folder_path = convert_to_wsl_path(gallery_path)
 
             if not folder_path.exists():

@@ -16,7 +16,7 @@ from src.core.image_host_config import (
     is_image_host_enabled,
     save_image_host_enabled
 )
-from bbdrop import get_project_root
+from src.utils.paths import get_project_root
 from src.utils.credentials import get_credential
 
 

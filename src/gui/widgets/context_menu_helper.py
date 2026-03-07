@@ -426,7 +426,7 @@ class GalleryContextMenuHelper(QObject):
         bbcode_regenerated = 0
         
         try:
-            from bbdrop import timestamp
+            from src.utils.format_utils import timestamp
             import os
             
             # Update each gallery's template

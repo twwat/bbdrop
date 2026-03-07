@@ -325,16 +325,7 @@ class TableRowManager(QObject):
         mw.gallery_table.setItem(row, _Col.TEMPLATE, tmpl_item)
 
         # Image host column
-        host_id = getattr(item, 'image_host_id', 'imx') or 'imx'
-        host_display = host_id
-        try:
-            from src.core.image_host_config import get_image_host_config_manager
-            host_cfg = get_image_host_config_manager().get_host_config(host_id)
-            if host_cfg:
-                host_display = host_cfg.name
-        except Exception:
-            pass
-        host_item = QTableWidgetItem(host_display)
+        host_item = QTableWidgetItem(item.image_host_id or "")
         host_item.setFlags(host_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         host_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         mw.gallery_table.setItem(row, _Col.IMAGE_HOST, host_item)

@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QIcon
 
-from bbdrop import get_config_path
+from src.utils.paths import get_config_path
 from src.utils.credentials import (encrypt_password, decrypt_password,
                                    get_credential, set_credential, remove_credential)
 

@@ -209,7 +209,7 @@ class ImxToUploader(ImageHostClient):
 
     def refresh_session_pool(self):
         """Refresh session connection pool with current parallel_batch_size setting"""
-        from bbdrop import load_user_defaults
+        from src.utils.paths import load_user_defaults
         try:
             defaults = load_user_defaults()
             current_batch_size = defaults.get('parallel_batch_size', 4)
@@ -276,7 +276,7 @@ class ImxToUploader(ImageHostClient):
 
         # Set headers based on authentication method
         if self.api_key:
-            from bbdrop import get_user_agent
+            from src.utils.paths import get_user_agent
             self.headers = {
                 "X-API-Key": self.api_key,
                 "User-Agent": get_user_agent()

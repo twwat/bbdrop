@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import QObject, QTimer
 
 from src.utils.logger import log
-from bbdrop import load_user_defaults, get_config_path
+from src.utils.paths import load_user_defaults, get_config_path
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI

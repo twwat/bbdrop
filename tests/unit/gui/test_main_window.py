@@ -291,9 +291,9 @@ def _mock_setup_ui(self):
 def mock_dependencies(monkeypatch, tmp_path):
     """Mock all dependencies for BBDropGUI"""
     # Mock bbdrop functions
-    monkeypatch.setattr('bbdrop.get_project_root', lambda: str(tmp_path))
-    monkeypatch.setattr('bbdrop.get_config_path', lambda: str(tmp_path / '.bbdrop'))
-    monkeypatch.setattr('bbdrop.load_user_defaults', lambda: {})
+    monkeypatch.setattr('src.utils.paths.get_project_root', lambda: str(tmp_path))
+    monkeypatch.setattr('src.utils.paths.get_config_path', lambda: str(tmp_path / '.bbdrop'))
+    monkeypatch.setattr('src.utils.paths.load_user_defaults', lambda: {})
     monkeypatch.setattr('src.utils.credentials.get_credential', lambda x: None)
     monkeypatch.setattr('src.utils.logger.set_main_window', lambda x: None)
 

@@ -22,7 +22,7 @@ from typing import Any, Dict, Optional
 from PyQt6.QtCore import QObject, pyqtSignal
 
 # Access central data dir path from shared helper
-from bbdrop import get_central_store_base_path
+from src.utils.paths import get_central_store_base_path
 
 logger = logging.getLogger(__name__)
 

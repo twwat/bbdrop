@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QFontDatabase, QSyntaxHighlighter, QTextCharFormat, QColor
 
-from bbdrop import get_config_path
+from src.utils.paths import get_config_path
 from src.gui.widgets.info_button import InfoButton
 from src.utils.logger import log
 

@@ -405,7 +405,7 @@ class HelpDialog(QDialog):
 
     def _start_document_loading(self):
         """Start the background document loading thread."""
-        from bbdrop import get_project_root
+        from src.utils.paths import get_project_root
         docs_dir = os.path.join(get_project_root(), "docs", "user")
 
         if not os.path.exists(docs_dir):

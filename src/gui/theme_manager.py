@@ -47,7 +47,7 @@ def get_assets_dir() -> str:
     Returns:
         str: Absolute path to project_root/assets directory
     """
-    from bbdrop import get_project_root
+    from src.utils.paths import get_project_root
     return os.path.join(get_project_root(), "assets")
 
 

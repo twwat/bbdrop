@@ -190,7 +190,8 @@ class CompletionWorker(QThread):
 
             # Use centralized save_gallery_artifacts function
             try:
-                from bbdrop import save_gallery_artifacts, load_user_defaults
+                from bbdrop import save_gallery_artifacts
+                from src.utils.paths import load_user_defaults
                 written = save_gallery_artifacts(
                     folder_path=path,
                     results={
@@ -405,7 +406,7 @@ class ArtifactHandler(QObject):
             True if auto-regeneration is enabled and gallery is completed
         """
         # Check if auto-regeneration is enabled
-        from bbdrop import load_user_defaults
+        from src.utils.paths import load_user_defaults
         defaults = load_user_defaults()
         if not defaults.get('auto_regenerate_bbcode', True):
             return False

@@ -253,7 +253,7 @@ class FileHostsSettingsWidget(QWidget):
         Returns:
             Clickable QLabel with scaled logo pixmap, or None if logo not found
         """
-        from bbdrop import get_project_root
+        from src.utils.paths import get_project_root
         import os
 
         logo_path = os.path.join(get_project_root(), "assets", "hosts", "logo", f"{host_id}.png")
@@ -727,7 +727,7 @@ class FileHostsSettingsWidget(QWidget):
             import os
             import configparser
             from src.core.file_host_config import get_config_manager, get_file_host_setting
-            from bbdrop import get_config_path
+            from src.utils.paths import get_config_path
             from src.utils.credentials import get_credential, decrypt_password
 
             config = configparser.ConfigParser()
@@ -780,7 +780,7 @@ class FileHostsSettingsWidget(QWidget):
             import os
             import configparser
             from src.core.file_host_config import save_file_host_setting
-            from bbdrop import get_config_path
+            from src.utils.paths import get_config_path
             from src.utils.credentials import set_credential, encrypt_password
 
             config = configparser.ConfigParser()

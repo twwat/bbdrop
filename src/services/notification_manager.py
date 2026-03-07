@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QSystemTrayIcon
 from src.utils.logger import log
 
 try:
-    from bbdrop import load_user_defaults, read_config, get_config_path
+    from src.utils.paths import load_user_defaults, read_config, get_config_path
 except ImportError:
     load_user_defaults = None
     read_config = None

@@ -38,7 +38,7 @@ _LOW_DISK_THRESHOLD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
 # Access central data dir path from shared helper
-from bbdrop import get_central_store_base_path
+from src.utils.paths import get_central_store_base_path
 
 
 def _get_db_path() -> str:
@@ -410,7 +410,7 @@ def _migrate_unnamed_galleries_to_db(conn: sqlite3.Connection) -> None:
         import os
         
         # Use the same config path logic as the original function
-        from bbdrop import get_config_path
+        from src.utils.paths import get_config_path
         config_file = get_config_path()
         
         if not os.path.exists(config_file):

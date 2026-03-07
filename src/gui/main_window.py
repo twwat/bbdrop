@@ -85,7 +85,8 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup, QDrag
 
 # Import the core uploader functionality
-from bbdrop import get_project_root, load_user_defaults, sanitize_gallery_name, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from src.utils.paths import get_project_root, load_user_defaults, get_config_path, get_central_storage_path
+from bbdrop import sanitize_gallery_name, rename_all_unnamed_with_session, build_gallery_filenames
 from src.utils.credentials import encrypt_password, decrypt_password
 from bbdrop import create_windows_context_menu, remove_windows_context_menu
 from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
@@ -1095,7 +1096,7 @@ class BBDropGUI(QMainWindow):
         """Initialize and start the disk space monitor."""
         import tempfile
         from src.utils.disk_space_monitor import DiskSpaceMonitor
-        from bbdrop import get_central_store_base_path
+        from src.utils.paths import get_central_store_base_path
 
         settings = QSettings("BBDropUploader", "BBDropGUI")
         enabled = settings.value('disk_monitor/enabled', True, type=bool)
@@ -1500,7 +1501,7 @@ class BBDropGUI(QMainWindow):
         
     def setup_ui(self):
         try:
-            from bbdrop import __version__
+            from src.utils.paths import __version__
             self.setWindowTitle(f"BBDrop {__version__}")
         except Exception as e:
             log(f"Failed to get version: {e}", level="warning", category="startup")
@@ -2309,7 +2310,8 @@ class BBDropGUI(QMainWindow):
                     Only show dialog if update is available.
         """
         from src.network.update_checker import UpdateChecker
-        from bbdrop import __version__, GITHUB_OWNER, GITHUB_REPO
+        from src.utils.paths import __version__
+        from bbdrop import GITHUB_OWNER, GITHUB_REPO
 
         self._update_checker = UpdateChecker(__version__, GITHUB_OWNER, GITHUB_REPO)
         self._update_checker.update_available.connect(
@@ -2332,7 +2334,7 @@ class BBDropGUI(QMainWindow):
             silent: Ignored for updates (updates are always shown).
         """
         from src.gui.dialogs.update_dialog import UpdateDialog
-        from bbdrop import __version__
+        from src.utils.paths import __version__
 
         # Check if user has skipped this version
         skipped_version = self.settings.value('updates/skipped_version', '', type=str)
@@ -2512,7 +2514,7 @@ class BBDropGUI(QMainWindow):
         if result == QDialog.DialogCode.Accepted:
             log("Comprehensive settings saved successfully", level="info", category="ui")
             # Reload settings into quick settings UI
-            from bbdrop import load_user_defaults
+            from src.utils.paths import load_user_defaults
             defaults = load_user_defaults()
             self.auto_start_upload_check.blockSignals(True)
             self.auto_start_upload_check.setChecked(defaults.get('auto_start_upload', False))
@@ -3489,7 +3491,7 @@ class BBDropGUI(QMainWindow):
             if item.status == "uploading":
                 current_rate_kib = float(getattr(item, 'current_kibps', 0.0) or 0.0)
                 try:
-                    from bbdrop import format_binary_rate
+                    from src.utils.format_utils import format_binary_rate
                     if current_rate_kib > 0:
                         transfer_text = format_binary_rate(current_rate_kib, precision=2)
                     else:
@@ -3679,7 +3681,7 @@ class BBDropGUI(QMainWindow):
         self._update_specific_gallery_display(path)
 
         # Auto-clear completed gallery if enabled
-        from bbdrop import load_user_defaults
+        from src.utils.paths import load_user_defaults
         defaults = load_user_defaults()
         if defaults.get('auto_clear_completed', False):
             # Get item to check if it's actually completed (not failed)
@@ -4476,7 +4478,7 @@ class BBDropGUI(QMainWindow):
         folder_name = os.path.basename(path)
         
         # Import here to avoid circular imports  
-        from bbdrop import get_central_storage_path
+        from src.utils.paths import get_central_storage_path
         central_path = get_central_storage_path()
         
         # Try central location first with standardized naming, fallback to legacy
@@ -4728,7 +4730,7 @@ class BBDropGUI(QMainWindow):
                 current_rate_kib = float(getattr(item, 'current_kibps', 0.0) or 0.0)
                 final_rate_kib = float(getattr(item, 'final_kibps', 0.0) or 0.0)
                 try:
-                    from bbdrop import format_binary_rate
+                    from src.utils.format_utils import format_binary_rate
                     if item.status == "uploading" and current_rate_kib > 0:
                         transfer_text = format_binary_rate(current_rate_kib, precision=2)
                     elif final_rate_kib > 0:
@@ -5269,7 +5271,7 @@ class BBDropGUI(QMainWindow):
                         if host_cell:
                             host_cell.setText(host_id)
 
-            from bbdrop import timestamp
+            from src.utils.format_utils import timestamp
             galleries_word = "gallery" if updated_count == 1 else "galleries"
             self.add_log_message(f"{timestamp()} Image host changed to '{host_display}' for {updated_count} {galleries_word}")
 

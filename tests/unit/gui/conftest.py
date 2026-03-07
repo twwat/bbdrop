@@ -107,14 +107,14 @@ def mock_bbdrop_functions(monkeypatch, tmp_path):
     monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
 
     # Mock path functions
-    monkeypatch.setattr('bbdrop.get_config_path', lambda: str(config_path / "bbdrop.ini"))
-    monkeypatch.setattr('bbdrop.get_project_root', lambda: str(tmp_path))
-    monkeypatch.setattr('bbdrop.get_central_store_base_path', lambda: str(config_path))
-    monkeypatch.setattr('bbdrop.get_default_central_store_base_path', lambda: str(config_path))
-    monkeypatch.setattr('bbdrop.get_base_path', lambda: str(config_path))
+    monkeypatch.setattr('src.utils.paths.get_config_path', lambda: str(config_path / "bbdrop.ini"))
+    monkeypatch.setattr('src.utils.paths.get_project_root', lambda: str(tmp_path))
+    monkeypatch.setattr('src.utils.paths.get_central_store_base_path', lambda: str(config_path))
+    monkeypatch.setattr('src.utils.paths.get_default_central_store_base_path', lambda: str(config_path))
+    monkeypatch.setattr('src.utils.paths.get_base_path', lambda: str(config_path))
 
     # Mock version function
-    monkeypatch.setattr('bbdrop.get_version', lambda: '1.0.0-test')
+    monkeypatch.setattr('src.utils.paths.get_version', lambda: '1.0.0-test')
 
     # Prevent Tor probe background thread from running during tests
     monkeypatch.setattr(

@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, field
 from threading import Lock
 
-from bbdrop import get_central_store_base_path
+from src.utils.paths import get_central_store_base_path
 from src.utils.logger import log
 
 
@@ -255,7 +255,7 @@ def get_file_host_setting(host_id: str, key: str, value_type: str = "str") -> An
     Returns:
         Setting value from INI (if set), else JSON default, else hardcoded default
     """
-    from bbdrop import get_config_path
+    from src.utils.paths import get_config_path
     import configparser
 
     # 1. Check INI first (user override)
@@ -316,7 +316,7 @@ def save_file_host_setting(host_id: str, key: str, value: Any) -> None:
     Raises:
         ValueError: If host_id doesn't exist or key is invalid
     """
-    from bbdrop import get_config_path
+    from src.utils.paths import get_config_path
     import configparser
 
     # Validate host exists
@@ -416,7 +416,7 @@ class FileHostConfigManager:
     def _get_builtin_hosts_dir(self) -> Path:
         """Get path to built-in host configs (shipped with bbdrop)."""
         # Use centralized get_project_root() for consistency with icon loading
-        from bbdrop import get_project_root
+        from src.utils.paths import get_project_root
         project_root = get_project_root()
         hosts_dir = Path(project_root) / "assets" / "hosts"
         return hosts_dir

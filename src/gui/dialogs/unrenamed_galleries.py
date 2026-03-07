@@ -179,7 +179,7 @@ class UnrenamedGalleriesDialog(QDialog):
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                from bbdrop import get_config_path
+                from src.utils.paths import get_config_path
                 from src.storage.database import QueueStore
 
                 # Get database instance

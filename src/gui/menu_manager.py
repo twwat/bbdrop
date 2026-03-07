@@ -244,7 +244,7 @@ class MenuManager(QObject):
         mw = self._main_window
 
         try:
-            from bbdrop import __version__, get_project_root
+            from src.utils.paths import __version__, get_project_root
             version = f"{__version__}"
         except Exception as e:
             log(f"Failed to get version: {e}", level="warning", category="ui")
@@ -261,7 +261,7 @@ class MenuManager(QObject):
 
         # Add logo at top
         try:
-            from bbdrop import get_project_root
+            from src.utils.paths import get_project_root
             logo_path = os.path.join(get_project_root(), 'assets', 'bbdrop.png')
             logo_pixmap = QPixmap(logo_path)
             if not logo_pixmap.isNull():
@@ -341,7 +341,7 @@ class MenuManager(QObject):
 
         # Load LICENSE file
         try:
-            from bbdrop import get_project_root
+            from src.utils.paths import get_project_root
             license_path = os.path.join(get_project_root(), 'LICENSE')
             if os.path.exists(license_path):
                 with open(license_path, 'r', encoding='utf-8') as f:

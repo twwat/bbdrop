@@ -22,7 +22,7 @@ class BBCodeViewerDialog(QDialog):
         self.folder_files = []
 
         # Import here to avoid circular imports
-        from bbdrop import get_central_storage_path
+        from src.utils.paths import get_central_storage_path
         self.central_path: str = get_central_storage_path()  # Type annotation ensures non-None
         
         self.setWindowTitle(f"BBCode Files - {self.folder_name}")

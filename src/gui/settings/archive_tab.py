@@ -316,7 +316,7 @@ class ArchiveSettingsWidget(QWidget):
 
     def load_from_config(self):
         """Load archive settings from user defaults (INI file)."""
-        from bbdrop import load_user_defaults
+        from src.utils.paths import load_user_defaults
         settings = load_user_defaults()
         self.load_settings(settings)
 
@@ -324,7 +324,7 @@ class ArchiveSettingsWidget(QWidget):
         """Save archive settings to INI file."""
         import os
         import configparser
-        from bbdrop import get_config_path
+        from src.utils.paths import get_config_path
 
         config = configparser.ConfigParser()
         config_file = get_config_path()

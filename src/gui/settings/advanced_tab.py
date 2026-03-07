@@ -292,7 +292,7 @@ class AdvancedSettingsWidget(QWidget):
         """Load advanced settings from INI file and QSettings."""
         import os
         import configparser
-        from bbdrop import get_config_path
+        from src.utils.paths import get_config_path
         from PyQt6.QtCore import QSettings
 
         config = configparser.ConfigParser()
@@ -340,7 +340,7 @@ class AdvancedSettingsWidget(QWidget):
         """
         import os
         import configparser
-        from bbdrop import get_config_path
+        from src.utils.paths import get_config_path
         from PyQt6.QtCore import QSettings
 
         config = configparser.ConfigParser()

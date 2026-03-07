@@ -133,8 +133,9 @@ class RenameWorker(QObject):
         """
         super().__init__()
         # Import existing functions
-        from bbdrop import (get_config_path, get_firefox_cookies,
-                          load_cookies_from_file, get_unnamed_galleries,
+        from src.utils.paths import get_config_path
+        from src.network.cookies import get_firefox_cookies, load_cookies_from_file
+        from bbdrop import (get_unnamed_galleries,
                           remove_unnamed_gallery, sanitize_gallery_name)
         from src.utils.credentials import decrypt_password, get_credential
 

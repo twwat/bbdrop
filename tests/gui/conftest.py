@@ -403,11 +403,11 @@ def mock_bbdrop_functions(monkeypatch):
     monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
 
     # Mock path functions
-    monkeypatch.setattr('bbdrop.get_config_path', lambda: '/tmp/.bbdrop')
-    monkeypatch.setattr('bbdrop.get_project_root', lambda: '/tmp/bbdrop')
+    monkeypatch.setattr('src.utils.paths.get_config_path', lambda: '/tmp/.bbdrop')
+    monkeypatch.setattr('src.utils.paths.get_project_root', lambda: '/tmp/bbdrop')
 
     # Mock version function
-    monkeypatch.setattr('bbdrop.get_version', lambda: '1.0.0-test')
+    monkeypatch.setattr('src.utils.paths.get_version', lambda: '1.0.0-test')
 
 
 @pytest.fixture

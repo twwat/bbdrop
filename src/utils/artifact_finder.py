@@ -31,7 +31,7 @@ def find_gallery_json_by_id(gallery_id: str, gallery_path: Optional[str] = None)
 
     # Check central storage
     try:
-        from bbdrop import get_central_storage_path
+        from src.utils.paths import get_central_storage_path
         central_path = get_central_storage_path()
         if os.path.exists(central_path):
             search_locations.append(central_path)

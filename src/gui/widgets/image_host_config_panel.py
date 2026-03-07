@@ -20,7 +20,7 @@ from src.core.image_host_config import (
     get_image_host_setting,
     save_image_host_setting
 )
-from bbdrop import get_config_path
+from src.utils.paths import get_config_path
 from src.utils.credentials import (
     encrypt_password,
     decrypt_password,

@@ -690,7 +690,7 @@ class GalleryTableWidget(QTableWidget):
                 try:
                     parent_window.regenerate_bbcode_for_gallery(path)
                     # Only log if regeneration actually happened (could check if enabled first)
-                    from bbdrop import load_user_defaults
+                    from src.utils.paths import load_user_defaults
                     defaults = load_user_defaults()
                     if defaults.get('auto_regenerate_bbcode', True):
                         log(f"BBCode regenerated for renamed gallery: {new_name}", level="debug")
@@ -1116,7 +1116,8 @@ class GalleryTableWidget(QTableWidget):
                 # Fallback: attempt to read JSON and extract meta.gallery_url
                 try:
                     folder_name = os.path.basename(path)
-                    from bbdrop import get_central_storage_path, build_gallery_filenames
+                    from src.utils.paths import get_central_storage_path
+                    from bbdrop import build_gallery_filenames
                     json_path_candidates = []
                     uploaded_subdir = os.path.join(path, ".uploaded")
                     if item.gallery_id and (item.name or folder_name):

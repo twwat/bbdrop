@@ -72,9 +72,9 @@ def temp_assets_dir(tmp_path):
 def comprehensive_mock_dependencies(monkeypatch, temp_assets_dir, tmp_path):
     """Comprehensive mock for all BBDropGUI dependencies"""
     # Mock bbdrop functions
-    monkeypatch.setattr('bbdrop.get_project_root', lambda: str(tmp_path))
-    monkeypatch.setattr('bbdrop.get_config_path', lambda: str(tmp_path / '.bbdrop'))
-    monkeypatch.setattr('bbdrop.load_user_defaults', lambda: {
+    monkeypatch.setattr('src.utils.paths.get_project_root', lambda: str(tmp_path))
+    monkeypatch.setattr('src.utils.paths.get_config_path', lambda: str(tmp_path / '.bbdrop'))
+    monkeypatch.setattr('src.utils.paths.load_user_defaults', lambda: {
         'confirm_delete': True,
         'parallel_batch_size': 4,
         'thumbnail_size': 180,
@@ -82,7 +82,7 @@ def comprehensive_mock_dependencies(monkeypatch, temp_assets_dir, tmp_path):
     })
     monkeypatch.setattr('src.utils.credentials.get_credential', lambda x: None)
     monkeypatch.setattr('src.utils.credentials.set_credential', lambda x, y: True)
-    monkeypatch.setattr('bbdrop.get_central_storage_path', lambda: str(tmp_path / 'storage'))
+    monkeypatch.setattr('src.utils.paths.get_central_storage_path', lambda: str(tmp_path / 'storage'))
     monkeypatch.setattr('src.utils.logger.set_main_window', lambda x: None)
 
     # Mock IconManager

@@ -159,7 +159,7 @@ def remove_credential(key, host_id=None):
 def migrate_credentials_from_ini():
     """Migrate credentials from INI file to QSettings, then remove from INI"""
     import configparser
-    from bbdrop import get_config_path
+    from src.utils.paths import get_config_path
     config = configparser.ConfigParser()
     config_file = get_config_path()
 

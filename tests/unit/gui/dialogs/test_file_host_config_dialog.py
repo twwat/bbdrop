@@ -174,8 +174,8 @@ def dialog_patches(mock_qsettings, monkeypatch):
     monkeypatch.setattr('src.utils.credentials.set_credential', Mock(return_value=True))
     monkeypatch.setattr('src.utils.credentials.encrypt_password', lambda x: f"encrypted_{x}")
     monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
-    monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp/imxup"))
-    monkeypatch.setattr('bbdrop.get_central_store_base_path', Mock(return_value="/tmp/.imxup"))
+    monkeypatch.setattr('src.utils.paths.get_project_root', Mock(return_value="/tmp/imxup"))
+    monkeypatch.setattr('src.utils.paths.get_central_store_base_path', Mock(return_value="/tmp/.imxup"))
 
     # Mock icon_manager
     mock_icon_manager = Mock()
@@ -588,8 +588,8 @@ class TestSaveApplyActions:
         monkeypatch.setattr('src.utils.credentials.set_credential', mock_set_cred)
         monkeypatch.setattr('src.utils.credentials.encrypt_password', lambda x: f"encrypted_{x}")
         monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
-        monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp/imxup"))
-        monkeypatch.setattr('bbdrop.get_central_store_base_path', Mock(return_value="/tmp/.imxup"))
+        monkeypatch.setattr('src.utils.paths.get_project_root', Mock(return_value="/tmp/imxup"))
+        monkeypatch.setattr('src.utils.paths.get_central_store_base_path', Mock(return_value="/tmp/.imxup"))
 
         # Mock icon_manager
         mock_icon_manager = Mock()

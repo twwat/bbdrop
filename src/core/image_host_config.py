@@ -116,7 +116,7 @@ def get_image_host_setting(host_id: str, key: str, value_type: str = "str") -> A
     Returns:
         Setting value from highest-priority source available.
     """
-    from bbdrop import get_config_path
+    from src.utils.paths import get_config_path
 
     ini_path = get_config_path()
     if os.path.exists(ini_path):
@@ -175,7 +175,7 @@ def save_image_host_setting(host_id: str, key: str, value: Any) -> None:
 
     Does NOT delete legacy [DEFAULTS] keys (safe migration).
     """
-    from bbdrop import get_config_path
+    from src.utils.paths import get_config_path
 
     with _ini_file_lock:
         ini_path = get_config_path()
@@ -211,7 +211,7 @@ def is_image_host_enabled(host_id: str) -> bool:
     Returns:
         True if host is enabled, False otherwise
     """
-    from bbdrop import get_config_path
+    from src.utils.paths import get_config_path
 
     ini_path = get_config_path()
     if os.path.exists(ini_path):
@@ -257,12 +257,12 @@ class ImageHostConfigManager:
 
     def _get_builtin_hosts_dir(self) -> Path:
         """Get path to built-in image host configs."""
-        from bbdrop import get_project_root
+        from src.utils.paths import get_project_root
         return Path(get_project_root()) / "assets" / "image_hosts"
 
     def _get_custom_hosts_dir(self) -> Path:
         """Get path to user custom image host configs."""
-        from bbdrop import get_central_store_base_path
+        from src.utils.paths import get_central_store_base_path
         hosts_dir = Path(get_central_store_base_path()) / "image_hosts"
         hosts_dir.mkdir(parents=True, exist_ok=True)
         return hosts_dir

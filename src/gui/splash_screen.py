@@ -23,7 +23,7 @@ class SplashScreen(QSplashScreen):
         
         # Load the bbdrop logo
         try:
-            from bbdrop import get_project_root
+            from src.utils.paths import get_project_root
             logo_path = os.path.join(get_project_root(), 'assets', 'bbdrop2.png')
             self.logo_pixmap = QPixmap(logo_path)
             if self.logo_pixmap.isNull():
@@ -33,7 +33,7 @@ class SplashScreen(QSplashScreen):
             
         # Get version info
         try:
-            from bbdrop import get_version
+            from src.utils.paths import get_version
             APP_VERSION = get_version()
             self.version = f"bbdrop v{APP_VERSION}    "
         except (ImportError, ModuleNotFoundError):

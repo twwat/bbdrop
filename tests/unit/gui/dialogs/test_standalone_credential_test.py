@@ -77,7 +77,7 @@ def dialog_patches(monkeypatch):
     monkeypatch.setattr('src.utils.credentials.set_credential', Mock(return_value=True))
     monkeypatch.setattr('src.utils.credentials.encrypt_password', lambda x: f"encrypted_{x}")
     monkeypatch.setattr('src.utils.credentials.decrypt_password', lambda x: x.replace("encrypted_", ""))
-    monkeypatch.setattr('bbdrop.get_project_root', Mock(return_value="/tmp/bbdrop"))
+    monkeypatch.setattr('src.utils.paths.get_project_root', Mock(return_value="/tmp/bbdrop"))
 
     mock_icon_manager = Mock()
     mock_icon_manager.get_icon = Mock(return_value=QIcon())

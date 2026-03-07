@@ -662,7 +662,7 @@ class FileHostConfigDialog(QDialog):
         Returns:
             Clickable QLabel with scaled logo pixmap, or None if logo not found
         """
-        from bbdrop import get_project_root
+        from src.utils.paths import get_project_root
         import os
 
         logo_path = os.path.join(get_project_root(), "assets", "hosts", "logo", f"{host_id}.png")
