@@ -85,7 +85,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QDesktopServices, QPainterPath, QPen, QFontMetrics, QTextDocument, QActionGroup, QDrag
 
 # Import the core uploader functionality
-from bbdrop import ImxToUploader, get_project_root, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
+from bbdrop import get_project_root, load_user_defaults, sanitize_gallery_name, encrypt_password, decrypt_password, rename_all_unnamed_with_session, get_config_path, build_gallery_filenames, get_central_storage_path
 from bbdrop import create_windows_context_menu, remove_windows_context_menu
 from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
 from src.utils.logger import log, set_main_window
@@ -1968,12 +1968,6 @@ class BBDropGUI(QMainWindow):
         self.worker_status_widget.layout().setSpacing(0)
         # Remove table border so it blends with the group box
         self.worker_status_widget.status_table.setFrameShape(QFrame.Shape.NoFrame)
-
-        # Move filter button from table overlay to group box title area
-        filter_btn = self.worker_status_widget.reparent_filter_button(worker_status_group)
-        if filter_btn:
-            filter_btn.setIconSize(QSize(12, 12))
-            filter_btn.setFixedSize(16, 16)
 
         # Add the already-created worker status widget to the layout
         worker_status_layout.addWidget(self.worker_status_widget)
@@ -5244,9 +5238,6 @@ class BBDropGUI(QMainWindow):
             return
 
         from src.core.image_host_config import get_image_host_config_manager
-        enabled = get_image_host_config_manager().get_enabled_hosts()
-        host_config = enabled.get(host_id)
-        host_display = host_config.name if host_config else host_id
 
         updated_count = 0
         for gallery_path in gallery_paths:
@@ -5275,7 +5266,7 @@ class BBDropGUI(QMainWindow):
                     if name_item and name_item.data(Qt.ItemDataRole.UserRole) in gallery_paths:
                         host_cell = table.item(row_idx, GalleryTableWidget.COL_IMAGE_HOST)
                         if host_cell:
-                            host_cell.setText(host_display)
+                            host_cell.setText(host_id)
 
             from bbdrop import timestamp
             galleries_word = "gallery" if updated_count == 1 else "galleries"

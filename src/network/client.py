@@ -12,7 +12,7 @@ from functools import cmp_to_key
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from bbdrop import ImxToUploader
+from src.network.imx_uploader import ImxToUploader
 from src.core.engine import UploadEngine, AtomicCounter
 from src.utils.logger import log
 from src.core.constants import (

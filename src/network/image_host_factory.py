@@ -52,7 +52,7 @@ def create_image_host_client(host_id: str, proxy: Optional[ProxyEntry] = None) -
 
     # Create the appropriate client based on host_id
     if host_id == "imx":
-        from bbdrop import ImxToUploader
+        from src.network.imx_uploader import ImxToUploader
         return ImxToUploader(proxy=proxy)
 
     elif host_id == "turbo":
