@@ -64,20 +64,11 @@ from src.network.cookies import get_firefox_cookies, load_cookies_from_file  # n
 
 from src.network.imx_uploader import ImxToUploader
 
-# Re-exported for backward compatibility — will be removed after import sweep
-from src.utils.credentials import (  # noqa: F401
+from src.utils.credentials import (
     CredentialDecryptionError,
-    _get_legacy_encryption_key,
     get_encryption_key,
-    encrypt_password,
-    decrypt_password,
-    get_credential,
-    set_credential,
-    remove_credential,
     migrate_credentials_from_ini,
-    _migrate_encryption_keys,
     setup_secure_password,
-    _save_credentials,
 )
 
 __version__ = "0.9.1"  # Application version number
