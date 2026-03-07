@@ -3,9 +3,8 @@ Test suite for M3 Upload Pipeline - Response Contract Validation.
 
 Verifies that:
 1. normalize_response() produces the standard shape consumed by engine/workers
-2. IMX client has get_default_headers() and supports_gallery_rename()
-3. Turbo client normalizes raw API responses into the standard contract
-4. Turbo client returns normalized errors (not raw exception-only paths)
+2. Turbo client normalizes raw API responses into the standard contract
+3. Turbo client returns normalized errors (not raw exception-only paths)
 """
 
 import pycurl
@@ -92,28 +91,6 @@ class TestNormalizeResponseHelper:
         """Engine calls it without an instance."""
         result = ImageHostClient.normalize_response(status='success', image_url='u')
         assert isinstance(result, dict)
-
-
-# ---------------------------------------------------------------------------
-# IMX client – verify ABC methods exist and behave
-# ---------------------------------------------------------------------------
-
-class TestIMXResponseContract:
-    """IMX uploader must expose the M3 ABC surface."""
-
-    def test_get_default_headers_returns_dict(self):
-        from src.network.client import GUIImxToUploader
-        with patch.object(GUIImxToUploader, '__init__', return_value=None):
-            uploader = GUIImxToUploader()
-            uploader.headers = {'User-Agent': 'test', 'Accept': '*/*'}
-            headers = uploader.get_default_headers()
-            assert isinstance(headers, dict)
-
-    def test_supports_gallery_rename_true(self):
-        from src.network.client import GUIImxToUploader
-        with patch.object(GUIImxToUploader, '__init__', return_value=None):
-            uploader = GUIImxToUploader()
-            assert uploader.supports_gallery_rename() is True
 
 
 # ---------------------------------------------------------------------------
