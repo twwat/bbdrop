@@ -64,8 +64,7 @@ except ImportError:
 import mimetypes
 from src.network.cookies import get_firefox_cookies, load_cookies_from_file  # noqa: F401  # re-exported
 
-# Re-exported for backward compatibility — will be removed after import sweep
-from src.network.imx_uploader import ImxToUploader, NestedProgressBar  # noqa: F401
+from src.network.imx_uploader import ImxToUploader
 
 __version__ = "0.9.1"  # Application version number
 
