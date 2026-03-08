@@ -13,6 +13,7 @@ import os
 import hashlib
 import getpass
 import base64
+import threading
 
 from cryptography.fernet import Fernet
 from src.utils.credential_helpers import generate_fernet_key
@@ -36,6 +37,7 @@ def _get_legacy_encryption_key():
     return base64.urlsafe_b64encode(key)
 
 _cached_master_key = None
+_master_key_lock = threading.Lock()
 
 def get_encryption_key():
     """Get the CSPRNG master Fernet key from OS keyring.
@@ -45,25 +47,31 @@ def get_encryption_key():
     CSPRNG key.
     """
     global _cached_master_key
-    if _cached_master_key:
+    # Fast path — no lock needed for read of already-cached value
+    if _cached_master_key is not None:
         return _cached_master_key
 
-    try:
-        import keyring
-        key = keyring.get_password("bbdrop", "_master_key")
-        if key:
-            _cached_master_key = key
-            return key
-    except Exception as e:
-        raise CredentialDecryptionError(
-            "OS keyring is not available. Credentials cannot be accessed. "
-            f"Install a keyring backend (e.g., SecretStorage on Linux): {e}"
-        ) from e
+    with _master_key_lock:
+        # Double-check after acquiring lock
+        if _cached_master_key is not None:
+            return _cached_master_key
 
-    # No master key yet — first run after upgrade (or fresh install)
-    key = _migrate_encryption_keys()
-    _cached_master_key = key
-    return key
+        try:
+            import keyring
+            key = keyring.get_password("bbdrop", "_master_key")
+            if key:
+                _cached_master_key = key
+                return key
+        except Exception as e:
+            raise CredentialDecryptionError(
+                "OS keyring is not available. Credentials cannot be accessed. "
+                f"Install a keyring backend (e.g., SecretStorage on Linux): {e}"
+            ) from e
+
+        # No master key yet — first run after upgrade (or fresh install)
+        key = _migrate_encryption_keys()
+        _cached_master_key = key
+        return key
 
 def encrypt_password(password):
     """Encrypt password using Fernet with the CSPRNG master key."""
