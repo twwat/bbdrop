@@ -87,35 +87,10 @@ GITHUB_OWNER = "twwat"
 GITHUB_REPO = "bbdrop"
 
 
-# --- Re-exports: templates, gallery management, Windows integration ---
-# Extracted to dedicated modules; re-exported here so existing
-# `from bbdrop import ...` statements keep working.
-
-from src.utils.templates import (  # noqa: F401
-    get_template_path,
-    get_default_template,
-    load_templates,
-    process_conditionals,
-    apply_template,
-    generate_bbcode_from_template,
-    save_gallery_artifacts,
-)
-
-from src.storage.gallery_management import (  # noqa: F401
-    save_unnamed_gallery,
-    get_unnamed_galleries,
-    rename_all_unnamed_with_session,
-    check_gallery_renamed,
-    remove_unnamed_gallery,
-    check_if_gallery_exists,
-    build_gallery_filenames,
-    sanitize_gallery_name,
-)
-
-from src.utils.windows_integration import (  # noqa: F401
-    create_windows_context_menu,
-    remove_windows_context_menu,
-)
+# Imports used by main() CLI flow
+from src.utils.templates import save_gallery_artifacts
+from src.storage.gallery_management import get_unnamed_galleries
+from src.utils.windows_integration import create_windows_context_menu, remove_windows_context_menu
 
 def main():
     # Migrate credentials from INI to keyring (runs once, safe to call multiple times)
