@@ -372,7 +372,7 @@ def mock_dependencies(monkeypatch, tmp_path):
     # Mock ArtifactHandler to prevent thread startup
     mock_artifact_handler = Mock()
     mock_artifact_handler.stop = Mock()
-    monkeypatch.setattr('src.gui.main_window.ArtifactHandler', lambda x: mock_artifact_handler)
+    monkeypatch.setattr('src.gui.main_window.ArtifactHandler', lambda *args, **kwargs: mock_artifact_handler)
 
     # Mock WorkerStatusWidget to prevent real Qt widget creation
     mock_worker_status_widget = Mock()

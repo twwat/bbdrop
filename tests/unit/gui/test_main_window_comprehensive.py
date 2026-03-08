@@ -148,7 +148,7 @@ def comprehensive_mock_dependencies(monkeypatch, temp_assets_dir, tmp_path):
     # Mock ArtifactHandler
     mock_artifact_handler = Mock()
     mock_artifact_handler.stop = Mock()
-    monkeypatch.setattr('src.gui.main_window.ArtifactHandler', lambda x: mock_artifact_handler)
+    monkeypatch.setattr('src.gui.main_window.ArtifactHandler', lambda *args, **kwargs: mock_artifact_handler)
 
     return {
         'icon_mgr': mock_icon_mgr,

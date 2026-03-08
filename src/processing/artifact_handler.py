@@ -18,15 +18,11 @@ import json
 import queue
 from queue import Queue
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 from PyQt6.QtWidgets import QMessageBox
 
 from src.utils.logger import log
-
-if TYPE_CHECKING:
-    from src.gui.main_window import BBDropGUI
 
 
 class CompletionWorker(QThread):
@@ -236,21 +232,27 @@ class ArtifactHandler(QObject):
     and regenerating output files with updated templates.
 
     Attributes:
-        _main_window: Reference to main GUI window for accessing queue_manager and settings
+        _queue_manager: QueueManager for gallery item lookup
+        _db_id_to_path: Mapping from database row IDs to gallery filesystem paths
+        _parent_widget: Optional parent widget for dialog parenting
 
     Example:
-        >>> handler = ArtifactHandler(main_window)
+        >>> handler = ArtifactHandler(queue_manager, db_id_to_path, parent_widget=window)
         >>> handler.regenerate_bbcode_for_gallery(gallery_path, force=True)
     """
 
-    def __init__(self, main_window: 'BBDropGUI'):
+    def __init__(self, queue_manager, db_id_to_path: dict, parent_widget=None):
         """Initialize the artifact handler.
 
         Args:
-            main_window: Reference to BBDropGUI instance
+            queue_manager: QueueManager instance for gallery item lookup
+            db_id_to_path: Dict mapping database IDs to gallery paths
+            parent_widget: Optional parent widget for QMessageBox dialogs
         """
         super().__init__()
-        self._main_window = main_window
+        self._queue_manager = queue_manager
+        self._db_id_to_path = db_id_to_path
+        self._parent_widget = parent_widget
 
     def regenerate_bbcode_for_gallery(self, gallery_path: str, force: bool = False):
         """Regenerate BBCode for a gallery using its current template.
@@ -264,7 +266,7 @@ class ArtifactHandler(QObject):
             return
 
         # Get the current template for this gallery
-        item = self._main_window.queue_manager.get_item(gallery_path)
+        item = self._queue_manager.get_item(gallery_path)
         if item and item.template_name:
             template_name = item.template_name
         else:
@@ -280,19 +282,12 @@ class ArtifactHandler(QObject):
         Args:
             paths: List of gallery paths to regenerate
         """
-        # Find the main GUI window
-        widget = self._main_window
-        while widget and not hasattr(widget, 'queue_manager'):
-            widget = widget.parent()
-        if not widget:
-            return
-
         success_count = 0
         error_count = 0
 
         for path in paths:
             try:
-                item = widget.queue_manager.get_item(path)
+                item = self._queue_manager.get_item(path)
                 if not item or item.status != "completed":
                     continue
 
@@ -310,11 +305,11 @@ class ArtifactHandler(QObject):
         # Show summary message
         if success_count > 0 or error_count > 0:
             if error_count == 0:
-                QMessageBox.information(self._main_window, "Success", f"Regenerated BBCode for {success_count} galleries.")
+                QMessageBox.information(self._parent_widget, "Success", f"Regenerated BBCode for {success_count} galleries.")
             else:
-                QMessageBox.warning(self._main_window, "Partial Failure", f"Regenerated {success_count}, failed {error_count}")
+                QMessageBox.warning(self._parent_widget, "Partial Failure", f"Regenerated {success_count}, failed {error_count}")
         else:
-            QMessageBox.information(self._main_window, "No Action", "No completed galleries found to regenerate.")
+            QMessageBox.information(self._parent_widget, "No Action", "No completed galleries found to regenerate.")
 
     def regenerate_gallery_bbcode(self, gallery_path, new_template):
         """Regenerate BBCode for an uploaded gallery using its JSON artifact.
@@ -329,7 +324,7 @@ class ArtifactHandler(QObject):
         from src.utils.templates import save_gallery_artifacts
 
         # Get gallery info
-        item = self._main_window.queue_manager.get_item(gallery_path)
+        item = self._queue_manager.get_item(gallery_path)
         if not item:
             raise Exception("Gallery not found in database")
 
@@ -412,7 +407,7 @@ class ArtifactHandler(QObject):
             return False
 
         # Check if gallery is completed
-        item = self._main_window.queue_manager.get_item(path)
+        item = self._queue_manager.get_item(path)
         if not item or item.status != "completed":
             return False
 
@@ -424,6 +419,6 @@ class ArtifactHandler(QObject):
         Args:
             db_id: Database ID of the gallery
         """
-        path = self._main_window._db_id_to_path.get(db_id)
+        path = self._db_id_to_path.get(db_id)
         if path and self.should_auto_regenerate_bbcode(path):
             self.regenerate_bbcode_for_gallery(path, force=False)

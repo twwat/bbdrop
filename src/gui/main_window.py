@@ -558,8 +558,14 @@ class BBDropGUI(QMainWindow):
         if self.splash:
             self.splash.set_status("Upload Completion Worker")
 
+        # Initialize db_id -> path cache (shared with ArtifactHandler)
+        if not hasattr(self, '_db_id_to_path'):
+            self._db_id_to_path = {}
+
         # Initialize artifact handler for BBCode regeneration
-        self.artifact_handler = ArtifactHandler(self)
+        self.artifact_handler = ArtifactHandler(
+            self.queue_manager, self._db_id_to_path, parent_widget=self
+        )
         if self.splash:
             self.splash.set_status("Artifact Handler")
 
