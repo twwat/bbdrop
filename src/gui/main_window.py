@@ -530,7 +530,12 @@ class BBDropGUI(QMainWindow):
         # Initialize archive support
         temp_dir = Path(get_config_path()).parent / "temp"
         archive_service = ArchiveService(temp_dir)
-        self.archive_coordinator = ArchiveCoordinator(archive_service, parent_widget=self)
+        from src.gui.dialogs.archive_folder_selector import ArchiveFolderSelector
+        self.archive_coordinator = ArchiveCoordinator(
+            archive_service,
+            parent_widget=self,
+            folder_selector_factory=ArchiveFolderSelector,
+        )
         if self.splash:
             self.splash.set_status("QueueManager")
         

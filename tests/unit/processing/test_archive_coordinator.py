@@ -40,6 +40,23 @@ class TestArchiveCoordinatorInit:
         assert coordinator.service is mock_service
         assert coordinator.parent is None
 
+    def test_init_with_folder_selector_factory(self):
+        """Test initialization with folder selector factory"""
+        mock_service = Mock()
+        mock_factory = Mock()
+
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
+
+        assert coordinator._folder_selector_factory is mock_factory
+
+    def test_init_without_folder_selector_factory(self):
+        """Test initialization without folder selector factory defaults to None"""
+        mock_service = Mock()
+
+        coordinator = ArchiveCoordinator(mock_service)
+
+        assert coordinator._folder_selector_factory is None
+
 
 class TestArchiveCoordinatorProcessArchiveBasic:
     """Test basic process_archive functionality"""
@@ -169,15 +186,14 @@ class TestArchiveCoordinatorSingleFolder:
         mock_service.get_folders.return_value = [folder]
         mock_service.cleanup_temp_dir.return_value = True
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_factory = Mock()
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
             assert result == [folder]
-            mock_dialog_class.assert_not_called()
+            mock_factory.assert_not_called()
 
     def test_single_folder_no_cleanup_needed(self):
         """Test single folder doesn't trigger cleanup"""
@@ -209,20 +225,18 @@ class TestArchiveCoordinatorMultipleFolders:
         mock_service.extract_archive.return_value = temp_dir
         mock_service.get_folders.return_value = folders
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = [folders[0]]
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test_archive'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = [folders[0]]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test_archive'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
             assert result == [folders[0]]
-            mock_dialog_class.assert_called_once_with('test_archive', folders, None)
+            mock_factory.assert_called_once_with('test_archive', folders, None)
             mock_dialog.exec.assert_called_once()
 
     def test_multiple_folders_with_parent_widget(self):
@@ -237,19 +251,17 @@ class TestArchiveCoordinatorMultipleFolders:
         mock_service.extract_archive.return_value = temp_dir
         mock_service.get_folders.return_value = folders
 
-        coordinator = ArchiveCoordinator(mock_service, mock_parent)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = [folders[0]]
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, mock_parent, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = [folders[0]]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             coordinator.process_archive(Path("/archive.zip"))
 
-            mock_dialog_class.assert_called_once_with('test', folders, mock_parent)
+            mock_factory.assert_called_once_with('test', folders, mock_parent)
 
     def test_dialog_with_three_folders(self):
         """Test dialog with exactly three folders"""
@@ -263,19 +275,37 @@ class TestArchiveCoordinatorMultipleFolders:
         mock_service.extract_archive.return_value = temp_dir
         mock_service.get_folders.return_value = folders
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = [folders[0], folders[2]]
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = [folders[0], folders[2]]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
             assert result == [folders[0], folders[2]]
+
+    def test_multiple_folders_no_factory_returns_none(self):
+        """Test multiple folders without factory cleans up and returns None"""
+        mock_service = Mock()
+        temp_dir = Path("/tmp/extract_test")
+        folders = [
+            Path("/tmp/extract_test/folder1"),
+            Path("/tmp/extract_test/folder2")
+        ]
+        mock_service.extract_archive.return_value = temp_dir
+        mock_service.get_folders.return_value = folders
+        mock_service.cleanup_temp_dir.return_value = True
+
+        coordinator = ArchiveCoordinator(mock_service)  # No factory
+
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
+            result = coordinator.process_archive(Path("/archive.zip"))
+
+        assert result is None
+        mock_service.cleanup_temp_dir.assert_called_once_with(temp_dir)
 
 
 class TestArchiveCoordinatorDialogCancellation:
@@ -293,15 +323,13 @@ class TestArchiveCoordinatorDialogCancellation:
         mock_service.get_folders.return_value = folders
         mock_service.cleanup_temp_dir.return_value = True
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = False
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = False
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
             assert result is None
@@ -318,15 +346,13 @@ class TestArchiveCoordinatorDialogCancellation:
         mock_service.get_folders.return_value = folders
         mock_service.cleanup_temp_dir.return_value = True
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = False
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = False
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             coordinator.process_archive(Path("/archive.zip"))
 
             mock_service.cleanup_temp_dir.assert_called_once_with(temp_dir)
@@ -343,16 +369,14 @@ class TestArchiveCoordinatorDialogCancellation:
         mock_service.get_folders.return_value = folders
         mock_service.cleanup_temp_dir.return_value = True
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = []
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = []
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
             assert result is None
@@ -369,16 +393,14 @@ class TestArchiveCoordinatorDialogCancellation:
         mock_service.get_folders.return_value = folders
         mock_service.cleanup_temp_dir.return_value = True
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = []
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = []
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             coordinator.process_archive(Path("/archive.zip"))
 
             mock_service.cleanup_temp_dir.assert_called_once_with(temp_dir)
@@ -399,17 +421,15 @@ class TestArchiveCoordinatorDialogSelection:
         mock_service.extract_archive.return_value = temp_dir
         mock_service.get_folders.return_value = folders
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        selected = [folders[0], folders[2]]
+        mock_dialog.get_selected_folders.return_value = selected
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            selected = [folders[0], folders[2]]
-            mock_dialog.get_selected_folders.return_value = selected
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
             assert result == selected
@@ -425,16 +445,14 @@ class TestArchiveCoordinatorDialogSelection:
         mock_service.extract_archive.return_value = temp_dir
         mock_service.get_folders.return_value = folders
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = [folders[0]]
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = [folders[0]]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             coordinator.process_archive(Path("/archive.zip"))
 
             mock_service.cleanup_temp_dir.assert_not_called()
@@ -454,22 +472,20 @@ class TestArchiveCoordinatorArchiveNameHandling:
         mock_service.extract_archive.return_value = temp_dir
         mock_service.get_folders.return_value = folders
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = [folders[0]]
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='my_archive_name') as mock_get_name, \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = [folders[0]]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='my_archive_name') as mock_get_name:
             archive_path = Path("/path/to/my_archive.zip")
             coordinator.process_archive(archive_path)
 
             mock_get_name.assert_called_once_with(archive_path)
-            mock_dialog_class.assert_called_once()
-            call_args = mock_dialog_class.call_args
+            mock_factory.assert_called_once()
+            call_args = mock_factory.call_args
             assert call_args[0][0] == 'my_archive_name'
 
     def test_archive_name_with_windows_path(self):
@@ -482,14 +498,7 @@ class TestArchiveCoordinatorArchiveNameHandling:
 
         coordinator = ArchiveCoordinator(mock_service)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='archive') as mock_get_name, \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
-
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = [folders[0]]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='archive') as mock_get_name:
             coordinator.process_archive(Path("C:\\Users\\test\\archive.zip"))
 
             mock_get_name.assert_called_once()
@@ -533,16 +542,14 @@ class TestArchiveCoordinatorEdgeCases:
         mock_service.extract_archive.return_value = temp_dir
         mock_service.get_folders.return_value = folders
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = folders[::2]
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = folders[::2]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
             assert len(result) == 5
@@ -584,16 +591,14 @@ class TestArchiveCoordinatorIntegration:
         mock_service.get_folders.return_value = folders
         mock_service.cleanup_temp_dir.return_value = True
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+        mock_dialog.get_selected_folders.return_value = [folders[0], folders[2]]
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = True
-            mock_dialog.get_selected_folders.return_value = [folders[0], folders[2]]
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
         assert result == [folders[0], folders[2]]
@@ -629,15 +634,13 @@ class TestArchiveCoordinatorIntegration:
         mock_service.get_folders.return_value = folders
         mock_service.cleanup_temp_dir.return_value = True
 
-        coordinator = ArchiveCoordinator(mock_service)
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = False
+        mock_factory = Mock(return_value=mock_dialog)
 
-        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'), \
-             patch('src.processing.archive_coordinator.ArchiveFolderSelector') as mock_dialog_class:
+        coordinator = ArchiveCoordinator(mock_service, folder_selector_factory=mock_factory)
 
-            mock_dialog = Mock()
-            mock_dialog.exec.return_value = False
-            mock_dialog_class.return_value = mock_dialog
-
+        with patch('src.processing.archive_coordinator.get_archive_name', return_value='test'):
             result = coordinator.process_archive(Path("/archive.zip"))
 
         assert result is None
