@@ -3,7 +3,7 @@ Factory for creating image host client instances.
 
 Provides a unified interface to instantiate the appropriate image host
 client based on the host identifier. Supports:
-- 'imx' -> ImxToUploader (from bbdrop.py)
+- 'imx' -> ImxToUploader (from src.network.imx_uploader)
 - 'turbo' -> TurboImageHostClient (from turbo_image_host_client.py)
 """
 

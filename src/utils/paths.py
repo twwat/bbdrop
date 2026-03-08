@@ -9,7 +9,6 @@ import os
 import sys
 import platform
 import configparser
-from typing import Any
 
 from src.utils.logger import log
 

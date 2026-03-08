@@ -25,7 +25,7 @@ import pycurl
 import certifi
 from tqdm import tqdm
 
-from src.utils.format_utils import format_binary_size, format_binary_rate
+from src.utils.format_utils import format_binary_size
 from src.utils.logger import log
 from src.network.image_host_client import ImageHostClient
 from src.core.image_host_config import (
@@ -509,13 +509,8 @@ class ImxToUploader(ImageHostClient):
         template_name="default", queue_store=None
     ):
         """
-        Upload all images in a folder as a gallery
-    def upload_folder(
-        self, folder_path, gallery_name=None,
-        thumbnail_size=3, thumbnail_format=2,
-        max_retries=3, parallel_batch_size=4,
-        template_name="default"
-    ):
+        Upload all images in a folder as a gallery.
+
         Args:
             folder_path (str): Path to folder containing images
             gallery_name (str): Name for the gallery (optional)

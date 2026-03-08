@@ -157,7 +157,7 @@ def remove_credential(key, host_id=None):
         pass  # Key may not exist
 
 def migrate_credentials_from_ini():
-    """Migrate credentials from INI file to QSettings, then remove from INI"""
+    """Migrate credentials from INI file to OS keyring, then remove from INI"""
     import configparser
     from src.utils.paths import get_config_path
     config = configparser.ConfigParser()
@@ -321,7 +321,7 @@ def _migrate_encryption_keys():
 def setup_secure_password():
     """Interactive setup for secure password storage"""
     print("Setting up secure password storage for imx.to")
-    print("This will store a hashed version of your password in ~/.bbdrop/bbdrop.ini")
+    print("This will store an encrypted version of your password in OS keyring")
     print("")
 
     username = input("Enter your imx.to username: ")
@@ -339,7 +339,7 @@ def setup_secure_password():
         return False
 
 def _save_credentials(username, password):
-    """Save credentials to QSettings (Registry)"""
+    """Save credentials to OS keyring"""
     set_credential('username', username)
     set_credential('password', encrypt_password(password))
     log("Username and encrypted password saved to Registry", level="info", category="auth")
