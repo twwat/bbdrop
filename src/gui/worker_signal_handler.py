@@ -62,7 +62,10 @@ class WorkerSignalHandler(QObject):
         if not mw:
             return
         if mw.worker is None or not mw.worker.isRunning():
-            mw.worker = UploadWorker(mw.queue_manager)
+            mw.worker = UploadWorker(
+                mw.queue_manager,
+                peak_bandwidth_callback=lambda: self.bandwidth_manager._upload_source.peak_value,
+            )
             log(f"UploadWorker created ({id(mw.worker)})", level="debug", category="uploads")
             mw.worker.progress_updated.connect(mw.on_progress_updated)
             mw.worker.gallery_started.connect(mw.on_gallery_started)

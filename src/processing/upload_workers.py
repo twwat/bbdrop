@@ -45,10 +45,17 @@ class UploadWorker(QThread):
     queue_stats = pyqtSignal(dict)  # aggregate status stats for GUI updates
     bandwidth_updated = pyqtSignal(float)  # Instantaneous KB/s from pycurl progress callbacks
 
-    def __init__(self, queue_manager):
-        """Initialize upload worker with queue manager"""
+    def __init__(self, queue_manager, peak_bandwidth_callback=None):
+        """Initialize upload worker with queue manager
+
+        Args:
+            queue_manager: QueueManager instance for queue operations
+            peak_bandwidth_callback: Optional callable returning peak bandwidth in KB/s.
+                Injected by the GUI layer to decouple from BandwidthManager.
+        """
         super().__init__()
         self.queue_manager = queue_manager
+        self._peak_bandwidth_callback = peak_bandwidth_callback
         self.uploader = None
         self.running = True
         self.current_item = None
@@ -324,15 +331,12 @@ class UploadWorker(QThread):
                 return
 
             # Store observed peak speed on item for metrics recording
-            # Query centralized manager for the peak value of this upload source
             try:
-                # The UploadWorker should have its signal_handler connected which has bandwidth_manager
-                # In GUI mode, it's safer to get it via the signal_handler linked to main window
-                from src.gui.bandwidth_manager import BandwidthManager
-                # If we're on the GUI thread or have reference to manager:
-                item.observed_peak_kbps = self.queue_manager._main_window.worker_signal_handler.bandwidth_manager._upload_source.peak_value
-            except (AttributeError, Exception):
-                # Fallback: BandwidthManager itself has a factory or tracker
+                if self._peak_bandwidth_callback:
+                    item.observed_peak_kbps = self._peak_bandwidth_callback()
+                else:
+                    item.observed_peak_kbps = None
+            except Exception:
                 item.observed_peak_kbps = None
 
             # Process results
