@@ -106,7 +106,7 @@ class UploadEngine:
     def _is_gallery_unnamed(self, gallery_id: str) -> bool:
         """Check if gallery is in the unnamed galleries list."""
         try:
-            from bbdrop import get_unnamed_galleries  # type: ignore
+            from src.storage.gallery_management import get_unnamed_galleries
             unnamed_galleries = get_unnamed_galleries()
             return gallery_id in unnamed_galleries
         except Exception as e:
@@ -296,7 +296,7 @@ class UploadEngine:
             else:
                 # No rename worker; queue for later auto-rename
                 try:
-                    from bbdrop import save_unnamed_gallery  # type: ignore
+                    from src.storage.gallery_management import save_unnamed_gallery
                     save_unnamed_gallery(gallery_id, gallery_name)
                     log(f"Queued gallery for auto-rename: '{gallery_name}' (no RenameWorker)", level="debug", category="renaming")
                 except Exception as e:

@@ -84,7 +84,7 @@ class BBCodeViewerDialog(QDialog):
             widget = widget.parent()
         
         # Central location files in standardized naming (fallback to legacy if not found)
-        from bbdrop import build_gallery_filenames
+        from src.storage.gallery_management import build_gallery_filenames
         if gallery_id and gallery_name:
             _, json_filename, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
             central_bbcode = os.path.join(self.central_path, bbcode_filename)

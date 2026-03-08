@@ -135,7 +135,7 @@ class RenameWorker(QObject):
         # Import existing functions
         from src.utils.paths import get_config_path
         from src.network.cookies import get_firefox_cookies, load_cookies_from_file
-        from bbdrop import (get_unnamed_galleries,
+        from src.storage.gallery_management import (get_unnamed_galleries,
                           remove_unnamed_gallery, sanitize_gallery_name)
         from src.utils.credentials import decrypt_password, get_credential
 
@@ -1120,7 +1120,7 @@ class RenameWorker(QObject):
 
     def _process_renames(self):
         """Background thread that processes rename queue."""
-        from bbdrop import save_unnamed_gallery
+        from src.storage.gallery_management import save_unnamed_gallery
 
         while self.running:
             try:

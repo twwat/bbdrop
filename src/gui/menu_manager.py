@@ -375,7 +375,7 @@ class MenuManager(QObject):
         """Install Windows Explorer context menu integration."""
         mw = self._main_window
         try:
-            from bbdrop import create_windows_context_menu
+            from src.utils.windows_integration import create_windows_context_menu
             ok = create_windows_context_menu()
             if ok:
                 QMessageBox.information(mw, "Context Menu", "'Add to BBDrop' context menu installed successfully.")
@@ -391,7 +391,7 @@ class MenuManager(QObject):
         """Remove Windows Explorer context menu integration."""
         mw = self._main_window
         try:
-            from bbdrop import remove_windows_context_menu
+            from src.utils.windows_integration import remove_windows_context_menu
             ok = remove_windows_context_menu()
             if ok:
                 QMessageBox.information(mw, "Context Menu", "'Add to BBDrop' context menu removed successfully.")

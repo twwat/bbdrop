@@ -117,7 +117,7 @@ class CompletionWorker(QThread):
 
             # Only track for renaming if gallery is actually unnamed
             try:
-                from bbdrop import save_unnamed_gallery, get_unnamed_galleries, check_gallery_renamed
+                from src.storage.gallery_management import save_unnamed_gallery, get_unnamed_galleries, check_gallery_renamed
                 # Check if gallery is already renamed
                 is_renamed = check_gallery_renamed(gallery_id)
                 if not is_renamed:
@@ -190,7 +190,7 @@ class CompletionWorker(QThread):
 
             # Use centralized save_gallery_artifacts function
             try:
-                from bbdrop import save_gallery_artifacts
+                from src.utils.templates import save_gallery_artifacts
                 from src.utils.paths import load_user_defaults
                 written = save_gallery_artifacts(
                     folder_path=path,
@@ -326,7 +326,7 @@ class ArtifactHandler(QObject):
         Raises:
             Exception: If gallery not found, no JSON artifact, or regeneration fails
         """
-        from bbdrop import save_gallery_artifacts
+        from src.utils.templates import save_gallery_artifacts
 
         # Get gallery info
         item = self._main_window.queue_manager.get_item(gallery_path)

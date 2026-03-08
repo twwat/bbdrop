@@ -11,9 +11,7 @@ from typing import Optional, Dict, Any
 
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QSettings
 
-from bbdrop import (
-    save_gallery_artifacts
-)
+from src.utils.templates import save_gallery_artifacts
 from src.network.image_host_factory import create_image_host_client
 from src.utils.logger import log
 from src.storage.queue_manager import GalleryQueueItem
@@ -996,7 +994,7 @@ class CompletionWorker(QThread):
             global generate_bbcode_from_results
             if generate_bbcode_from_results is None:
                 # Not patched, use real function
-                from bbdrop import generate_bbcode_from_template
+                from src.utils.templates import generate_bbcode_from_template
                 _gen_func = generate_bbcode_from_template
             else:
                 # Patched by test or set to real function

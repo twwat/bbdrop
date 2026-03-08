@@ -34,7 +34,7 @@ class TestCoverFullFlow:
         }
 
         # 4. Template resolution
-        from bbdrop import apply_template
+        from src.utils.templates import apply_template
         template = "#cover#\n[b]#folderName#[/b]\n#allImages#"
         data = {
             'cover': item.cover_result.get('bbcode', ''),
@@ -50,7 +50,7 @@ class TestCoverFullFlow:
 
     def test_no_cover_template_empty(self):
         """When no cover is detected, #cover# resolves to empty string."""
-        from bbdrop import apply_template
+        from src.utils.templates import apply_template
         template = "#cover#[b]#folderName#[/b]"
         data = {
             'cover': '',
@@ -63,7 +63,7 @@ class TestCoverFullFlow:
 
     def test_cover_conditional_with_content(self):
         """[if cover]...[/if] shows content when cover exists."""
-        from bbdrop import apply_template
+        from src.utils.templates import apply_template
         template = "[if cover]#cover#[/if]\n#folderName#"
 
         # With cover

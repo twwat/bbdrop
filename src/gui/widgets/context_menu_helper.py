@@ -378,7 +378,7 @@ class GalleryContextMenuHelper(QObject):
             return
             
         try:
-            from bbdrop import load_templates
+            from src.utils.templates import load_templates
             templates = load_templates()
             template_names = list(templates.keys())
             

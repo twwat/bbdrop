@@ -1117,7 +1117,7 @@ class GalleryTableWidget(QTableWidget):
                 try:
                     folder_name = os.path.basename(path)
                     from src.utils.paths import get_central_storage_path
-                    from bbdrop import build_gallery_filenames
+                    from src.storage.gallery_management import build_gallery_filenames
                     json_path_candidates = []
                     uploaded_subdir = os.path.join(path, ".uploaded")
                     if item.gallery_id and (item.name or folder_name):

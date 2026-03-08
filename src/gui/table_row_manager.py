@@ -28,7 +28,7 @@ from src.storage.queue_manager import GalleryQueueItem
 from src.gui.widgets.custom_widgets import TableProgressWidget, ActionButtonWidget
 from src.gui.icon_manager import get_icon_manager
 from src.processing.tasks import BackgroundTask
-from bbdrop import check_gallery_renamed
+from src.storage.gallery_management import check_gallery_renamed
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI

@@ -86,9 +86,9 @@ from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QPixmap, QPai
 
 # Import the core uploader functionality
 from src.utils.paths import get_project_root, load_user_defaults, get_config_path, get_central_storage_path
-from bbdrop import sanitize_gallery_name, rename_all_unnamed_with_session, build_gallery_filenames
+from src.storage.gallery_management import sanitize_gallery_name, rename_all_unnamed_with_session, build_gallery_filenames
 from src.utils.credentials import encrypt_password, decrypt_password
-from bbdrop import create_windows_context_menu, remove_windows_context_menu
+from src.utils.windows_integration import create_windows_context_menu, remove_windows_context_menu
 from src.utils.format_utils import format_binary_size, format_binary_rate, timestamp
 from src.utils.logger import log, set_main_window
 from src.gui.splash_screen import SplashScreen
@@ -1461,15 +1461,12 @@ class BBDropGUI(QMainWindow):
             QTimer.singleShot(3000, self._check_for_updates_silently)
     
     def _cache_format_functions(self):
-        """Pre-cache ALL bbdrop functions to avoid blocking imports during runtime"""
+        """Pre-cache utility functions to avoid blocking imports during runtime"""
         try:
-            from bbdrop import (
-                format_binary_rate, format_binary_size, get_unnamed_galleries,
-                check_if_gallery_exists, timestamp, get_central_storage_path,
-                build_gallery_filenames, save_gallery_artifacts, generate_bbcode_from_template,
-                load_templates, get_template_path, __version__,
-                get_central_store_base_path
-            )
+            from src.utils.format_utils import format_binary_rate, format_binary_size, timestamp
+            from src.storage.gallery_management import get_unnamed_galleries, check_if_gallery_exists, build_gallery_filenames
+            from src.utils.paths import get_central_storage_path, get_central_store_base_path, __version__
+            from src.utils.templates import save_gallery_artifacts, generate_bbcode_from_template, load_templates, get_template_path
             self._format_binary_rate = format_binary_rate
             self._format_binary_size = format_binary_size
             self._get_unnamed_galleries = get_unnamed_galleries
@@ -1484,7 +1481,7 @@ class BBDropGUI(QMainWindow):
             self._version = __version__
             self._get_central_store_base_path = get_central_store_base_path
         except Exception as e:
-            log(f"Failed to import bbdrop utilities: {e}", level="error", category="startup")
+            log(f"Failed to cache format/template/gallery functions: {e}", level="error", category="startup")
             self._format_binary_rate = lambda rate, precision=2: self._format_rate_consistent(rate, precision)
             self._format_binary_size = lambda size, precision=2: f"{size} B" if size else ""
             self._get_unnamed_galleries = lambda: {}
@@ -1724,7 +1721,7 @@ class BBDropGUI(QMainWindow):
         qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Template</span>:"), 3, 0)
         self.template_combo = QComboBox()
         self.template_combo.setToolTip("Template to use for generating bbcode files")
-        from bbdrop import load_templates
+        from src.utils.templates import load_templates
         templates = load_templates()
         for template_name in templates.keys():
             self.template_combo.addItem(template_name)
@@ -1738,7 +1735,7 @@ class BBDropGUI(QMainWindow):
         # Watch template directory for changes and refresh dropdown automatically
         try:
             from PyQt6.QtCore import QFileSystemWatcher
-            from bbdrop import get_template_path
+            from src.utils.templates import get_template_path
             self._template_watcher = QFileSystemWatcher([get_template_path()])
             self._template_watcher.directoryChanged.connect(self._on_templates_directory_changed)
         except Exception as e:
@@ -2311,7 +2308,7 @@ class BBDropGUI(QMainWindow):
         """
         from src.network.update_checker import UpdateChecker
         from src.utils.paths import __version__
-        from bbdrop import GITHUB_OWNER, GITHUB_REPO
+        from bbdrop import GITHUB_OWNER, GITHUB_REPO  # stays in bbdrop (app-level constants)
 
         self._update_checker = UpdateChecker(__version__, GITHUB_OWNER, GITHUB_REPO)
         self._update_checker.update_available.connect(
@@ -2411,7 +2408,7 @@ class BBDropGUI(QMainWindow):
 
     def refresh_template_combo(self, preferred: str | None = None):
         """Reload templates into the dropdown, preserving selection when possible."""
-        from bbdrop import load_templates
+        from src.utils.templates import load_templates
         templates = load_templates()
         current = preferred if preferred is not None else self.template_combo.currentText()
         self.template_combo.blockSignals(True)
@@ -2915,7 +2912,7 @@ class BBDropGUI(QMainWindow):
         # For now, we'll do the check but it's still somewhat blocking
         # TODO: Move to a proper worker thread for complete non-blocking operation
         try:
-            from bbdrop import check_if_gallery_exists
+            from src.storage.gallery_management import check_if_gallery_exists
             existing_files = check_if_gallery_exists(gallery_name)
             
             # Use QTimer to ensure dialog shows on main thread
@@ -4482,7 +4479,7 @@ class BBDropGUI(QMainWindow):
         central_path = get_central_storage_path()
         
         # Try central location first with standardized naming, fallback to legacy
-        from bbdrop import build_gallery_filenames
+        from src.storage.gallery_management import build_gallery_filenames
         item = self.queue_manager.get_item(path)
         if item and item.gallery_id and (item.name or folder_name):
             log(f"BBcode copy: item.name='{item.name}', folder_name='{folder_name}', gallery_id='{item.gallery_id}'", level="debug", category="fileio")
@@ -5112,7 +5109,7 @@ class BBDropGUI(QMainWindow):
             template_item = table.item(row, GalleryTableWidget.COL_TEMPLATE)
             current_template = template_item.text() if template_item else "default"
 
-            from bbdrop import load_templates
+            from src.utils.templates import load_templates
 
             try:
                 templates = load_templates()

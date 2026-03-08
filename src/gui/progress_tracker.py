@@ -212,7 +212,7 @@ class ProgressTracker(QObject):
     def _update_unnamed_count_background(self):
         """Update unnamed gallery count in background."""
         try:
-            from bbdrop import get_unnamed_galleries
+            from src.storage.gallery_management import get_unnamed_galleries
             unnamed_galleries = get_unnamed_galleries()
             unnamed_count = len(unnamed_galleries)
             QTimer.singleShot(0, lambda: self._main_window.stats_unnamed_value_label.setText(f"{unnamed_count}"))

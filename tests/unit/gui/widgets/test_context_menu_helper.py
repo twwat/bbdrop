@@ -407,7 +407,7 @@ class TestStatusOperations:
 class TestTemplateSubmenu:
     """Test template selection submenu"""
 
-    @patch('bbdrop.load_templates')
+    @patch('src.utils.templates.load_templates')
     def test_template_submenu_exists(self, mock_load_templates, context_menu_helper):
         """Test template submenu is created"""
         mock_load_templates.return_value = {
@@ -426,7 +426,7 @@ class TestTemplateSubmenu:
         )
         assert has_template_menu
 
-    @patch('bbdrop.load_templates')
+    @patch('src.utils.templates.load_templates')
     def test_template_submenu_has_templates(self, mock_load_templates, context_menu_helper):
         """Test template submenu contains available templates"""
         template_names = ['Default', 'Thumbnails', 'Full Size']
@@ -447,7 +447,7 @@ class TestTemplateSubmenu:
         for name in template_names:
             assert name in submenu_texts
 
-    @patch('bbdrop.load_templates')
+    @patch('src.utils.templates.load_templates')
     def test_template_selection_emits_signal(self, mock_load_templates, context_menu_helper, qtbot):
         """Test template selection emits signal"""
         mock_load_templates.return_value = {'Default': {}}
@@ -910,7 +910,7 @@ class TestEdgeCases:
         menu = context_menu_helper.create_context_menu(QPoint(0, 0), selected_paths)
         assert menu is not None
 
-    @patch('bbdrop.load_templates')
+    @patch('src.utils.templates.load_templates')
     def test_template_load_error(self, mock_load_templates, context_menu_helper, capsys):
         """Test handling of template loading error"""
         mock_load_templates.side_effect = Exception("Load error")

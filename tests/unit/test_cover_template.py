@@ -6,7 +6,7 @@ class TestCoverPlaceholder:
     """#cover# placeholder resolves correctly in templates."""
 
     def test_cover_placeholder_replaced(self):
-        from bbdrop import apply_template
+        from src.utils.templates import apply_template
         data = {
             'folder_name': 'Test Gallery',
             'all_images': '[img]thumb[/img]',
@@ -18,7 +18,7 @@ class TestCoverPlaceholder:
         assert "[url=full][img]cover_thumb[/img][/url]" in result
 
     def test_cover_placeholder_empty_when_no_cover(self):
-        from bbdrop import apply_template
+        from src.utils.templates import apply_template
         data = {
             'folder_name': 'Test Gallery',
             'all_images': '[img]thumb[/img]',
@@ -31,7 +31,7 @@ class TestCoverPlaceholder:
         assert "Test Gallery" in result
 
     def test_cover_conditional_true(self):
-        from bbdrop import apply_template
+        from src.utils.templates import apply_template
         data = {
             'folder_name': 'Test',
             'all_images': '',
@@ -43,7 +43,7 @@ class TestCoverPlaceholder:
         assert "Cover: [img]thumb[/img]" in result
 
     def test_cover_conditional_false(self):
-        from bbdrop import apply_template
+        from src.utils.templates import apply_template
         data = {
             'folder_name': 'Test',
             'all_images': '',

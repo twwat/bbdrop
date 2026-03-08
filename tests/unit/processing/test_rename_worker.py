@@ -456,7 +456,7 @@ class TestRenameWorkerProcessing:
 
         # Mock login timeout
         with patch.object(worker.login_complete, 'wait', return_value=False), \
-             patch('bbdrop.save_unnamed_gallery') as mock_save:
+             patch('src.storage.gallery_management.save_unnamed_gallery') as mock_save:
             # Manually call processing for one iteration
             worker.running = True
             try:
@@ -480,7 +480,7 @@ class TestRenameWorkerProcessing:
         worker.login_successful = True
 
         with patch.object(worker, 'rename_gallery_with_session', return_value=False), \
-             patch('bbdrop.save_unnamed_gallery') as mock_save:
+             patch('src.storage.gallery_management.save_unnamed_gallery') as mock_save:
 
             worker.queue.put({'gallery_id': '456', 'gallery_name': 'Failed'})
 
