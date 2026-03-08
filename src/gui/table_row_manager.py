@@ -331,7 +331,7 @@ class TableRowManager(QObject):
         mw.gallery_table.setItem(row, _Col.IMAGE_HOST, host_item)
 
         # Renamed status: only applies to hosts that support gallery rename (IMX)
-        if host_id == 'imx':
+        if item.image_host_id == 'imx':
             is_renamed = check_gallery_renamed(item.gallery_id) if item.gallery_id else None
             self._set_renamed_cell_icon(row, is_renamed)
         else:
