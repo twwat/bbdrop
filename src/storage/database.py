@@ -1961,6 +1961,70 @@ class QueueStore:
             log(f"Failed to bulk update IMX status: {e}", level="error", category="database")
             raise
 
+    def bulk_upsert_scan_results(
+        self, results: List[Tuple[int, str, str, str, int, int, int, Optional[str]]]
+    ) -> None:
+        """Bulk upsert scan results for the multi-host link scanner.
+
+        Each tuple: (gallery_fk, host_type, host_id, status, online_count, total_count, checked_ts, detail_json)
+
+        Uses INSERT OR REPLACE on the UNIQUE(gallery_fk, host_type, host_id) constraint.
+        """
+        if not results:
+            return
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                conn.executemany(
+                    """INSERT OR REPLACE INTO host_scan_results
+                       (gallery_fk, host_type, host_id, status, online_count, total_count, checked_ts, detail_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    results
+                )
+            log(f"Upserted {len(results)} scan results", level="debug", category="database")
+        except Exception as e:
+            log(f"Failed to upsert scan results: {e}", level="error", category="database")
+            raise
+
+    def get_scan_stats_by_host(self) -> Dict[Tuple[str, str], Dict[str, int]]:
+        """Get aggregated scan statistics grouped by (host_type, host_id).
+
+        Returns:
+            Dict keyed by (host_type, host_id) tuples, each value containing:
+            - online_galleries, partial_galleries, offline_galleries, error_galleries
+            - total_online (sum of online_count), total_items (sum of total_count)
+        """
+        result: Dict[Tuple[str, str], Dict[str, int]] = {}
+
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            cursor = conn.execute("""
+                SELECT host_type, host_id, status,
+                       COUNT(*) as gallery_count,
+                       SUM(online_count) as sum_online,
+                       SUM(total_count) as sum_total
+                FROM host_scan_results
+                GROUP BY host_type, host_id, status
+            """)
+
+            for row in cursor.fetchall():
+                host_type, host_id, status = row[0], row[1], row[2]
+                gallery_count, sum_online, sum_total = row[3], row[4] or 0, row[5] or 0
+                key = (host_type, host_id)
+
+                if key not in result:
+                    result[key] = {
+                        'online_galleries': 0, 'partial_galleries': 0,
+                        'offline_galleries': 0, 'error_galleries': 0,
+                        'total_online': 0, 'total_items': 0,
+                    }
+
+                result[key][f'{status}_galleries'] = gallery_count
+                result[key]['total_online'] += sum_online
+                result[key]['total_items'] += sum_total
+
+        return result
+
     def get_galleries_by_check_age(self) -> Dict[str, List[Dict[str, Any]]]:
         """Get completed galleries grouped by how long ago they were checked.
 
