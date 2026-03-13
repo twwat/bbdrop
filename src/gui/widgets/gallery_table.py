@@ -1269,3 +1269,37 @@ class GalleryTableWidget(QTableWidget):
             item.setToolTip("")
             # Reset foreground color to default
             item.setForeground(self.palette().color(QPalette.ColorRole.WindowText))
+
+    def set_online_status(
+        self,
+        row: int,
+        online_count: int,
+        total_count: int,
+        check_datetime: Optional[str] = None,
+        host_details: Optional[list] = None,
+    ):
+        """Set the Online column value with optional multi-host tooltip.
+
+        Displays worst-case status across all hosts. If host_details is provided,
+        the tooltip shows a per-host breakdown.
+
+        Args:
+            row: Table row index
+            online_count: Aggregate online items across all hosts
+            total_count: Aggregate total items across all hosts
+            check_datetime: ISO datetime string of most recent check
+            host_details: Optional list of dicts with keys: host_id, online, total, status
+        """
+        self.set_online_imx_status(row, online_count, total_count, check_datetime)
+
+        if host_details and row < self.rowCount():
+            item = self.item(row, self.COL_ONLINE_IMX)
+            if item:
+                lines = []
+                for h in host_details:
+                    hid = h.get('host_id', '?').upper()
+                    ho = h.get('online', 0)
+                    ht = h.get('total', 0)
+                    hs = h.get('status', 'unknown')
+                    lines.append(f"{hid}: {ho}/{ht} ({hs})")
+                item.setToolTip('\n'.join(lines))

@@ -2025,6 +2025,67 @@ class QueueStore:
 
         return result
 
+    def get_worst_status_for_gallery(self, gallery_fk: int) -> Optional[Dict[str, Any]]:
+        """Get the worst scan status across all hosts for a gallery.
+
+        Status priority (worst first): offline > partial > online.
+
+        Returns:
+            Dict with worst_status, total_online, total_items, hosts list.
+            None if no scan results exist.
+        """
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                rows = conn.execute(
+                    "SELECT host_type, host_id, status, online_count, total_count, checked_ts "
+                    "FROM host_scan_results WHERE gallery_fk = ?",
+                    (gallery_fk,)
+                ).fetchall()
+
+            if not rows:
+                return None
+
+            hosts = []
+            total_online = 0
+            total_items = 0
+            has_offline = False
+            has_partial = False
+
+            for host_type, host_id, status, online, total, checked_ts in rows:
+                hosts.append({
+                    'host_type': host_type,
+                    'host_id': host_id,
+                    'status': status,
+                    'online': online,
+                    'total': total,
+                    'checked_ts': checked_ts,
+                })
+                total_online += online
+                total_items += total
+                if status == 'offline':
+                    has_offline = True
+                elif status == 'partial':
+                    has_partial = True
+
+            if has_offline:
+                worst = 'offline'
+            elif has_partial:
+                worst = 'partial'
+            else:
+                worst = 'online'
+
+            return {
+                'worst_status': worst,
+                'total_online': total_online,
+                'total_items': total_items,
+                'hosts': hosts,
+            }
+        except Exception as e:
+            log(f"Error getting worst status for gallery {gallery_fk}: {e}",
+                level="error", category="database")
+            return None
+
     def get_galleries_by_check_age(self) -> Dict[str, List[Dict[str, Any]]]:
         """Get completed galleries grouped by how long ago they were checked.
 
