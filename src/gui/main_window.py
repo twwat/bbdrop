@@ -2551,18 +2551,51 @@ class BBDropGUI(QMainWindow):
         dialog.exec()
 
     def open_link_scanner_dashboard(self) -> None:
-        """Open the Link Scanner Dashboard dialog.
+        """Open the Link Scanner Dashboard.
 
-        Shows gallery online status statistics with cumulative scanning options,
-        allowing targeted scanning of galleries based on check age or status.
+        Creates a non-modal dashboard that handles its own scan lifecycle
+        via ScanCoordinator. The dashboard persists until closed by the user.
         """
-        from src.gui.dialogs.link_scanner_dashboard import LinkScannerDashboardDialog
-        dialog = LinkScannerDashboardDialog(
+        from src.gui.dialogs.link_scanner_dashboard import LinkScannerDashboard
+
+        # Reuse existing dashboard if still open
+        if hasattr(self, '_link_scanner_dashboard') and self._link_scanner_dashboard is not None:
+            try:
+                self._link_scanner_dashboard.raise_()
+                self._link_scanner_dashboard.activateWindow()
+                return
+            except RuntimeError:
+                # Widget was deleted
+                self._link_scanner_dashboard = None
+
+        # Create coordinator if ScanCoordinator is available
+        coordinator = None
+        try:
+            from src.processing.scan_coordinator import ScanCoordinator
+            from src.network.connection_limiter import ConnectionLimiter
+            coordinator = ScanCoordinator(
+                store=self.queue_manager.store,
+                connection_limiter=ConnectionLimiter(),
+            )
+        except ImportError:
+            log("ScanCoordinator not available, dashboard will be view-only",
+                level="warning", category="scanner")
+
+        dashboard = LinkScannerDashboard(
             parent=self,
             queue_manager=self.queue_manager,
-            on_scan_requested=self.check_image_status_via_menu
+            coordinator=coordinator,
         )
-        dialog.exec()
+
+        # Wire coordinator callbacks to dashboard methods if coordinator exists
+        if coordinator:
+            coordinator._progress_callback = dashboard._on_scan_progress
+            coordinator._completion_callback = dashboard._on_scan_complete
+
+        dashboard.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dashboard.destroyed.connect(lambda: setattr(self, '_link_scanner_dashboard', None))
+        self._link_scanner_dashboard = dashboard
+        dashboard.show()
 
     def _init_session_stats(self) -> None:
         """Initialize session statistics on app startup.
