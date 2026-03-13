@@ -373,6 +373,36 @@ class ImageStatusChecker:
             log(f"Timing: Bulk DB update took {(_t9 - _t8)*1000:.1f}ms for {len(db_updates)} updates",
                 level="trace", category="status_check")
 
+        # --- IMX Bridge: also write to multi-host host_scan_results table ---
+        bridge_results = []
+        now = int(time.time())
+        path_to_db_id = {g['path']: g['db_id'] for g in self._galleries_data if 'db_id' in g}
+        for path, result in results.items():
+            online = result.get('online', 0)
+            total = result.get('total', 0)
+            db_id = path_to_db_id.get(path)
+            if db_id is None:
+                continue
+
+            if total == 0:
+                status = 'online'
+            elif online == total:
+                status = 'online'
+            elif online == 0:
+                status = 'offline'
+            else:
+                status = 'partial'
+
+            bridge_results.append((db_id, 'image', 'imx', status, online, total, now, None))
+
+        if bridge_results:
+            try:
+                self.queue_manager.store.bulk_upsert_scan_results(bridge_results)
+                log(f"IMX bridge: wrote {len(bridge_results)} results to host_scan_results",
+                    level="debug", category="status_check")
+            except Exception as e:
+                log(f"IMX bridge write failed: {e}", level="error", category="status_check")
+
         _t10 = time.perf_counter()
         log(f"Timing: Total _on_completed processing took {(_t10 - _t0)*1000:.1f}ms",
             level="trace", category="status_check")
