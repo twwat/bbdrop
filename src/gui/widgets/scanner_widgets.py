@@ -225,3 +225,133 @@ class ScanControlsWidget(QWidget):
     def _on_problems(self) -> None:
         """Emit scan_requested for problem galleries (age=0)."""
         self.scan_requested.emit(0, self._get_host_filter(), 'problems')
+
+
+# ============================================================================
+# Task 11: ScanProgressWidget
+# ============================================================================
+
+class ScanProgressWidget(QWidget):
+    """Progress display for an active link scan.
+
+    Shows an overall progress bar with count/percentage, a stop button,
+    and dynamically created per-host progress bars arranged in a grid
+    (two hosts per row).
+
+    Emits stop_requested when the user clicks Stop.
+    """
+
+    stop_requested = pyqtSignal()
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        # Top row: status label + stop button
+        top_row = QHBoxLayout()
+        self._status_label = QLabel('Scanning...')
+        top_row.addWidget(self._status_label)
+        top_row.addStretch()
+
+        self._stop_btn = QPushButton('Stop')
+        self._stop_btn.setFixedWidth(60)
+        self._stop_btn.clicked.connect(self._on_stop)
+        top_row.addWidget(self._stop_btn)
+        outer.addLayout(top_row)
+
+        # Overall progress bar
+        self._overall_bar = QProgressBar()
+        self._overall_bar.setValue(0)
+        outer.addWidget(self._overall_bar)
+
+        # Overall count label
+        self._overall_count = QLabel('')
+        self._overall_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self._overall_count)
+
+        # Per-host progress grid (2 hosts per row, each entry = label + bar + count)
+        self._host_grid = QGridLayout()
+        self._host_grid.setContentsMargins(0, 4, 0, 0)
+        outer.addLayout(self._host_grid)
+
+        self._host_bars: Dict[str, tuple] = {}
+
+    def set_overall(self, current: int, total: int) -> None:
+        """Update the overall progress bar and count label.
+
+        Args:
+            current: Number of items processed so far.
+            total: Total number of items to process.
+        """
+        self._overall_bar.setMaximum(total)
+        self._overall_bar.setValue(current)
+
+        if total > 0:
+            pct = round(current * 100 / total)
+            self._overall_count.setText(f'{current}/{total}  ({pct}%)')
+        else:
+            self._overall_count.setText('')
+
+    def update_progress(self, host_id: str, current: int, total: int) -> None:
+        """Create or update a per-host progress bar.
+
+        New hosts are added to a grid with two hosts per row. Each entry
+        consists of a label (host_id uppercased), a 14px progress bar,
+        and a count label showing "current/total".
+
+        Args:
+            host_id: Host identifier string.
+            current: Items processed for this host.
+            total: Total items for this host.
+        """
+        if host_id in self._host_bars:
+            bar, count_label = self._host_bars[host_id]
+            bar.setMaximum(total)
+            bar.setValue(current)
+            count_label.setText(f'{current}/{total}')
+            return
+
+        # Calculate grid position: 2 hosts per row, 3 columns each
+        idx = len(self._host_bars)
+        row = idx // 2
+        col_offset = (idx % 2) * 3
+
+        label = QLabel(host_id.upper())
+        self._host_grid.addWidget(label, row, col_offset)
+
+        bar = QProgressBar()
+        bar.setFixedHeight(14)
+        bar.setMaximum(total)
+        bar.setValue(current)
+        bar.setTextVisible(False)
+        self._host_grid.addWidget(bar, row, col_offset + 1)
+
+        count_label = QLabel(f'{current}/{total}')
+        self._host_grid.addWidget(count_label, row, col_offset + 2)
+
+        self._host_bars[host_id] = (bar, count_label)
+
+    def reset(self) -> None:
+        """Clear all host bars, reset overall progress, re-enable stop."""
+        self._overall_bar.setValue(0)
+        self._overall_bar.setMaximum(100)
+        self._overall_count.setText('')
+        self._status_label.setText('Scanning...')
+        self._stop_btn.setEnabled(True)
+
+        # Remove all per-host widgets from the grid
+        while self._host_grid.count():
+            item = self._host_grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        self._host_bars.clear()
+
+    def _on_stop(self) -> None:
+        """Disable the stop button, update label, and emit stop_requested."""
+        self._stop_btn.setEnabled(False)
+        self._status_label.setText('Stopping...')
+        self.stop_requested.emit()
