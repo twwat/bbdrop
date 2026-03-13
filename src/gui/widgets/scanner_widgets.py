@@ -124,3 +124,104 @@ class HostSummaryCard(QFrame):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Emit host_clicked signal when the card is clicked."""
         self.host_clicked.emit(self._host_id)
+
+
+# ============================================================================
+# Task 10: ScanControlsWidget
+# ============================================================================
+
+class ScanControlsWidget(QWidget):
+    """Control panel for initiating link scans with filter options.
+
+    Provides age and host filter dropdowns plus three scan trigger buttons:
+    - Start Scan: scans galleries older than the selected age threshold
+    - Unchecked Only: scans galleries that have never been checked
+    - Problems: scans only galleries with known offline items
+
+    The scan_requested signal carries (age_days, host_filter, scan_type).
+    """
+
+    scan_requested = pyqtSignal(int, str, str)
+
+    _AGE_OPTIONS = [
+        ('7+ days', 7),
+        ('14+ days', 14),
+        ('30+ days', 30),
+        ('60+ days', 60),
+        ('90+ days', 90),
+    ]
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Age filter dropdown
+        self._age_combo = QComboBox()
+        for label, days in self._AGE_OPTIONS:
+            self._age_combo.addItem(label, days)
+        self._age_combo.setCurrentIndex(2)  # default: 30+ days
+        layout.addWidget(self._age_combo)
+
+        # Host filter dropdown
+        self._host_combo = QComboBox()
+        self._host_combo.addItem('All hosts', '')
+        layout.addWidget(self._host_combo)
+
+        # Start Scan button (age-based)
+        self._start_btn = QPushButton('Start Scan')
+        self._start_btn.clicked.connect(self._on_start)
+        layout.addWidget(self._start_btn)
+
+        # Unchecked Only button
+        self._unchecked_btn = QPushButton('Unchecked Only')
+        self._unchecked_btn.clicked.connect(self._on_unchecked)
+        layout.addWidget(self._unchecked_btn)
+
+        # Problems button
+        self._problems_btn = QPushButton('Problems')
+        self._problems_btn.clicked.connect(self._on_problems)
+        layout.addWidget(self._problems_btn)
+
+    def set_hosts(self, host_ids: list[str]) -> None:
+        """Populate the host filter dropdown.
+
+        Preserves the 'All hosts' entry at index 0 and appends each host_id.
+
+        Args:
+            host_ids: List of host identifier strings to add.
+        """
+        self._host_combo.clear()
+        self._host_combo.addItem('All hosts', '')
+        for hid in host_ids:
+            self._host_combo.addItem(hid, hid)
+
+    def set_enabled(self, enabled: bool) -> None:
+        """Toggle all controls on or off.
+
+        Args:
+            enabled: True to enable, False to disable.
+        """
+        self._start_btn.setEnabled(enabled)
+        self._unchecked_btn.setEnabled(enabled)
+        self._problems_btn.setEnabled(enabled)
+        self._age_combo.setEnabled(enabled)
+        self._host_combo.setEnabled(enabled)
+
+    def _get_host_filter(self) -> str:
+        """Return the currently selected host filter value."""
+        return self._host_combo.currentData() or ''
+
+    def _on_start(self) -> None:
+        """Emit scan_requested for an age-based scan."""
+        age_days = self._age_combo.currentData()
+        self.scan_requested.emit(age_days, self._get_host_filter(), 'age')
+
+    def _on_unchecked(self) -> None:
+        """Emit scan_requested for unchecked galleries (age=0)."""
+        self.scan_requested.emit(0, self._get_host_filter(), 'unchecked')
+
+    def _on_problems(self) -> None:
+        """Emit scan_requested for problem galleries (age=0)."""
+        self.scan_requested.emit(0, self._get_host_filter(), 'problems')
