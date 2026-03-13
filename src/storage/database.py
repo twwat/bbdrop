@@ -359,6 +359,26 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE file_host_uploads ADD COLUMN deduped INTEGER DEFAULT 0")
             log("Added md5_hash, file_size, deduped columns to file_host_uploads", level="info", category="database")
 
+        # Migration: Add host_scan_results table for multi-host link scanner
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS host_scan_results (
+                id INTEGER PRIMARY KEY,
+                gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+                host_type TEXT NOT NULL CHECK (host_type IN ('image', 'file')),
+                host_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('online', 'offline', 'partial', 'error', 'unknown')),
+                online_count INTEGER NOT NULL DEFAULT 0,
+                total_count INTEGER NOT NULL DEFAULT 0,
+                checked_ts INTEGER NOT NULL,
+                detail_json TEXT,
+                UNIQUE(gallery_fk, host_type, host_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS scan_results_gallery_idx ON host_scan_results(gallery_fk)")
+        conn.execute("CREATE INDEX IF NOT EXISTS scan_results_host_idx ON host_scan_results(host_type, host_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS scan_results_status_idx ON host_scan_results(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS scan_results_checked_idx ON host_scan_results(checked_ts)")
+
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
         # Continue anyway - the app should still work
