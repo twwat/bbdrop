@@ -355,3 +355,165 @@ class ScanProgressWidget(QWidget):
         self._stop_btn.setEnabled(False)
         self._status_label.setText('Stopping...')
         self.stop_requested.emit()
+
+
+# ============================================================================
+# Task 12: HostResultsTabWidget
+# ============================================================================
+
+class _StatusSortItem(QTableWidgetItem):
+    """Custom table item that sorts by offline count descending.
+
+    Stores (offline_count, timestamp) in UserRole so that galleries with
+    more problems sort first. Falls back to text comparison if no data set.
+    """
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        my_data = self.data(Qt.ItemDataRole.UserRole)
+        other_data = other.data(Qt.ItemDataRole.UserRole)
+        if my_data is not None and other_data is not None:
+            # Higher offline count = more problems = sort first (descending)
+            my_offline, my_ts = my_data
+            other_offline, other_ts = other_data
+            if my_offline != other_offline:
+                return my_offline > other_offline
+            return my_ts < other_ts
+        return super().__lt__(other)
+
+
+class HostResultsTabWidget(QTabWidget):
+    """Tabbed display of per-host scan results.
+
+    Each host gets its own tab containing a sortable QTableWidget with
+    columns: Name, Status (online/total), Last Checked. Status cells are
+    color-coded using get_online_status_colors().
+
+    Tabs are created lazily on first result for a given host_id.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._host_tabs: Dict[str, QTableWidget] = {}
+        self._gallery_rows: Dict[str, Dict[str, int]] = {}
+
+    def update_result(
+        self,
+        host_id: str,
+        gallery_name: str,
+        online: int,
+        total: int,
+        checked_ts: str,
+    ) -> None:
+        """Add or update a single gallery result row.
+
+        Creates the host tab if it doesn't exist yet. If the gallery already
+        has a row, updates it in place.
+
+        Args:
+            host_id: Host identifier string.
+            gallery_name: Display name of the gallery.
+            online: Number of items confirmed online.
+            total: Total number of items in the gallery.
+            checked_ts: Timestamp string of the last check.
+        """
+        table = self._ensure_tab(host_id)
+
+        # Disable sorting while updating to prevent row index shifts
+        table.setSortingEnabled(False)
+
+        host_rows = self._gallery_rows.setdefault(host_id, {})
+
+        if gallery_name in host_rows:
+            row = host_rows[gallery_name]
+        else:
+            row = table.rowCount()
+            table.insertRow(row)
+            host_rows[gallery_name] = row
+
+        # Column 0: Name
+        name_item = QTableWidgetItem(gallery_name)
+        table.setItem(row, 0, name_item)
+
+        # Column 1: Status (online/total) with color coding
+        status_text = f'{online}/{total}'
+        status_item = _StatusSortItem(status_text)
+        offline_count = total - online
+        status_item.setData(Qt.ItemDataRole.UserRole, (offline_count, checked_ts))
+
+        colors = get_online_status_colors()
+        if total == 0:
+            status_item.setForeground(colors['gray'])
+        elif online == total:
+            status_item.setForeground(colors['online'])
+        elif online > 0:
+            status_item.setForeground(colors['partial'])
+        else:
+            status_item.setForeground(colors['offline'])
+
+        table.setItem(row, 1, status_item)
+
+        # Column 2: Last Checked
+        ts_item = QTableWidgetItem(checked_ts)
+        table.setItem(row, 2, ts_item)
+
+        # Re-enable sorting
+        table.setSortingEnabled(True)
+
+    def load_results(self, results: list[dict]) -> None:
+        """Bulk-populate from a list of result dicts.
+
+        Each dict must have keys: host_id, gallery_name, online, total, checked_ts.
+
+        Args:
+            results: List of result dictionaries.
+        """
+        for r in results:
+            self.update_result(
+                r['host_id'],
+                r['gallery_name'],
+                r['online'],
+                r['total'],
+                r['checked_ts'],
+            )
+
+    def activate_host(self, host_id: str) -> None:
+        """Switch to the tab for the given host.
+
+        Args:
+            host_id: Host identifier whose tab should be shown.
+        """
+        if host_id in self._host_tabs:
+            self.setCurrentWidget(self._host_tabs[host_id])
+
+    def clear_all(self) -> None:
+        """Remove all tabs and reset internal state."""
+        while self.count():
+            self.removeTab(0)
+        self._host_tabs.clear()
+        self._gallery_rows.clear()
+
+    def _ensure_tab(self, host_id: str) -> QTableWidget:
+        """Lazily create a tab for a host if it doesn't exist yet.
+
+        Args:
+            host_id: Host identifier string.
+
+        Returns:
+            The QTableWidget for this host.
+        """
+        if host_id in self._host_tabs:
+            return self._host_tabs[host_id]
+
+        table = QTableWidget(0, 3)
+        table.setHorizontalHeaderLabels(['Name', 'Status', 'Last Checked'])
+        table.setSortingEnabled(True)
+
+        # Stretch the Name column to fill available space
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+
+        self.addTab(table, host_id.upper())
+        self._host_tabs[host_id] = table
+        self._gallery_rows[host_id] = {}
+
+        return table
