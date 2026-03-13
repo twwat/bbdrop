@@ -11,7 +11,7 @@ import configparser
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
     QGroupBox, QPushButton, QSlider, QComboBox, QCheckBox, QLineEdit,
-    QDialog, QMessageBox, QStyle
+    QDialog, QMessageBox, QStyle, QRadioButton, QButtonGroup, QFrame
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QThread
 
@@ -58,130 +58,176 @@ class ImageHostConfigPanel(QWidget):
         """Initialize the UI components."""
         main_layout = QVBoxLayout(self)
 
-        # Section 1: Credentials (skip if host has no auth)
-        if self.config.auth_type != "none":
-            credentials_group = self._create_credentials_group()
-            main_layout.addWidget(credentials_group)
+        # Section 1: Credentials (full width, always shown for ALL hosts)
+        credentials_group = self._create_credentials_group()
+        main_layout.addWidget(credentials_group)
 
-        # Section 2: Connection
+        # Section 2: 2-column grid for remaining sections
+        grid = QGridLayout()
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.setVerticalSpacing(12)
+
+        # Row 0: Connection (left), Thumbnails (right)
         connection_group = self._create_connection_group()
-        main_layout.addWidget(connection_group)
+        grid.addWidget(connection_group, 0, 0)
 
-        # Section 3: Thumbnails
         thumbnails_group = self._create_thumbnails_group()
-        main_layout.addWidget(thumbnails_group)
+        grid.addWidget(thumbnails_group, 0, 1)
 
-        # Section 4: Host-Specific Options
-        if self.host_id in ("imx", "pixhost"):
-            options_group = self._create_options_group()
-            main_layout.addWidget(options_group)
+        # Row 1: Options (left), Cover Gallery (right, skip for pixhost)
+        options_group = self._create_options_group()
+        grid.addWidget(options_group, 1, 0)
 
-        # Section 5: Cover Gallery (skip if host doesn't support it, like Pixhost)
-        if self.host_id != "pixhost":
+        self._has_cover_gallery = self.config.requires_auth or (self.config.auth_type and 'session' in self.config.auth_type)
+        if self._has_cover_gallery:
             cover_group = self._create_cover_group()
-            main_layout.addWidget(cover_group)
-        else:
-            # Still need the edit object so save() doesn't crash, but it can be hidden
-            self.cover_gallery_edit = QLineEdit()
-            self.cover_create_btn = QPushButton()
+            grid.addWidget(cover_group, 1, 1)
+
+        main_layout.addLayout(grid)
+
+    def _create_credential_row(self, label: str, attr_prefix: str,
+                                change_slot, remove_slot) -> QHBoxLayout:
+        """Build a status row: bold label, status text, Set/Unset buttons.
+
+        Sets self.<attr_prefix>_status_label, self.<attr_prefix>_change_btn,
+        and self.<attr_prefix>_remove_btn.
+        """
+        row = QHBoxLayout()
+        row.addWidget(QLabel(f"<b>{label}</b>: "))
+
+        status_label = QLabel("NOT SET")
+        status_label.setProperty("class", "status-muted")
+        row.addWidget(status_label)
+        row.addStretch()
+
+        change_btn = QPushButton(" Set")
+        change_btn.clicked.connect(change_slot)
+        row.addWidget(change_btn)
+
+        remove_btn = QPushButton(" Unset")
+        remove_btn.clicked.connect(remove_slot)
+        row.addWidget(remove_btn)
+
+        setattr(self, f'{attr_prefix}_status_label', status_label)
+        setattr(self, f'{attr_prefix}_change_btn', change_btn)
+        setattr(self, f'{attr_prefix}_remove_btn', remove_btn)
+
+        return row
 
     def _create_credentials_group(self) -> QGroupBox:
         """Create the credentials configuration group.
 
-        Shows/hides credential rows based on config.auth_type:
-        - "api_key_or_session" (IMX): API Key, Username, Password, Firefox Cookies
-        - "session_optional" (Turbo): Username, Password only (marked optional)
-        - Other: Username, Password
+        Three branches based on auth_type:
+        - "none" (Pixhost): No-account notice
+        - "api_key_or_session" (IMX): API Key + Login hybrid
+        - "session_optional" (Turbo): Optional username/password
         """
         auth_type = self.config.auth_type or ""
         needs_api_key = "api_key" in auth_type
         needs_cookies = auth_type == "api_key_or_session"  # IMX-specific
         is_optional = not self.config.requires_auth
 
-        if is_optional:
-            group = QGroupBox("Credentials (Optional)")
-        else:
-            group = QGroupBox("Credentials")
-        layout = QVBoxLayout(group)
-
-        # Track which widgets exist for this host
+        # Track which widgets exist for this host (set BEFORE branch checks)
         self._has_api_key_row = needs_api_key
         self._has_cookies_row = needs_cookies
 
-        # API Key row (only for hosts that use API keys)
-        if needs_api_key:
-            api_key_row = QHBoxLayout()
-            api_key_row.addWidget(QLabel("<b>API Key</b>: "))
-            self.api_key_status_label = QLabel("NOT SET")
-            self.api_key_status_label.setProperty("class", "status-muted")
-            api_key_row.addWidget(self.api_key_status_label)
-            api_key_row.addStretch()
+        # ── Pixhost: no-account notice ──
+        if auth_type == "none":
+            group = QGroupBox("Credentials")
+            layout = QVBoxLayout(group)
 
-            self.api_key_change_btn = QPushButton("Set")
-            if not self.api_key_change_btn.text().startswith(" "):
-                self.api_key_change_btn.setText(" " + self.api_key_change_btn.text())
-            self.api_key_change_btn.clicked.connect(self.change_api_key)
-            api_key_row.addWidget(self.api_key_change_btn)
+            notice_row = QHBoxLayout()
+            notice_label = QLabel(
+                "Pixhost does not require an account. Uploads are anonymous"
+                " &mdash; once uploaded, images cannot be deleted or managed."
+            )
+            notice_label.setWordWrap(True)
+            notice_label.setProperty("class", "info-panel")
+            notice_row.addWidget(notice_label, 1)
+            notice_row.addWidget(InfoButton(
+                "Pixhost is a fully anonymous image host. There are no user"
+                " accounts, no dashboard, and no way to delete or manage"
+                " images after upload.<br><br>"
+                "Once an image is uploaded, it is permanent and publicly"
+                " accessible via its URL. There is no API key or login"
+                " to configure."
+            ))
+            layout.addLayout(notice_row)
 
-            self.api_key_remove_btn = QPushButton("Unset")
-            if not self.api_key_remove_btn.text().startswith(" "):
-                self.api_key_remove_btn.setText(" " + self.api_key_remove_btn.text())
-            self.api_key_remove_btn.clicked.connect(self.remove_api_key)
-            api_key_row.addWidget(self.api_key_remove_btn)
-
-            layout.addLayout(api_key_row)
-        else:
-            # Create dummy attributes so load_current_credentials() doesn't crash
+            # Set ALL dummy attributes so other methods don't crash
             self.api_key_status_label = None
             self.api_key_change_btn = None
             self.api_key_remove_btn = None
+            self.username_status_label = None
+            self.username_change_btn = None
+            self.username_remove_btn = None
+            self.password_status_label = None
+            self.password_change_btn = None
+            self.password_remove_btn = None
+            self.cookies_status_label = None
+            self.cookies_enable_btn = None
+            self.cookies_disable_btn = None
+            self.test_credentials_btn = None
+            self.test_result_label = None
+            self._test_thread = None
 
-        # Username row
-        username_row = QHBoxLayout()
-        username_row.addWidget(QLabel("<b>Username</b>: "))
-        self.username_status_label = QLabel("NOT SET")
-        self.username_status_label.setProperty("class", "status-muted")
-        username_row.addWidget(self.username_status_label)
-        username_row.addStretch()
+            return group
 
-        self.username_change_btn = QPushButton("Set")
-        if not self.username_change_btn.text().startswith(" "):
-            self.username_change_btn.setText(" " + self.username_change_btn.text())
-        self.username_change_btn.clicked.connect(self.change_username)
-        username_row.addWidget(self.username_change_btn)
+        # ── IMX: API Key + Login hybrid ──
+        if needs_api_key:
+            group = QGroupBox("Credentials")
+            layout = QVBoxLayout(group)
 
-        self.username_remove_btn = QPushButton("Unset")
-        if not self.username_remove_btn.text().startswith(" "):
-            self.username_remove_btn.setText(" " + self.username_remove_btn.text())
-        self.username_remove_btn.clicked.connect(self.remove_username)
-        username_row.addWidget(self.username_remove_btn)
+            # Bold "API Key" header
+            api_key_header = QLabel("<b>API Key</b>")
+            layout.addWidget(api_key_header)
 
-        layout.addLayout(username_row)
+            # Info-panel with link
+            api_key_info = QLabel(
+                '<span class="info-panel">Required for uploading files &mdash;'
+                ' get your API key from'
+                ' <a href="https://imx.to/user/api">imx.to/user/api</a></span>'
+            )
+            api_key_info.setWordWrap(True)
+            api_key_info.setOpenExternalLinks(True)
+            api_key_info.setProperty("class", "info-panel")
+            layout.addWidget(api_key_info)
 
-        # Password row
-        password_row = QHBoxLayout()
-        password_row.addWidget(QLabel("<b>Password</b>: "))
-        self.password_status_label = QLabel("NOT SET")
-        self.password_status_label.setProperty("class", "status-muted")
-        password_row.addWidget(self.password_status_label)
-        password_row.addStretch()
+            # API Key status row
+            layout.addLayout(self._create_credential_row(
+                "API Key", "api_key", self.change_api_key, self.remove_api_key
+            ))
 
-        self.password_change_btn = QPushButton("Set")
-        if not self.password_change_btn.text().startswith(" "):
-            self.password_change_btn.setText(" " + self.password_change_btn.text())
-        self.password_change_btn.clicked.connect(self.change_password)
-        password_row.addWidget(self.password_change_btn)
+            # Separator
+            separator = QFrame()
+            separator.setFrameShape(QFrame.Shape.HLine)
+            separator.setFrameShadow(QFrame.Shadow.Sunken)
+            layout.addWidget(separator)
 
-        self.password_remove_btn = QPushButton("Unset")
-        if not self.password_remove_btn.text().startswith(" "):
-            self.password_remove_btn.setText(" " + self.password_remove_btn.text())
-        self.password_remove_btn.clicked.connect(self.remove_password)
-        password_row.addWidget(self.password_remove_btn)
+            # Bold "Login" header
+            login_header = QLabel("<b>Login</b>")
+            layout.addWidget(login_header)
 
-        layout.addLayout(password_row)
+            # Login info-panel
+            login_info = QLabel(
+                "Required for renaming galleries and checking online status"
+                " via Link Scanner. Without login credentials, all galleries"
+                " will be named &ldquo;untitled gallery&rdquo;."
+            )
+            login_info.setWordWrap(True)
+            login_info.setProperty("class", "info-panel")
+            layout.addWidget(login_info)
 
-        # Firefox Cookies row (only for hosts that use cookie-based sessions)
-        if needs_cookies:
+            # Username + Password rows
+            layout.addLayout(self._create_credential_row(
+                "Username", "username", self.change_username, self.remove_username
+            ))
+            layout.addLayout(self._create_credential_row(
+                "Password", "password", self.change_password, self.remove_password
+            ))
+
+            # Firefox Cookies row
             cookies_row = QHBoxLayout()
             cookies_row.addWidget(QLabel("<b>Firefox Cookies</b>: "))
             cookies_row.addWidget(InfoButton(
@@ -211,12 +257,38 @@ class ImageHostConfigPanel(QWidget):
             cookies_row.addWidget(self.cookies_disable_btn)
 
             layout.addLayout(cookies_row)
+
+        # ── Turbo: optional session credentials ──
         else:
+            group = QGroupBox("Credentials (Optional)") if is_optional else QGroupBox("Credentials")
+            layout = QVBoxLayout(group)
+
+            # Info-panel
+            optional_info = QLabel(
+                "Optional &mdash; an account lets you manage uploaded"
+                " galleries and use cover galleries."
+            )
+            optional_info.setWordWrap(True)
+            optional_info.setProperty("class", "info-panel")
+            layout.addWidget(optional_info)
+
+            # No API key row, no cookies row
+            self.api_key_status_label = None
+            self.api_key_change_btn = None
+            self.api_key_remove_btn = None
             self.cookies_status_label = None
             self.cookies_enable_btn = None
             self.cookies_disable_btn = None
 
-        # Test Credentials button and result
+            # Username + Password rows
+            layout.addLayout(self._create_credential_row(
+                "Username", "username", self.change_username, self.remove_username
+            ))
+            layout.addLayout(self._create_credential_row(
+                "Password", "password", self.change_password, self.remove_password
+            ))
+
+        # Test Credentials button and result (shared by IMX and Turbo)
         test_row = QHBoxLayout()
         self.test_credentials_btn = QPushButton(" Test Credentials")
         self.test_credentials_btn.setToolTip("Verify stored credentials work")
@@ -414,30 +486,47 @@ class ImageHostConfigPanel(QWidget):
             layout.addWidget(self.thumbnail_format_combo, current_row, 1)
             current_row += 1
 
-        # Content Type dropdown (if host supports content type filtering)
-        self.content_type_combo = None
-        if self.config.content_types:
-            layout.addWidget(QLabel("<b>Content Type</b>:"), current_row, 0)
-            self.content_type_combo = QComboBox()
-            for ct in self.config.content_types:
-                self.content_type_combo.addItem(ct['label'], ct['id'])
-            # Load saved content type
-            saved_content_type = get_image_host_setting(self.host_id, 'content_type', 'str')
-            if saved_content_type:
-                index = self.content_type_combo.findData(saved_content_type)
-                if index >= 0:
-                    self.content_type_combo.setCurrentIndex(index)
-            self.content_type_combo.currentIndexChanged.connect(self._mark_modified)
-            layout.addWidget(self.content_type_combo, current_row, 1)
-            current_row += 1
-
         return group
 
     def _create_options_group(self) -> QGroupBox:
-        """Create host-specific options group."""
+        """Create host-specific options group.
+
+        Serves ALL hosts. Contains content rating (radio buttons),
+        plus host-specific options like auto-rename (IMX) or
+        auto-finalize and error strategy (Pixhost).
+        """
         group = QGroupBox("Options")
         layout = QVBoxLayout(group)
 
+        # Legacy compat
+        self.content_type_combo = None
+        self._content_type_group = None
+
+        # Content Rating (if host defines content_types)
+        if self.config.content_types:
+            content_rating_label = QLabel("<b>Content Rating</b>")
+            layout.addWidget(content_rating_label)
+
+            self._content_type_group = QButtonGroup(self)
+            saved_content_type = get_image_host_setting(self.host_id, 'content_type', 'str')
+            first_radio = None
+            for ct in self.config.content_types:
+                radio = QRadioButton(ct['label'])
+                radio.setProperty("content_type_id", ct['id'])
+                self._content_type_group.addButton(radio)
+                layout.addWidget(radio)
+                if first_radio is None:
+                    first_radio = radio
+                if saved_content_type and ct['id'] == saved_content_type:
+                    radio.setChecked(True)
+            # Fall back to first option if nothing was saved
+            if not saved_content_type and first_radio:
+                first_radio.setChecked(True)
+            self._content_type_group.buttonClicked.connect(
+                lambda _btn: self._mark_modified()
+            )
+
+        # IMX: Auto-rename checkbox
         if self.host_id == "imx":
             self.auto_rename_check = QCheckBox("Automatically rename galleries on imx.to")
             self.auto_rename_check.setChecked(
@@ -445,32 +534,88 @@ class ImageHostConfigPanel(QWidget):
             )
             self.auto_rename_check.toggled.connect(self._mark_modified)
             layout.addWidget(self.auto_rename_check)
-            
-        elif self.host_id == "pixhost":
-            # Auto finalize
-            self.auto_finalize_check = QCheckBox("Auto-finalize galleries (required for images to be visible)")
+
+        # Pixhost-only additions
+        if self.host_id == "pixhost":
+            # Auto-finalize with InfoButton
+            finalize_row = QHBoxLayout()
+            self.auto_finalize_check = QCheckBox("Auto-finalize galleries")
             self.auto_finalize_check.setChecked(
                 get_image_host_setting(self.host_id, 'auto_finalize_gallery', 'bool')
             )
             self.auto_finalize_check.toggled.connect(self._mark_modified)
-            layout.addWidget(self.auto_finalize_check)
-            
-            # Error retry strategy (Fake 200s)
-            error_row = QHBoxLayout()
-            error_row.addWidget(QLabel("<b>API Error Strategy</b>:"))
-            self.error_strategy_combo = QComboBox()
-            self.error_strategy_combo.addItem("Retry single image (Saves bandwidth)", "retry_image")
-            self.error_strategy_combo.addItem("Corrupt gallery (Retries entire gallery, preserves Zip Download)", "retry_gallery")
-            
-            saved_strategy = get_image_host_setting(self.host_id, 'error_retry_strategy', 'str') or 'retry_image'
-            index = self.error_strategy_combo.findData(saved_strategy)
-            if index >= 0:
-                self.error_strategy_combo.setCurrentIndex(index)
-            
-            self.error_strategy_combo.currentIndexChanged.connect(self._mark_modified)
-            error_row.addWidget(self.error_strategy_combo)
-            error_row.addStretch()
-            layout.addLayout(error_row)
+            finalize_row.addWidget(self.auto_finalize_check)
+            finalize_row.addWidget(InfoButton(
+                "Finalization makes images visible on Pixhost. Without"
+                " finalization, uploaded images remain in a draft state"
+                " and are not accessible via their URLs.<br><br>"
+                "Leave this enabled unless you have a specific reason"
+                " to finalize galleries manually."
+            ))
+            finalize_row.addStretch()
+            layout.addLayout(finalize_row)
+
+            # Failed Upload Strategy header with InfoButton
+            strategy_header_row = QHBoxLayout()
+            strategy_header_label = QLabel("<b>Failed Upload Strategy</b>")
+            strategy_header_row.addWidget(strategy_header_label)
+            strategy_header_row.addWidget(InfoButton(
+                "Pixhost occasionally returns fake &ldquo;success&rdquo;"
+                " responses (HTTP 200) for uploads that actually failed."
+                " When BBDrop detects this, it needs to decide how to"
+                " retry.<br><br>"
+                "The trade-off is between bandwidth usage and whether"
+                " retried images are included in the gallery&rsquo;s"
+                " zip download on Pixhost."
+            ))
+            strategy_header_row.addStretch()
+            layout.addLayout(strategy_header_row)
+
+            self._error_strategy_group = QButtonGroup(self)
+            saved_strategy = get_image_host_setting(
+                self.host_id, 'error_retry_strategy', 'str'
+            ) or 'retry_image'
+
+            # Option 1: Retry image only
+            retry_image_radio = QRadioButton("Retry image only")
+            retry_image_radio.setProperty("strategy_id", "retry_image")
+            self._error_strategy_group.addButton(retry_image_radio)
+            layout.addWidget(retry_image_radio)
+
+            retry_image_sublabel = QLabel(
+                "Re-uploads just the failed image. Saves bandwidth but the"
+                " retried image won&rsquo;t be included in the gallery&rsquo;s"
+                " zip download on Pixhost."
+            )
+            retry_image_sublabel.setWordWrap(True)
+            retry_image_sublabel.setProperty("class", "label-credential-note")
+            retry_image_sublabel.setContentsMargins(20, 0, 0, 4)
+            layout.addWidget(retry_image_sublabel)
+
+            # Option 2: Retry full gallery
+            retry_gallery_radio = QRadioButton("Retry full gallery")
+            retry_gallery_radio.setProperty("strategy_id", "retry_gallery")
+            self._error_strategy_group.addButton(retry_gallery_radio)
+            layout.addWidget(retry_gallery_radio)
+
+            retry_gallery_sublabel = QLabel(
+                "Re-uploads the entire gallery from scratch. Uses more"
+                " bandwidth but keeps all images together in the zip download."
+            )
+            retry_gallery_sublabel.setWordWrap(True)
+            retry_gallery_sublabel.setProperty("class", "label-credential-note")
+            retry_gallery_sublabel.setContentsMargins(20, 0, 0, 4)
+            layout.addWidget(retry_gallery_sublabel)
+
+            # Select saved value, default to retry_image
+            if saved_strategy == "retry_gallery":
+                retry_gallery_radio.setChecked(True)
+            else:
+                retry_image_radio.setChecked(True)
+
+            self._error_strategy_group.buttonClicked.connect(
+                lambda _btn: self._mark_modified()
+            )
 
         return group
 
@@ -614,16 +759,26 @@ class ImageHostConfigPanel(QWidget):
             save_image_host_setting(self.host_id, 'thumbnail_format', self.thumbnail_format_combo.currentIndex() + 1)
 
         # Save content type (if available)
-        if self.content_type_combo is not None:
-            save_image_host_setting(self.host_id, 'content_type', self.content_type_combo.currentData())
+        if self._content_type_group is not None:
+            checked = self._content_type_group.checkedButton()
+            if checked:
+                save_image_host_setting(
+                    self.host_id, 'content_type',
+                    checked.property("content_type_id")
+                )
 
         if self.host_id == "imx":
             save_image_host_setting(self.host_id, 'auto_rename', self.auto_rename_check.isChecked())
         elif self.host_id == "pixhost":
             save_image_host_setting(self.host_id, 'auto_finalize_gallery', self.auto_finalize_check.isChecked())
-            save_image_host_setting(self.host_id, 'error_retry_strategy', self.error_strategy_combo.currentData())
+            checked_strategy = self._error_strategy_group.checkedButton()
+            if checked_strategy:
+                save_image_host_setting(
+                    self.host_id, 'error_retry_strategy',
+                    checked_strategy.property("strategy_id")
+                )
 
-        if self.cover_gallery_edit.isVisible():
+        if self._has_cover_gallery:
             save_image_host_setting(self.host_id, 'cover_gallery', self.cover_gallery_edit.text())
             self.cover_gallery_changed.emit(self.host_id, self.cover_gallery_edit.text())
 

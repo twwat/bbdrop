@@ -37,7 +37,7 @@ class ImageHostConfigDialog(QDialog):
         self._test_thread = None
         self.setWindowTitle(f"Configure {host_config.name}")
         self.setModal(True)
-        self.resize(550, 650)
+        self.resize(750, 700)
         self.setup_ui()
 
     def setup_ui(self):
