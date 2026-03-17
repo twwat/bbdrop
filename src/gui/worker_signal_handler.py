@@ -303,10 +303,8 @@ class WorkerSignalHandler(QObject):
         """Get host_id and display name from the current upload worker."""
         mw = self._mw
         host_id = getattr(mw.worker, '_current_host_id', 'imx') if mw.worker else 'imx'
-        from src.core.image_host_config import get_image_host_config_manager
-        cfg = get_image_host_config_manager().get_host(host_id)
-        host_name = cfg.name if cfg else host_id
-        return host_id, host_name
+        from src.core.host_registry import get_display_name
+        return host_id, get_display_name(host_id)
 
     def _on_upload_worker_started(self, path: str, total_images: int):
         """Handle upload worker started (any image host)."""

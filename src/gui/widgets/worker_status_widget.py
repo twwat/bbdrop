@@ -25,6 +25,7 @@ from src.utils.format_utils import format_binary_rate
 from src.utils.logger import log
 from src.gui.icon_manager import get_icon_manager
 from src.core.file_host_config import get_config_manager, get_file_host_setting, save_file_host_setting
+from src.core.host_registry import get_display_name
 from src.core.image_host_config import get_image_host_config_manager, is_image_host_enabled, save_image_host_enabled, get_all_hosts
 from src.gui.widgets.custom_widgets import StorageProgressBar
 from src.core.constants import (
@@ -1204,7 +1205,7 @@ class WorkerStatusWidget(QWidget):
                 worker_id=worker_id,
                 worker_type=worker_type,
                 hostname=hostname,
-                display_name=self._format_display_name(hostname, worker_type),
+                display_name=get_display_name(hostname),
                 host_id=host_id,
                 speed_bps=speed_bps,
                 status=status,
@@ -2085,28 +2086,6 @@ class WorkerStatusWidget(QWidget):
         mib_per_s = speed_bps / (1024.0 * 1024.0)
         # Show M/s with 2 decimal places
         return f"{mib_per_s:.2f} M/s"
-
-    def _format_display_name(self, hostname: str, worker_type: str) -> str:
-        """Format display name for worker.
-
-        Args:
-            hostname: Raw hostname
-            worker_type: 'imagehost' or 'filehost'
-
-        Returns:
-            Formatted display name
-        """
-        if worker_type == 'imagehost':
-            # Look up display name from ImageHostConfigManager
-            # hostname is actually host_id for image hosts
-            all_hosts = get_all_hosts()
-            if hostname in all_hosts:
-                return all_hosts[hostname].name
-            # Fallback if not found
-            return hostname.capitalize()
-        else:
-            # Capitalize first letter
-            return hostname.capitalize()
 
     # =========================================================================
     # Event Handlers

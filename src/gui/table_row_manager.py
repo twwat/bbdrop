@@ -22,6 +22,7 @@ from PyQt6.QtCore import QObject, QTimer, Qt
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import QTableWidgetItem, QApplication
 
+from src.core.host_registry import get_display_name
 from src.utils.logger import log
 from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.storage.queue_manager import GalleryQueueItem
@@ -325,7 +326,7 @@ class TableRowManager(QObject):
         mw.gallery_table.setItem(row, _Col.TEMPLATE, tmpl_item)
 
         # Image host column
-        host_item = QTableWidgetItem(item.image_host_id or "")
+        host_item = QTableWidgetItem(get_display_name(item.image_host_id) if item.image_host_id else "")
         host_item.setFlags(host_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         host_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         mw.gallery_table.setItem(row, _Col.IMAGE_HOST, host_item)

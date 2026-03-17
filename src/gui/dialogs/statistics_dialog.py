@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSettings
 
 from src.utils.format_utils import format_binary_size, format_binary_rate, format_duration
+from src.core.host_registry import get_display_name
 from src.utils.logger import log
 
 
@@ -440,7 +441,7 @@ class StatisticsDialog(QDialog):
 
         for row, (host_name, metrics) in enumerate(sorted_hosts):
             # Host name (capitalize for display)
-            host_item = QTableWidgetItem(host_name.title())
+            host_item = QTableWidgetItem(get_display_name(host_name))
             self._file_hosts_table.setItem(row, 0, host_item)
 
             # Files Uploaded

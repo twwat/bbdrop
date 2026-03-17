@@ -18,23 +18,9 @@ from src.gui.widgets.scanner_widgets import (
     ScanControlsWidget,
     GalleryResultsTable,
 )
+from src.core.host_registry import get_display_name
 from src.gui.theme_manager import get_online_status_colors
 from src.utils.logger import log
-
-
-# Host display labels (host_id -> human-readable short name)
-HOST_LABELS: Dict[str, str] = {
-    'imx': 'IMX.to',
-    'turbo': 'TurboImageHost',
-    'pixhost': 'Pixhost',
-    'rapidgator': 'Rapidgator',
-    'keep2share': 'Keep2Share',
-    'fileboom': 'FileBoom',
-    'tezfiles': 'TezFiles',
-    'filedot': 'Filedot',
-    'filespace': 'Filespace',
-    'katfile': 'Katfile',
-}
 
 
 class LinkScannerDashboard(QDialog):
@@ -164,7 +150,7 @@ class LinkScannerDashboard(QDialog):
         # Build host data dict for the host table
         hosts_dict = {}
         for (host_type, host_id), counts in hosts_with_uploads.items():
-            label = HOST_LABELS.get(host_id, host_id.upper())
+            label = get_display_name(host_id)
             stats = scan_stats.get((host_type, host_id))
             online = stats.get('total_online', 0) if stats else 0
             total = stats.get('total_items', 0) if stats else 0
