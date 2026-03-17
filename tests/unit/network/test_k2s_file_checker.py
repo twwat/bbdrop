@@ -1,4 +1,4 @@
-"""Tests for K2SFileChecker — file availability via getFilesList API."""
+"""Tests for K2SFileChecker — file availability via getFilesInfo API."""
 
 import pytest
 from unittest.mock import patch, Mock

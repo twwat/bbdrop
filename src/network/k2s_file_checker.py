@@ -1,4 +1,4 @@
-"""K2S file availability checker using getFilesList API.
+"""K2S file availability checker using getFilesInfo API.
 
 Works for Keep2Share, FileBoom, and TezFiles (same API, different domains).
 Supports batch checking up to 10,000 file IDs per call.
@@ -14,7 +14,7 @@ from src.utils.logger import log
 
 
 class K2SFileChecker:
-    """Checks file availability on K2S-family hosts via getFilesList API."""
+    """Checks file availability on K2S-family hosts via getFilesInfo API."""
 
     def __init__(self, api_base: str, auth_token: str, batch_size: int = 10000, timeout: int = 30):
         self.api_base = api_base.rstrip('/')
@@ -23,7 +23,7 @@ class K2SFileChecker:
         self.timeout = timeout
 
     def _api_call(self, file_ids: List[str]) -> Dict[str, Any]:
-        """Call getFilesList API endpoint with a batch of file IDs.
+        """Call getFilesInfo API endpoint with a batch of file IDs.
 
         Args:
             file_ids: List of file IDs to check (max batch_size per call).
@@ -34,7 +34,7 @@ class K2SFileChecker:
         Raises:
             Exception: On HTTP errors or connection failures.
         """
-        url = f"{self.api_base}/getFilesList"
+        url = f"{self.api_base}/getFilesInfo"
         body = json.dumps({"ids": file_ids, "access_token": self.auth_token})
 
         curl = pycurl.Curl()
@@ -89,7 +89,7 @@ class K2SFileChecker:
                     if fid and fid in result:
                         result[fid] = file_info.get('is_available', False)
             except Exception as e:
-                log(f"K2S getFilesList batch failed: {e}", level="error", category="scanner")
+                log(f"K2S getFilesInfo batch failed: {e}", level="error", category="scanner")
 
         return result
 
