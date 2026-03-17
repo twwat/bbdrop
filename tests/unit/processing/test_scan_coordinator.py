@@ -139,11 +139,11 @@ class TestScanCoordinatorCancellation:
         assert coord.is_cancelled
 
 
-class TestScanCoordinatorIMXPassthrough:
-    """Test that IMX galleries are routed to the existing RenameWorker checker."""
+class TestScanCoordinatorIMXRouting:
+    """Test that IMX galleries are routed to the moderat endpoint, not ThumbnailChecker."""
 
-    def test_imx_galleries_excluded_from_thumbnail_jobs(self):
-        """IMX galleries should not be included in thumbnail checker jobs."""
+    def test_imx_excluded_from_thumbnail_jobs(self):
+        """IMX galleries should NOT be in thumbnail checker jobs (handled via _run_imx_job)."""
         coord = ScanCoordinator.__new__(ScanCoordinator)
         coord._cancelled = threading.Event()
         galleries = [
@@ -154,3 +154,25 @@ class TestScanCoordinatorIMXPassthrough:
         host_ids = {j.host_id for j in jobs}
         assert 'imx' not in host_ids
         assert 'turbo' in host_ids
+
+    def test_imx_job_built_separately(self):
+        """IMX galleries should produce a separate IMX job."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        coord._cancelled = threading.Event()
+        galleries = [
+            {'db_id': 1, 'image_host_id': 'imx', 'image_urls': ['https://imx.to/i/abc']},
+            {'db_id': 2, 'image_host_id': 'turbo', 'thumb_urls': ['u2']},
+        ]
+        imx_job = coord._build_imx_job(galleries)
+        assert imx_job is not None
+        assert imx_job.host_id == 'imx'
+        assert len(imx_job.galleries) == 1
+
+    def test_no_imx_job_when_no_imx_galleries(self):
+        """No IMX job if there are no IMX galleries."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        coord._cancelled = threading.Event()
+        galleries = [
+            {'db_id': 1, 'image_host_id': 'turbo', 'thumb_urls': ['u1']},
+        ]
+        assert coord._build_imx_job(galleries) is None

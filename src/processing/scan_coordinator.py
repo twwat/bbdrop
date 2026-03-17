@@ -4,9 +4,9 @@ Orchestrates concurrent per-host checking for a set of galleries.
 Groups galleries by host, creates the appropriate checker, runs all host
 checks concurrently, collects results, and writes them to the database.
 
-IMX galleries are NOT handled here — they are routed to the existing
-RenameWorker/ImageStatusChecker pipeline and their results are written
-to host_scan_results by the caller after completion.
+IMX galleries are checked via the RenameWorker's /user/moderate endpoint
+(single POST, near-instantaneous). Other image hosts (Turbo, etc.) use
+ThumbnailChecker (HEAD requests + ETag matching).
 """
 
 import json
@@ -23,7 +23,7 @@ from src.network.connection_limiter import ConnectionLimiter
 from src.utils.logger import log
 
 
-# File hosts that use the K2S API (getFilesList)
+# File hosts that use the K2S API (getFilesInfo)
 K2S_FAMILY_HOSTS = frozenset({'keep2share', 'fileboom', 'tezfiles'})
 
 # K2S API base URLs by host_id
@@ -32,6 +32,9 @@ K2S_API_BASES = {
     'fileboom': 'https://fboom.me/api/v2',
     'tezfiles': 'https://tezfiles.com/api/v2',
 }
+
+# File hosts with no checker implementation yet
+UNSUPPORTED_FILE_HOSTS = frozenset({'filedot', 'filespace'})
 
 
 @dataclass
@@ -45,12 +48,69 @@ class HostScanJob:
     # For RapidGator: each gallery has 'db_id', 'download_urls' (list)
 
 
+def _load_file_host_credentials() -> Dict[str, str]:
+    """Load decrypted credentials/tokens for file hosts from OS keyring.
+
+    For K2S-family hosts (api_key auth), the decrypted credential IS the
+    access token. For RapidGator (token_login), tries the token cache first,
+    then falls back to login.
+
+    Returns:
+        Dict mapping host_id to auth token string.
+    """
+    credentials: Dict[str, str] = {}
+
+    try:
+        from src.utils.credentials import get_credential, decrypt_password
+    except ImportError:
+        log("Credentials module not available", level="error", category="scanner")
+        return credentials
+
+    # K2S-family: api_key auth — decrypted credential IS the token
+    for host_id in K2S_FAMILY_HOSTS:
+        encrypted = get_credential(f'file_host_{host_id}_credentials')
+        if encrypted:
+            try:
+                decrypted = decrypt_password(encrypted)
+                if decrypted:
+                    credentials[host_id] = decrypted
+            except Exception as e:
+                log(f"Failed to decrypt {host_id} credentials: {e}",
+                    level="warning", category="scanner")
+
+    # RapidGator: token_login auth — try cached token first
+    try:
+        from src.network.token_cache import get_token_cache
+        token_cache = get_token_cache()
+        cached_token = token_cache.get_token('rapidgator')
+        if cached_token:
+            credentials['rapidgator'] = cached_token
+        else:
+            # Try to login with stored credentials
+            encrypted = get_credential('file_host_rapidgator_credentials')
+            if encrypted:
+                decrypted = decrypt_password(encrypted)
+                if decrypted:
+                    from src.core.file_host_config import get_config_manager
+                    config_mgr = get_config_manager()
+                    rg_config = config_mgr.get_host_config('rapidgator')
+                    if rg_config:
+                        from src.network.file_host_client import FileHostClient
+                        client = FileHostClient(rg_config, credentials=decrypted, host_id='rapidgator')
+                        if client.auth_token:
+                            credentials['rapidgator'] = client.auth_token
+    except Exception as e:
+        log(f"Failed to get rapidgator token: {e}", level="warning", category="scanner")
+
+    return credentials
+
+
 class ScanCoordinator:
     """Orchestrates concurrent per-host link scanning.
 
     Usage:
         coord = ScanCoordinator(store=queue_store, connection_limiter=limiter)
-        coord.start_scan(gallery_data, file_upload_data, credentials)
+        coord.start_scan(gallery_data, file_upload_data)
         # ... progress via callback ...
         # results written to host_scan_results table on completion
     """
@@ -60,12 +120,14 @@ class ScanCoordinator:
         store: Any,
         connection_limiter: ConnectionLimiter,
         credentials: Optional[Dict[str, str]] = None,
+        rename_worker: Any = None,
         progress_callback: Optional[Callable[[str, str, int, int], None]] = None,
         completion_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
         self._store = store
         self._connection_limiter = connection_limiter
         self._credentials = credentials or {}
+        self._rename_worker = rename_worker
         self._progress_callback = progress_callback
         self._completion_callback = completion_callback
         self._cancelled = threading.Event()
@@ -84,6 +146,10 @@ class ScanCoordinator:
         image_galleries: List[Dict[str, Any]],
         file_uploads: List[Dict[str, Any]],
     ) -> None:
+        # Load credentials if none were provided
+        if not self._credentials:
+            self._credentials = _load_file_host_credentials()
+
         self._cancelled.clear()
         self._scan_thread = threading.Thread(
             target=self._run_scan,
@@ -102,9 +168,10 @@ class ScanCoordinator:
         all_results: List[Tuple[int, str, str, str, int, int, int, Optional[str]]] = []
 
         try:
+            imx_job = self._build_imx_job(image_galleries)
             image_jobs = self._build_image_host_jobs(image_galleries)
             file_jobs = self._build_file_host_jobs(file_uploads)
-            all_jobs = image_jobs + file_jobs
+            all_jobs = ([imx_job] if imx_job else []) + image_jobs + file_jobs
 
             if not all_jobs:
                 log("No scan jobs to run", level="info", category="scanner")
@@ -151,12 +218,17 @@ class ScanCoordinator:
         if self._cancelled.is_set():
             return []
 
-        if job.host_type == 'image':
+        if job.host_id == 'imx':
+            return self._run_imx_job(job)
+        elif job.host_type == 'image':
             return self._run_image_host_job(job)
         elif job.host_id in K2S_FAMILY_HOSTS:
             return self._run_k2s_job(job)
         elif job.host_id == 'rapidgator':
             return self._run_rapidgator_job(job)
+        elif job.host_id in UNSUPPORTED_FILE_HOSTS:
+            log(f"No checker implemented for {job.host_id} yet", level="info", category="scanner")
+            return []
         else:
             log(f"No checker for host {job.host_id}, skipping", level="warning", category="scanner")
             return []
@@ -166,22 +238,29 @@ class ScanCoordinator:
         results = []
         now = int(time.time())
 
+        # Calculate cumulative total for meaningful progress reporting
+        total_for_host = sum(len(g.get('thumb_urls', [])) for g in job.galleries)
+        cumulative_checked = 0
+
         for gallery in job.galleries:
             if self._cancelled.is_set():
                 break
 
             thumb_urls = gallery.get('thumb_urls', [])
             db_id = gallery['db_id']
+            gallery_base = cumulative_checked
 
-            def on_progress(checked, total):
+            def on_progress(checked, total, _base=gallery_base, _host_total=total_for_host):
                 if self._progress_callback:
-                    self._progress_callback(job.host_type, job.host_id, checked, total)
+                    self._progress_callback(job.host_type, job.host_id, _base + checked, _host_total)
 
             check_result = checker.check_gallery(
                 thumb_urls,
                 cancel_event=self._cancelled,
                 progress_callback=on_progress,
             )
+
+            cumulative_checked += len(thumb_urls)
 
             detail = None
             if check_result.get('offline_urls'):
@@ -210,8 +289,9 @@ class ScanCoordinator:
         checker = K2SFileChecker(api_base=api_base, auth_token=token)
         results = []
         now = int(time.time())
+        gallery_count = len(job.galleries)
 
-        for gallery in job.galleries:
+        for i, gallery in enumerate(job.galleries):
             if self._cancelled.is_set():
                 break
 
@@ -219,6 +299,10 @@ class ScanCoordinator:
             db_id = gallery['db_id']
 
             check_result = checker.check_gallery(file_ids)
+
+            # Report per-gallery progress
+            if self._progress_callback:
+                self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count)
 
             detail = None
             if check_result.get('offline_urls'):
@@ -246,8 +330,9 @@ class ScanCoordinator:
         checker = RapidgatorFileChecker(auth_token=token)
         results = []
         now = int(time.time())
+        gallery_count = len(job.galleries)
 
-        for gallery in job.galleries:
+        for i, gallery in enumerate(job.galleries):
             if self._cancelled.is_set():
                 break
 
@@ -255,6 +340,10 @@ class ScanCoordinator:
             db_id = gallery['db_id']
 
             check_result = checker.check_gallery(download_urls)
+
+            # Report per-gallery progress
+            if self._progress_callback:
+                self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count)
 
             detail = None
             if check_result.get('offline_urls'):
@@ -273,6 +362,85 @@ class ScanCoordinator:
 
         return results
 
+    def _build_imx_job(self, galleries: List[Dict[str, Any]]) -> Optional[HostScanJob]:
+        """Build a single IMX job if there are IMX galleries to scan."""
+        imx_galleries = [g for g in galleries if g.get('image_host_id', 'imx') == 'imx']
+        if not imx_galleries:
+            return None
+        return HostScanJob(host_type='image', host_id='imx', galleries=imx_galleries)
+
+    def _run_imx_job(self, job: HostScanJob) -> List[Tuple]:
+        """Check IMX galleries via the RenameWorker's /user/moderate endpoint.
+
+        This is a single POST with all image URLs — near-instantaneous compared
+        to per-thumbnail HEAD requests.
+        """
+        if not self._rename_worker:
+            log("No RenameWorker available for IMX scan — skipping", level="warning", category="scanner")
+            return []
+
+        rw = self._rename_worker
+        if not getattr(rw, 'login_successful', False):
+            log("RenameWorker not authenticated — skipping IMX scan", level="warning", category="scanner")
+            return []
+
+        # Build galleries_data in the format _perform_status_check expects
+        galleries_data = []
+        for gal in job.galleries:
+            image_urls = gal.get('image_urls', [])
+            if not image_urls:
+                continue
+            galleries_data.append({
+                'db_id': gal['db_id'],
+                'path': f"__scan__{gal['db_id']}",  # synthetic path as key
+                'name': gal.get('name', ''),
+                'image_urls': image_urls,
+            })
+
+        if not galleries_data:
+            return []
+
+        total_galleries = len(galleries_data)
+        if self._progress_callback:
+            self._progress_callback('image', 'imx', 0, total_galleries)
+
+        try:
+            raw_results = rw._perform_status_check(galleries_data)
+        except Exception as e:
+            log(f"IMX moderate check failed: {e}", level="error", category="scanner")
+            return []
+
+        if self._progress_callback:
+            self._progress_callback('image', 'imx', total_galleries, total_galleries)
+
+        # Convert RenameWorker result format to scan_coordinator tuple format
+        results = []
+        now = int(time.time())
+        for gal in galleries_data:
+            path = gal['path']
+            db_id = gal['db_id']
+            r = raw_results.get(path, {})
+            online = r.get('online', 0)
+            total = r.get('total', 0)
+            offline = r.get('offline', 0)
+
+            if total == 0:
+                status = 'unknown'
+            elif offline == 0:
+                status = 'online'
+            elif online == 0:
+                status = 'offline'
+            else:
+                status = 'partial'
+
+            detail = None
+            if r.get('offline_urls'):
+                detail = json.dumps({'offline_urls': r['offline_urls']})
+
+            results.append((db_id, 'image', 'imx', status, online, total, now, detail))
+
+        return results
+
     def _build_image_host_jobs(
         self, galleries: List[Dict[str, Any]]
     ) -> List[HostScanJob]:
@@ -280,7 +448,7 @@ class ScanCoordinator:
         for gal in galleries:
             host_id = gal.get('image_host_id', 'imx')
             if host_id == 'imx':
-                continue  # IMX uses existing checker
+                continue  # IMX handled separately via _run_imx_job
             if host_id not in groups:
                 groups[host_id] = []
             groups[host_id].append(gal)
