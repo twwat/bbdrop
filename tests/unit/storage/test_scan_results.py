@@ -228,3 +228,159 @@ class TestGetScanStatsByHost:
         """No scan results should return empty dict."""
         stats = store.get_scan_stats_by_host()
         assert stats == {}
+
+
+class TestGetHostsWithUploads:
+    """Tests for QueueStore.get_hosts_with_uploads()."""
+
+    def test_empty_db(self, store):
+        """No uploads should return empty dict."""
+        assert store.get_hosts_with_uploads() == {}
+
+    def test_image_hosts_from_galleries(self, store):
+        """Completed galleries with image_host_id should appear with counts."""
+        conn = _connect(store.db_path)
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO galleries (path, name, status, added_ts, image_host_id, total_images) VALUES (?, ?, ?, ?, ?, ?)",
+            ('/test/a', 'a', 'completed', now, 'imx', 15)
+        )
+        conn.execute(
+            "INSERT INTO galleries (path, name, status, added_ts, image_host_id, total_images) VALUES (?, ?, ?, ?, ?, ?)",
+            ('/test/b', 'b', 'completed', now, 'imx', 25)
+        )
+        conn.execute(
+            "INSERT INTO galleries (path, name, status, added_ts, image_host_id, total_images) VALUES (?, ?, ?, ?, ?, ?)",
+            ('/test/c', 'c', 'completed', now, 'turbo', 10)
+        )
+        conn.close()
+        result = store.get_hosts_with_uploads()
+        assert result[('image', 'imx')]['gallery_count'] == 2
+        assert result[('image', 'imx')]['image_count'] == 40
+        assert result[('image', 'turbo')]['gallery_count'] == 1
+        assert result[('image', 'turbo')]['image_count'] == 10
+
+    def test_excludes_non_completed(self, store):
+        """Only completed galleries should be counted."""
+        conn = _connect(store.db_path)
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO galleries (path, name, status, added_ts, image_host_id) VALUES (?, ?, ?, ?, ?)",
+            ('/test/d', 'd', 'uploading', now, 'imx')
+        )
+        conn.execute(
+            "INSERT INTO galleries (path, name, status, added_ts, image_host_id) VALUES (?, ?, ?, ?, ?)",
+            ('/test/e', 'e', 'completed', now, 'imx')
+        )
+        conn.close()
+        result = store.get_hosts_with_uploads()
+        assert result[('image', 'imx')]['gallery_count'] == 1
+
+    def test_file_hosts_from_file_host_uploads(self, store):
+        """Completed file_host_uploads should appear as file hosts."""
+        conn = _connect(store.db_path)
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO galleries (path, name, status, added_ts) VALUES (?, ?, ?, ?)",
+            ('/test/f', 'f', 'completed', now)
+        )
+        gal_id = conn.execute("SELECT id FROM galleries WHERE path = '/test/f'").fetchone()[0]
+        conn.execute(
+            "INSERT INTO file_host_uploads (gallery_fk, host_name, status) VALUES (?, ?, ?)",
+            (gal_id, 'rapidgator', 'completed')
+        )
+        conn.execute(
+            "INSERT INTO file_host_uploads (gallery_fk, host_name, status) VALUES (?, ?, ?)",
+            (gal_id, 'keep2share', 'completed')
+        )
+        conn.close()
+        result = store.get_hosts_with_uploads()
+        assert result[('file', 'rapidgator')]['gallery_count'] == 1
+        assert result[('file', 'rapidgator')]['image_count'] == 1  # 1 file upload
+        assert result[('file', 'keep2share')]['gallery_count'] == 1
+
+    def test_mixed_image_and_file_hosts(self, store):
+        """Both image and file hosts should appear together."""
+        conn = _connect(store.db_path)
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO galleries (path, name, status, added_ts, image_host_id) VALUES (?, ?, ?, ?, ?)",
+            ('/test/g', 'g', 'completed', now, 'turbo')
+        )
+        gal_id = conn.execute("SELECT id FROM galleries WHERE path = '/test/g'").fetchone()[0]
+        conn.execute(
+            "INSERT INTO file_host_uploads (gallery_fk, host_name, status) VALUES (?, ?, ?)",
+            (gal_id, 'rapidgator', 'completed')
+        )
+        conn.close()
+        result = store.get_hosts_with_uploads()
+        assert ('image', 'turbo') in result
+        assert ('file', 'rapidgator') in result
+
+
+class TestGetGalleriesForScanAgeMode:
+    """Test age_mode parameter for upload-age vs last-scan filtering."""
+
+    @pytest.fixture
+    def store_with_data(self, tmp_path):
+        """Store with galleries that have different upload times and scan times."""
+        store = QueueStore(db_path=str(tmp_path / "test.db"))
+        conn = _connect(store.db_path)
+        _ensure_schema(conn)
+        now = int(time.time())
+        # Gallery 1: uploaded 60 days ago, scanned 5 days ago
+        conn.execute(
+            "INSERT INTO galleries (id, path, name, status, added_ts, image_host_id, finished_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (1, '/old_upload_recent_scan', 'OldUpload', 'completed', now - 60 * 86400, 'turbo', now - 60 * 86400)
+        )
+        conn.execute(
+            "INSERT INTO images (gallery_fk, filename, thumb_url) VALUES (?, ?, ?)",
+            (1, 'img1.jpg', 'https://t.turbo.to/thumb/abc.jpg')
+        )
+        conn.execute(
+            "INSERT INTO host_scan_results (gallery_fk, host_type, host_id, status, online_count, total_count, checked_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (1, 'image', 'turbo', 'online', 1, 1, now - 5 * 86400)
+        )
+        # Gallery 2: uploaded 5 days ago, scanned 60 days ago
+        conn.execute(
+            "INSERT INTO galleries (id, path, name, status, added_ts, image_host_id, finished_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (2, '/new_upload_old_scan', 'NewUpload', 'completed', now - 5 * 86400, 'turbo', now - 5 * 86400)
+        )
+        conn.execute(
+            "INSERT INTO images (gallery_fk, filename, thumb_url) VALUES (?, ?, ?)",
+            (2, 'img2.jpg', 'https://t.turbo.to/thumb/def.jpg')
+        )
+        conn.execute(
+            "INSERT INTO host_scan_results (gallery_fk, host_type, host_id, status, online_count, total_count, checked_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (2, 'image', 'turbo', 'online', 1, 1, now - 60 * 86400)
+        )
+        conn.close()
+        return store
+
+    def test_last_scan_mode_filters_by_checked_ts(self, store_with_data):
+        """age_mode='last_scan' should return gallery scanned 60 days ago, not the one scanned 5 days ago."""
+        result = store_with_data.get_galleries_for_scan(30, '', 'age', age_mode='last_scan')
+        db_ids = [g['db_id'] for g in result['image_galleries']]
+        assert 2 in db_ids  # scanned 60 days ago
+        assert 1 not in db_ids  # scanned 5 days ago
+
+    def test_upload_mode_filters_by_finished_ts(self, store_with_data):
+        """age_mode='upload' should return gallery uploaded 60 days ago, not the one uploaded 5 days ago."""
+        result = store_with_data.get_galleries_for_scan(30, '', 'age', age_mode='upload')
+        db_ids = [g['db_id'] for g in result['image_galleries']]
+        assert 1 in db_ids  # uploaded 60 days ago
+        assert 2 not in db_ids  # uploaded 5 days ago
+
+    def test_default_age_mode_is_last_scan(self, store_with_data):
+        """Omitting age_mode should default to last_scan behavior."""
+        result = store_with_data.get_galleries_for_scan(30, '', 'age')
+        db_ids = [g['db_id'] for g in result['image_galleries']]
+        assert 2 in db_ids
+        assert 1 not in db_ids
+
+    def test_age_zero_returns_all(self, store_with_data):
+        """age_days=0 ('All') should return all galleries regardless of age."""
+        result = store_with_data.get_galleries_for_scan(0, '', 'age', age_mode='last_scan')
+        db_ids = [g['db_id'] for g in result['image_galleries']]
+        assert 1 in db_ids
+        assert 2 in db_ids

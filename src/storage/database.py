@@ -1986,6 +1986,51 @@ class QueueStore:
             log(f"Failed to upsert scan results: {e}", level="error", category="database")
             raise
 
+    def get_hosts_with_uploads(self) -> Dict[Tuple[str, str], Dict[str, int]]:
+        """Get all hosts that have completed uploads, with gallery and image counts.
+
+        Queries galleries (for image hosts) and file_host_uploads (for file hosts)
+        to discover which hosts actually have uploads in the database.
+
+        Returns:
+            Dict keyed by (host_type, host_id) tuples, values are
+            {'gallery_count': int, 'image_count': int}.
+        """
+        result: Dict[Tuple[str, str], Dict[str, int]] = {}
+
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            # Image hosts from galleries table
+            cursor = conn.execute("""
+                SELECT image_host_id, COUNT(*) as gal_cnt,
+                       COALESCE(SUM(total_images), 0) as img_cnt
+                FROM galleries
+                WHERE status = 'completed' AND image_host_id IS NOT NULL
+                GROUP BY image_host_id
+            """)
+            for row in cursor.fetchall():
+                result[('image', row[0])] = {
+                    'gallery_count': row[1],
+                    'image_count': row[2],
+                }
+
+            # File hosts from file_host_uploads table
+            cursor = conn.execute("""
+                SELECT host_name, COUNT(DISTINCT gallery_fk) as gal_cnt,
+                       COUNT(*) as file_cnt
+                FROM file_host_uploads
+                WHERE status = 'completed'
+                GROUP BY host_name
+            """)
+            for row in cursor.fetchall():
+                result[('file', row[0])] = {
+                    'gallery_count': row[1],
+                    'image_count': row[2],
+                }
+
+        return result
+
     def get_scan_stats_by_host(self) -> Dict[Tuple[str, str], Dict[str, int]]:
         """Get aggregated scan statistics grouped by (host_type, host_id).
 
@@ -2085,6 +2130,197 @@ class QueueStore:
             log(f"Error getting worst status for gallery {gallery_fk}: {e}",
                 level="error", category="database")
             return None
+
+    def get_galleries_for_dashboard(self) -> List[Dict[str, Any]]:
+        """Get all completed galleries per host for dashboard tab display.
+
+        Returns every gallery with its upload host, LEFT JOINing scan results
+        so unchecked galleries still appear. Image host galleries come from
+        galleries.image_host_id; file host galleries from file_host_uploads.
+
+        Returns:
+            List of dicts with keys: host_id, host_type, gallery_name,
+            total_images, online, total, checked_ts.
+        """
+        results = []
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            # Image host galleries
+            rows = conn.execute("""
+                SELECT g.image_host_id, g.name, g.total_images,
+                       hsr.online_count, hsr.total_count,
+                       strftime('%Y-%m-%d %H:%M', hsr.checked_ts, 'unixepoch', 'localtime'),
+                       strftime('%Y-%m-%d %H:%M', g.finished_ts, 'unixepoch', 'localtime')
+                FROM galleries g
+                LEFT JOIN host_scan_results hsr
+                    ON hsr.gallery_fk = g.id
+                    AND hsr.host_type = 'image'
+                    AND hsr.host_id = g.image_host_id
+                WHERE g.status = 'completed'
+                    AND g.image_host_id IS NOT NULL
+                ORDER BY g.image_host_id, g.name
+            """).fetchall()
+            for row in rows:
+                results.append({
+                    'host_id': row[0],
+                    'host_type': 'image',
+                    'gallery_name': row[1] or '(unnamed)',
+                    'total_images': row[2] or 0,
+                    'online': row[3],       # None if no scan
+                    'total': row[4],        # None if no scan
+                    'checked_ts': row[5] or '',
+                    'upload_ts': row[6] or '',
+                })
+
+            # File host galleries (grouped — one row per gallery per host)
+            rows = conn.execute("""
+                SELECT fhu.host_name, g.name,
+                       hsr.online_count, hsr.total_count,
+                       strftime('%Y-%m-%d %H:%M', hsr.checked_ts, 'unixepoch', 'localtime'),
+                       strftime('%Y-%m-%d %H:%M', MAX(fhu.finished_ts), 'unixepoch', 'localtime')
+                FROM file_host_uploads fhu
+                JOIN galleries g ON g.id = fhu.gallery_fk
+                LEFT JOIN host_scan_results hsr
+                    ON hsr.gallery_fk = fhu.gallery_fk
+                    AND hsr.host_type = 'file'
+                    AND hsr.host_id = fhu.host_name
+                WHERE fhu.status = 'completed'
+                GROUP BY fhu.gallery_fk, fhu.host_name
+                ORDER BY fhu.host_name, g.name
+            """).fetchall()
+            for row in rows:
+                results.append({
+                    'host_id': row[0],
+                    'host_type': 'file',
+                    'gallery_name': row[1] or '(unnamed)',
+                    'total_images': 1,      # file hosts have 1 file per upload
+                    'online': row[2],       # None if no scan
+                    'total': row[3],        # None if no scan
+                    'checked_ts': row[4] or '',
+                    'upload_ts': row[5] or '',
+                })
+
+        return results
+
+    def get_galleries_for_scan(
+        self, age_days: int, host_filter: str, scan_type: str,
+        age_mode: str = 'last_scan'
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Get galleries and file uploads eligible for scanning.
+
+        Args:
+            age_days: Minimum days since last check (for 'age' scan_type).
+                      0 means 'All' — skip age filtering entirely.
+            host_filter: Host ID to filter, or '' for all hosts.
+            scan_type: 'age' (not checked in X days), 'unchecked' (never checked),
+                       or 'problems' (offline/partial only).
+            age_mode: For 'age' scan_type — 'last_scan' filters by checked_ts,
+                      'upload' filters by gallery finished_ts.
+
+        Returns:
+            Dict with 'image_galleries' and 'file_uploads' lists, shaped for
+            ScanCoordinator.start_scan().
+        """
+        result: Dict[str, List[Dict[str, Any]]] = {
+            'image_galleries': [],
+            'file_uploads': [],
+        }
+        now = int(time.time())
+        cutoff_ts = now - (age_days * 86400)
+
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+
+            # --- Image host galleries ---
+            image_query = """
+                SELECT g.id, g.image_host_id, g.name
+                FROM galleries g
+                LEFT JOIN host_scan_results hsr
+                    ON hsr.gallery_fk = g.id
+                    AND hsr.host_type = 'image'
+                    AND hsr.host_id = g.image_host_id
+                WHERE g.status = 'completed'
+                    AND g.image_host_id IS NOT NULL
+            """
+            params: list = []
+
+            if host_filter:
+                image_query += " AND g.image_host_id = ?"
+                params.append(host_filter)
+
+            if scan_type == 'age':
+                if age_days == 0:
+                    pass  # No age filter — return all
+                elif age_mode == 'upload':
+                    image_query += " AND (g.finished_ts IS NULL OR g.finished_ts < ?)"
+                    params.append(cutoff_ts)
+                else:  # 'last_scan' (default)
+                    image_query += " AND (hsr.checked_ts IS NULL OR hsr.checked_ts < ?)"
+                    params.append(cutoff_ts)
+            elif scan_type == 'unchecked':
+                image_query += " AND hsr.checked_ts IS NULL"
+            elif scan_type == 'problems':
+                image_query += " AND hsr.status IN ('offline', 'partial')"
+
+            for row in conn.execute(image_query, params).fetchall():
+                gal_id, host_id, name = row[0], row[1], row[2]
+
+                # Gather URLs for this gallery
+                url_rows = conn.execute(
+                    "SELECT url, thumb_url FROM images WHERE gallery_fk = ? AND (url IS NOT NULL OR thumb_url IS NOT NULL)",
+                    (gal_id,)
+                ).fetchall()
+                image_urls = [r[0] for r in url_rows if r[0]]
+                thumb_urls = [r[1] for r in url_rows if r[1]]
+
+                result['image_galleries'].append({
+                    'db_id': gal_id,
+                    'image_host_id': host_id,
+                    'name': name,
+                    'thumb_urls': thumb_urls,
+                    'image_urls': image_urls,
+                })
+
+            # --- File host uploads ---
+            file_query = """
+                SELECT fhu.gallery_fk, fhu.host_name, fhu.file_id, fhu.download_url
+                FROM file_host_uploads fhu
+                LEFT JOIN host_scan_results hsr
+                    ON hsr.gallery_fk = fhu.gallery_fk
+                    AND hsr.host_type = 'file'
+                    AND hsr.host_id = fhu.host_name
+                WHERE fhu.status = 'completed'
+            """
+            fparams: list = []
+
+            if host_filter:
+                file_query += " AND fhu.host_name = ?"
+                fparams.append(host_filter)
+
+            if scan_type == 'age':
+                if age_days == 0:
+                    pass  # No age filter — return all
+                elif age_mode == 'upload':
+                    file_query += " AND EXISTS (SELECT 1 FROM galleries g2 WHERE g2.id = fhu.gallery_fk AND (g2.finished_ts IS NULL OR g2.finished_ts < ?))"
+                    fparams.append(cutoff_ts)
+                else:  # 'last_scan' (default)
+                    file_query += " AND (hsr.checked_ts IS NULL OR hsr.checked_ts < ?)"
+                    fparams.append(cutoff_ts)
+            elif scan_type == 'unchecked':
+                file_query += " AND hsr.checked_ts IS NULL"
+            elif scan_type == 'problems':
+                file_query += " AND hsr.status IN ('offline', 'partial')"
+
+            for row in conn.execute(file_query, fparams).fetchall():
+                result['file_uploads'].append({
+                    'gallery_fk': row[0],
+                    'host_name': row[1],
+                    'file_id': row[2] or '',
+                    'download_url': row[3] or '',
+                })
+
+        return result
 
     def get_galleries_by_check_age(self) -> Dict[str, List[Dict[str, Any]]]:
         """Get completed galleries grouped by how long ago they were checked.
