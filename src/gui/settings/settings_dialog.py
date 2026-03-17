@@ -261,6 +261,10 @@ class ComprehensiveSettingsDialog(QDialog):
             self.image_hosts_widget.cover_host_changed.connect(
                 self.covers_tab.on_external_cover_host_change
             )
+            # Disable cover host radios + icons when covers are toggled off
+            self.covers_tab.covers_enabled_check.toggled.connect(
+                self.image_hosts_widget.set_covers_enabled
+            )
 
     def setup_external_apps_tab(self):
         """Setup the External Apps tab (delegated to HooksTab widget)."""

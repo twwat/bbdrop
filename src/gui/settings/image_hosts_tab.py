@@ -62,11 +62,11 @@ class ImageHostsSettingsWidget(QWidget):
         enabled_header.setProperty("class", "status-muted")
         header_layout.addWidget(enabled_header)
 
-        cover_header = QLabel("Use for Covers")
-        cover_header.setFixedWidth(100)
-        cover_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        cover_header.setProperty("class", "status-muted")
-        header_layout.addWidget(cover_header)
+        self._cover_header = QLabel("Use for Covers")
+        self._cover_header.setFixedWidth(100)
+        self._cover_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cover_header.setProperty("class", "status-muted")
+        header_layout.addWidget(self._cover_header)
 
         host_header = QLabel("Host")
         host_header.setProperty("class", "status-muted")
@@ -97,6 +97,10 @@ class ImageHostsSettingsWidget(QWidget):
         scroll_area.setWidget(hosts_container)
         hosts_layout.addWidget(scroll_area)
         layout.addWidget(hosts_group)
+
+        # Apply initial cover enabled state
+        covers_on = self.settings.value('cover/enabled', False, type=bool)
+        self.set_covers_enabled(covers_on)
 
     def _create_host_row(self, host_id: str, config):
         """Create UI row for a single image host.
@@ -203,6 +207,18 @@ class ImageHostsSettingsWidget(QWidget):
         # Add to layout
         self.hosts_layout.addWidget(frame)
 
+    def set_covers_enabled(self, enabled: bool) -> None:
+        """Enable or disable cover host selection UI.
+
+        Called by the settings dialog when the covers_enabled checkbox
+        on the Covers tab changes. Disables the cover radio buttons and
+        header when covers are off, and refreshes status icons.
+        """
+        self._cover_header.setEnabled(enabled)
+        for widgets in self.host_widgets.values():
+            widgets['cover_radio'].setEnabled(enabled)
+        self._update_all_status_icons()
+
     def _on_cover_host_toggled(self, host_id: str, checked: bool):
         """Handle cover host radio button toggle."""
         if checked:
@@ -229,8 +245,9 @@ class ImageHostsSettingsWidget(QWidget):
 
         enabled = is_image_host_enabled(host_id)
         is_active = (host_id == self._active_image_host)
+        covers_on = self.settings.value('cover/enabled', False, type=bool)
         cover_host = self.settings.value('cover/host_id', 'imx', type=str)
-        is_cover = (host_id == cover_host)
+        is_cover = covers_on and (host_id == cover_host)
 
         if enabled and is_active:
             key = 'status-active-cover' if is_cover else 'status-active'

@@ -501,5 +501,86 @@ class TestQSSAlignment:
         pass
 
 
+# ============================================================================
+# TEST CATEGORY 8: Cover Icon Gating
+# ============================================================================
+
+class TestCoverIconGating:
+    """Test that cover 'C' icons only show when covers are globally enabled."""
+
+    def test_no_cover_icon_when_covers_disabled(self, widget):
+        """_resolve_status_icon should not return '-cover' key when cover/enabled is False."""
+        # Add an imagehost worker matching the cover host
+        widget.update_worker_status(
+            worker_id="imx_1",
+            worker_type="imagehost",
+            hostname="imx",
+            speed_bps=0,
+            status="idle"
+        )
+        worker = widget._workers["imx_1"]
+        worker.host_id = "imx"
+
+        # mock_settings returns defaults (cover/enabled=False, cover/host_id='imx')
+        key, tip = widget._resolve_status_icon(worker)
+        assert '-cover' not in key
+        assert 'Cover' not in tip
+
+    def test_cover_icon_when_covers_enabled(self, qapp):
+        """_resolve_status_icon should return '-cover' key when cover/enabled is True."""
+        mock_qs = MagicMock(spec=QSettings)
+        settings_data = {
+            'cover/enabled': True,
+            'cover/host_id': 'imx',
+        }
+        def mock_value(key, default=None, **kwargs):
+            return settings_data.get(key, default)
+        mock_qs.value.side_effect = mock_value
+
+        with patch("src.gui.widgets.worker_status_widget.QSettings",
+                   return_value=mock_qs):
+            widget = WorkerStatusWidget()
+            widget.update_worker_status(
+                worker_id="imx_1",
+                worker_type="imagehost",
+                hostname="imx",
+                speed_bps=0,
+                status="idle"
+            )
+            worker = widget._workers["imx_1"]
+            worker.host_id = "imx"
+
+            key, tip = widget._resolve_status_icon(worker)
+            assert '-cover' in key
+            assert 'Cover' in tip
+
+    def test_non_cover_host_never_gets_cover_icon(self, qapp):
+        """A host that is NOT the cover host should never get '-cover' key."""
+        mock_qs = MagicMock(spec=QSettings)
+        settings_data = {
+            'cover/enabled': True,
+            'cover/host_id': 'imx',
+        }
+        def mock_value(key, default=None, **kwargs):
+            return settings_data.get(key, default)
+        mock_qs.value.side_effect = mock_value
+
+        with patch("src.gui.widgets.worker_status_widget.QSettings",
+                   return_value=mock_qs):
+            widget = WorkerStatusWidget()
+            widget.update_worker_status(
+                worker_id="turbo_1",
+                worker_type="imagehost",
+                hostname="turbo",
+                speed_bps=0,
+                status="idle"
+            )
+            worker = widget._workers["turbo_1"]
+            worker.host_id = "turbo"
+
+            key, tip = widget._resolve_status_icon(worker)
+            assert '-cover' not in key
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

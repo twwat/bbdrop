@@ -737,13 +737,15 @@ class WorkerStatusWidget(QWidget):
 
     def _resolve_status_icon(self, worker) -> tuple:
         """Return (icon_key, tooltip) for a worker's status column."""
-        cover_host = QSettings("BBDropUploader", "BBDropGUI").value('cover/host_id', 'imx', type=str)
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        covers_on = settings.value('cover/enabled', False, type=bool)
+        cover_host = settings.value('cover/host_id', 'imx', type=str)
 
         if worker.worker_type == 'imagehost':
             host_id = worker.host_id or worker.hostname
             enabled = is_image_host_enabled(host_id)
             is_active = (host_id == self._active_image_host)
-            is_cover = (host_id == cover_host)
+            is_cover = covers_on and (host_id == cover_host)
 
             if enabled and is_active:
                 key = 'status-active-cover' if is_cover else 'status-active'
