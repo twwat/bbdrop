@@ -78,6 +78,11 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
             painter.setPen(QPen(QColor(255, 0, 0), 2))
             painter.drawLine(4, 4, 18, 18)
             painter.drawLine(18, 4, 4, 18)
+        elif status == 'offline':
+            painter.setOpacity(1.0)
+            painter.setPen(QPen(QColor(255, 0, 0), 2))
+            painter.drawLine(4, 4, 18, 18)
+            painter.drawLine(18, 4, 4, 18)
 
         painter.end()
         self._overlay_cache[status] = pixmap
@@ -163,6 +168,15 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
             overlay = self._get_overlay_pixmap(status)
             if not overlay.isNull() and status in ('uploading', 'pending', 'failed'):
                 painter.drawPixmap(icon_rect, overlay)
+
+            # Red X for offline content (from scan results)
+            if status == 'completed':
+                scan_status = index.data(Qt.ItemDataRole.UserRole + 2) or {}
+                host_scan = scan_status.get(host_name, {})
+                if host_scan.get('status') == 'offline':
+                    offline_overlay = self._get_overlay_pixmap('offline')
+                    if not offline_overlay.isNull():
+                        painter.drawPixmap(icon_rect, offline_overlay)
 
     def editorEvent(self, event, model, option, index) -> bool:
         if event.type() == QEvent.Type.MouseButtonRelease:
