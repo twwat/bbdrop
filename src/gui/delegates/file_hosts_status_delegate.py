@@ -14,6 +14,8 @@ class FileHostsStatusDelegateSignals(QObject):
     """Signals for FileHostsStatusDelegate."""
     __slots__ = ()
     host_clicked = pyqtSignal(str, str)  # (gallery_path, host_name)
+    host_right_clicked = pyqtSignal(str, str, object)  # (gallery_path, host_name, global_pos)
+    host_double_clicked = pyqtSignal(str, str)  # (gallery_path, host_name)
 
 
 class FileHostsStatusDelegate(QStyledItemDelegate):
@@ -201,20 +203,27 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
                         painter.drawPixmap(icon_rect, offline_overlay)
 
     def editorEvent(self, event, model, option, index) -> bool:
-        if event.type() == QEvent.Type.MouseButtonRelease:
+        if event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick):
             path = index.data(Qt.ItemDataRole.UserRole)
             if not path:
                 return super().editorEvent(event, model, option, index)
-            
+
             host_uploads = index.data(Qt.ItemDataRole.UserRole + 1) or {}
-            # Compute positions fresh using current cell rect
             icon_rects = self._compute_icon_rects(option.rect, host_uploads)
-            
+
             pos = event.position().toPoint()
             for host_name, rect in icon_rects:
                 if rect.contains(pos):
-                    self.signals.host_clicked.emit(path, host_name)
-                    return True
+                    if event.type() == QEvent.Type.MouseButtonDblClick:
+                        self.signals.host_double_clicked.emit(path, host_name)
+                        return True
+                    elif event.button() == Qt.MouseButton.RightButton:
+                        global_pos = event.globalPosition().toPoint()
+                        self.signals.host_right_clicked.emit(path, host_name, global_pos)
+                        return True
+                    else:
+                        self.signals.host_clicked.emit(path, host_name)
+                        return True
         return super().editorEvent(event, model, option, index)
 
     def helpEvent(self, event, view, option, index):

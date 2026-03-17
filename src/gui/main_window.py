@@ -832,6 +832,11 @@ class BBDropGUI(QMainWindow):
                 self._handle_action_button,
                 self._handle_file_host_click
             )
+            # Connect right-click and double-click signals for file host icons
+            if hasattr(self.gallery_table, 'hosts_delegate'):
+                delegate = self.gallery_table.hosts_delegate
+                delegate.signals.host_right_clicked.connect(self._on_file_host_icon_right_clicked)
+                delegate.signals.host_double_clicked.connect(self._on_file_host_icon_double_clicked)
         
         # Ensure initial filter is applied once UI is ready
         try:
@@ -4593,6 +4598,46 @@ class BBDropGUI(QMainWindow):
         """
         # Delegate to existing handler
         self._on_file_host_icon_clicked(path, host_name)
+
+    def _on_file_host_icon_right_clicked(self, gallery_path: str, host_name: str, global_pos):
+        """Show context menu on right-click of file host icon."""
+        from PyQt6.QtWidgets import QMenu, QApplication
+        from src.core.host_registry import get_display_name
+
+        display_name = get_display_name(host_name)
+
+        try:
+            uploads = self.queue_manager.store.get_file_host_uploads(gallery_path)
+            upload = next((u for u in uploads if u['host_name'] == host_name), None)
+        except Exception:
+            upload = None
+
+        menu = QMenu(self)
+
+        if upload and upload.get('download_url'):
+            copy_action = menu.addAction("Copy Link")
+            copy_action.triggered.connect(lambda: (
+                QApplication.clipboard().setText(upload['download_url']),
+                log(f"Copied {host_name} link to clipboard", level="info", category="file_hosts")
+            ))
+
+        check_action = menu.addAction("Check Online Status")
+        check_action.triggered.connect(
+            lambda: self._live_check_file_host(gallery_path, host_name, display_name))
+        if not upload or upload.get('status') != 'completed':
+            check_action.setEnabled(False)
+
+        reupload_action = menu.addAction(f"Reupload to {display_name}")
+        reupload_action.triggered.connect(
+            lambda: self._queue_file_host_upload(gallery_path, host_name, display_name))
+
+        menu.exec(global_pos)
+
+    def _on_file_host_icon_double_clicked(self, gallery_path: str, host_name: str):
+        """Double-click on file host icon triggers reupload directly."""
+        from src.core.host_registry import get_display_name
+        display_name = get_display_name(host_name)
+        self._queue_file_host_upload(gallery_path, host_name, display_name)
 
     def copy_bbcode_to_clipboard(self, path: str):
         """Copy BBCode content to clipboard for the given item"""
