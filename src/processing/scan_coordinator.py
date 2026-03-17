@@ -121,7 +121,7 @@ class ScanCoordinator:
         connection_limiter: ConnectionLimiter,
         credentials: Optional[Dict[str, str]] = None,
         rename_worker: Any = None,
-        progress_callback: Optional[Callable[[str, str, int, int], None]] = None,
+        progress_callback: Optional[Callable[[str, str, int, int, int, int], None]] = None,
         completion_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
         self._store = store
@@ -241,6 +241,8 @@ class ScanCoordinator:
         # Calculate cumulative total for meaningful progress reporting
         total_for_host = sum(len(g.get('thumb_urls', [])) for g in job.galleries)
         cumulative_checked = 0
+        cumulative_online = 0
+        cumulative_items = 0
 
         for gallery in job.galleries:
             if self._cancelled.is_set():
@@ -250,9 +252,13 @@ class ScanCoordinator:
             db_id = gallery['db_id']
             gallery_base = cumulative_checked
 
-            def on_progress(checked, total, _base=gallery_base, _host_total=total_for_host):
+            _cum_online = cumulative_online
+            _cum_items = cumulative_items
+            def on_progress(checked, total, _base=gallery_base, _host_total=total_for_host,
+                            _online=_cum_online, _items=_cum_items):
                 if self._progress_callback:
-                    self._progress_callback(job.host_type, job.host_id, _base + checked, _host_total)
+                    self._progress_callback(job.host_type, job.host_id, _base + checked, _host_total,
+                                            _online, _items)
 
             check_result = checker.check_gallery(
                 thumb_urls,
@@ -261,6 +267,8 @@ class ScanCoordinator:
             )
 
             cumulative_checked += len(thumb_urls)
+            cumulative_online += check_result.get('online', 0)
+            cumulative_items += check_result.get('online', 0) + check_result.get('offline', 0) + check_result.get('errors', 0)
 
             detail = None
             if check_result.get('offline_urls'):
@@ -290,6 +298,8 @@ class ScanCoordinator:
         results = []
         now = int(time.time())
         gallery_count = len(job.galleries)
+        cumulative_online = 0
+        cumulative_items = 0
 
         for i, gallery in enumerate(job.galleries):
             if self._cancelled.is_set():
@@ -301,8 +311,11 @@ class ScanCoordinator:
             check_result = checker.check_gallery(file_ids)
 
             # Report per-gallery progress
+            cumulative_online += check_result.get('online', 0)
+            cumulative_items += check_result.get('total', 0)
             if self._progress_callback:
-                self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count)
+                self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count,
+                                        cumulative_online, cumulative_items)
 
             detail = None
             if check_result.get('offline_urls'):
@@ -331,6 +344,8 @@ class ScanCoordinator:
         results = []
         now = int(time.time())
         gallery_count = len(job.galleries)
+        cumulative_online = 0
+        cumulative_items = 0
 
         for i, gallery in enumerate(job.galleries):
             if self._cancelled.is_set():
@@ -342,8 +357,11 @@ class ScanCoordinator:
             check_result = checker.check_gallery(download_urls)
 
             # Report per-gallery progress
+            cumulative_online += check_result.get('online', 0)
+            cumulative_items += check_result.get('total', 0)
             if self._progress_callback:
-                self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count)
+                self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count,
+                                        cumulative_online, cumulative_items)
 
             detail = None
             if check_result.get('offline_urls'):
@@ -402,7 +420,7 @@ class ScanCoordinator:
 
         total_galleries = len(galleries_data)
         if self._progress_callback:
-            self._progress_callback('image', 'imx', 0, total_galleries)
+            self._progress_callback('image', 'imx', 0, total_galleries, 0, 0)
 
         try:
             raw_results = rw._perform_status_check(galleries_data)
@@ -410,8 +428,13 @@ class ScanCoordinator:
             log(f"IMX moderate check failed: {e}", level="error", category="scanner")
             return []
 
+        imx_online = sum(1 for r in raw_results.values() if r.get('online', 0) > 0
+                         and r.get('offline', 0) == 0)
+        imx_total_items = sum(r.get('total', 0) for r in raw_results.values())
+        imx_online_items = sum(r.get('online', 0) for r in raw_results.values())
         if self._progress_callback:
-            self._progress_callback('image', 'imx', total_galleries, total_galleries)
+            self._progress_callback('image', 'imx', total_galleries, total_galleries,
+                                    imx_online_items, imx_total_items)
 
         # Convert RenameWorker result format to scan_coordinator tuple format
         results = []

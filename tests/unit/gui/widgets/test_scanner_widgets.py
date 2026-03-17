@@ -66,20 +66,32 @@ class TestHostTableWidget:
         host_table.set_hosts({
             'imx': {'label': 'IMX', 'gallery_count': 10, 'image_count': 100, 'online_items': 90, 'total_items': 100},
         })
-        host_table.update_scan_progress('imx', 50, 100)
+        host_table.update_scan_progress('imx', 50, 100, online_count=40, total_items=80)
+        # Health bar shows online/total ratio
         bar = host_table._get_bar(0)
-        assert bar.value() == 50
-        assert bar.maximum() == 100
+        assert bar.value() == 40
+        assert bar.maximum() == 80
+        # Thin scan bar shows scan progress (use isHidden to check widget's own state)
+        scan_bar = host_table._get_scan_bar(0)
+        assert scan_bar is not None
+        assert not scan_bar.isHidden()
+        assert scan_bar.value() == 50
+        assert scan_bar.maximum() == 100
 
     def test_revert_to_health_after_scan(self, host_table):
         host_table.set_hosts({
             'imx': {'label': 'IMX', 'gallery_count': 10, 'image_count': 100, 'online_items': 90, 'total_items': 100},
         })
-        host_table.update_scan_progress('imx', 100, 100)
+        host_table.update_scan_progress('imx', 100, 100, online_count=90, total_items=100)
+        # Scan bar should not be hidden during scan
+        scan_bar = host_table._get_scan_bar(0)
+        assert not scan_bar.isHidden()
         host_table.revert_to_health('imx', online_items=95, total_items=100)
         bar = host_table._get_bar(0)
         assert bar.value() == 95
         assert bar.maximum() == 100
+        # Scan bar should be hidden after revert
+        assert scan_bar.isHidden()
 
     def test_get_selected_host_id(self, host_table):
         host_table.set_hosts({

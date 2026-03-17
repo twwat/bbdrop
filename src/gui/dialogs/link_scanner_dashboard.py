@@ -34,7 +34,7 @@ class LinkScannerDashboard(QDialog):
         5. Close button
     """
 
-    _progress_signal = pyqtSignal(str, str, int, int)
+    _progress_signal = pyqtSignal(str, str, int, int, int, int)  # (host_type, host_id, checked, total, online_count, total_items)
     _complete_signal = pyqtSignal(dict)
 
     def __init__(self, parent=None, queue_manager=None, coordinator=None):
@@ -227,9 +227,10 @@ class LinkScannerDashboard(QDialog):
         if self._coordinator:
             self._coordinator.cancel()
 
-    def _on_scan_progress(self, host_type: str, host_id: str, checked: int, total: int) -> None:
+    def _on_scan_progress(self, host_type: str, host_id: str, checked: int, total: int,
+                          online_count: int, total_items: int) -> None:
         """Handle scan progress (always called on GUI thread via signal)."""
-        self._host_table.update_scan_progress(host_id, checked, total)
+        self._host_table.update_scan_progress(host_id, checked, total, online_count, total_items)
 
         self._scan_checked[host_id] = checked
         self._scan_totals[host_id] = total

@@ -98,11 +98,22 @@ class HostTableWidget(QTableWidget):
                 bar.setToolTip(f"{online}/{total} items online")
             else:
                 bar.setToolTip("Not yet scanned")
+            # Thin scan progress bar (hidden until scan starts)
+            scan_bar = QProgressBar()
+            scan_bar.setFixedHeight(3)
+            scan_bar.setTextVisible(False)
+            scan_bar.setMaximum(1)
+            scan_bar.setValue(0)
+            scan_bar.setStyleSheet('QProgressBar::chunk { background-color: #4a9eff; }')
+            scan_bar.hide()
+
             container = QWidget()
             container_layout = QVBoxLayout(container)
             container_layout.setContentsMargins(2, 0, 2, 0)
+            container_layout.setSpacing(1)
             container_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
             container_layout.addWidget(bar)
+            container_layout.addWidget(scan_bar)
             self.setCellWidget(row, 1, container)
 
             # Col 2: Image count (gallery count in tooltip)
@@ -143,21 +154,45 @@ class HostTableWidget(QTableWidget):
             return bar
         return None
 
-    def update_scan_progress(self, host_id: str, checked: int, total: int) -> None:
-        """Temporarily show scan progress in a host's health bar."""
+    def _get_scan_bar(self, row: int) -> Optional[QProgressBar]:
+        """Get the thin scan progress bar from a row's container widget."""
+        container = self.cellWidget(row, 1)
+        if container:
+            bars = container.findChildren(QProgressBar)
+            if len(bars) >= 2:
+                return bars[1]
+        return None
+
+    def update_scan_progress(self, host_id: str, checked: int, total: int,
+                             online_count: int = 0, total_items: int = 0) -> None:
+        """Update both health bar (incremental health) and scan progress bar."""
         row = self._host_rows.get(host_id)
         if row is None:
             return
         self._scanning.add(host_id)
+
+        # Update health bar with running online/total ratio
         bar = self._get_bar(row)
         if bar:
-            bar.setMaximum(total)
-            bar.setValue(checked)
             colors = get_online_status_colors()
-            bar.setStyleSheet(
-                f'QProgressBar::chunk {{ background-color: {colors["online"].name()}; }}'
-            )
-            bar.setToolTip(f"Scanning: {checked}/{total}")
+            bar.setMaximum(max(total_items, 1))
+            bar.setValue(online_count)
+            self._apply_bar_color(bar, online_count, total_items, colors)
+            if total_items > 0:
+                pct = int(online_count * 100 / total_items)
+                bar.setToolTip(f"{online_count}/{total_items} online ({pct}%)")
+                pct_item = self.item(row, 3)
+                if pct_item:
+                    pct_item.setText(f"{pct}%")
+            else:
+                bar.setToolTip(f"Scanning: {checked}/{total}")
+
+        # Update thin scan progress bar
+        scan_bar = self._get_scan_bar(row)
+        if scan_bar:
+            scan_bar.show()
+            scan_bar.setMaximum(max(total, 1))
+            scan_bar.setValue(checked)
 
     def revert_to_health(self, host_id: str, online_items: int, total_items: int) -> None:
         """Revert a host's bar from scan progress back to health display."""
@@ -165,6 +200,10 @@ class HostTableWidget(QTableWidget):
         if row is None:
             return
         self._scanning.discard(host_id)
+        # Hide scan progress bar
+        scan_bar = self._get_scan_bar(row)
+        if scan_bar:
+            scan_bar.hide()
         self._health_data[host_id] = (online_items, total_items)
         bar = self._get_bar(row)
         if bar:
