@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 - Shutdown dialog in-progress step text now bolds for visibility
+- **CVE-2026-32274**: Bump black to >=26.3.1 (arbitrary file writes from unsanitized cache file name)
 
 ## [0.9.1] - 2026-03-06 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.0...v0.9.1))
 
