@@ -1016,7 +1016,10 @@ class FileHostClient:
                 return None
 
             if error_code == 10:
-                raise Exception(f"createFileByHash auth error: {data.get('message', 'Unauthorized')}")
+                if self._log_callback:
+                    self._log_callback(
+                        f"createFileByHash auth error: {data.get('message', 'Unauthorized')} — will upload normally", "warning")
+                return None
 
             if error_code == 64:
                 raise Exception(f"Disk quota exceeded: {data.get('message', '')}")

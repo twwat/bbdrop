@@ -142,9 +142,9 @@ class TestHashDedupTokenField:
         mock_curl.getinfo.return_value = 403
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            with pytest.raises(Exception, match="auth error"):
-                client._try_create_by_hash("abc123", "file.bin")
+            result = client._try_create_by_hash("abc123", "file.bin")
 
+        assert result is None
         assert captured_body["access_token"] == ""
 
 
@@ -210,9 +210,11 @@ class TestHashDedupResponses:
 
         assert result is None
 
-    def test_error_code_10_raises_auth_error(self, k2s_config, bandwidth_counter):
-        """Error code 10 should raise an auth exception."""
+    def test_error_code_10_returns_none_for_fallback(self, k2s_config, bandwidth_counter):
+        """Error code 10 (auth error) should return None so caller falls back to regular upload."""
         client = _make_client(k2s_config, bandwidth_counter, auth_token="bad-tok")
+        log_messages = []
+        client._log_callback = lambda msg, level: log_messages.append((msg, level))
 
         def fake_setopt(opt, val):
             if opt == pycurl.WRITEDATA:
@@ -227,8 +229,12 @@ class TestHashDedupResponses:
         mock_curl.getinfo.return_value = 403
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            with pytest.raises(Exception, match="auth error"):
-                client._try_create_by_hash("aabbccdd", "file.zip")
+            result = client._try_create_by_hash("aabbccdd", "file.zip")
+
+        assert result is None
+        # Should log a warning about the auth error
+        assert any("auth error" in msg and level == "warning"
+                    for msg, level in log_messages)
 
     def test_error_code_64_raises_quota_error(self, k2s_config, bandwidth_counter):
         """Error code 64 should raise a quota exceeded exception."""
