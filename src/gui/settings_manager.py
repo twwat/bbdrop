@@ -317,6 +317,7 @@ class SettingsManager(QObject):
                 config['DEFAULTS'] = {}
 
             # Update settings
+            config['DEFAULTS']['default_image_host'] = mw.image_host_combo.currentData() or 'imx'
             config['DEFAULTS']['thumbnail_size'] = str(thumbnail_size)
             config['DEFAULTS']['thumbnail_format'] = str(thumbnail_format)
             config['DEFAULTS']['max_retries'] = str(max_retries)

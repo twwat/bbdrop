@@ -332,10 +332,12 @@ def load_user_defaults():
         'use_median': True,
         'stats_exclude_outliers': False,
         'check_updates_on_startup': True,
+        'default_image_host': 'imx',
         'archive_format': 'zip',
         'archive_compression': 'store',
         'archive_split_enabled': False,
         'archive_split_size_mb': 500,
+        'archive_split_mode': 'fixed',
     }
 
     config = read_config()
@@ -356,8 +358,10 @@ def load_user_defaults():
 
             # Load string settings
             defaults['template_name'] = config.get('DEFAULTS', 'template_name', fallback='default')
+            defaults['default_image_host'] = config.get('DEFAULTS', 'default_image_host', fallback='imx')
             defaults['archive_format'] = config.get('DEFAULTS', 'archive_format', fallback='zip')
             defaults['archive_compression'] = config.get('DEFAULTS', 'archive_compression', fallback='store')
+            defaults['archive_split_mode'] = config.get('DEFAULTS', 'archive_split_mode', fallback='fixed')
 
             # Load central store path with fallback handling
             try:

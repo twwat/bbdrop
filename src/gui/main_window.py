@@ -1703,6 +1703,11 @@ class BBDropGUI(QMainWindow):
         self.image_host_combo = QComboBox()
         self.image_host_combo.setToolTip("Default image host for new galleries")
         self._populate_image_host_combo()
+        saved_host = defaults.get('default_image_host', 'imx')
+        for i in range(self.image_host_combo.count()):
+            if self.image_host_combo.itemData(i) == saved_host:
+                self.image_host_combo.setCurrentIndex(i)
+                break
         self.image_host_combo.currentIndexChanged.connect(self.on_setting_changed)
         self.image_host_combo.currentIndexChanged.connect(self._on_image_host_changed)
         qs_grid.addWidget(self.image_host_combo, 0, 1)
