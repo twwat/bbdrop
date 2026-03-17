@@ -146,3 +146,4 @@ assets/hosts/logo/ignored/
 voo/
 gemini-superpowers/
 GEMINI.md
+.coverage
