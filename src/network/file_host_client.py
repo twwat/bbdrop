@@ -965,7 +965,7 @@ class FileHostClient:
         dedupe_url = f"{api_base}/{self.config.dedupe_endpoint}"
 
         body = json.dumps({
-            "auth_token": self.auth_token or "",
+            "access_token": self.auth_token or "",
             "hash": md5_hash,
             "name": filename
         }).encode('utf-8')
