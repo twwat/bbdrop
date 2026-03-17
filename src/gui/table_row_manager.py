@@ -401,6 +401,15 @@ class TableRowManager(QObject):
         hosts_item.setFlags(hosts_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         hosts_item.setData(Qt.ItemDataRole.UserRole, item.path)
         hosts_item.setData(Qt.ItemDataRole.UserRole + 1, host_uploads)
+        # Scan status for offline overlay and tooltip enrichment
+        scan_status = {}
+        if hasattr(mw, '_scan_status_cache'):
+            for host_name in (host_uploads or {}):
+                key = (item.path, host_name)
+                status_data = mw._scan_status_cache.get(key)
+                if status_data:
+                    scan_status[host_name] = status_data
+        hosts_item.setData(Qt.ItemDataRole.UserRole + 2, scan_status)
         mw.gallery_table.setItem(row, _Col.HOSTS_STATUS, hosts_item)
 
     def _populate_table_row_detailed(self, row: int, item: GalleryQueueItem):
@@ -643,6 +652,12 @@ class TableRowManager(QObject):
             log(f"Failed to batch load file host uploads: {e}", level="warning", category="performance")
             mw._file_host_uploads_cache = {}
 
+        # Load scan status cache for offline overlays
+        try:
+            mw._scan_status_cache = mw.queue_manager.store.get_scan_status_by_gallery_host()
+        except Exception:
+            mw._scan_status_cache = {}
+
         # Set flag to defer expensive widget creation during initial load
         mw._initializing = True
 
@@ -880,6 +895,12 @@ class TableRowManager(QObject):
         except Exception as e:
             log(f"Failed to batch load file host uploads: {e}", level="warning", category="performance")
             mw._file_host_uploads_cache = {}
+
+        # Load scan status cache for offline overlays
+        try:
+            mw._scan_status_cache = mw.queue_manager.store.get_scan_status_by_gallery_host()
+        except Exception:
+            mw._scan_status_cache = {}
 
         # Disable table updates during bulk insert
         mw.gallery_table.setUpdatesEnabled(False)

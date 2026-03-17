@@ -2070,6 +2070,35 @@ class QueueStore:
 
         return result
 
+    def get_scan_status_by_gallery_host(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
+        """Get per-gallery per-host scan status for the main queue table overlay.
+
+        Returns:
+            Dict keyed by (gallery_path, host_id) with values:
+            {status: str, online_count: int, total_count: int, checked_ts: int}
+        """
+        result: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                cursor = conn.execute("""
+                    SELECT g.path, hsr.host_id, hsr.status,
+                           hsr.online_count, hsr.total_count, hsr.checked_ts
+                    FROM host_scan_results hsr
+                    JOIN galleries g ON g.id = hsr.gallery_fk
+                """)
+                for row in cursor.fetchall():
+                    key = (row[0], row[1])
+                    result[key] = {
+                        'status': row[2],
+                        'online_count': row[3],
+                        'total_count': row[4],
+                        'checked_ts': row[5],
+                    }
+        except Exception as e:
+            log(f"Failed to load scan status cache: {e}", level="warning", category="database")
+        return result
+
     def get_worst_status_for_gallery(self, gallery_fk: int) -> Optional[Dict[str, Any]]:
         """Get the worst scan status across all hosts for a gallery.
 

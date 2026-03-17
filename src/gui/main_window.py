@@ -487,6 +487,9 @@ class BBDropGUI(QMainWindow):
         # MILESTONE 4: Track which rows have widgets created for viewport-based lazy loading
         self._rows_with_widgets = set()  # Rows that have progress/action widgets created
 
+        # Scan status cache for offline overlay rendering in file host icons
+        self._scan_status_cache = {}
+
         # Session time tracking for statistics
         self._session_start_time = time.time()
         self._session_time_saved = False  # Flag to prevent double-saving on close
@@ -2594,10 +2597,23 @@ class BBDropGUI(QMainWindow):
             coordinator._progress_callback = dashboard._progress_signal.emit
             coordinator._completion_callback = dashboard._complete_signal.emit
 
+        # Refresh scan status cache in main window when scan completes
+        dashboard._complete_signal.connect(lambda _: self._refresh_scan_status_cache())
+
         dashboard.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dashboard.destroyed.connect(lambda: setattr(self, '_link_scanner_dashboard', None))
         self._link_scanner_dashboard = dashboard
         dashboard.show()
+
+    def _refresh_scan_status_cache(self):
+        """Reload scan status cache and refresh file host icons in table."""
+        try:
+            self._scan_status_cache = self.queue_manager.store.get_scan_status_by_gallery_host()
+        except Exception:
+            self._scan_status_cache = {}
+        # Trigger repaint of the hosts status column
+        if hasattr(self, 'gallery_table'):
+            self.gallery_table.viewport().update()
 
     def _init_session_stats(self) -> None:
         """Initialize session statistics on app startup.
