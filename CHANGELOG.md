@@ -4,6 +4,22 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.3]
+
+### Added
+- **Archive split modes**: Choose between fixed part size or split only when exceeding the host's file size limit
+  - "Only when exceeding host limit" uses each host's configured max file size as the split threshold
+  - The per-host limit is user-configurable — set it to your preferred cap, not necessarily the host's actual maximum
+
+### Changed
+- Pixhost and TurboImageHost default content type changed from Family Safe to Adult
+- Image host config buttons in settings remain clickable even when the host is disabled
+- File host upload logs consolidated to a single message per upload with elapsed time and average speed
+
+### Fixed
+- **Image host selection not saved**: Changing the image host in quick settings was lost on restart
+- **File host speed column blank**: BandwidthManager was accessed on the wrong object
+
 ## [0.9.2] - 2026-03-17 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.1...v0.9.2))
 
 ### Added
