@@ -4180,83 +4180,151 @@ class BBDropGUI(QMainWindow):
             return False
 
     def _on_file_host_icon_clicked(self, gallery_path: str, host_name: str):
-        """Handle file host icon click - show link if completed, queue upload if not"""
-        from PyQt6.QtWidgets import QMessageBox
-        from PyQt6.QtGui import QClipboard
-        from PyQt6.QtWidgets import QApplication
+        """Handle file host icon click — show details dialog with actions."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QApplication
+        from PyQt6.QtCore import Qt
+        from src.core.host_registry import get_display_name
+        from datetime import datetime
 
         log(f"File host icon clicked: {host_name} for {os.path.basename(gallery_path)}", level="debug", category="file_hosts")
 
-        # Check if upload exists and get status
         try:
             uploads = self.queue_manager.store.get_file_host_uploads(gallery_path)
             upload = next((u for u in uploads if u['host_name'] == host_name), None)
-
-            if upload and upload['status'] == 'completed' and upload.get('download_url'):
-                # Show download link
-                download_link = upload['download_url']
-                msg = QMessageBox(self)
-                msg.setWindowTitle(f"{host_name} Download Link")
-                msg.setText(f"Gallery uploaded successfully!\n\nDownload link:")
-                msg.setInformativeText(download_link)
-                msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-
-                # Add copy button
-                copy_btn = msg.addButton("Copy Link", QMessageBox.ButtonRole.ActionRole)
-
-                msg.exec()
-
-                # If copy button was clicked, copy to clipboard
-                if msg.clickedButton() == copy_btn:
-                    clipboard = QApplication.clipboard()
-                    if clipboard:
-                        clipboard.setText(download_link)
-                        log(f"Copied {host_name} link to clipboard", level="info", category="file_hosts")
-            else:
-                # Validate gallery folder exists before queuing
-                if not os.path.isdir(gallery_path):
-                    log(f"Cannot upload to {host_name}: gallery folder not found: {gallery_path}", level="warning", category="file_hosts")
-                    new_path = self._handle_missing_gallery_folder(gallery_path, host_name)
-                    if new_path:
-                        # User relocated the gallery, retry with new path
-                        gallery_path = new_path
-                    else:
-                        # User cancelled or removed gallery
-                        return
-
-                # Queue manual upload
-                log(f"Queueing manual upload to {host_name} for {os.path.basename(gallery_path)}", level="info", category="file_hosts")
-
-                # Get host config to confirm it exists
-                from src.core.file_host_config import get_config_manager
-                config_manager = get_config_manager()
-                host_config = config_manager.get_host(host_name)
-
-                if not host_config:
-                    QMessageBox.warning(self, "Error", f"Host configuration not found: {host_name}")
-                    return
-
-                # Queue the upload (use host_name which is the host_id, not display name)
-                upload_id = self.queue_manager.store.add_file_host_upload(
-                    gallery_path=gallery_path,
-                    host_name=host_name,  # host_id like 'filedot', not display name like 'FileDot.to'
-                    status='pending'
-                )
-
-                log(f"Queued manual upload (upload_id={upload_id}) for {os.path.basename(gallery_path)} to {host_name}", level="info", category="file_hosts")
-
-                # Refresh the row to show updated status
-                self._update_specific_gallery_display(gallery_path)
-
-                QMessageBox.information(
-                    self,
-                    "Upload Queued",
-                    f"Gallery queued for upload to {host_name}.\n\nThe upload will begin shortly."
-                )
-
         except Exception as e:
-            log(f"Error handling file host icon click: {e}", level="error", category="file_hosts")
-            QMessageBox.critical(self, "Error", f"Failed to process click: {str(e)}")
+            log(f"Error loading upload data: {e}", level="error", category="file_hosts")
+            return
+
+        display_name = get_display_name(host_name)
+
+        # If not yet uploaded, queue upload directly
+        if not upload or upload['status'] not in ('completed', 'failed'):
+            if not upload:
+                self._queue_file_host_upload(gallery_path, host_name, display_name)
+            return
+
+        # Build details dialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"{display_name} — {os.path.basename(gallery_path)}")
+        dlg.setMinimumWidth(550)
+        layout = QVBoxLayout(dlg)
+
+        # Status info
+        status = upload.get('status', 'unknown')
+        download_url = upload.get('download_url', '')
+
+        # Upload date
+        finished_ts = upload.get('finished_ts')
+        if finished_ts:
+            try:
+                upload_date = datetime.fromtimestamp(int(finished_ts)).strftime('%Y-%m-%d %H:%M')
+            except (ValueError, OSError):
+                upload_date = 'Unknown'
+        else:
+            upload_date = 'Unknown'
+
+        # Scan status
+        scan_data = getattr(self, '_scan_status_cache', {}).get((gallery_path, host_name))
+        if scan_data:
+            checked_ts = scan_data.get('checked_ts')
+            try:
+                checked_date = datetime.fromtimestamp(int(checked_ts)).strftime('%Y-%m-%d %H:%M')
+            except (ValueError, OSError):
+                checked_date = 'Unknown'
+            online_status = scan_data.get('status', 'unknown').title()
+        else:
+            checked_date = 'Never'
+            online_status = 'Unknown'
+
+        # Info labels
+        info_text = f"<b>Status:</b> {status.title()}<br>"
+        info_text += f"<b>Uploaded:</b> {upload_date}<br>"
+        info_text += f"<b>Last checked:</b> {checked_date}<br>"
+        info_text += f"<b>Online status:</b> {online_status}"
+        info_label = QLabel(info_text)
+        info_label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(info_label)
+
+        # Download link (selectable)
+        if download_url:
+            link_label = QLabel(download_url)
+            link_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            link_label.setWordWrap(False)
+            layout.addWidget(link_label)
+
+        # Error message for failed uploads
+        if status == 'failed':
+            error_msg = upload.get('error_message', 'Unknown error')
+            error_label = QLabel(f"<b>Error:</b> {error_msg}")
+            error_label.setTextFormat(Qt.TextFormat.RichText)
+            error_label.setWordWrap(True)
+            layout.addWidget(error_label)
+
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        if download_url:
+            copy_btn = QPushButton("Copy Link")
+            copy_btn.clicked.connect(lambda: (
+                QApplication.clipboard().setText(download_url),
+                log(f"Copied {host_name} link to clipboard", level="info", category="file_hosts"),
+                dlg.accept()
+            ))
+            btn_layout.addWidget(copy_btn)
+
+        check_btn = QPushButton("Check Status")
+        check_btn.clicked.connect(lambda: self._live_check_file_host(
+            gallery_path, host_name, display_name, dlg))
+        btn_layout.addWidget(check_btn)
+
+        reupload_btn = QPushButton("Reupload")
+        reupload_btn.clicked.connect(lambda: (
+            self._queue_file_host_upload(gallery_path, host_name, display_name),
+            dlg.accept()
+        ))
+        btn_layout.addWidget(reupload_btn)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dlg.reject)
+        btn_layout.addWidget(close_btn)
+
+        layout.addLayout(btn_layout)
+        dlg.exec()
+
+    def _queue_file_host_upload(self, gallery_path: str, host_name: str, display_name: str):
+        """Queue a file host upload for a gallery."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        if not os.path.isdir(gallery_path):
+            new_path = self._handle_missing_gallery_folder(gallery_path, host_name)
+            if new_path:
+                gallery_path = new_path
+            else:
+                return
+
+        from src.core.file_host_config import get_config_manager
+        config_manager = get_config_manager()
+        if not config_manager.get_host(host_name):
+            QMessageBox.warning(self, "Error", f"Host configuration not found: {host_name}")
+            return
+
+        log(f"Queueing manual upload to {host_name} for {os.path.basename(gallery_path)}", level="info", category="file_hosts")
+        upload_id = self.queue_manager.store.add_file_host_upload(
+            gallery_path=gallery_path,
+            host_name=host_name,
+            status='pending'
+        )
+        log(f"Queued manual upload (upload_id={upload_id}) for {os.path.basename(gallery_path)} to {host_name}", level="info", category="file_hosts")
+        self._update_specific_gallery_display(gallery_path)
+        QMessageBox.information(self, "Upload Queued",
+            f"Gallery queued for upload to {display_name}.\nThe upload will begin shortly.")
+
+    def _live_check_file_host(self, gallery_path: str, host_name: str, display_name: str, parent_dialog=None):
+        """Perform a live online status check for a single file host upload."""
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(parent_dialog or self, "Check Status",
+            f"Live status check for {display_name} is not yet implemented.")
 
     def _handle_missing_gallery_folder(self, gallery_path: str, host_name: str) -> Optional[str]:
         """Handle missing gallery folder - offer to relocate or remove.
