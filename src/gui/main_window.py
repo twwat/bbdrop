@@ -2573,9 +2573,11 @@ class BBDropGUI(QMainWindow):
         try:
             from src.processing.scan_coordinator import ScanCoordinator
             from src.network.connection_limiter import ConnectionLimiter
+            rename_worker = getattr(self.worker, 'rename_worker', None) if self.worker else None
             coordinator = ScanCoordinator(
                 store=self.queue_manager.store,
                 connection_limiter=ConnectionLimiter(),
+                rename_worker=rename_worker,
             )
         except ImportError:
             log("ScanCoordinator not available, dashboard will be view-only",
@@ -2587,10 +2589,10 @@ class BBDropGUI(QMainWindow):
             coordinator=coordinator,
         )
 
-        # Wire coordinator callbacks to dashboard methods if coordinator exists
+        # Wire coordinator callbacks via thread-safe signals (bg thread -> GUI thread)
         if coordinator:
-            coordinator._progress_callback = dashboard._on_scan_progress
-            coordinator._completion_callback = dashboard._on_scan_complete
+            coordinator._progress_callback = dashboard._progress_signal.emit
+            coordinator._completion_callback = dashboard._complete_signal.emit
 
         dashboard.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dashboard.destroyed.connect(lambda: setattr(self, '_link_scanner_dashboard', None))
