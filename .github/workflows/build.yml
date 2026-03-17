@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set version
         id: version
@@ -64,7 +64,7 @@ jobs:
           echo "Using version: $VERSION"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -472,7 +472,7 @@ jobs:
 
       # Upload portable artifact
       - name: Upload portable artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-portable
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-portable${{ matrix.asset_ext }}
@@ -481,7 +481,7 @@ jobs:
       # Upload Windows installer (raw .exe, not zipped)
       - name: Upload Windows installer (exe)
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup.exe
@@ -491,7 +491,7 @@ jobs:
       # Upload Windows MSI installer
       - name: Upload Windows installer (msi)
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-msi
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.msi
@@ -500,7 +500,7 @@ jobs:
       # Upload macOS DMG
       - name: Upload macOS DMG
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-dmg
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.dmg
@@ -510,7 +510,7 @@ jobs:
       # Upload Linux .deb
       - name: Upload Linux deb
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-deb
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.deb
@@ -519,7 +519,7 @@ jobs:
       # Upload Linux .rpm
       - name: Upload Linux rpm
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-rpm
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.rpm
@@ -528,7 +528,7 @@ jobs:
       # Upload Linux AppImage
       - name: Upload Linux AppImage
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-appimage
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.AppImage
@@ -542,7 +542,7 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -550,7 +550,7 @@ jobs:
         run: ls -la artifacts/*
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           draft: true
           generate_release_notes: true
