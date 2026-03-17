@@ -1,39 +1,23 @@
-"""Tests for LinkScannerDashboard — the assembled dashboard dialog."""
+"""Tests for LinkScannerDashboard — the redesigned splitter-based dashboard."""
 
 import os
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt
-
 
 class TestLinkScannerDashboard:
-    """Tests for the assembled dashboard dialog."""
 
     @pytest.fixture
     def mock_store(self):
         store = MagicMock()
-        store.get_scan_stats_by_host.return_value = {
-            ('image', 'imx'): {
-                'total_galleries': 100,
-                'online_galleries': 80,
-                'partial_galleries': 15,
-                'offline_galleries': 5,
-                'total_online': 900,
-                'total_items': 1000,
-            },
-            ('image', 'turbo'): {
-                'total_galleries': 50,
-                'online_galleries': 48,
-                'partial_galleries': 2,
-                'offline_galleries': 0,
-                'total_online': 490,
-                'total_items': 500,
-            },
+        store.get_hosts_with_uploads.return_value = {
+            ('image', 'imx'): {'gallery_count': 10, 'image_count': 100},
+            ('image', 'turbo'): {'gallery_count': 5, 'image_count': 50},
         }
+        store.get_galleries_for_dashboard.return_value = []
+        store.get_scan_stats_by_host.return_value = {}
         return store
 
     @pytest.fixture
@@ -55,48 +39,45 @@ class TestLinkScannerDashboard:
     def test_is_non_modal(self, dashboard):
         assert not dashboard.isModal()
 
-    def test_summary_cards_created(self, dashboard):
-        assert len(dashboard._summary_cards) == 2
-        assert 'imx' in dashboard._summary_cards
-        assert 'turbo' in dashboard._summary_cards
+    def test_has_host_table(self, dashboard):
+        from src.gui.widgets.scanner_widgets import HostTableWidget
+        assert isinstance(dashboard._host_table, HostTableWidget)
 
-    def test_controls_visible_initially(self, dashboard):
-        assert dashboard._control_stack.currentWidget() == dashboard._controls
+    def test_has_gallery_table(self, dashboard):
+        from src.gui.widgets.scanner_widgets import GalleryResultsTable
+        assert isinstance(dashboard._gallery_table, GalleryResultsTable)
 
-    def test_scan_requested_starts_coordinator(self, dashboard, qtbot):
+    def test_host_table_populated(self, dashboard):
+        assert dashboard._host_table.rowCount() == 2
+
+    def test_has_controls(self, dashboard):
+        from src.gui.widgets.scanner_widgets import ScanControlsWidget
+        assert isinstance(dashboard._controls, ScanControlsWidget)
+
+    def test_progress_bar_hidden_initially(self, dashboard):
+        assert not dashboard._overall_bar.isVisible()
+
+    def test_has_header_text(self, dashboard):
+        assert dashboard._header_label.text() != ''
+
+    def test_no_host_selected_initially(self, dashboard):
+        assert dashboard._host_table.get_selected_host_id() is None
+        assert dashboard._controls.get_host_filter() == ''
+        assert dashboard._gallery_table.rowCount() == 0
+
+    def test_host_click_syncs_dropdown(self, dashboard):
+        dashboard._host_table.selectRow(1)
+        assert dashboard._controls.get_host_filter() == 'turbo'
+
+    def test_scan_requested_starts_coordinator(self, dashboard):
         dashboard._coordinator = MagicMock()
-        dashboard._on_scan_requested(30, '', 'age')
+        dashboard._controls.scan_requested.emit(30, '', 'age', 'last_scan')
         dashboard._coordinator.start_scan.assert_called_once()
-
-    def test_scan_switches_to_progress_view(self, dashboard):
-        dashboard._coordinator = MagicMock()
-        dashboard._on_scan_requested(30, '', 'age')
-        assert dashboard._control_stack.currentWidget() == dashboard._progress
 
     def test_stop_cancels_coordinator(self, dashboard):
         dashboard._coordinator = MagicMock()
         dashboard._on_stop_requested()
         dashboard._coordinator.cancel.assert_called_once()
 
-    def test_scan_complete_switches_back_to_controls(self, dashboard):
-        dashboard._coordinator = MagicMock()
-        dashboard._on_scan_requested(30, '', 'age')
-        assert dashboard._control_stack.currentWidget() == dashboard._progress
-        dashboard._on_scan_complete({'total_hosts': 2, 'total_galleries': 10, 'elapsed': 5.0})
-        assert dashboard._control_stack.currentWidget() == dashboard._controls
-
-    def test_card_click_activates_results_tab(self, dashboard):
-        dashboard._results_tabs.update_result('imx', 'Gallery A', 10, 10, '2026-03-10')
-        dashboard._results_tabs.update_result('turbo', 'Gallery B', 5, 5, '2026-03-10')
-        dashboard._on_host_card_clicked('turbo')
-        assert dashboard._results_tabs.currentIndex() == 1
-
-    def test_no_store_shows_empty(self, qtbot):
-        from src.gui.dialogs.link_scanner_dashboard import LinkScannerDashboard
-        dlg = LinkScannerDashboard(parent=None, queue_manager=None)
-        qtbot.addWidget(dlg)
-        assert len(dlg._summary_cards) == 0
-
-    def test_progress_callback_updates_widgets(self, dashboard):
-        dashboard._on_scan_progress('image', 'imx', 25, 100)
-        assert 'imx' in dashboard._progress._host_bars
+    def test_wider_than_old_dialog(self, dashboard):
+        assert dashboard.minimumWidth() >= 750
