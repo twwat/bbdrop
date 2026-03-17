@@ -141,7 +141,7 @@ class ArchiveManager:
             # Create new archive
             base_name = self._generate_archive_name(db_id, gallery_name)
             log(f"Creating {archive_format.upper()} archive for gallery {db_id}: {base_name}",
-                level="info", category="file_hosts")
+                level="debug", category="file_hosts")
 
             try:
                 if split_size_mb > 0:

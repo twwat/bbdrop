@@ -781,7 +781,7 @@ class FileHostClient:
         self.last_uploaded_for_speed = 0
         self.current_speed_bps = 0.0
 
-        if self._log_callback: self._log_callback(f"Uploading {file_path.name} to {self.config.name}...", "info")
+        if self._log_callback: self._log_callback(f"Uploading {file_path.name} to {self.config.name}...", "debug")
 
         # Handle multi-step uploads (like RapidGator) with automatic token retry
         if self.config.upload_init_url:
