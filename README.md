@@ -142,7 +142,7 @@ Every host supports automatic retry, connection pooling, and token caching.
 - 💾 **Disk space monitoring** — tiered warnings with adaptive polling, pre-flight checks before uploads and archive creation
 - 🛡️ **Proxy & Tor** — HTTP, HTTPS, SOCKS4, and SOCKS5 proxies with a 3-level resolver (global → category → per-service); built-in Tor integration with one-click pool creation and circuit rotation
 - 📊 **Statistics** — upload history, bandwidth tracking, per-host metrics
-- 🔍 **Link scanner** — check image availability across IMX.to galleries with configurable age thresholds
+- 🔍 **Link scanner** — check content availability across most image and file hosts with configurable age thresholds, scan type filters, and per-host health tracking
 - ⚡ **Hook system** — run external scripts on upload events with positional placeholders and JSON output parsing
 - 🖥️ **GUI** — PyQt6 with dark/light themes, system tray, single-instance mode, keyboard shortcuts, and audio + toast notifications
 

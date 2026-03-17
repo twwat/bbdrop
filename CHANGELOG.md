@@ -4,6 +4,32 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.2] - 2026-03-17 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.1...v0.9.2))
+
+### Added
+- **Link Scanner redesign**: Dashboard replaced with a left-right split layout (host table | gallery results table)
+  - Host table with health progress bars, image counts, and percentage columns
+  - Gallery results table repopulates on host selection (no more tabs)
+  - Bidirectional sync between host table and host dropdown
+  - Overall progress bar at top, hidden when idle
+- **Scan type radio buttons**: Stale / Unchecked / Problems selector replaces three separate buttons
+- **Age mode dropdown**: Filter by last scan age or original upload age
+- **"All" age option**: Scan all galleries regardless of age threshold
+- **Info buttons**: Contextual help popovers on every scan control
+- Scan coordinator credential loading for K2S-family and Rapidgator file hosts
+- IMX gallery routing to RenameWorker's /user/moderate endpoint in scan coordinator
+
+### Changed
+- Link Scanner dashboard is wider (750px minimum, up from 650px)
+- Host labels use canonical names (IMX.to, TurboImageHost, Rapidgator, etc.) instead of abbreviations
+- Scan controls signal now carries age_mode parameter through to database query
+- K2S file checker uses getFilesInfo endpoint (renamed from getFilesList)
+- Coordinator callbacks routed through thread-safe pyqtSignal (fixes potential cross-thread GUI updates)
+- Splash screen dimensions and corner radius adjusted
+
+### Fixed
+- Shutdown dialog in-progress step text now bolds for visibility
+
 ## [0.9.1] - 2026-03-06 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.0...v0.9.1))
 
 ### Added
