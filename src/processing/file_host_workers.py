@@ -724,7 +724,26 @@ class FileHostWorker(QThread):
             archive_format = defaults.get('archive_format', 'zip')
             archive_compression = defaults.get('archive_compression', 'store')
             split_enabled = defaults.get('archive_split_enabled', False)
-            split_size_mb = defaults.get('archive_split_size_mb', 0) if split_enabled else 0
+            split_mode = defaults.get('archive_split_mode', 'fixed')
+
+            if not split_enabled:
+                split_size_mb = 0
+            elif split_mode == 'auto_host_limit':
+                host_max_mb = get_file_host_setting(self.host_id, 'max_file_size_mb', 'int') or 0
+                if host_max_mb > 0:
+                    estimated_bytes = sum(
+                        f.stat().st_size for f in folder_path.iterdir() if f.is_file()
+                    )
+                    split_size_mb = host_max_mb if estimated_bytes > host_max_mb * 1024 * 1024 else 0
+                else:
+                    self._log(
+                        "Split mode is 'only when exceeding host limit' but no max file size "
+                        "is configured for this host — skipping split",
+                        level="warning"
+                    )
+                    split_size_mb = 0
+            else:
+                split_size_mb = defaults.get('archive_split_size_mb', 0)
 
             # Pre-flight disk space check before archive creation
             import shutil as _shutil

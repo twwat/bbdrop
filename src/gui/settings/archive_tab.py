@@ -118,6 +118,30 @@ class ArchiveSettingsWidget(QWidget):
         split_enable_row.addStretch()
         split_layout.addLayout(split_enable_row)
 
+        # Split mode selector (visible only when splitting is enabled)
+        mode_row = QHBoxLayout()
+        mode_label = QLabel("Split mode:")
+        mode_row.addWidget(mode_label)
+        self.split_mode_combo = QComboBox()
+        self.split_mode_combo.addItem("Fixed part size", "fixed")
+        self.split_mode_combo.addItem("Only when exceeding host's file size limit", "auto_host_limit")
+        self.split_mode_combo.setEnabled(False)
+        self.split_mode_combo.currentIndexChanged.connect(self._on_split_mode_changed)
+        mode_row.addWidget(self.split_mode_combo, 1)
+        split_layout.addLayout(mode_row)
+        self._mode_row_widgets = [mode_label, self.split_mode_combo]
+
+        # Auto-mode explanatory note (visible only in auto_host_limit mode)
+        self._auto_mode_note = QLabel(
+            "Archives are only split if they exceed the file size limit you set per host. "
+            "Configure it in each host's settings — it doesn't need to match the host's actual maximum. "
+            "For example, set 2,000 MB even if the host supports 5,000 MB."
+        )
+        self._auto_mode_note.setWordWrap(True)
+        self._auto_mode_note.setStyleSheet("color: #888; font-size: 11px;")
+        self._auto_mode_note.setVisible(False)
+        split_layout.addWidget(self._auto_mode_note)
+
         # 7z CLI warning — only needed for 7z format splits, not ZIP
         from src.utils.archive_manager import HAS_7Z_CLI
         self._7z_warning = QLabel(
@@ -266,10 +290,25 @@ class ArchiveSettingsWidget(QWidget):
 
     def _on_split_enabled_changed(self, checked: bool):
         """Handle split enabled checkbox change."""
-        self.split_size_slider.setEnabled(checked)
-        self.split_size_spinbox.setEnabled(checked)
+        self.split_mode_combo.setEnabled(checked)
+        for w in self._mode_row_widgets:
+            w.setEnabled(checked)
+        self._apply_split_mode_visibility()
         self._update_7z_split_warning()
         self._on_settings_changed()
+
+    def _on_split_mode_changed(self):
+        """Show/hide size controls vs auto-mode note based on selected mode."""
+        self._apply_split_mode_visibility()
+        self._on_settings_changed()
+
+    def _apply_split_mode_visibility(self):
+        """Sync size slider/spinbox and auto-note visibility to current mode."""
+        enabled = self.split_enabled_checkbox.isChecked()
+        is_fixed = self.split_mode_combo.currentData() == 'fixed'
+        self.split_size_slider.setEnabled(enabled and is_fixed)
+        self.split_size_spinbox.setEnabled(enabled and is_fixed)
+        self._auto_mode_note.setVisible(enabled and not is_fixed)
 
     def _on_settings_changed(self):
         """Emit settings changed signal and update compression info."""
@@ -300,10 +339,21 @@ class ArchiveSettingsWidget(QWidget):
         split_enabled = settings.get('archive_split_enabled', False)
         self.split_enabled_checkbox.setChecked(split_enabled)
 
+        split_mode = settings.get('archive_split_mode', 'fixed')
+        for i in range(self.split_mode_combo.count()):
+            if self.split_mode_combo.itemData(i) == split_mode:
+                self.split_mode_combo.setCurrentIndex(i)
+                break
+
         split_size_mb = settings.get('archive_split_size_mb', 500)
         self.split_size_spinbox.setValue(split_size_mb)
 
         self.blockSignals(False)
+        # Sync visibility after load without emitting settings_changed
+        self.split_mode_combo.setEnabled(split_enabled)
+        for w in self._mode_row_widgets:
+            w.setEnabled(split_enabled)
+        self._apply_split_mode_visibility()
 
     def get_settings(self) -> dict:
         """Get current archive settings as dict."""
@@ -311,6 +361,7 @@ class ArchiveSettingsWidget(QWidget):
             'archive_format': self.format_combo.currentData(),
             'archive_compression': self.compression_combo.currentData(),
             'archive_split_enabled': self.split_enabled_checkbox.isChecked(),
+            'archive_split_mode': self.split_mode_combo.currentData(),
             'archive_split_size_mb': self.split_size_spinbox.value()
         }
 
@@ -342,6 +393,7 @@ class ArchiveSettingsWidget(QWidget):
         config.set('DEFAULTS', 'archive_format', archive_settings['archive_format'])
         config.set('DEFAULTS', 'archive_compression', archive_settings['archive_compression'])
         config.set('DEFAULTS', 'archive_split_enabled', str(archive_settings['archive_split_enabled']))
+        config.set('DEFAULTS', 'archive_split_mode', archive_settings['archive_split_mode'])
         config.set('DEFAULTS', 'archive_split_size_mb', str(archive_settings['archive_split_size_mb']))
 
         with open(config_file, 'w', encoding='utf-8') as f:
