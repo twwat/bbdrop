@@ -844,7 +844,8 @@ class TestFileHostsStatusDelegatePaint:
         mock_index.row.return_value = 0
         mock_index.data.side_effect = [
             "/test/path",
-            {"rapidgator": {"status": "completed"}}
+            {"rapidgator": {"status": "completed"}},
+            {}  # UserRole + 2: scan status (empty = no scan data)
         ]
 
         delegate.paint(mock_painter, mock_option, mock_index)
