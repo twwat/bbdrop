@@ -88,29 +88,51 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
         self._overlay_cache[status] = pixmap
         return pixmap
 
-    def _get_status_tooltip(self, host_name: str, upload_data: Dict) -> str:
-        """Generate tooltip text for a file host icon."""
+    def _get_status_tooltip(self, host_name: str, upload_data: Dict,
+                            scan_data: Optional[Dict] = None) -> str:
+        """Generate rich tooltip with upload date, scan status, and link."""
+        from src.core.host_registry import get_display_name
+        from datetime import datetime
+
+        display_name = get_display_name(host_name)
         status = upload_data.get('status', 'not_uploaded')
-        status_labels = {
-            'not_uploaded': 'Click to upload',
-            'pending': 'Pending',
-            'uploading': 'Uploading...',
-            'completed': 'Completed',
-            'failed': 'Failed - click to retry',
-        }
-        status_text = status_labels.get(status, status.title())
-        
-        # Add download URL if completed
-        download_url = upload_data.get('download_url', '')
-        if status == 'completed' and download_url:
-            return f"{host_name}: {status_text}\n{download_url}"
-        
-        # Add error message if failed
-        error_msg = upload_data.get('error_message', '')
-        if status == 'failed' and error_msg:
-            return f"{host_name}: {status_text}\n{error_msg[:100]}"
-        
-        return f"{host_name}: {status_text}"
+
+        if status == 'not_uploaded':
+            return f"{display_name} \u2014 Click to upload"
+
+        parts = [display_name]
+
+        # Upload date
+        finished_ts = upload_data.get('finished_ts')
+        if finished_ts:
+            try:
+                upload_date = datetime.fromtimestamp(int(finished_ts)).strftime('%Y-%m-%d')
+                parts.append(f"Uploaded: {upload_date}")
+            except (ValueError, OSError):
+                pass
+
+        # Scan status
+        if scan_data:
+            checked_ts = scan_data.get('checked_ts')
+            scan_status = scan_data.get('status', 'unknown')
+            if checked_ts:
+                try:
+                    checked_date = datetime.fromtimestamp(int(checked_ts)).strftime('%Y-%m-%d')
+                    parts.append(f"Last checked: {checked_date}")
+                except (ValueError, OSError):
+                    pass
+            status_label = 'Online' if scan_status == 'online' else scan_status.title()
+            parts.append(status_label)
+        else:
+            parts.append("Last checked: Never")
+
+        # Error message for failed uploads
+        if status == 'failed':
+            error_msg = upload_data.get('error_message', '')
+            if error_msg:
+                parts.append(f"Error: {error_msg[:80]}")
+
+        return ' \u00b7 '.join(parts)
 
     def _compute_icon_rects(self, cell_rect: QRect, host_uploads: Dict) -> List[Tuple[str, QRect]]:
         """Compute icon rectangles for all hosts within a cell."""
@@ -203,10 +225,12 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
             icon_rects = self._compute_icon_rects(option.rect, host_uploads)
             
             pos = event.pos()
+            scan_status = index.data(Qt.ItemDataRole.UserRole + 2) or {}
             for host_name, rect in icon_rects:
                 if rect.contains(pos):
                     upload_data = host_uploads.get(host_name, {})
-                    tooltip = self._get_status_tooltip(host_name, upload_data)
+                    scan_data = scan_status.get(host_name)
+                    tooltip = self._get_status_tooltip(host_name, upload_data, scan_data)
                     QToolTip.showText(event.globalPos(), tooltip, view)
                     return True
             
