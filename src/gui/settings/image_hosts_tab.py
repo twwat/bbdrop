@@ -430,7 +430,6 @@ class ImageHostsSettingsWidget(QWidget):
 
         # Update widget states
         widgets["logo_container"].setEnabled(enabled)
-        widgets["configure_btn"].setEnabled(enabled)
         widgets["status"].setEnabled(enabled)
 
         # Update frame appearance for disabled hosts
