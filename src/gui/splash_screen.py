@@ -17,7 +17,7 @@ class SplashScreen(QSplashScreen):
     
     def __init__(self):
         # Create a base pixmap for the splash screen
-        pixmap = QPixmap(605, 360)  # Increased height for logo
+        pixmap = QPixmap(605, 380)  # Splash screen size in pixels  (w, h)
         pixmap.fill(QColor(29, 22, 22))  # Dark blue-gray background
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
@@ -64,7 +64,7 @@ class SplashScreen(QSplashScreen):
         """Set the window to have rounded corners"""
         # Use QRegion constructor that takes QPainterPath directly
         path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), 78, 78)
+        path.addRoundedRect(QRectF(self.rect()), 80, 80)
         # Convert path to region without double polygon conversion
         from PyQt6.QtGui import QTransform
         region = QRegion(path.toFillPolygon(QTransform()).toPolygon())
@@ -85,14 +85,14 @@ class SplashScreen(QSplashScreen):
         painter.drawRoundedRect(2, 2, self.width() - 3, self.height() - 3, 80, 80)
         
         # Draw logo at top if available
-        y_offset = 22
+        y_offset = 27
         if self.logo_pixmap and not self.logo_pixmap.isNull():
             # Scale logo to fit nicely at top
             logo_height = 110
             logo_scaled = self.logo_pixmap.scaledToHeight(logo_height, Qt.TransformationMode.SmoothTransformation)
             logo_x = (self.width() - logo_scaled.width()) // 2
             painter.drawPixmap(logo_x, y_offset, logo_scaled)
-            y_offset += logo_height - 30
+            y_offset += logo_height - 25
 
         # Draw version
         version_font = QFont("Courier", 13, QFont.Weight.Bold)

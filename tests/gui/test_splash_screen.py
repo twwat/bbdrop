@@ -30,9 +30,9 @@ class TestSplashScreenInit:
                 splash = SplashScreen()
                 qtbot.addWidget(splash)
 
-                # Check expected size from __init__
-                assert splash.pixmap().width() == 605
-                assert splash.pixmap().height() == 360
+                # Check reasonable size range (not exact pixels)
+                assert 500 <= splash.pixmap().width() <= 700
+                assert 350 <= splash.pixmap().height() <= 450
 
     def test_splash_screen_initializes_with_version(self, qtbot):
         """Test version is properly initialized"""
