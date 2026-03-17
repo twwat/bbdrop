@@ -1,17 +1,17 @@
 """Link Scanner Dashboard
 
-Non-modal dashboard for multi-host link scanning. Left-right split layout
-with host table, gallery results table, scan controls with radio buttons,
+Non-modal dashboard for multi-host link scanning. Fixed-left / stretching-right
+layout with host table, gallery results table, scan controls with radio buttons,
 and an overall progress bar.
 """
 
 from typing import Optional, Dict, Any, List
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QProgressBar,
-    QDialogButtonBox, QApplication, QSplitter,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar,
+    QDialogButtonBox, QApplication, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QTimer, pyqtSignal
 
 from src.gui.widgets.scanner_widgets import (
     HostTableWidget,
@@ -30,7 +30,7 @@ class LinkScannerDashboard(QDialog):
         1. Header text (muted description)
         2. Overall progress bar (hidden when idle)
         3. ScanControlsWidget (radio buttons, dropdowns, start/stop)
-        4. QSplitter: HostTableWidget (1/3) | GalleryResultsTable (2/3)
+        4. QHBoxLayout: HostTableWidget (fixed) | GalleryResultsTable (stretch)
         5. Close button
     """
 
@@ -47,8 +47,8 @@ class LinkScannerDashboard(QDialog):
 
         self.setWindowTitle("Link Scanner")
         self.setModal(False)
-        self.setMinimumSize(750, 550)
-        self.resize(900, 650)
+        self.setMinimumSize(850, 550)
+        self.resize(1050, 650)
         self._center_on_parent()
 
         self._progress_signal.connect(self._on_scan_progress)
@@ -105,19 +105,18 @@ class LinkScannerDashboard(QDialog):
         self._controls.stop_requested.connect(self._on_stop_requested)
         layout.addWidget(self._controls)
 
-        # Splitter: host table (1/3) | gallery table (2/3)
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(8)
 
         self._host_table = HostTableWidget()
         self._host_table.host_selected.connect(self._on_host_selected)
-        splitter.addWidget(self._host_table)
+        self._host_table.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        content_layout.addWidget(self._host_table)
 
         self._gallery_table = GalleryResultsTable()
-        splitter.addWidget(self._gallery_table)
+        content_layout.addWidget(self._gallery_table, stretch=1)
 
-        splitter.setStretchFactor(0, 1)  # 1/3
-        splitter.setStretchFactor(1, 2)  # 2/3
-        layout.addWidget(splitter, stretch=1)
+        layout.addLayout(content_layout, stretch=1)
 
         # Close button
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
