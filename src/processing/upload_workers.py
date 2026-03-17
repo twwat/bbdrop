@@ -358,11 +358,9 @@ class UploadWorker(QThread):
             from src.utils.metrics_store import get_metrics_store
             metrics_store = get_metrics_store()
             if metrics_store and item.start_time:
-                _cfg = get_image_host_config_manager().get_host(host_id)
-                _host_name = _cfg.name if _cfg else host_id
                 transfer_time = time.time() - item.start_time
                 metrics_store.record_transfer(
-                    host_name=_host_name,
+                    host_name=host_id,
                     bytes_uploaded=0,
                     transfer_time=transfer_time,
                     success=False,
@@ -594,11 +592,9 @@ class UploadWorker(QThread):
         metrics_store = get_metrics_store()
         if metrics_store and item.start_time:
             _host_id = getattr(item, 'image_host_id', 'imx') or 'imx'
-            _cfg = get_image_host_config_manager().get_host(_host_id)
-            _host_name = _cfg.name if _cfg else _host_id
             transfer_time = item.end_time - item.start_time
             metrics_store.record_transfer(
-                host_name=_host_name,
+                host_name=_host_id,
                 bytes_uploaded=item.uploaded_bytes or 0,
                 transfer_time=transfer_time,
                 success=True,
