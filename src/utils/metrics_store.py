@@ -27,6 +27,108 @@ from src.utils.paths import get_central_store_base_path
 logger = logging.getLogger(__name__)
 
 
+# Alias map: old display-name keys -> canonical host_id
+_HOST_NAME_ALIASES: Dict[str, str] = {
+    'IMX.to': 'imx',
+    'Imx': 'imx',
+    'Imx.To': 'imx',
+    'Imx.to': 'imx',
+    'Turbo': 'turbo',
+    'Turboimagehost': 'turbo',
+    'TurboImageHost': 'turbo',
+    'Pixhost': 'pixhost',
+}
+
+# Test artifacts to delete
+_DELETE_KEYS = {'Host_0', 'Host_1', 'Host_2', 'Host_3', 'Host_4', 'Host_5'}
+
+
+def _migrate_host_name_keys(db_path: str) -> None:
+    """One-time migration: normalize host_name keys to host_id.
+
+    Merges rows with display-name keys into their canonical host_id,
+    summing counts/bytes and taking max peak_speed. Deletes test artifacts.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        # Check if migration needed — look for any alias keys
+        cursor = conn.execute("SELECT DISTINCT host_name FROM host_metrics")
+        existing_keys = {row[0] for row in cursor.fetchall()}
+
+        aliases_present = existing_keys & set(_HOST_NAME_ALIASES.keys())
+        artifacts_present = existing_keys & _DELETE_KEYS
+
+        if not aliases_present and not artifacts_present:
+            return  # Already clean
+
+        # Delete test artifacts
+        if artifacts_present:
+            placeholders = ','.join('?' * len(artifacts_present))
+            conn.execute(
+                f"DELETE FROM host_metrics WHERE host_name IN ({placeholders})",
+                list(artifacts_present)
+            )
+
+        # Merge alias keys into canonical host_id
+        for old_key, new_key in _HOST_NAME_ALIASES.items():
+            if old_key not in existing_keys:
+                continue
+
+            # Get all period rows for the old key
+            old_rows = conn.execute(
+                "SELECT period_type, period_date, bytes_uploaded, files_uploaded, "
+                "files_failed, files_deduped, total_transfer_time, peak_speed "
+                "FROM host_metrics WHERE host_name = ?",
+                (old_key,)
+            ).fetchall()
+
+            for row in old_rows:
+                period_type, period_date = row[0], row[1]
+                bytes_up, files_up, files_fail = row[2], row[3], row[4]
+                files_dedup, transfer_time, peak = row[5], row[6], row[7]
+
+                # Check if canonical key already has a row for this period
+                existing = conn.execute(
+                    "SELECT id, bytes_uploaded, files_uploaded, files_failed, "
+                    "files_deduped, total_transfer_time, peak_speed "
+                    "FROM host_metrics WHERE host_name = ? AND period_type = ? AND period_date IS ?",
+                    (new_key, period_type, period_date)
+                ).fetchone()
+
+                if existing:
+                    # Merge into existing row
+                    conn.execute(
+                        "UPDATE host_metrics SET "
+                        "bytes_uploaded = bytes_uploaded + ?, "
+                        "files_uploaded = files_uploaded + ?, "
+                        "files_failed = files_failed + ?, "
+                        "files_deduped = files_deduped + ?, "
+                        "total_transfer_time = total_transfer_time + ?, "
+                        "peak_speed = MAX(peak_speed, ?) "
+                        "WHERE id = ?",
+                        (bytes_up, files_up, files_fail, files_dedup,
+                         transfer_time, peak, existing[0])
+                    )
+                else:
+                    # Rename the row
+                    conn.execute(
+                        "UPDATE host_metrics SET host_name = ? "
+                        "WHERE host_name = ? AND period_type = ? AND period_date IS ?",
+                        (new_key, old_key, period_type, period_date)
+                    )
+
+            # Delete any remaining old-key rows (in case rename hit UNIQUE conflict)
+            conn.execute("DELETE FROM host_metrics WHERE host_name = ?", (old_key,))
+
+        conn.commit()
+        logger.info("Migrated host_metrics keys to canonical host_id format")
+
+    except Exception as e:
+        logger.warning(f"host_metrics key migration failed: {e}")
+    finally:
+        conn.close()
+
+
 class PeakSpeedValidator:
     """Validates peak speed measurements to filter outliers."""
 
@@ -155,6 +257,7 @@ class MetricsStore:
             # This prevents race condition where worker tries to acquire
             # _db_lock while schema creation is in progress
             self._ensure_schema()
+            _migrate_host_name_keys(self._db_path)
 
             # Start background writer as a DAEMON thread AFTER schema is ready
             # Daemon threads don't block Python shutdown
