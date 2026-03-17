@@ -1270,7 +1270,7 @@ class FileHostClient:
                     # Check for final URL
                     final_url = self._extract_from_json(poll_data, self.config.link_path)
                     if final_url:
-                        if self._log_callback: self._log_callback(f"{file_path.name}: Upload complete!", "info")
+                        if self._log_callback: self._log_callback(f"{file_path.name}: Upload complete!", "debug")
                         # Extract file_id from poll response
                         file_id = self._extract_from_json(poll_data, self.config.file_id_path) or upload_id
                         return {
@@ -1291,7 +1291,7 @@ class FileHostClient:
                             alternate_url = self._extract_from_json(poll_data, ["response", "upload", "file_url"])
 
                         if alternate_url:
-                            if self._log_callback: self._log_callback(f"{file_path.name}: Upload complete (state 2, alternate path)!", "info")
+                            if self._log_callback: self._log_callback(f"{file_path.name}: Upload complete (state 2, alternate path)!", "debug")
                             return {
                                 "status": "success",
                                 "url": alternate_url,

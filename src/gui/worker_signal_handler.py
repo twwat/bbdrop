@@ -181,7 +181,7 @@ class WorkerSignalHandler(QObject):
     def on_file_host_upload_completed(self, db_id: int, host_name: str, result: dict):
         """Handle file host upload completed - ASYNC to prevent blocking main thread."""
         log(f"File host upload completed: {host_name} for gallery {db_id}",
-            level="info", category="file_hosts")
+            level="debug", category="file_hosts")
         mw = self._mw
         # Defer UI refresh to avoid blocking signal emission
         # Use QTimer.singleShot(0) to schedule on next event loop iteration

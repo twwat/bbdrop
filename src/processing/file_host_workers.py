@@ -909,10 +909,11 @@ class FileHostWorker(QThread):
                             observed_peak_kbps=peak_kbps,
                             deduped=bool(result.get('deduplication'))
                         )
+                    avg_speed_mbs = (part_size / upload_elapsed_time / (1024 * 1024)) if upload_elapsed_time > 0 else 0
                     self._log(
                         f"Successfully uploaded {gallery_name}"
                         f"{f' (part {part_idx + 1})' if len(archive_paths) > 1 else ''}"
-                        f": {download_url}",
+                        f" in {upload_elapsed_time:.1f}s ({avg_speed_mbs:.1f} MiB/s): {download_url}",
                         level="info")
 
                     # Log raw server response for debugging

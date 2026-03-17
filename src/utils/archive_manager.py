@@ -159,7 +159,7 @@ class ArchiveManager:
                 size_mb = total_size / (1024 * 1024)
                 log(
                     f"Created archive: {len(paths)} part(s), {size_mb:.2f} MiB total",
-                    level="info", category="file_hosts"
+                    level="debug", category="file_hosts"
                 )
                 return paths
 
