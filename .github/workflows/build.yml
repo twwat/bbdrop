@@ -231,88 +231,10 @@ jobs:
         with:
           path: bbdrop.iss
 
-      # Create Windows MSI installer with WiX
-      - name: Create WiX script
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.VERSION }}"
-          # WiX requires a GUID for the product - generate deterministically from version
-          $guid = [guid]::NewGuid().ToString().ToUpper()
-
-          $wxsContent = @"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-            <Product Id="*"
-                     Name="BBDrop"
-                     Language="1033"
-                     Version="$version.0"
-                     Manufacturer="BBDrop"
-                     UpgradeCode="F8E7D6C5-B4A3-4210-9F8E-7D6C5B4A3210">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
-              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
-              <MediaTemplate EmbedCab="yes" />
-
-              <Feature Id="ProductFeature" Title="BBDrop" Level="1">
-                <ComponentGroupRef Id="HeatGenerated" />
-                <ComponentRef Id="StartMenuShortcut" />
-                <ComponentRef Id="DesktopShortcut" />
-              </Feature>
-
-              <Directory Id="TARGETDIR" Name="SourceDir">
-                <Directory Id="ProgramFiles64Folder">
-                  <Directory Id="INSTALLFOLDER" Name="BBDrop" />
-                </Directory>
-                <Directory Id="ProgramMenuFolder">
-                  <Directory Id="ApplicationProgramsFolder" Name="BBDrop" />
-                </Directory>
-                <Directory Id="DesktopFolder" Name="Desktop" />
-              </Directory>
-
-              <DirectoryRef Id="ApplicationProgramsFolder">
-                <Component Id="StartMenuShortcut" Guid="*">
-                  <Shortcut Id="StartMenuShortcut"
-                            Name="BBDrop"
-                            Target="[INSTALLFOLDER]bbdrop.exe"
-                            WorkingDirectory="INSTALLFOLDER" />
-                  <RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" />
-                  <RegistryValue Root="HKCU" Key="Software\BBDrop" Name="installed" Type="integer" Value="1" KeyPath="yes" />
-                </Component>
-              </DirectoryRef>
-
-              <DirectoryRef Id="DesktopFolder">
-                <Component Id="DesktopShortcut" Guid="*">
-                  <Shortcut Id="DesktopShortcut"
-                            Name="BBDrop"
-                            Target="[INSTALLFOLDER]bbdrop.exe"
-                            WorkingDirectory="INSTALLFOLDER" />
-                  <RegistryValue Root="HKCU" Key="Software\BBDrop" Name="desktop" Type="integer" Value="1" KeyPath="yes" />
-                </Component>
-              </DirectoryRef>
-            </Product>
-          </Wix>
-          "@
-          $wxsContent | Out-File -FilePath "bbdrop.wxs" -Encoding UTF8
-
-      - name: Build Windows MSI
-        if: runner.os == 'Windows'
-        run: |
-          choco install wixtoolset -y
-          $env:PATH += ";C:\Program Files (x86)\WiX Toolset v3.14\bin"
-          # Use HeatGenerated as the component group name, -arch x64 for 64-bit components
-          heat dir bbdrop -cg HeatGenerated -dr INSTALLFOLDER -scom -sreg -srd -var var.SourceDir -gg -sfrag -arch x64 -out components.wxs
-          candle -arch x64 -dSourceDir=bbdrop bbdrop.wxs components.wxs
-          light -ext WixUIExtension -out "bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.msi" bbdrop.wixobj components.wixobj
-        shell: pwsh
-
-      # Package Unix (portable tarball)
-      - name: Package (Unix)
+      # Rename dist for downstream packaging steps
+      - name: Prepare dist (Unix)
         if: runner.os != 'Windows'
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          FILENAME="bbdrop-$VERSION-${{ matrix.platform }}-${{ matrix.arch }}-portable"
-          mv dist bbdrop
-          tar -czvf "$FILENAME.tar.gz" bbdrop
+        run: mv dist bbdrop
 
       # Create Linux packages (deb, rpm, AppImage)
       - name: Create Linux packages
@@ -470,8 +392,9 @@ jobs:
             "$FILENAME.dmg" \
             "BBDrop.app" || true  # create-dmg returns non-zero even on success sometimes
 
-      # Upload portable artifact
+      # Upload Windows portable zip
       - name: Upload portable artifact
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-portable
@@ -486,15 +409,6 @@ jobs:
           name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup
           path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-setup.exe
           compression-level: 0  # Don't compress the .exe
-          retention-days: 30
-
-      # Upload Windows MSI installer
-      - name: Upload Windows installer (msi)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v7
-        with:
-          name: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}-msi
-          path: bbdrop-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}.msi
           retention-days: 30
 
       # Upload macOS DMG
@@ -556,9 +470,7 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/**/*.zip
-            artifacts/**/*.tar.gz
             artifacts/**/*.exe
-            artifacts/**/*.msi
             artifacts/**/*.dmg
             artifacts/**/*.deb
             artifacts/**/*.rpm
