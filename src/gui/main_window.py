@@ -1156,25 +1156,37 @@ class BBDropGUI(QMainWindow):
             # Show dialog once per critical entry
             if self._disk_dialog_shown_for_tier != tier:
                 self._disk_dialog_shown_for_tier = tier
-                from src.utils.system_utils import format_bytes
-                free_space_str = format_bytes(min(
-                    self._disk_monitor.data_free,
-                    self._disk_monitor.temp_free
-                ))
-
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(
-                    self,
-                    "Low Disk Space",
-                    f"Only {free_space_str} of disk space remaining.\n\n"
-                    f"New uploads have been paused until more space is available.\n\n"
-                    f"Free up disk space to resume uploading.",
-                )
+                # Defer the dialog — if the window isn't visible yet (e.g. still
+                # behind the splash screen), a modal QMessageBox would be hidden
+                # and appear to freeze the app.
+                QTimer.singleShot(0, lambda t=tier: self._show_disk_warning_dialog(t))
 
         # Fire notification for warning/critical/emergency tiers
         if tier in ('warning', 'critical', 'emergency'):
             if hasattr(self, 'notification_manager'):
                 self.notification_manager.notify('disk_space_warning', detail=f'Disk space: {tier}')
+
+    def _show_disk_warning_dialog(self, tier: str):
+        """Show the low disk space warning, deferring if the window isn't visible yet."""
+        if not self.isVisible():
+            # Window still hidden (splash screen up) — retry after event loop settles
+            QTimer.singleShot(500, lambda t=tier: self._show_disk_warning_dialog(t))
+            return
+
+        from src.utils.system_utils import format_bytes
+        free_space_str = format_bytes(min(
+            self._disk_monitor.data_free,
+            self._disk_monitor.temp_free
+        ))
+
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.warning(
+            self,
+            "Low Disk Space",
+            f"Only {free_space_str} of disk space remaining.\n\n"
+            f"New uploads have been paused until more space is available.\n\n"
+            f"Free up disk space to resume uploading.",
+        )
 
     def _on_disk_space_updated(self, data_free: int, temp_free: int):
         """Update the status bar label with current free space."""
