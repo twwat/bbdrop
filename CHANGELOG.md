@@ -4,6 +4,15 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.4] - 2026-03-18 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.3...v0.9.4))
+
+### Changed
+- Removed portable tarball builds for Linux and macOS (use AppImage or .deb/.dmg instead)
+- Removed Windows MSI installer (use the Inno Setup .exe or portable .zip instead)
+
+### Fixed
+- **Disk space warning freezes startup**: When disk space was already low at launch, the warning dialog appeared behind the splash screen, making the app appear frozen — now defers until the main window is visible
+
 ## [0.9.3] - 2026-03-18 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.2...v0.9.3))
 
 ### Added
