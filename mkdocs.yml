@@ -93,6 +93,7 @@ nav:
   - Architecture:
     - architecture/index.md
     - System Overview: architecture/system-context.md
+    - Application Components: architecture/containers.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md

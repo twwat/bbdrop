@@ -79,5 +79,6 @@ Quick lookup for settings, shortcuts, and parameters.
 ## Architecture & Decisions
 
 - [System Overview](architecture/system-context.md) — C4 system context diagram
+- [Application Components](architecture/containers.md) — C4 container diagram
 
 
