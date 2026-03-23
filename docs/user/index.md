@@ -18,6 +18,8 @@ New to BBDrop? Start here.
 
 Step-by-step walkthroughs for common workflows.
 
+- [Setting Up IMX.to](tutorials/imx-setup.md) — Configure authentication, thumbnails, and gallery renaming
+
 ## Guides
 
 Task-oriented instructions for specific features.
