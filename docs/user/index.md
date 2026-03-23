@@ -14,6 +14,10 @@ New to BBDrop? Start here.
 
 ---
 
+## Tutorials
+
+Step-by-step walkthroughs for common workflows.
+
 ## Guides
 
 Task-oriented instructions for specific features.
