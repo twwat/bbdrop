@@ -505,14 +505,14 @@ class FileHostWorker(QThread):
                 except Exception as e:
                     spinup_error = str(e)
                     last_exception = e
-                    self._log(f"Credential test exception: {spinup_error}", level="error")
+                    self._log(f"Credential test exception: {spinup_error}", level="debug")
 
                 # Handle spinup error (from either credential failure or exception)
                 if spinup_error:
                     # Check if this is an auth error (no retry) vs network error (retry)
                     if not spinup_retry_enabled or not self._is_spinup_network_error(last_exception, spinup_error):
                         # Auth error or retry disabled - fail immediately
-                        self._log(f"Authentication error, failing immediately: {spinup_error}", level="warning")
+                        self._log(f"Authentication error, failing immediately: {spinup_error}", level="info")
                         self.status_updated.emit(self.host_id, "failed:Authentication failed")
                         break
 
