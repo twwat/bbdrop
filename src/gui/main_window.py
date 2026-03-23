@@ -120,6 +120,7 @@ from src.gui.table_row_manager import TableRowManager
 from src.gui.settings_manager import SettingsManager
 from src.gui.theme_manager import ThemeManager
 from src.gui.menu_manager import MenuManager
+from src.gui.upload_lifecycle_handler import UploadLifecycleHandler
 
 
 # Import queue manager classes - adding one at a time
@@ -598,6 +599,7 @@ class BBDropGUI(QMainWindow):
         self.settings_manager = SettingsManager(self)
         self.theme_manager = ThemeManager(self)
         self.menu_manager = MenuManager(self)
+        self.upload_lifecycle_handler = UploadLifecycleHandler(self)
         self._update_checker = None  # Initialize update checker reference
 
         # Now connect queue status changes (after worker_signal_handler is ready)
@@ -3477,518 +3479,95 @@ class BBDropGUI(QMainWindow):
                 return []
 
     def on_gallery_started(self, path: str, total_images: int):
-        """Handle gallery start"""
-        with QMutexLocker(self.queue_manager.mutex):
-            if path in self.queue_manager.items:
-                item = self.queue_manager.items[path]
-                item.total_images = total_images
-                item.uploaded_images = 0
+        """Handle gallery start.
 
-        # Check for file host auto-upload triggers (on_started)
-        try:
-            from src.core.file_host_config import get_config_manager
-            config_manager = get_config_manager()
-            triggered_hosts = config_manager.get_hosts_by_trigger('started')
+        Delegates to UploadLifecycleHandler.on_gallery_started()
+        """
+        self.upload_lifecycle_handler.on_gallery_started(path, total_images)
 
-            if triggered_hosts:
-                log(f"Gallery started trigger: Found {len(triggered_hosts)} enabled hosts with 'On Started' trigger",
-                    level="info", category="file_hosts")
-
-                for host_id, host_config in triggered_hosts.items():
-                    # Queue upload to this file host (use host_id, not display name)
-                    upload_id = self.queue_manager.store.add_file_host_upload(
-                        gallery_path=path,
-                        host_name=host_id,  # host_id like 'filedot', not display name
-                        status='pending'
-                    )
-
-                    if upload_id:
-                        log(f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
-                            level="info", category="file_hosts")
-                        self.worker_signal_handler._update_filehost_queue_for_host(host_id)
-                    else:
-                        log(f"Failed to queue file host upload for {path} to {host_config.name}",
-                            level="error", category="file_hosts")
-        except Exception as e:
-            log(f"Error checking file host triggers on gallery start: {e}", level="error", category="file_hosts")
-
-        # Update only the specific row status instead of full table refresh
-        # Use O(1) path lookup instead of O(n) row iteration
-        row = self._get_row_for_path(path)
-        if row is not None:
-            # Update uploaded count
-            uploaded_text = f"0/{total_images}"
-            uploaded_item = QTableWidgetItem(uploaded_text)
-            uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.gallery_table.setItem(row, GalleryTableWidget.COL_UPLOADED, uploaded_item)
-
-            # Update status cell
-            current_status = item.status
-            self._set_status_cell_icon(row, current_status)
-            self._set_status_text_cell(row, current_status)
-
-            # Update action buttons
-            action_widget = self.gallery_table.cellWidget(row, GalleryTableWidget.COL_ACTION)
-            if isinstance(action_widget, ActionButtonWidget):
-                action_widget.update_buttons(current_status)
-        
-        # Update button counts and progress after gallery starts
-        QTimer.singleShot(0, self.progress_tracker._update_counts_and_progress)
-    
     def on_progress_updated(self, path: str, completed: int, total: int, progress_percent: int, current_image: str):
-        """Handle progress updates from worker - NON-BLOCKING"""
-        # Only update the data model (fast operation)
-        with QMutexLocker(self.queue_manager.mutex):
-            if path in self.queue_manager.items:
-                item = self.queue_manager.items[path]
-                item.uploaded_images = completed
-                item.total_images = total
-                item.progress = progress_percent
-                item.current_image = current_image
-                # Update live transfer speed using centralized BandwidthManager
-                try:
-                    # Only update speed if it's currently uploading
-                    if item.status == "uploading":
-                        item.current_kibps = self.worker_signal_handler.bandwidth_manager.get_imx_bandwidth()
-                except Exception as e:
-                    log(f"Exception in main_window: {e}", level="error", category="ui")
-                    raise
+        """Handle progress updates from worker.
 
-        # Add to batched progress updates for non-blocking GUI updates
-        self._progress_batcher.add_update(path, completed, total, progress_percent, current_image)
-        
+        Delegates to UploadLifecycleHandler.on_progress_updated()
+        """
+        self.upload_lifecycle_handler.on_progress_updated(path, completed, total, progress_percent, current_image)
+
     def _process_batched_progress_update(self, path: str, completed: int, total: int, progress_percent: int, current_image: str):
-        """Process batched progress updates on main thread - minimal operations only"""
-        try:
-            # Get fresh data from model
-            item = self.queue_manager.get_item(path)
-            if not item:
-                return
-                
-            # Find row (thread-safe lookup)
-            matched_row = self._get_row_for_path(path)
-            if matched_row is None or matched_row >= self.gallery_table.rowCount():
-                return
-                
-            # Update essential columns directly since table update queue may not work
-            # Upload progress column (column 2)
-            uploaded_text = f"{completed}/{total}" if total > 0 else "0/?"
-            uploaded_item = QTableWidgetItem(uploaded_text)
-            uploaded_item.setFlags(uploaded_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.gallery_table.setItem(matched_row, GalleryTableWidget.COL_UPLOADED, uploaded_item)
-            
-            # Progress bar (column 3)
-            progress_widget = self.gallery_table.cellWidget(matched_row, 3)
-            if isinstance(progress_widget, TableProgressWidget):
-                progress_widget.update_progress(progress_percent, item.status)
-            
-            # Transfer speed column (column 10) - show live speed for uploading items
-            if item.status == "uploading":
-                current_rate_kib = float(getattr(item, 'current_kibps', 0.0) or 0.0)
-                try:
-                    from src.utils.format_utils import format_binary_rate
-                    if current_rate_kib > 0:
-                        transfer_text = format_binary_rate(current_rate_kib, precision=2)
-                    else:
-                        # Show visual indicator even when speed is 0
-                        transfer_text = "Uploading..."
-                except Exception as e:
-                    log(f"Rate formatting failed: {e}", level="warning", category="ui")
-                    if current_rate_kib > 0:
-                        transfer_text = self._format_rate_consistent(current_rate_kib)
-                    else:
-                        transfer_text = "Uploading..."
-                
-                xfer_item = QTableWidgetItem(transfer_text)
-                xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                # Use live transfer color
-                theme_mode = self._current_theme_mode
-                xfer_item.setForeground(QColor(173, 216, 255, 255) if theme_mode == 'dark' else QColor(20, 90, 150, 255))
-                self.gallery_table.setItem(matched_row, GalleryTableWidget.COL_TRANSFER, xfer_item)
-            
-            # Handle completion when all images uploaded OR progress reaches 100%
-            if completed >= total or progress_percent >= 100:
-                # Set finished timestamp if not already set
-                if not item.finished_time:
-                    item.finished_time = time.time()
+        """Process batched progress updates on main thread.
 
-                # If there were failures (based on item.uploaded_images vs total), show Failed; else Completed
-                final_status_text = "Completed"
-                row_failed = False
-                if item.total_images and item.uploaded_images is not None and item.uploaded_images < item.total_images:
-                    final_status_text = "Failed"
-                    row_failed = True
-                item.status = "completed" if not row_failed else "failed"
-                # Final icon and text
-                self._set_status_cell_icon(matched_row, item.status)
-                self._set_status_text_cell(matched_row, item.status)
+        Delegates to UploadLifecycleHandler._process_batched_progress_update()
+        """
+        self.upload_lifecycle_handler._process_batched_progress_update(path, completed, total, progress_percent, current_image)
 
-                # Update action buttons for completed status
-                action_widget = self.gallery_table.cellWidget(matched_row, GalleryTableWidget.COL_ACTION)
-                if isinstance(action_widget, ActionButtonWidget):
-                    action_widget.update_buttons(item.status)
-                
-                # Update finished time column
-                finished_text, finished_tooltip = format_timestamp_for_display(item.finished_time)
-                finished_item = QTableWidgetItem(finished_text)
-                finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if finished_tooltip:
-                    finished_item.setToolTip(finished_tooltip)
-                    pass
-                self.gallery_table.setItem(matched_row, GalleryTableWidget.COL_FINISHED, finished_item)
-
-                # Compute and freeze final transfer speed for this item
-                try:
-                    elapsed = max(float(item.finished_time or time.time()) - float(item.start_time or item.finished_time), 0.001)
-                    item.final_kibps = (float(getattr(item, 'uploaded_bytes', 0) or 0) / elapsed) / 1024.0
-                    item.current_kibps = 0.0
-                except Exception as e:
-                    log(f"Exception in main_window: {e}", level="error", category="ui")
-                    raise
-                
-                # Render Transfer column (10) - use cached function
-                try:
-                    if hasattr(self, '_format_binary_rate'):
-                        final_text = self._format_binary_rate(item.final_kibps, precision=1) if item.final_kibps > 0 else ""
-                    else:
-                        final_text = f"{item.final_kibps:.1f} KiB/s" if item.final_kibps > 0 else ""
-                except Exception as e:
-                    log(f"Final rate formatting failed: {e}", level="warning", category="ui")
-                    final_text = ""
-                xfer_item = QTableWidgetItem(final_text)
-                xfer_item.setFlags(xfer_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                xfer_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-                try:
-                    if final_text:
-                        xfer_item.setForeground(QColor(0, 0, 0, 160))
-                except Exception as e:
-                    log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-                    raise
-                self.gallery_table.setItem(matched_row, GalleryTableWidget.COL_TRANSFER, xfer_item)
-                
-            # Update overall progress bar and info/speed displays after individual table updates
-            self.progress_tracker.update_progress_display()
-                
-        except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise  # Fail silently to prevent blocking
-    
     def on_gallery_completed(self, path: str, results: dict):
-        """Handle gallery completion - minimal GUI thread work, everything else deferred"""
-        # ONLY critical GUI updates on the main thread - keep this minimal!
-        with QMutexLocker(self.queue_manager.mutex):
-            if path in self.queue_manager.items:
-                item = self.queue_manager.items[path]
-                # Essential status update only
-                total = int(results.get('total_images') or 0)
-                success = int(results.get('successful_count') or len(results.get('images', [])))
-                item.total_images = total or item.total_images
-                item.uploaded_images = success
-                is_success = success >= (total or success)
-                item.status = "completed" if is_success else "failed"
-                item.progress = 100 if is_success else int((success / max(total, 1)) * 100)
-                item.gallery_url = results.get('gallery_url', '')
-                item.gallery_id = results.get('gallery_id', '')
-                # Ensure failed galleries have error details from engine results
-                if not is_success:
-                    failed_details = results.get('failed_details', [])
-                    failed_count = int(results.get('failed_count') or 0)
-                    if failed_details and not item.failed_files:
-                        item.failed_files = failed_details
-                    if not item.error_message and failed_count:
-                        item.error_message = f"{failed_count} of {total} images failed to upload"
-                item.finished_time = time.time()
-                # Quick transfer rate calculation
-                try:
-                    elapsed = max(float(item.finished_time or time.time()) - float(item.start_time or item.finished_time), 0.001)
-                    item.final_kibps = (float(results.get('uploaded_size', 0) or 0) / elapsed) / 1024.0
-                    item.current_kibps = 0.0
-                except Exception as e:
-                    log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-                    raise
+        """Handle gallery completion.
 
-        # Check for file host auto-upload triggers (on_completed)
-        try:
-            from src.core.file_host_config import get_config_manager
-            config_manager = get_config_manager()
-            triggered_hosts = config_manager.get_hosts_by_trigger('completed')
+        Delegates to UploadLifecycleHandler.on_gallery_completed()
+        """
+        self.upload_lifecycle_handler.on_gallery_completed(path, results)
 
-            if triggered_hosts:
-                log(f"Gallery completed trigger: Found {len(triggered_hosts)} enabled hosts with 'On Completed' trigger",
-                    level="info", category="file_hosts")
-
-                for host_id, host_config in triggered_hosts.items():
-                    # Queue upload to this file host (use host_id, not display name)
-                    upload_id = self.queue_manager.store.add_file_host_upload(
-                        gallery_path=path,
-                        host_name=host_id,  # host_id like 'filedot', not display name
-                        status='pending'
-                    )
-
-                    if upload_id:
-                        log(f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})", level="info", category="file_hosts")
-                        self.worker_signal_handler._update_filehost_queue_for_host(host_id)
-                    else:
-                        log(f"Failed to queue file host upload for {path} to {host_config.name}", level="error", category="file_hosts")
-        except Exception as e:
-            log(f"Error checking file host triggers on gallery completion: {e}", level="error", category="file_hosts")
-
-        # Force final progress update to show 100% completion
-        if path in self.queue_manager.items:
-            final_item = self.queue_manager.items[path]
-            self._progress_batcher.add_update(path, final_item.uploaded_images, final_item.total_images, 100, "")
-        
-        # Cleanup temp folder if from archive
-        if path in self.queue_manager.items:
-            itm = self.queue_manager.items[path]
-            if getattr(itm, 'is_from_archive', False):
-                QTimer.singleShot(0, lambda p=path: self.archive_coordinator.service.cleanup_temp_dir(p))
-
-        # Delegate heavy file I/O to background thread immediately
-        self.completion_worker.process_completion(path, results, self)
-
-        # Handle other completion work synchronously to avoid UI race conditions
-        self._handle_completion_immediate(path, results)
-    
     def _handle_completion_immediate(self, path: str, results: dict):
-        """Handle completion work immediately on GUI thread to maintain UI consistency"""
-        # Core engine already logs upload completion details, no need to duplicate
-        
-        # Update current transfer speed immediately
-        try:
-            transfer_speed = float(results.get('transfer_speed', 0) or 0)
-            self.progress_tracker._current_transfer_kbps = transfer_speed / 1024.0
-            # Also update the item's speed for consistency
-            with QMutexLocker(self.queue_manager.mutex):
-                if path in self.queue_manager.items:
-                    item = self.queue_manager.items[path]
-                    item.final_kibps = self.progress_tracker._current_transfer_kbps
-        except Exception as e:
-            log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-            raise
-        
-        # Re-enable settings if no remaining active items (defer to avoid blocking)
-        #QTimer.singleShot(5, self._check_and_enable_settings)
+        """Handle completion work immediately on GUI thread.
 
-        # Update display with targeted update instead of full rebuild
-        self._update_specific_gallery_display(path)
-
-        # Auto-clear completed gallery if enabled
-        from src.utils.paths import load_user_defaults
-        defaults = load_user_defaults()
-        if defaults.get('auto_clear_completed', False):
-            # Get item to check if it's actually completed (not failed)
-            item = self.queue_manager.get_item(path)
-            if item and item.status == "completed":
-                QTimer.singleShot(100, lambda: self._remove_gallery_from_table(path))
-
-
-        # Update button counts and progress after status change
-        QTimer.singleShot(0, self.progress_tracker._update_counts_and_progress)
-
-        # Defer only the heavy stats update to avoid blocking
-        QTimer.singleShot(50, lambda: self._update_stats_deferred(results))
-
-        # Fire notification
-        if hasattr(self, 'notification_manager'):
-            self.notification_manager.notify('gallery_completed')
+        Delegates to UploadLifecycleHandler._handle_completion_immediate()
+        """
+        self.upload_lifecycle_handler._handle_completion_immediate(path, results)
 
     def _update_stats_deferred(self, results: dict):
-        """Update cumulative stats in background"""
-        try:
-            successful_count = results.get('successful_count', 0)
-            settings = QSettings("BBDropUploader", "Stats")
-            total_galleries = settings.value("total_galleries", 0, type=int) + 1
-            total_images_acc = settings.value("total_images", 0, type=int) + successful_count
-            base_total_str = settings.value("total_size_bytes_v2", "0")
-            try:
-                base_total = int(str(base_total_str))
-            except Exception as e:
-                log(f"Failed to parse total_size_bytes_v2: {e}", level="warning", category="stats")
-                base_total = settings.value("total_size_bytes", 0, type=int)
-            total_size_acc = base_total + int(results.get('uploaded_size', 0) or 0)
-            transfer_speed = float(results.get('transfer_speed', 0) or 0)
-            current_kbps = transfer_speed / 1024.0
-            fastest_kbps = settings.value("fastest_kbps", 0.0, type=float)
-            if current_kbps > fastest_kbps:
-                fastest_kbps = current_kbps
-                # Save timestamp when new record is set
-                from datetime import datetime
-                settings.setValue("fastest_kbps_timestamp",
-                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            settings.setValue("total_galleries", total_galleries)
-            settings.setValue("total_images", total_images_acc)
-            settings.setValue("total_size_bytes_v2", str(total_size_acc))
-            settings.setValue("fastest_kbps", fastest_kbps)
-            settings.sync()
-            # Refresh progress display to show updated stats
-            self.progress_tracker.update_progress_display()
-        except Exception as e:
-            log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-            raise
+        """Update cumulative stats in background.
+
+        Delegates to UploadLifecycleHandler._update_stats_deferred()
+        """
+        self.upload_lifecycle_handler._update_stats_deferred(results)
 
     def on_ext_fields_updated(self, path: str, ext_fields: dict):
-        """Handle ext fields update from external hooks"""
-        try:
-            log(f"on_ext_fields_updated called: path={path}, ext_fields={ext_fields}", level="info", category="hooks")
+        """Handle ext fields update from external hooks.
 
-            # Update the item in the queue manager (already done by worker)
-            # Just need to refresh the table row to show the new values
-            with QMutexLocker(self.queue_manager.mutex):
-                if path in self.queue_manager.items:
-                    item = self.queue_manager.items[path]
-                    log(f"Found item in queue_manager: {item.name}", level="debug", category="hooks")
+        Delegates to UploadLifecycleHandler.on_ext_fields_updated()
+        """
+        self.upload_lifecycle_handler.on_ext_fields_updated(path, ext_fields)
 
-                    # Get the actual table widget - SAME PATTERN AS _populate_table_row
-                    actual_table = getattr(self.gallery_table, 'table', self.gallery_table)
-                    log(f"Using actual_table: {type(actual_table).__name__}", level="debug", category="hooks")
-
-                    # Use O(1) path lookup instead of O(n) row iteration
-                    row = self._get_row_for_path(path)
-                    if row is not None and actual_table:
-                        log(f"Found matching row {row} for path {path}", level="debug", category="hooks")
-
-                        # Block signals to prevent itemChanged events during update
-                        signals_blocked = actual_table.signalsBlocked()
-                        actual_table.blockSignals(True)
-                        try:
-                            # Update ext columns
-                            for ext_field, value in ext_fields.items():
-                                log(f"Processing ext_field={ext_field}, value={value}", level="debug", category="hooks")
-                                if ext_field == 'ext1':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT1, ext_item)
-                                    log(f"Set COL_EXT1 (col {GalleryTableWidget.COL_EXT1}) to: {value}", level="trace", category="hooks")
-                                elif ext_field == 'ext2':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT2, ext_item)
-                                    log(f"Set COL_EXT2 (col {GalleryTableWidget.COL_EXT2}) to: {value}", level="trace", category="hooks")
-                                elif ext_field == 'ext3':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT3, ext_item)
-                                    log(f"Set COL_EXT3 (col {GalleryTableWidget.COL_EXT3}) to: {value}", level="trace", category="hooks")
-                                elif ext_field == 'ext4':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT4, ext_item)
-                                    log(f"Set COL_EXT4 (col {GalleryTableWidget.COL_EXT4}) to: {value}", level="trace", category="hooks")
-                        finally:
-                            # Restore original signal state
-                            actual_table.blockSignals(signals_blocked)
-
-                        log(f"Updated ext fields in GUI for {item.name}: {ext_fields}", level="info", category="hooks")
-                        # Trigger artifact regeneration for ext field changes if enabled
-                        def _maybe_regen(p=path):
-                            if self.artifact_handler.should_auto_regenerate_bbcode(p):
-                                self.artifact_handler.regenerate_bbcode_for_gallery(
-                                    p, force=False
-                                )
-                        QTimer.singleShot(100, _maybe_regen)
-                    elif not actual_table:
-                        log(f"WARNING: Table is None!", level="debug", category="hooks")
-                else:
-                    log(f"Path {path} not found in queue_manager.items", level="debug", category="hooks")
-        except Exception as e:
-            log(f"Error updating ext fields in GUI: {e}", level="error", category="hooks")
-            import traceback
-            traceback.print_exc()
-
-    
     def on_completion_processed(self, path: str):
-        """Handle when background completion processing is done"""
-        # Background file generation is complete, nothing specific needed here
-        # but could trigger additional UI updates if needed in the future
-        pass
-    
-    
+        """Handle when background completion processing is done.
+
+        Delegates to UploadLifecycleHandler.on_completion_processed()
+        """
+        self.upload_lifecycle_handler.on_completion_processed(path)
+
     def on_gallery_exists(self, gallery_name: str, existing_files: list):
-        """Handle existing gallery detection"""
-        json_count = sum(1 for f in existing_files if f.lower().endswith('.json'))
-        message = f"Gallery '{gallery_name}' already exists with {json_count} .json file{'' if json_count == 1 else 's'}.\n\nContinue with upload anyway?"
-        msgbox = QMessageBox(self)
-        msgbox.setWindowTitle("Gallery Already Exists")
-        msgbox.setText(message)
-        msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msgbox.setDefaultButton(QMessageBox.StandardButton.No)
-        msgbox.open()
-        msgbox.finished.connect(lambda result: self._handle_upload_gallery_exists_confirmation(result))
-    
+        """Handle existing gallery detection.
+
+        Delegates to UploadLifecycleHandler.on_gallery_exists()
+        """
+        self.upload_lifecycle_handler.on_gallery_exists(gallery_name, existing_files)
+
     def _handle_upload_gallery_exists_confirmation(self, result):
-        """Handle upload gallery exists confirmation"""
-        if result != QMessageBox.StandardButton.Yes:
-            # Cancel the upload
-            log(f"Upload cancelled by user due to existing gallery", level="info", category="ui")
-            # TODO: Implement proper cancellation mechanism
-        else:
-            log("User chose to continue with existing gallery", level="info", category="ui")
+        """Handle upload gallery exists confirmation.
+
+        Delegates to UploadLifecycleHandler._handle_upload_gallery_exists_confirmation()
+        """
+        self.upload_lifecycle_handler._handle_upload_gallery_exists_confirmation(result)
 
     def on_gallery_renamed(self, gallery_id: str):
-        """Mark cells for the given gallery_id as renamed (check icon) - optimized version."""
-        # Update unnamed gallery count
-        self.progress_tracker._update_unnamed_count_background()
-        # Defer the expensive operation to avoid blocking GUI
-        QTimer.singleShot(1, lambda: self._handle_gallery_renamed_background(gallery_id))
-    
+        """Mark cells for the given gallery_id as renamed.
+
+        Delegates to UploadLifecycleHandler.on_gallery_renamed()
+        """
+        self.upload_lifecycle_handler.on_gallery_renamed(gallery_id)
+
     def _handle_gallery_renamed_background(self, gallery_id: str):
-        """Handle gallery renamed in background to avoid blocking"""
-        try:
-            # Find the gallery by ID using path mapping instead of full traversal
-            found_row = None
-            for path, row in self.path_to_row.items():
-                item = self.queue_manager.get_item(path)
-                if item and item.gallery_id == gallery_id:
-                    found_row = row
-                    break
-            
-            if found_row is not None and item is not None:
-                # Guard: only mark renamed for hosts that support gallery rename
-                host_id = getattr(item, 'image_host_id', 'imx') or 'imx'
-                if host_id == 'imx':
-                    self._set_renamed_cell_icon(found_row, True)
-        except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise
+        """Handle gallery renamed in background.
+
+        Delegates to UploadLifecycleHandler._handle_gallery_renamed_background()
+        """
+        self.upload_lifecycle_handler._handle_gallery_renamed_background(gallery_id)
 
     def on_gallery_failed(self, path: str, error_message: str):
-        """Handle gallery failure"""
-        with QMutexLocker(self.queue_manager.mutex):
-            if path in self.queue_manager.items:
-                item = self.queue_manager.items[path]
-                item.status = "failed"
-                item.error_message = error_message
-        
-        # Re-enable settings if no remaining active (queued/uploading) items
-        #try:
-        #    remaining = self.queue_manager.get_all_items()
-        #    any_active = any(i.status in ("queued", "uploading") for i in remaining)
-        #    self.settings_group.setEnabled(not any_active)
-        #except Exception as e:
-        #    log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-        #    raise
+        """Handle gallery failure.
 
-        # Update display when status changes  
-        self._update_specific_gallery_display(path)
-        
-        # Update button counts and progress after status change
-        QTimer.singleShot(0, self.progress_tracker._update_counts_and_progress)
-        
-        gallery_name = os.path.basename(path)
-        log(f"Failed: {gallery_name} - {error_message}", level="warning")
-
-        # Fire notification
-        if hasattr(self, 'notification_manager'):
-            self.notification_manager.notify('gallery_failed', detail=error_message[:80])
+        Delegates to UploadLifecycleHandler.on_gallery_failed()
+        """
+        self.upload_lifecycle_handler.on_gallery_failed(path, error_message)
 
     def _ensure_log_visible(self):
         """Ensure log is scrolled to bottom - called via QTimer for thread safety"""
