@@ -501,6 +501,8 @@ class WorkerStatusWidget(QWidget):
     open_settings_tab_requested = pyqtSignal(int)  # tab_index for settings dialog
     image_host_enabled_changed = pyqtSignal(str, bool)  # host_id, enabled
     file_host_enabled_changed = pyqtSignal(str, bool)  # host_id, enabled
+    primary_host_change_requested = pyqtSignal(str)  # host_id — set as default image host
+    cover_host_change_requested = pyqtSignal(str)    # host_id — set as cover image host
 
     def __init__(self, parent=None):
         """Initialize worker status widget."""
@@ -760,19 +762,28 @@ class WorkerStatusWidget(QWidget):
 
         elif worker.worker_type == 'filehost':
             fh_id = worker.host_id or worker.hostname.lower()
-            enabled = get_file_host_setting(fh_id, "enabled", "bool")
-            trigger = get_file_host_setting(fh_id, "trigger", "str")
-            has_auto = enabled and trigger and trigger != "disabled"
 
-            if has_auto:
-                key = 'status-active'
-                tip = f"Auto-upload: {trigger}"
-            elif enabled:
-                key = 'status-enabled'
-                tip = "Enabled"
-            else:
+            # Runtime status overrides INI — if the worker failed or is disabled
+            # at runtime, show that regardless of what the config file says
+            if worker.status in ('failed', 'disabled'):
                 key = 'status-disabled'
-                tip = "Disabled"
+                tip = worker.status.capitalize()
+                if worker.status == 'failed' and worker.error_message:
+                    tip = f"Failed: {worker.error_message}"
+            else:
+                enabled = get_file_host_setting(fh_id, "enabled", "bool")
+                trigger = get_file_host_setting(fh_id, "trigger", "str")
+                has_auto = enabled and trigger and trigger != "disabled"
+
+                if has_auto:
+                    key = 'status-active'
+                    tip = f"Auto-upload: {trigger}"
+                elif enabled:
+                    key = 'status-enabled'
+                    tip = "Enabled"
+                else:
+                    key = 'status-disabled'
+                    tip = "Disabled"
         else:
             key = 'status-enabled'
             tip = "Enabled"
@@ -2270,6 +2281,26 @@ class WorkerStatusWidget(QWidget):
                 disable_action.triggered.connect(lambda: self._set_image_host_enabled(host_id, False))
             else:
                 disable_action.triggered.connect(lambda: self._set_host_enabled(host_id, False))
+
+        # Image host role actions (primary / cover)
+        if is_image_host and enabled:
+            menu.addSeparator()
+            is_primary = (host_id == self._active_image_host)
+            primary_action = menu.addAction("Set as Primary Host")
+            primary_action.setCheckable(True)
+            primary_action.setChecked(is_primary)
+            primary_action.setEnabled(not is_primary)
+            primary_action.triggered.connect(lambda: self.primary_host_change_requested.emit(host_id))
+
+            settings = QSettings("BBDropUploader", "BBDropGUI")
+            covers_on = settings.value('cover/enabled', False, type=bool)
+            current_cover = settings.value('cover/host_id', 'imx', type=str)
+            is_cover = covers_on and (host_id == current_cover)
+            cover_action = menu.addAction("Set as Cover Host")
+            cover_action.setCheckable(True)
+            cover_action.setChecked(is_cover)
+            cover_action.setEnabled(not is_cover)
+            cover_action.triggered.connect(lambda: self.cover_host_change_requested.emit(host_id))
 
         # Auto-upload trigger submenu (only for file hosts)
         if not is_image_host:

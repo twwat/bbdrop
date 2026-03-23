@@ -2520,6 +2520,20 @@ class BBDropGUI(QMainWindow):
         if hasattr(self, 'worker_signal_handler'):
             self.worker_signal_handler.register_image_host_workers()
 
+    def _set_primary_image_host(self, host_id: str):
+        """Set the default image host from worker status right-click menu."""
+        for i in range(self.image_host_combo.count()):
+            if self.image_host_combo.itemData(i) == host_id:
+                self.image_host_combo.setCurrentIndex(i)
+                return
+
+    def _set_cover_image_host(self, host_id: str):
+        """Set the cover image host from worker status right-click menu."""
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        settings.setValue('cover/host_id', host_id)
+        self.worker_status_widget.refresh_icons()
+
     def _on_file_host_enabled_changed(self, host_id: str, enabled: bool):
         """Handle file host enable/disable from worker status right-click menu."""
         if not hasattr(self, 'file_host_manager') or not self.file_host_manager:
