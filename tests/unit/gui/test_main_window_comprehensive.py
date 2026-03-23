@@ -33,6 +33,7 @@ from src.gui.main_window import (
     BBDropGUI, CompletionWorker, SingleInstanceServer,
     NumericTableWidgetItem, format_timestamp_for_display
 )
+from src.gui.gallery_table_controller import GalleryTableController
 
 
 # ============================================================================
@@ -239,6 +240,7 @@ def create_minimal_window(qtbot, comprehensive_mock_dependencies):
             self._upload_animation_timer = Mock()
             self.theme_manager = Mock()
             self.gallery_queue_controller = Mock()
+            self.gallery_table_controller = GalleryTableController(self)
             self._thread_pool = Mock()
             self._current_theme_mode = 'light'
             self._refresh_file_host_widgets_for_gallery_id = Mock()
