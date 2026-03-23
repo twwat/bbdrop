@@ -14,3 +14,4 @@ New ADRs should use the `NNN-slug.md` naming convention and follow
 |-----|-------|--------|
 | [001](001-pycurl-over-requests.md) | pycurl over requests for upload clients | Accepted |
 | [002](002-single-instance-architecture.md) | Single-instance architecture | Accepted |
+| [003](003-credential-storage.md) | Fernet encryption with OS keyring | Accepted |

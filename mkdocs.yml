@@ -98,6 +98,7 @@ nav:
     - decisions/index.md
     - "001: pycurl Over requests": decisions/001-pycurl-over-requests.md
     - "002: Single-Instance Architecture": decisions/002-single-instance-architecture.md
+    - "003: Credential Storage": decisions/003-credential-storage.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md
