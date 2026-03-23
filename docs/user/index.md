@@ -80,5 +80,6 @@ Quick lookup for settings, shortcuts, and parameters.
 
 - [System Overview](architecture/system-context.md) — C4 system context diagram
 - [Application Components](architecture/containers.md) — C4 container diagram
+- [Decision Log](decisions/index.md) — Architecture Decision Records
 
 
