@@ -2242,8 +2242,13 @@ class WorkerStatusWidget(QWidget):
         else:
             return
 
-        # Get settings based on host type
-        if is_image_host:
+        # Get settings based on host type — check runtime status first
+        # (a worker that failed spinup is effectively disabled even if INI says enabled)
+        worker_obj = self._workers.get(worker_id) if worker_id in self._workers else None
+        if worker_obj and worker_obj.status in ('failed', 'disabled'):
+            enabled = False
+            trigger = "disabled"
+        elif is_image_host:
             enabled = is_image_host_enabled(host_id)
             trigger = "disabled"  # Image hosts don't use triggers yet
         else:
