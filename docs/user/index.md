@@ -51,6 +51,7 @@ Task-oriented instructions for specific features.
 Understand how BBDrop works under the hood.
 
 - [Upload Pipeline](explanation/upload-pipeline.md) — How galleries flow from queue to hosted images
+- [Security Model](explanation/security-model.md) — Credential encryption, transport security, and thread safety
 
 ## Reference
 
