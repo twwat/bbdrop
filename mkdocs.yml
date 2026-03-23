@@ -85,6 +85,8 @@ nav:
     - Hooks & Automation: guides/hooks.md
     - Credential Management: guides/credential-management.md
     - Theme Customization: guides/theme-customization.md
+  - Explanation:
+    - explanation/index.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md

@@ -46,6 +46,10 @@ Task-oriented instructions for specific features.
 
 ---
 
+## Explanation
+
+Understand how BBDrop works under the hood.
+
 ## Reference
 
 Quick lookup for settings, shortcuts, and parameters.
