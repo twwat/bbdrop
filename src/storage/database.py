@@ -83,16 +83,19 @@ class _ConnectionContext:
         return False
 
 
+_SCHEMA_VERSION = 10  # Bump this when adding new migrations
+
+
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     """Ensure database schema is created and migrations are run.
 
-    Uses module-level tracking to avoid repeated schema introspection.
-    Only runs full schema creation once per database path per process.
+    Uses a stored schema version to skip migration checks on startup
+    when the database is already up to date.
     """
     # Get database path from connection to track initialization
     db_path = conn.execute("PRAGMA database_list").fetchone()[2]
 
-    # Early return if already initialized for this database
+    # Early return if already initialized this process
     if db_path in _schema_initialized_dbs:
         return
 
@@ -195,30 +198,39 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS file_host_uploads_host_status_idx ON file_host_uploads(host_name, status);
         """
     )
-    # Run migrations after core schema creation (this adds tab_name column and indexes)
-    _run_migrations(conn)
+    # Check stored schema version — skip migrations if already current
+    cur = conn.execute("SELECT value_text FROM settings WHERE key = 'schema_version'")
+    row = cur.fetchone()
+    stored_version = int(row[0]) if row else 0
 
-    # Mark this database as initialized to skip future calls
+    if stored_version < _SCHEMA_VERSION:
+        _run_migrations(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO settings(key, value_text) VALUES('schema_version', ?)",
+            (str(_SCHEMA_VERSION),)
+        )
+
+    # Mark this database as initialized to skip future calls within this process
     _schema_initialized_dbs.add(db_path)
 
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
     """Run database migrations to add new columns/features."""
     try:
+        # Fetch column lists ONCE for each table (avoid repeated PRAGMA calls)
+        gallery_columns = {col[1] for col in conn.execute("PRAGMA table_info(galleries)").fetchall()}
+        fh_columns = {col[1] for col in conn.execute("PRAGMA table_info(file_host_uploads)").fetchall()}
+
         # Migration 1: Add failed_files column if it doesn't exist
-        cursor = conn.execute("PRAGMA table_info(galleries)")
-        columns = [column[1] for column in cursor.fetchall()]
-        
-        if 'failed_files' not in columns:
+        if 'failed_files' not in gallery_columns:
             conn.execute("ALTER TABLE galleries ADD COLUMN failed_files TEXT")
+            gallery_columns.add('failed_files')
             log("Added failed_files column", level="info", category="database")
-            
+
         # Migration 2: Add tab_name column if it doesn't exist
-        cursor = conn.execute("PRAGMA table_info(galleries)")
-        columns = [column[1] for column in cursor.fetchall()]
-        
-        if 'tab_name' not in columns:
+        if 'tab_name' not in gallery_columns:
             conn.execute("ALTER TABLE galleries ADD COLUMN tab_name TEXT DEFAULT 'Main'")
+            gallery_columns.add('tab_name')
             conn.execute("CREATE INDEX IF NOT EXISTS galleries_tab_idx ON galleries(tab_name)")
             conn.execute("CREATE INDEX IF NOT EXISTS galleries_tab_status_idx ON galleries(tab_name, status)")
             log("Added tab_name column and indexes", level="info", category="database")
@@ -227,12 +239,10 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         _migrate_unnamed_galleries_to_db(conn)
 
         # Migration 4: Replace tab_name with tab_id for referential integrity
-        cursor = conn.execute("PRAGMA table_info(galleries)")
-        columns = [column[1] for column in cursor.fetchall()]
-
-        if 'tab_name' in columns and 'tab_id' not in columns:
+        if 'tab_name' in gallery_columns and 'tab_id' not in gallery_columns:
             # Add tab_id column
             conn.execute("ALTER TABLE galleries ADD COLUMN tab_id INTEGER")
+            gallery_columns.add('tab_id')
 
             # Get all tab names and their IDs
             cursor = conn.execute("SELECT id, name FROM tabs")
@@ -264,9 +274,6 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         _initialize_default_tabs(conn)
 
         # Migration 5: Add custom fields columns
-        cursor = conn.execute("PRAGMA table_info(galleries)")
-        columns = [column[1] for column in cursor.fetchall()]
-
         # Migration: Add dimension columns for storing calculated values
         dimension_columns = [
             ('avg_width', 'REAL DEFAULT 0.0'),
@@ -278,16 +285,18 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         ]
         added_dim_cols = []
         for col_name, col_def in dimension_columns:
-            if col_name not in columns:
+            if col_name not in gallery_columns:
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {col_name} {col_def}")
+                gallery_columns.add(col_name)
                 added_dim_cols.append(col_name)
         if added_dim_cols:
             log(f"Added dimension columns: {', '.join(added_dim_cols)}", level="debug", category="database")
 
         added_custom_cols = []
         for custom_field in ['custom1', 'custom2', 'custom3', 'custom4']:
-            if custom_field not in columns:
+            if custom_field not in gallery_columns:
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {custom_field} TEXT")
+                gallery_columns.add(custom_field)
                 added_custom_cols.append(custom_field)
         if added_custom_cols:
             log(f"Added custom fields: {', '.join(added_custom_cols)}", level="debug", category="database")
@@ -295,32 +304,30 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         # Add external program result fields (ext1-4)
         added_ext_cols = []
         for ext_field in ['ext1', 'ext2', 'ext3', 'ext4']:
-            if ext_field not in columns:
+            if ext_field not in gallery_columns:
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {ext_field} TEXT")
+                gallery_columns.add(ext_field)
                 added_ext_cols.append(ext_field)
         if added_ext_cols:
             log(f"Added extension fields: {', '.join(added_ext_cols)}", level="debug", category="database")
 
         # Migration 6: Add IMX status tracking columns
-        cursor = conn.execute("PRAGMA table_info(galleries)")
-        columns = [column[1] for column in cursor.fetchall()]
-
-        if 'image_host_id' not in columns:
+        if 'image_host_id' not in gallery_columns:
             conn.execute("ALTER TABLE galleries ADD COLUMN image_host_id TEXT DEFAULT 'imx'")
+            gallery_columns.add('image_host_id')
             log("Added image_host_id column", level="info", category="database")
 
-        if 'imx_status' not in columns:
+        if 'imx_status' not in gallery_columns:
             conn.execute("ALTER TABLE galleries ADD COLUMN imx_status TEXT")
+            gallery_columns.add('imx_status')
             log("Added imx_status column", level="info", category="database")
 
-        if 'imx_status_checked' not in columns:
+        if 'imx_status_checked' not in gallery_columns:
             conn.execute("ALTER TABLE galleries ADD COLUMN imx_status_checked INTEGER")
+            gallery_columns.add('imx_status_checked')
             log("Added imx_status_checked column", level="info", category="database")
 
         # Migration: Add cover photo columns
-        cursor = conn.execute("PRAGMA table_info(galleries)")
-        columns = [column[1] for column in cursor.fetchall()]
-
         added_cover_cols = []
         for cover_col, cover_def in [
             ('cover_source_path', 'TEXT'),
@@ -328,16 +335,14 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             ('cover_status', 'TEXT'),
             ('cover_result', 'TEXT'),
         ]:
-            if cover_col not in columns:
+            if cover_col not in gallery_columns:
                 conn.execute(f"ALTER TABLE galleries ADD COLUMN {cover_col} {cover_def}")
+                gallery_columns.add(cover_col)
                 added_cover_cols.append(cover_col)
         if added_cover_cols:
             log("Added cover columns", level="debug", category="database")
 
         # Migration: Add part_number column to file_host_uploads for split archives
-        cursor = conn.execute("PRAGMA table_info(file_host_uploads)")
-        fh_columns = [column[1] for column in cursor.fetchall()]
-
         if 'part_number' not in fh_columns:
             conn.execute("ALTER TABLE file_host_uploads ADD COLUMN part_number INTEGER DEFAULT 0")
             # Drop old unique constraint and create new one with part_number
