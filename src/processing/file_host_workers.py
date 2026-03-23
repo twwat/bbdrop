@@ -40,7 +40,7 @@ class FileHostWorker(QThread):
 
     # Signals for communication with GUI
     upload_started = pyqtSignal(int, str)  # db_id, host_name
-    upload_progress = pyqtSignal(int, str, int, int, float)  # db_id, host_name, uploaded_bytes, total_bytes, speed_bps
+    upload_progress = pyqtSignal(int, str, object, object, float)  # db_id, host_name, uploaded_bytes, total_bytes, speed_bps
     upload_completed = pyqtSignal(int, str, dict)  # db_id, host_name, result_dict
     upload_failed = pyqtSignal(int, str, str)  # db_id, host_name, error_message
     bandwidth_updated = pyqtSignal(str, float)  # host_id, KB/s from pycurl
