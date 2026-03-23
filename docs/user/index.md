@@ -74,4 +74,8 @@ Quick lookup for settings, shortcuts, and parameters.
 - [Silent Failures](troubleshooting/silent-failures.md) — When uploads fail without feedback
 - [Log Diagnosis](troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md) — Interpret log files
 - [WSL2 Drag & Drop](troubleshooting/wsl2-drag-drop-fix.md) — Fix drag-and-drop in WSL2
+---
+
+## Architecture & Decisions
+
 
