@@ -110,9 +110,9 @@ Right-click any folder and select **Add to BBDrop** to add it to the queue. Remo
 
 | Host | Auth | Max File Size | Storage | Notes |
 |------|------|---------------|---------|-------|
-| **IMX.to** | API / Session | Unlimited | Unlimited | Gallery/thumbnail hosting, status checking, gallery rename |
-| **Pixhost** | None | 10 MB | Unlimited | Gallery hosting, pycurl-based, family/adult content types |
-| **TurboImageHost** | Session | Unlimited | Unlimited | Gallery hosting, pycurl-based uploads |
+| **IMX.to** | API / Session | Unlimited | Unlimited | Affiliate program |
+| **Pixhost** | None | 10 MB | Unlimited | Integrated zip download |
+| **TurboImageHost** | Session | 35 MB | Unlimited | — |
 
 ### File Hosts
 
