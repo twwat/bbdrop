@@ -207,6 +207,10 @@ class FileHostClient:
             response_code = curl.getinfo(pycurl.RESPONSE_CODE)
 
             if response_code != 200:
+                # Check if this is a Cloudflare challenge rather than a real auth failure
+                body = response_buffer.getvalue().decode('utf-8', errors='replace')
+                if 'cloudflare' in body.lower() or 'cf-browser-verification' in body.lower() or 'challenge-platform' in body.lower():
+                    raise ValueError(f"Login blocked by Cloudflare challenge (HTTP {response_code}) — try opening the site in a browser first")
                 raise ValueError(f"Login failed with status {response_code}")
 
             response_text = response_buffer.getvalue().decode('utf-8')
@@ -399,6 +403,9 @@ class FileHostClient:
             response_code = post_curl.getinfo(pycurl.RESPONSE_CODE)
 
             if response_code not in [200, 302]:
+                body = post_buffer.getvalue().decode('utf-8', errors='replace')
+                if 'cloudflare' in body.lower() or 'cf-browser-verification' in body.lower() or 'challenge-platform' in body.lower():
+                    raise ValueError(f"Login blocked by Cloudflare challenge (HTTP {response_code}) — try opening the site in a browser first")
                 raise ValueError(f"Login failed with status {response_code}")
 
             # Extract cookies from POST response

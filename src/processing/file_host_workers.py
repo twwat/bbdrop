@@ -368,6 +368,8 @@ class FileHostWorker(QThread):
             "account not found",
             "access denied",
             "forbidden",
+            "login failed",
+            "login blocked",
         ]
 
         for pattern in auth_error_patterns:
