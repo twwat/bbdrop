@@ -89,6 +89,7 @@ nav:
     - explanation/index.md
     - Upload Pipeline: explanation/upload-pipeline.md
     - Security Model: explanation/security-model.md
+    - Queue & Persistence: explanation/queue-architecture.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md
