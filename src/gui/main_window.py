@@ -2012,6 +2012,8 @@ class BBDropGUI(QMainWindow):
         self.worker_status_widget.open_host_config_requested.connect(self._open_host_config_from_worker)
         self.worker_status_widget.image_host_enabled_changed.connect(self._on_image_host_enabled_changed)
         self.worker_status_widget.file_host_enabled_changed.connect(self._on_file_host_enabled_changed)
+        self.worker_status_widget.primary_host_change_requested.connect(self._set_primary_image_host)
+        self.worker_status_widget.cover_host_change_requested.connect(self._set_cover_image_host)
 
         # Worker monitoring started in showEvent() to avoid blocking startup
         # with database queries from _populate_initial_metrics()
@@ -5475,6 +5477,9 @@ class BBDropGUI(QMainWindow):
                             host_cell.setText(host_id)
 
             from src.utils.format_utils import timestamp
+            config_mgr = get_image_host_config_manager()
+            host_cfg = config_mgr.get_host(host_id)
+            host_display = host_cfg.name if host_cfg else host_id
             galleries_word = "gallery" if updated_count == 1 else "galleries"
             self.add_log_message(f"{timestamp()} Image host changed to '{host_display}' for {updated_count} {galleries_word}")
 
