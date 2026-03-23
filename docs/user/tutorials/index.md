@@ -8,3 +8,4 @@ If you haven't uploaded your first gallery yet, start with the [Quick Start](../
 
 - **[Setting Up IMX.to](imx-setup.md)** --- Configure IMX.to with API key authentication, thumbnails, and automatic gallery renaming.
 - **[Creating a Custom Template](custom-template.md)** --- Build a BBCode template with placeholders, metadata, and conditional logic.
+- **[Adding File Host Downloads](file-host-setup.md)** --- Enable file hosts to generate automatic download links for your galleries.

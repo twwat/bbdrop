@@ -20,6 +20,7 @@ Step-by-step walkthroughs for common workflows.
 
 - [Setting Up IMX.to](tutorials/imx-setup.md) — Configure authentication, thumbnails, and gallery renaming
 - [Creating a Custom Template](tutorials/custom-template.md) — Build a BBCode template with placeholders and conditionals
+- [Adding File Host Downloads](tutorials/file-host-setup.md) — Enable file hosts for automatic archive upload
 
 ## Guides
 
