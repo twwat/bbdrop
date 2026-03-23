@@ -1,0 +1,97 @@
+site_name: BBDrop
+site_url: https://bbdrop.net
+site_description: Batch-upload image galleries to multiple image and file hosts
+repo_url: https://github.com/twwat/bbdrop
+repo_name: twwat/bbdrop
+edit_uri: edit/master/docs/user/
+docs_dir: docs/user
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/twwat/bbdrop
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+    - Key Concepts: getting-started/concepts.md
+  - Guides:
+    - guides/index.md
+    - GUI Guide: guides/gui-guide.md
+    - Image Hosts: guides/image-hosts.md
+    - Multi-Host Upload: guides/multi-host-upload.md
+    - Queue Management: guides/queue-management.md
+    - Scanning & Link Checking: guides/scanning.md
+    - BBCode Templates: guides/bbcode-templates.md
+    - Proxies & Tor: guides/proxies.md
+    - Archive Management: guides/archive-management.md
+    - Duplicate Detection: guides/duplicate-detection.md
+    - Hooks & Automation: guides/hooks.md
+    - Credential Management: guides/credential-management.md
+    - Theme Customization: guides/theme-customization.md
+  - Reference:
+    - reference/index.md
+    - Settings: reference/settings-reference.md
+    - Keyboard Shortcuts: reference/keyboard-shortcuts.md
+    - Template Placeholders: reference/template-placeholders.md
+    - External App Parameters: reference/external-apps-parameters.md
+    - Quick Reference: reference/quick-reference.md
+  - Troubleshooting:
+    - troubleshooting/index.md
+    - FAQ: troubleshooting/faq.md
+    - Common Issues: troubleshooting/common-issues.md
+    - Troubleshooting Guide: troubleshooting/troubleshooting.md
+    - Silent Failures: troubleshooting/silent-failures.md
+    - Log Diagnosis: troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md
+    - WSL2 Drag & Drop: troubleshooting/wsl2-drag-drop-fix.md

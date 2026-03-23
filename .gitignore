@@ -6,6 +6,7 @@ yarn-error.log*
 
 # Build outputs
 ddos_bypass.exe
+site/
 
 # Python
 __pycache__/
