@@ -69,6 +69,7 @@ nav:
   - Tutorials:
     - tutorials/index.md
     - Setting Up IMX.to: tutorials/imx-setup.md
+    - Creating a Custom Template: tutorials/custom-template.md
   - Guides:
     - guides/index.md
     - GUI Guide: guides/gui-guide.md

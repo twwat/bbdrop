@@ -7,3 +7,4 @@ If you haven't uploaded your first gallery yet, start with the [Quick Start](../
 ## Available Tutorials
 
 - **[Setting Up IMX.to](imx-setup.md)** --- Configure IMX.to with API key authentication, thumbnails, and automatic gallery renaming.
+- **[Creating a Custom Template](custom-template.md)** --- Build a BBCode template with placeholders, metadata, and conditional logic.
