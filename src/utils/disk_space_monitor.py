@@ -19,7 +19,7 @@ class DiskSpaceMonitor(QObject):
     # Emitted when tier changes: "ok", "warning", "critical", "emergency"
     tier_changed = pyqtSignal(str)
     # Emitted on every poll: (data_free_bytes, temp_free_bytes)
-    space_updated = pyqtSignal(int, int)
+    space_updated = pyqtSignal(object, object)
 
     HYSTERESIS_FACTOR = 1.2  # 20% margin to exit warning state
 

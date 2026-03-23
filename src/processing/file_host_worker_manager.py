@@ -32,7 +32,7 @@ class FileHostWorkerManager(QObject):
     spinup_complete = pyqtSignal(str, str)  # host_id, error_message
     enabled_workers_changed = pyqtSignal(list)  # List of enabled host_ids
     upload_started = pyqtSignal(int, str)  # gallery_id, host_name
-    upload_progress = pyqtSignal(int, str, int, int, float)  # gallery_id, host_name, uploaded, total, speed_bps
+    upload_progress = pyqtSignal(int, str, object, object, float)  # gallery_id, host_name, uploaded, total, speed_bps
     upload_completed = pyqtSignal(int, str, dict)  # gallery_id, host_name, result
     upload_failed = pyqtSignal(int, str, str)  # gallery_id, host_name, error
     bandwidth_updated = pyqtSignal(str, float)  # host_id, KB/s
