@@ -96,6 +96,7 @@ nav:
     - Application Components: architecture/containers.md
   - Decisions:
     - decisions/index.md
+    - "001: pycurl Over requests": decisions/001-pycurl-over-requests.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md
