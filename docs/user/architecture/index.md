@@ -7,3 +7,4 @@ zoom levels --- from a high-level system context down to individual components
 
 | Diagram | C4 Level | Description |
 |---------|----------|-------------|
+| [System overview](system-context.md) | 1 --- System Context | BBDrop and its external dependencies |

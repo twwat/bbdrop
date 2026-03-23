@@ -92,6 +92,7 @@ nav:
     - Queue & Persistence: explanation/queue-architecture.md
   - Architecture:
     - architecture/index.md
+    - System Overview: architecture/system-context.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md
