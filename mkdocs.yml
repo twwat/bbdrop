@@ -90,15 +90,6 @@ nav:
     - Upload Pipeline: explanation/upload-pipeline.md
     - Security Model: explanation/security-model.md
     - Queue & Persistence: explanation/queue-architecture.md
-  - Architecture:
-    - architecture/index.md
-    - System Overview: architecture/system-context.md
-    - Application Components: architecture/containers.md
-  - Decisions:
-    - decisions/index.md
-    - "001: pycurl Over requests": decisions/001-pycurl-over-requests.md
-    - "002: Single-Instance Architecture": decisions/002-single-instance-architecture.md
-    - "003: Credential Storage": decisions/003-credential-storage.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md
@@ -114,3 +105,12 @@ nav:
     - Silent Failures: troubleshooting/silent-failures.md
     - Log Diagnosis: troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md
     - WSL2 Drag & Drop: troubleshooting/wsl2-drag-drop-fix.md
+  - Architecture:
+    - architecture/index.md
+    - System Overview: architecture/system-context.md
+    - Application Components: architecture/containers.md
+  - Decisions:
+    - decisions/index.md
+    - "001: pycurl Over requests": decisions/001-pycurl-over-requests.md
+    - "002: Single-Instance Architecture": decisions/002-single-instance-architecture.md
+    - "003: Credential Storage": decisions/003-credential-storage.md

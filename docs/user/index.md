@@ -22,6 +22,8 @@ Step-by-step walkthroughs for common workflows.
 - [Creating a Custom Template](tutorials/custom-template.md) — Build a BBCode template with placeholders and conditionals
 - [Adding File Host Downloads](tutorials/file-host-setup.md) — Enable file hosts for automatic archive upload
 
+---
+
 ## Guides
 
 Task-oriented instructions for specific features.
@@ -54,6 +56,8 @@ Understand how BBDrop works under the hood.
 - [Security Model](explanation/security-model.md) — Credential encryption, transport security, and thread safety
 - [Queue & Persistence](explanation/queue-architecture.md) — How the queue survives restarts and manages state
 
+---
+
 ## Reference
 
 Quick lookup for settings, shortcuts, and parameters.
@@ -74,6 +78,7 @@ Quick lookup for settings, shortcuts, and parameters.
 - [Silent Failures](troubleshooting/silent-failures.md) — When uploads fail without feedback
 - [Log Diagnosis](troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md) — Interpret log files
 - [WSL2 Drag & Drop](troubleshooting/wsl2-drag-drop-fix.md) — Fix drag-and-drop in WSL2
+
 ---
 
 ## Architecture & Decisions
@@ -81,5 +86,3 @@ Quick lookup for settings, shortcuts, and parameters.
 - [System Overview](architecture/system-context.md) — C4 system context diagram
 - [Application Components](architecture/containers.md) — C4 container diagram
 - [Decision Log](decisions/index.md) — Architecture Decision Records
-
-
