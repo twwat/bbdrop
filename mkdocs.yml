@@ -87,6 +87,7 @@ nav:
     - Theme Customization: guides/theme-customization.md
   - Explanation:
     - explanation/index.md
+    - Upload Pipeline: explanation/upload-pipeline.md
   - Reference:
     - reference/index.md
     - Settings: reference/settings-reference.md
