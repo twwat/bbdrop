@@ -39,11 +39,6 @@ class TestGalleryTableControllerConstruction:
         controller = GalleryTableController(mock_main_window)
         assert controller._main_window is mock_main_window
 
-    def test_controller_stores_main_window_reference(self, mock_main_window):
-        """Verify controller stores reference to main window."""
-        controller = GalleryTableController(mock_main_window)
-        assert controller._main_window is mock_main_window
-
 
 class TestAddGalleryToTable:
     """Test suite for _add_gallery_to_table method."""

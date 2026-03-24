@@ -29,11 +29,6 @@ class TestUploadLifecycleHandlerConstruction:
         handler = UploadLifecycleHandler(mock_main_window)
         assert handler._main_window is mock_main_window
 
-    def test_handler_stores_main_window_reference(self, mock_main_window):
-        """Verify handler stores reference to main window."""
-        handler = UploadLifecycleHandler(mock_main_window)
-        assert handler._main_window is mock_main_window
-
 
 class TestOnGalleryStarted:
     """Test suite for on_gallery_started method."""
@@ -370,3 +365,196 @@ class TestOnGalleryRenamed:
         handler = UploadLifecycleHandler(mock_main_window)
         handler.on_gallery_renamed("gallery123")
         mock_main_window.progress_tracker._update_unnamed_count_background.assert_called_once()
+
+
+class TestProcessBatchedProgressUpdate:
+    """Test suite for _process_batched_progress_update method."""
+
+    @pytest.fixture
+    def mock_main_window(self):
+        mw = Mock()
+        mw.queue_manager = Mock()
+        mw.queue_manager.mutex = QMutex()
+        mw.gallery_table = Mock()
+        mw.gallery_table.rowCount.return_value = 5
+        mw._get_row_for_path = Mock(return_value=2)
+        mw._current_theme_mode = 'dark'
+        mw.progress_tracker = Mock()
+        return mw
+
+    @pytest.fixture
+    def handler(self, mock_main_window):
+        return UploadLifecycleHandler(mock_main_window)
+
+    def test_sets_uploaded_text_on_table(self, handler, mock_main_window):
+        """Verify _process_batched_progress_update sets uploaded count text."""
+        item = GalleryQueueItem(path="/test/gallery")
+        item.status = "uploading"
+        mock_main_window.queue_manager.get_item.return_value = item
+        mock_main_window.gallery_table.cellWidget.return_value = None
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler._process_batched_progress_update("/test/gallery", 5, 10, 50, "img.jpg")
+
+        # Verify setItem was called for the uploaded column
+        mock_main_window.gallery_table.setItem.assert_called()
+        # First call should be the uploaded count column
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        first_call_args = mock_main_window.gallery_table.setItem.call_args_list[0]
+        assert first_call_args[0][0] == 2  # row
+        assert first_call_args[0][1] == GalleryTableWidget.COL_UPLOADED
+
+    def test_returns_early_for_missing_item(self, handler, mock_main_window):
+        """Verify _process_batched_progress_update returns early when item not found."""
+        mock_main_window.queue_manager.get_item.return_value = None
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler._process_batched_progress_update("/test/gallery", 5, 10, 50, "img.jpg")
+
+        mock_main_window.gallery_table.setItem.assert_not_called()
+
+    def test_returns_early_for_no_row(self, handler, mock_main_window):
+        """Verify _process_batched_progress_update returns early when no row found."""
+        item = GalleryQueueItem(path="/test/gallery")
+        mock_main_window.queue_manager.get_item.return_value = item
+        mock_main_window._get_row_for_path.return_value = None
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler._process_batched_progress_update("/test/gallery", 5, 10, 50, "img.jpg")
+
+        mock_main_window.gallery_table.setItem.assert_not_called()
+
+    def test_does_not_raise_on_error(self, handler, mock_main_window):
+        """Verify _process_batched_progress_update does not raise on unexpected error."""
+        mock_main_window.queue_manager.get_item.side_effect = RuntimeError("boom")
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            # Should NOT raise
+            handler._process_batched_progress_update("/test/gallery", 5, 10, 50, "img.jpg")
+
+
+class TestOnExtFieldsUpdated:
+    """Test suite for on_ext_fields_updated method."""
+
+    @pytest.fixture
+    def mock_main_window(self):
+        mw = Mock()
+        mw.queue_manager = Mock()
+        mw.queue_manager.mutex = QMutex()
+        mw.queue_manager.items = {}
+        mw.gallery_table = Mock()
+        mw.gallery_table.table = Mock()
+        mw.gallery_table.table.signalsBlocked.return_value = False
+        mw._get_row_for_path = Mock(return_value=1)
+        mw.artifact_handler = Mock()
+        return mw
+
+    @pytest.fixture
+    def handler(self, mock_main_window):
+        return UploadLifecycleHandler(mock_main_window)
+
+    @patch('src.gui.upload_lifecycle_handler.QTimer')
+    def test_updates_ext_column_on_table(self, mock_timer, handler, mock_main_window):
+        """Verify on_ext_fields_updated sets ext column value on the table."""
+        item = GalleryQueueItem(path="/test/gallery")
+        item.name = "test_gallery"
+        mock_main_window.queue_manager.items = {"/test/gallery": item}
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler.on_ext_fields_updated("/test/gallery", {"ext1": "hello"})
+
+        # Table should have had setItem called
+        mock_main_window.gallery_table.table.setItem.assert_called()
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        call_args = mock_main_window.gallery_table.table.setItem.call_args_list[0]
+        assert call_args[0][0] == 1  # row
+        assert call_args[0][1] == GalleryTableWidget.COL_EXT1
+
+    @patch('src.gui.upload_lifecycle_handler.QTimer')
+    def test_skips_unknown_path(self, mock_timer, handler, mock_main_window):
+        """Verify on_ext_fields_updated skips when path not in queue."""
+        mock_main_window.queue_manager.items = {}
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler.on_ext_fields_updated("/unknown/path", {"ext1": "value"})
+
+        mock_main_window.gallery_table.table.setItem.assert_not_called()
+
+
+class TestOnGalleryExists:
+    """Test suite for on_gallery_exists method."""
+
+    @pytest.fixture
+    def mock_main_window(self):
+        mw = Mock()
+        return mw
+
+    def test_creates_message_box(self, mock_main_window):
+        """Verify on_gallery_exists creates a QMessageBox."""
+        handler = UploadLifecycleHandler(mock_main_window)
+
+        with patch('src.gui.upload_lifecycle_handler.QMessageBox') as MockMsgBox:
+            mock_instance = MockMsgBox.return_value
+            mock_instance.finished = Mock()
+            mock_instance.finished.connect = Mock()
+            with patch('src.gui.upload_lifecycle_handler.log'):
+                handler.on_gallery_exists("test_gallery", ["data.json"])
+
+            MockMsgBox.assert_called_once_with(mock_main_window)
+            mock_instance.setWindowTitle.assert_called_once_with("Gallery Already Exists")
+            mock_instance.open.assert_called_once()
+
+
+class TestHandleGalleryRenamedBackground:
+    """Test suite for _handle_gallery_renamed_background method."""
+
+    @pytest.fixture
+    def mock_main_window(self):
+        mw = Mock()
+        mw.queue_manager = Mock()
+        mw.path_to_row = {}
+        mw._set_renamed_cell_icon = Mock()
+        return mw
+
+    @pytest.fixture
+    def handler(self, mock_main_window):
+        return UploadLifecycleHandler(mock_main_window)
+
+    def test_finds_and_marks_renamed_row(self, handler, mock_main_window):
+        """Verify _handle_gallery_renamed_background marks the renamed row."""
+        item = GalleryQueueItem(path="/test/gallery")
+        item.gallery_id = "gal123"
+        item.image_host_id = "imx"
+        mock_main_window.path_to_row = {"/test/gallery": 5}
+        mock_main_window.queue_manager.get_item.return_value = item
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler._handle_gallery_renamed_background("gal123")
+
+        mock_main_window._set_renamed_cell_icon.assert_called_once_with(5, True)
+
+    def test_skips_non_imx_host(self, handler, mock_main_window):
+        """Verify _handle_gallery_renamed_background skips non-IMX hosts."""
+        item = GalleryQueueItem(path="/test/gallery")
+        item.gallery_id = "gal123"
+        item.image_host_id = "turbo"
+        mock_main_window.path_to_row = {"/test/gallery": 5}
+        mock_main_window.queue_manager.get_item.return_value = item
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler._handle_gallery_renamed_background("gal123")
+
+        mock_main_window._set_renamed_cell_icon.assert_not_called()
+
+    def test_no_match_does_nothing(self, handler, mock_main_window):
+        """Verify _handle_gallery_renamed_background does nothing when gallery_id not found."""
+        item = GalleryQueueItem(path="/test/gallery")
+        item.gallery_id = "other_id"
+        item.image_host_id = "imx"
+        mock_main_window.path_to_row = {"/test/gallery": 5}
+        mock_main_window.queue_manager.get_item.return_value = item
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler._handle_gallery_renamed_background("gal123")
+
+        mock_main_window._set_renamed_cell_icon.assert_not_called()

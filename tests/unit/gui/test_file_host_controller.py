@@ -38,11 +38,6 @@ class TestFileHostControllerConstruction:
         controller = FileHostController(mock_main_window)
         assert controller._main_window is mock_main_window
 
-    def test_controller_stores_main_window_reference(self, mock_main_window):
-        """Verify controller stores reference to main window."""
-        controller = FileHostController(mock_main_window)
-        assert controller._main_window is mock_main_window
-
     def test_controller_initializes_db_id_to_path_cache(self, mock_main_window):
         """Verify controller initializes an empty _db_id_to_path cache."""
         controller = FileHostController(mock_main_window)
@@ -289,3 +284,97 @@ class TestHandleActionButton:
         """Verify 'view_error' action delegates to _show_error_details."""
         controller._handle_action_button("/test", "view_error")
         mock_main_window._show_error_details.assert_called_once_with("/test")
+
+
+class TestOnFileHostsEnabledChanged:
+    """Test suite for _on_file_hosts_enabled_changed method."""
+
+    @pytest.fixture
+    def mock_main_window(self):
+        mw = Mock()
+        mw.queue_manager = Mock()
+        mw.queue_manager.mutex = QMutex()
+        mw.queue_manager.items = {}
+        mw.queue_manager.store = Mock()
+        mw.gallery_table = Mock()
+        mw.gallery_table.table = Mock()
+        mw.path_to_row = {}
+        mw.row_to_path = {}
+        mw.worker_signal_handler = Mock()
+        mw._file_host_startup_complete = False
+        return mw
+
+    @pytest.fixture
+    def controller(self, mock_main_window):
+        return FileHostController(mock_main_window)
+
+    def test_skips_during_startup(self, controller, mock_main_window):
+        """Verify _on_file_hosts_enabled_changed skips when startup not complete."""
+        mock_main_window._file_host_startup_complete = False
+
+        with patch('src.gui.file_host_controller.log'):
+            controller._on_file_hosts_enabled_changed(["host1", "host2"])
+
+        # Should not touch queue_manager or gallery_table since startup not complete
+        mock_main_window.queue_manager.get_all_items.assert_not_called()
+
+    def test_refreshes_after_startup(self, controller, mock_main_window):
+        """Verify _on_file_hosts_enabled_changed refreshes widgets after startup."""
+        mock_main_window._file_host_startup_complete = True
+        mock_main_window.queue_manager.get_all_items.return_value = []
+        mock_main_window.gallery_table.rowCount.return_value = 0
+
+        with patch('src.gui.file_host_controller.log'):
+            controller._on_file_hosts_enabled_changed(["host1"])
+
+        mock_main_window.worker_signal_handler._on_enabled_workers_changed.assert_called_once_with(["host1"])
+        mock_main_window.queue_manager.get_all_items.assert_called_once()
+
+
+class TestQueueFileHostUpload:
+    """Test suite for _queue_file_host_upload method."""
+
+    @pytest.fixture
+    def mock_main_window(self):
+        mw = Mock()
+        mw.queue_manager = Mock()
+        mw.queue_manager.store = Mock()
+        mw.queue_manager.store.add_file_host_upload.return_value = 42
+        mw._update_specific_gallery_display = Mock()
+        return mw
+
+    @pytest.fixture
+    def controller(self, mock_main_window):
+        return FileHostController(mock_main_window)
+
+    @patch('os.path.isdir', return_value=True)
+    def test_calls_store_add_file_host_upload(self, mock_isdir, controller, mock_main_window):
+        """Verify _queue_file_host_upload calls store.add_file_host_upload."""
+        mock_config = Mock()
+        mock_config.get_host.return_value = Mock()
+
+        with patch('src.gui.file_host_controller.log'), \
+             patch('src.core.file_host_config.get_config_manager', return_value=mock_config), \
+             patch('PyQt6.QtWidgets.QMessageBox'):
+            controller._queue_file_host_upload("/test/gallery", "filedot", "Filedot")
+
+        mock_main_window.queue_manager.store.add_file_host_upload.assert_called_once_with(
+            gallery_path="/test/gallery",
+            host_name="filedot",
+            status='pending'
+        )
+        mock_main_window._update_specific_gallery_display.assert_called_once_with("/test/gallery")
+
+    @patch('os.path.isdir', return_value=True)
+    def test_skips_when_host_config_not_found(self, mock_isdir, controller, mock_main_window):
+        """Verify _queue_file_host_upload shows warning when host config not found."""
+        mock_config = Mock()
+        mock_config.get_host.return_value = None
+
+        with patch('src.gui.file_host_controller.log'), \
+             patch('src.core.file_host_config.get_config_manager', return_value=mock_config), \
+             patch('PyQt6.QtWidgets.QMessageBox') as MockMsgBox:
+            controller._queue_file_host_upload("/test/gallery", "unknown_host", "Unknown")
+
+        MockMsgBox.warning.assert_called_once()
+        mock_main_window.queue_manager.store.add_file_host_upload.assert_not_called()
