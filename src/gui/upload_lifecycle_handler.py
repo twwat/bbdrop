@@ -45,6 +45,7 @@ class UploadLifecycleHandler(QObject):
     def on_gallery_started(self, path: str, total_images: int):
         """Handle gallery start"""
         mw = self._main_window
+        item = None
         with QMutexLocker(mw.queue_manager.mutex):
             if path in mw.queue_manager.items:
                 item = mw.queue_manager.items[path]
@@ -82,7 +83,7 @@ class UploadLifecycleHandler(QObject):
         # Update only the specific row status instead of full table refresh
         # Use O(1) path lookup instead of O(n) row iteration
         row = mw._get_row_for_path(path)
-        if row is not None:
+        if row is not None and item is not None:
             # Update uploaded count
             uploaded_text = f"0/{total_images}"
             uploaded_item = QTableWidgetItem(uploaded_text)

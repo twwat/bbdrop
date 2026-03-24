@@ -337,8 +337,9 @@ class FileHostController(QObject):
                 if success:
                     log(f"User relocated gallery: {gallery_path} -> {new_path}", level="info", category="file_hosts")
 
-                    # Refresh the table to show updated path
-                    self._main_window._refresh_gallery_table()
+                    # Rebuild table from queue since gallery path changed in DB
+                    self._main_window._rebuild_path_mappings()
+                    self._main_window._initialize_table_from_queue()
 
                     # Check for sibling galleries that might also need updating
                     self._check_sibling_galleries(old_parent, os.path.dirname(new_path), gallery_path)
@@ -351,8 +352,8 @@ class FileHostController(QObject):
         elif clicked == remove_btn:
             # Remove gallery from queue
             try:
-                self._main_window.queue_manager.remove_items([gallery_path])
-                self._main_window._refresh_gallery_table()
+                self._main_window.queue_manager.remove_item(gallery_path)
+                self._main_window._remove_gallery_from_table(gallery_path)
                 log(f"User removed missing gallery from queue: {gallery_path}", level="info", category="file_hosts")
             except Exception as e:
                 log(f"Error removing gallery: {e}", level="error", category="file_hosts")
@@ -433,7 +434,9 @@ class FileHostController(QObject):
 
             if updated > 0:
                 log(f"Batch relocated {updated} sibling galleries", level="info", category="file_hosts")
-                self._main_window._refresh_gallery_table()
+                # Rebuild table from queue since gallery paths changed in DB
+                self._main_window._rebuild_path_mappings()
+                self._main_window._initialize_table_from_queue()
 
     def _on_file_hosts_manage_clicked(self, gallery_path: str):
         """Handle 'Manage' button click - show File Host Details Dialog"""
