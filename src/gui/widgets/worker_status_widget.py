@@ -2747,7 +2747,7 @@ class WorkerStatusWidget(QWidget):
         else:
             # Use defaults - include BOTH core and metric columns
             self._active_columns = [col for col in CORE_COLUMNS + METRIC_COLUMNS if col.default_visible]
-            log(f"No saved settings, using {len(self._active_columns)} default columns", level="debug", category="ui")
+            log(f"Worker status table: no column preferences saved, using {len(self._active_columns)} defaults", level="trace", category="ui")
 
         # Load column widths
         widths = settings.value("worker_status/column_widths", None, type=dict)
