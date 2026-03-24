@@ -15,7 +15,6 @@ Handles:
 
 import os
 import time
-import traceback
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, QTimer, QMutexLocker, Qt, QSettings
@@ -121,8 +120,7 @@ class UploadLifecycleHandler(QObject):
                     if item.status == "uploading":
                         item.current_kibps = mw.worker_signal_handler.bandwidth_manager.get_imx_bandwidth()
                 except Exception as e:
-                    log(f"Exception in main_window: {e}", level="error", category="ui")
-                    raise
+                    log(f"Failed to update bandwidth in on_progress_updated: {e}", level="error", category="ui")
 
         # Add to batched progress updates for non-blocking GUI updates
         mw._progress_batcher.add_update(path, completed, total, progress_percent, current_image)
@@ -166,9 +164,12 @@ class UploadLifecycleHandler(QObject):
                         transfer_text = "Uploading..."
                 except Exception as e:
                     log(f"Rate formatting failed: {e}", level="warning", category="ui")
-                    if current_rate_kib > 0:
-                        transfer_text = mw._format_rate_consistent(current_rate_kib)
-                    else:
+                    try:
+                        if current_rate_kib > 0:
+                            transfer_text = mw._format_rate_consistent(current_rate_kib)
+                        else:
+                            transfer_text = "Uploading..."
+                    except Exception:
                         transfer_text = "Uploading..."
 
                 xfer_item = QTableWidgetItem(transfer_text)
@@ -209,7 +210,6 @@ class UploadLifecycleHandler(QObject):
                 finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if finished_tooltip:
                     finished_item.setToolTip(finished_tooltip)
-                    pass
                 mw.gallery_table.setItem(matched_row, GalleryTableWidget.COL_FINISHED, finished_item)
 
                 # Compute and freeze final transfer speed for this item
@@ -218,8 +218,7 @@ class UploadLifecycleHandler(QObject):
                     item.final_kibps = (float(getattr(item, 'uploaded_bytes', 0) or 0) / elapsed) / 1024.0
                     item.current_kibps = 0.0
                 except Exception as e:
-                    log(f"Exception in main_window: {e}", level="error", category="ui")
-                    raise
+                    log(f"Failed to compute final transfer rate: {e}", level="warning", category="ui")
 
                 # Render Transfer column (10) - use cached function
                 try:
@@ -237,16 +236,14 @@ class UploadLifecycleHandler(QObject):
                     if final_text:
                         xfer_item.setForeground(QColor(0, 0, 0, 160))
                 except Exception as e:
-                    log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-                    raise
+                    log(f"Failed to set transfer rate foreground color: {e}", level="warning", category="ui")
                 mw.gallery_table.setItem(matched_row, GalleryTableWidget.COL_TRANSFER, xfer_item)
 
             # Update overall progress bar and info/speed displays after individual table updates
             mw.progress_tracker.update_progress_display()
 
         except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise  # Fail silently to prevent blocking
+            log(f"Exception in _process_batched_progress_update: {e}", level="error", category="ui")
 
     def on_gallery_completed(self, path: str, results: dict):
         """Handle gallery completion - minimal GUI thread work, everything else deferred"""
@@ -280,8 +277,7 @@ class UploadLifecycleHandler(QObject):
                     item.final_kibps = (float(results.get('uploaded_size', 0) or 0) / elapsed) / 1024.0
                     item.current_kibps = 0.0
                 except Exception as e:
-                    log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-                    raise
+                    log(f"Failed to compute transfer rate in on_gallery_completed: {e}", level="error", category="ui")
 
         # Check for file host auto-upload triggers (on_completed)
         try:
@@ -310,14 +306,12 @@ class UploadLifecycleHandler(QObject):
             log(f"Error checking file host triggers on gallery completion: {e}", level="error", category="file_hosts")
 
         # Force final progress update to show 100% completion
-        if path in mw.queue_manager.items:
-            final_item = mw.queue_manager.items[path]
+        final_item = mw.queue_manager.get_item(path)
+        if final_item:
             mw._progress_batcher.add_update(path, final_item.uploaded_images, final_item.total_images, 100, "")
 
-        # Cleanup temp folder if from archive
-        if path in mw.queue_manager.items:
-            itm = mw.queue_manager.items[path]
-            if getattr(itm, 'is_from_archive', False):
+            # Cleanup temp folder if from archive
+            if getattr(final_item, 'is_from_archive', False):
                 QTimer.singleShot(0, lambda p=path: mw.archive_coordinator.service.cleanup_temp_dir(p))
 
         # Delegate heavy file I/O to background thread immediately
@@ -341,8 +335,7 @@ class UploadLifecycleHandler(QObject):
                     item = mw.queue_manager.items[path]
                     item.final_kibps = mw.progress_tracker._current_transfer_kbps
         except Exception as e:
-            log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-            raise
+            log(f"Failed to update transfer speed in _handle_completion_immediate: {e}", level="error", category="ui")
 
         # Re-enable settings if no remaining active items (defer to avoid blocking)
         #QTimer.singleShot(5, self._check_and_enable_settings)
@@ -402,8 +395,7 @@ class UploadLifecycleHandler(QObject):
             # Refresh progress display to show updated stats
             mw.progress_tracker.update_progress_display()
         except Exception as e:
-            log(f"ERROR: Exception in main_window: {e}", level="error", category="ui")
-            raise
+            log(f"Failed to update cumulative stats in _update_stats_deferred: {e}", level="error", category="ui")
 
     def on_ext_fields_updated(self, path: str, ext_fields: dict):
         """Handle ext fields update from external hooks"""
@@ -411,69 +403,61 @@ class UploadLifecycleHandler(QObject):
         try:
             log(f"on_ext_fields_updated called: path={path}, ext_fields={ext_fields}", level="info", category="hooks")
 
-            # Update the item in the queue manager (already done by worker)
-            # Just need to refresh the table row to show the new values
+            # Read item data under mutex, then release before GUI updates
+            item_name = None
             with QMutexLocker(mw.queue_manager.mutex):
                 if path in mw.queue_manager.items:
                     item = mw.queue_manager.items[path]
-                    log(f"Found item in queue_manager: {item.name}", level="debug", category="hooks")
+                    item_name = item.name
 
-                    # Get the actual table widget - SAME PATTERN AS _populate_table_row
-                    actual_table = getattr(mw.gallery_table, 'table', mw.gallery_table)
-                    log(f"Using actual_table: {type(actual_table).__name__}", level="debug", category="hooks")
+            if item_name is None:
+                log(f"Path {path} not found in queue_manager.items", level="debug", category="hooks")
+                return
 
-                    # Use O(1) path lookup instead of O(n) row iteration
-                    row = mw._get_row_for_path(path)
-                    if row is not None and actual_table:
-                        log(f"Found matching row {row} for path {path}", level="debug", category="hooks")
+            log(f"Found item in queue_manager: {item_name}", level="debug", category="hooks")
 
-                        # Block signals to prevent itemChanged events during update
-                        signals_blocked = actual_table.signalsBlocked()
-                        actual_table.blockSignals(True)
-                        try:
-                            # Update ext columns
-                            for ext_field, value in ext_fields.items():
-                                log(f"Processing ext_field={ext_field}, value={value}", level="debug", category="hooks")
-                                if ext_field == 'ext1':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT1, ext_item)
-                                    log(f"Set COL_EXT1 (col {GalleryTableWidget.COL_EXT1}) to: {value}", level="trace", category="hooks")
-                                elif ext_field == 'ext2':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT2, ext_item)
-                                    log(f"Set COL_EXT2 (col {GalleryTableWidget.COL_EXT2}) to: {value}", level="trace", category="hooks")
-                                elif ext_field == 'ext3':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT3, ext_item)
-                                    log(f"Set COL_EXT3 (col {GalleryTableWidget.COL_EXT3}) to: {value}", level="trace", category="hooks")
-                                elif ext_field == 'ext4':
-                                    ext_item = QTableWidgetItem(str(value))
-                                    ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                                    ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                                    actual_table.setItem(row, GalleryTableWidget.COL_EXT4, ext_item)
-                                    log(f"Set COL_EXT4 (col {GalleryTableWidget.COL_EXT4}) to: {value}", level="trace", category="hooks")
-                        finally:
-                            # Restore original signal state
-                            actual_table.blockSignals(signals_blocked)
+            # GUI updates outside the mutex
+            actual_table = getattr(mw.gallery_table, 'table', mw.gallery_table)
+            log(f"Using actual_table: {type(actual_table).__name__}", level="debug", category="hooks")
 
-                        log(f"Updated ext fields in GUI for {item.name}: {ext_fields}", level="info", category="hooks")
-                        # Trigger artifact regeneration for ext field changes if enabled
-                        def _maybe_regen(p=path):
-                            if mw.artifact_handler.should_auto_regenerate_bbcode(p):
-                                mw.artifact_handler.regenerate_bbcode_for_gallery(
-                                    p, force=False
-                                )
-                        QTimer.singleShot(100, _maybe_regen)
-                    elif not actual_table:
-                        log(f"WARNING: Table is None!", level="debug", category="hooks")
-                else:
-                    log(f"Path {path} not found in queue_manager.items", level="debug", category="hooks")
+            row = mw._get_row_for_path(path)
+            if row is not None and actual_table:
+                log(f"Found matching row {row} for path {path}", level="debug", category="hooks")
+
+                # Column mapping for ext fields
+                col_map = {
+                    'ext1': GalleryTableWidget.COL_EXT1,
+                    'ext2': GalleryTableWidget.COL_EXT2,
+                    'ext3': GalleryTableWidget.COL_EXT3,
+                    'ext4': GalleryTableWidget.COL_EXT4,
+                }
+
+                # Block signals to prevent itemChanged events during update
+                signals_blocked = actual_table.signalsBlocked()
+                actual_table.blockSignals(True)
+                try:
+                    for ext_field, value in ext_fields.items():
+                        log(f"Processing ext_field={ext_field}, value={value}", level="debug", category="hooks")
+                        col = col_map.get(ext_field)
+                        if col is not None:
+                            ext_item = QTableWidgetItem(str(value))
+                            ext_item.setFlags(ext_item.flags() | Qt.ItemFlag.ItemIsEditable)
+                            ext_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                            actual_table.setItem(row, col, ext_item)
+                            log(f"Set {ext_field} (col {col}) to: {value}", level="trace", category="hooks")
+                finally:
+                    actual_table.blockSignals(signals_blocked)
+
+                log(f"Updated ext fields in GUI for {item_name}: {ext_fields}", level="info", category="hooks")
+                # Trigger artifact regeneration for ext field changes if enabled
+                def _maybe_regen(p=path):
+                    if mw.artifact_handler.should_auto_regenerate_bbcode(p):
+                        mw.artifact_handler.regenerate_bbcode_for_gallery(
+                            p, force=False
+                        )
+                QTimer.singleShot(100, _maybe_regen)
+            elif not actual_table:
+                log(f"WARNING: Table is None!", level="debug", category="hooks")
         except Exception as e:
             log(f"Error updating ext fields in GUI: {e}", level="error", category="hooks")
             import traceback
@@ -536,8 +520,7 @@ class UploadLifecycleHandler(QObject):
                 if host_id == 'imx':
                     mw._set_renamed_cell_icon(found_row, True)
         except Exception as e:
-            log(f"Exception in main_window: {e}", level="error", category="ui")
-            raise
+            log(f"Exception in _handle_gallery_renamed_background: {e}", level="error", category="ui")
 
     def on_gallery_failed(self, path: str, error_message: str):
         """Handle gallery failure"""
