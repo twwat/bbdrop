@@ -6,6 +6,7 @@ Tests cover:
 - Network configuration values
 - File size constants and calculations
 - Image processing constants
+- Video extensions
 - Thumbnail configuration
 - Gallery settings
 - Progress update thresholds
@@ -16,7 +17,7 @@ Tests cover:
 - GUI settings
 - Performance settings
 - File paths and directory names
-- Template placeholders
+- Template placeholders (including video placeholders)
 - Encryption settings
 - Time format strings
 - Error and success messages
@@ -28,6 +29,11 @@ Tests cover:
 """
 
 import pytest
+from src.core.constants import (
+    IMAGE_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    TEMPLATE_PLACEHOLDERS,
+)
 from src.core.constants import *
 
 
@@ -170,6 +176,24 @@ class TestImageProcessing:
         """Test IMAGE_EXTENSIONS all start with dot."""
         for ext in IMAGE_EXTENSIONS:
             assert ext.startswith('.')
+
+
+# ============================================================================
+# Media Extensions Tests (Image + Video)
+# ============================================================================
+
+class TestMediaExtensions:
+    """Test suite for image and video extension constants."""
+
+    def test_video_extensions_defined(self):
+        assert VIDEO_EXTENSIONS == ('.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.webm')
+
+    def test_image_extensions_unchanged(self):
+        assert IMAGE_EXTENSIONS == ('.jpg', '.jpeg', '.png', '.gif')
+
+    def test_no_overlap_between_image_and_video(self):
+        overlap = set(IMAGE_EXTENSIONS) & set(VIDEO_EXTENSIONS)
+        assert overlap == set()
 
 
 # ============================================================================
@@ -511,6 +535,24 @@ class TestTemplatePlaceholders:
     def test_template_placeholders_count(self):
         """Test TEMPLATE_PLACEHOLDERS has expected number of entries."""
         assert len(TEMPLATE_PLACEHOLDERS) >= 10
+
+
+# ============================================================================
+# Video Placeholders Tests
+# ============================================================================
+
+class TestVideoPlaceholders:
+    """Test suite for video-specific template placeholders."""
+
+    def test_video_placeholders_in_template_list(self):
+        video_placeholders = [
+            '#videoDetails#', '#screenshotSheet#', '#downloadLinks#',
+            '#filename#', '#duration#', '#resolution#', '#fps#',
+            '#bitrate#', '#videoCodec#', '#audioCodec#', '#audioTracks#',
+            '#filesize#',
+        ]
+        for p in video_placeholders:
+            assert p in TEMPLATE_PLACEHOLDERS, f"{p} missing from TEMPLATE_PLACEHOLDERS"
 
 
 # ============================================================================

@@ -27,6 +27,7 @@ MAX_LINES_PER_METHOD = 50
 # Image Processing
 MAX_DIMENSION_SAMPLES = 25
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.gif')
+VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.wmv', '.mov', '.flv', '.webm')
 
 # Thumbnail Sizes (imx.to API)
 THUMBNAIL_SIZES = {
@@ -154,7 +155,19 @@ TEMPLATE_PLACEHOLDERS = [
     "#ext1#",
     "#ext2#",
     "#ext3#",
-    "#ext4#"
+    "#ext4#",
+    "#videoDetails#",
+    "#screenshotSheet#",
+    "#downloadLinks#",
+    "#filename#",
+    "#duration#",
+    "#resolution#",
+    "#fps#",
+    "#bitrate#",
+    "#videoCodec#",
+    "#audioCodec#",
+    "#audioTracks#",
+    "#filesize#",
 ]
 
 # Encryption
