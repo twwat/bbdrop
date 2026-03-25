@@ -13,4 +13,5 @@ class TabIndex:
     LOGS = 8
     NOTIFICATIONS = 9
     ARCHIVE = 10
-    ADVANCED = 11
+    VIDEO = 11
+    ADVANCED = 12

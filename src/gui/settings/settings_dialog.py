@@ -140,6 +140,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.setup_logs_tab()
         self.setup_notifications_tab()
         self.setup_archive_tab()
+        self.setup_video_tab()
         self.setup_advanced_tab()
 
         # Buttons
@@ -318,6 +319,13 @@ class ComprehensiveSettingsDialog(QDialog):
         self.archive_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ARCHIVE))
         self._add_settings_page(self.archive_widget, "Zip Archives")
 
+    def setup_video_tab(self):
+        """Setup the Video settings tab."""
+        from src.gui.settings.video_tab import VideoSettingsTab
+        self.video_tab = VideoSettingsTab(self)
+        self.video_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.VIDEO))
+        self._add_settings_page(self.video_tab, "Video")
+
     def setup_icons_tab(self):
         """Setup the Icons management tab (delegated to IconsTab widget)."""
         from src.gui.settings.icons_tab import IconsTab
@@ -361,6 +369,9 @@ class ComprehensiveSettingsDialog(QDialog):
         self.advanced_widget.load_from_config()
         # Load archive settings
         self.archive_widget.load_from_config()
+        # Load video settings
+        if hasattr(self, 'video_tab'):
+            self.video_tab.load_settings(self.settings)
 
     def _load_tabs_settings(self):
         """Load tabs settings if available"""
@@ -395,6 +406,10 @@ class ComprehensiveSettingsDialog(QDialog):
                 # Save file hosts settings
                 if hasattr(self, 'file_hosts_widget') and self.file_hosts_widget:
                     self.file_hosts_widget.save_to_config()
+
+                # Save video settings
+                if hasattr(self, 'video_tab'):
+                    self.video_tab.save_settings(self.settings)
 
                 # Save tabs settings
                 self._save_tabs_settings()
@@ -593,7 +608,7 @@ class ComprehensiveSettingsDialog(QDialog):
             # NOTE: Tabs and Icons tabs are created but not added to tab widget
             # Actual tab order: General(0), Image Hosts(1), File Hosts(2), Templates(3),
             #                   Image Scan(4), Covers(5), Hooks(6), Proxy(7), Logs(8),
-            #                   Archive(9), Advanced(10)
+            #                   Notifications(9), Archive(10), Video(11), Advanced(12)
             if current_index == TabIndex.GENERAL:
                 return self.general_tab.save_settings()
             elif current_index == TabIndex.IMAGE_HOSTS:
@@ -621,6 +636,8 @@ class ComprehensiveSettingsDialog(QDialog):
                 return self.advanced_widget.save_to_config(parent_window=self.parent_window)
             elif current_index == TabIndex.ARCHIVE:
                 return self.archive_widget.save_to_config()
+            elif current_index == TabIndex.VIDEO:
+                return self.video_tab.save_settings(self.settings)
             else:
                 return True
         except Exception as e:
