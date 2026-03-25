@@ -1042,3 +1042,70 @@ class TestGetVideoFiles:
             qm = QueueManager.__new__(QueueManager)
             videos = qm._get_video_files(tmpdir)
             assert videos == ["real.mp4"]
+
+
+class TestManualDownloadLinks:
+    """Test download_links field on GalleryQueueItem."""
+
+    def test_download_links_field_exists(self):
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        assert item.download_links == ""
+
+    def test_download_links_can_be_set(self):
+        item = GalleryQueueItem(
+            path="/tmp/test", name="test",
+            download_links="https://example.com/dl/video.mp4",
+        )
+        assert item.download_links == "https://example.com/dl/video.mp4"
+
+    def test_download_links_multiline(self):
+        links = "https://example.com/dl/part1.mp4\nhttps://example.com/dl/part2.mp4"
+        item = GalleryQueueItem(
+            path="/tmp/test", name="test",
+            download_links=links,
+        )
+        assert item.download_links == links
+
+    def test_download_links_in_item_to_dict(self, queue_manager, gallery_dir):
+        queue_manager.add_item(gallery_dir, name="Test")
+        item = queue_manager.items[gallery_dir]
+        item.download_links = "https://example.com/dl/video.mp4"
+
+        item_dict = queue_manager._item_to_dict(item)
+
+        assert item_dict['download_links'] == "https://example.com/dl/video.mp4"
+
+    def test_download_links_default_in_item_to_dict(self, queue_manager, gallery_dir):
+        queue_manager.add_item(gallery_dir, name="Test")
+        item = queue_manager.items[gallery_dir]
+
+        item_dict = queue_manager._item_to_dict(item)
+
+        assert item_dict['download_links'] == ""
+
+    def test_download_links_in_dict_to_item(self, queue_manager):
+        data = {
+            'path': '/test/gallery',
+            'name': 'Test Gallery',
+            'status': QUEUE_STATE_READY,
+            'added_time': int(time.time()),
+            'tab_name': 'Main',
+            'download_links': 'https://example.com/dl/video.mp4',
+        }
+
+        item = queue_manager._dict_to_item(data)
+
+        assert item.download_links == "https://example.com/dl/video.mp4"
+
+    def test_download_links_missing_from_dict_defaults_empty(self, queue_manager):
+        data = {
+            'path': '/test/gallery',
+            'name': 'Test Gallery',
+            'status': QUEUE_STATE_READY,
+            'added_time': int(time.time()),
+            'tab_name': 'Main',
+        }
+
+        item = queue_manager._dict_to_item(data)
+
+        assert item.download_links == ""

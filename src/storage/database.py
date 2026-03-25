@@ -120,7 +120,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             gallery_url TEXT,
             insertion_order INTEGER DEFAULT 0,
             failed_files TEXT,
-            media_type TEXT DEFAULT 'image'
+            media_type TEXT DEFAULT 'image',
+            download_links TEXT DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS galleries_status_idx ON galleries(status);
         CREATE INDEX IF NOT EXISTS galleries_added_idx ON galleries(added_ts DESC);
@@ -350,6 +351,14 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             )
             gallery_columns.add("media_type")
             log("Migration: added media_type column to galleries", level="info", category="database")
+
+        # Migration: add download_links column for manual video download links
+        if "download_links" not in gallery_columns:
+            conn.execute(
+                "ALTER TABLE galleries ADD COLUMN download_links TEXT DEFAULT ''"
+            )
+            gallery_columns.add("download_links")
+            log("Migration: added download_links column to galleries", level="info", category="database")
 
         # Migration: Add part_number column to file_host_uploads for split archives
         if 'part_number' not in fh_columns:
@@ -660,6 +669,7 @@ class QueueStore:
             'imx_status_checked': imx_status_checked,
             'image_host_id': item.get('image_host_id', 'imx'),
             'media_type': item.get('media_type', 'image'),
+            'download_links': item.get('download_links', ''),
             'cover_source_path': item.get('cover_source_path'),
             'cover_host_id': item.get('cover_host_id'),
             'cover_status': item.get('cover_status', 'none'),
@@ -785,7 +795,7 @@ class QueueStore:
                     g.custom1, g.custom2, g.custom3, g.custom4,
                     g.ext1, g.ext2, g.ext3, g.ext4,
                     g.imx_status, g.imx_status_checked, g.image_host_id,
-                    g.media_type,
+                    g.media_type, g.download_links,
                     g.cover_source_path, g.cover_host_id, g.cover_status, g.cover_result
                 FROM galleries g
                 ORDER BY g.insertion_order ASC, g.added_ts ASC
@@ -828,10 +838,11 @@ class QueueStore:
                     'imx_status_checked': int(r[28]) if r[28] else None,
                     'image_host_id': r[29] or 'imx',
                     'media_type': r[30] or 'image',
-                    'cover_source_path': r[31] or None,
-                    'cover_host_id': r[32] or None,
-                    'cover_status': r[33] or 'none',
-                    'cover_result': _safe_json_loads(r[34], None),
+                    'download_links': r[31] or '',
+                    'cover_source_path': r[32] or None,
+                    'cover_host_id': r[33] or None,
+                    'cover_status': r[34] or 'none',
+                    'cover_result': _safe_json_loads(r[35], None),
                     'uploaded_files': [],  # Load separately when needed, not in gallery list query
                 }
                 items.append(item)
