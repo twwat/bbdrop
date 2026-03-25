@@ -699,6 +699,34 @@ class GalleryTableWidget(QTableWidget):
                 except Exception as e:
                     log(f"Error auto-regenerating BBCode for renamed gallery {path}: {e}", level="error")
 
+    def preview_screenshot_sheet(self, path: str):
+        """Show screenshot sheet preview dialog for a video item."""
+        from PyQt6.QtWidgets import QMainWindow
+        from src.gui.dialogs.screenshot_sheet_preview import ScreenshotSheetPreviewDialog
+        from src.core.constants import VIDEO_EXTENSIONS
+
+        # Walk parent chain to find queue_manager
+        widget = self
+        while widget and not isinstance(widget, QMainWindow):
+            widget = widget.parent()
+        if not widget or not hasattr(widget, 'queue_manager'):
+            return
+
+        item = widget.queue_manager.get_item(path)
+        if not item or getattr(item, 'media_type', '') != 'video':
+            return
+
+        # For single files, use the path directly; for folders, find the video
+        video_path = item.path
+        if os.path.isdir(video_path):
+            for f in os.listdir(video_path):
+                if f.lower().endswith(VIDEO_EXTENSIONS):
+                    video_path = os.path.join(video_path, f)
+                    break
+
+        dialog = ScreenshotSheetPreviewDialog(video_path, item.name, parent=self)
+        dialog.exec()
+
     def dragEnterEvent(self, event):
         """Handle drag enter events"""
         # Check if we're dragging files

@@ -118,6 +118,13 @@ class GalleryContextMenuHelper(QObject):
             # Rename Gallery (single selection only)
             rename_action = menu.addAction("✏️ Rename Gallery")
             rename_action.triggered.connect(lambda: self._delegate_to_main_window('rename_gallery', selected_paths[0]))
+
+            # Preview Screenshot Sheet (single selection, video only)
+            path = selected_paths[0]
+            item = self._get_queue_item(path)
+            if item and getattr(item, 'media_type', '') == 'video':
+                preview_action = menu.addAction("Preview Screenshot Sheet")
+                preview_action.triggered.connect(lambda: self._delegate_to_main_window('preview_screenshot_sheet', path))
     
     def _add_status_operations(self, menu, selected_paths):
         """Add retry/rescan/reset actions"""
@@ -216,13 +223,19 @@ class GalleryContextMenuHelper(QObject):
         """Check if any selected items can be started"""
         if not self.main_window or not hasattr(self.main_window, 'queue_manager'):
             return False
-            
+
         for path in selected_paths:
             item = self.main_window.queue_manager.get_item(path)
             if item and item.status in ("ready", "paused", "incomplete"):
                 return True
         return False
-    
+
+    def _get_queue_item(self, path):
+        """Get queue item for a given path."""
+        if not self.main_window or not hasattr(self.main_window, 'queue_manager'):
+            return None
+        return self.main_window.queue_manager.get_item(path)
+
     def _get_paths_by_status(self, selected_paths, statuses):
         """Get paths that match the given status(es)"""
         if not self.main_window or not hasattr(self.main_window, 'queue_manager'):
