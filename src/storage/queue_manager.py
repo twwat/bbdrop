@@ -110,6 +110,9 @@ class GalleryQueueItem:
     # Media type: "image" or "video"
     media_type: str = "image"
 
+    # Video metadata from VideoScanner (resolution, duration, streams, etc.)
+    video_metadata: dict = field(default_factory=dict)
+
     # Manual download links for video items
     download_links: str = ""
 
@@ -213,31 +216,58 @@ class QueueManager(QObject):
     def _comprehensive_scan_item(self, path: str):
         """Scan and validate a gallery item"""
         try:
-            # Validation
-            if not os.path.exists(path) or not os.path.isdir(path):
-                self._mark_item_failed(path, "Path does not exist or is not a directory")
-                #log(f" Scan completed for {path}")
-                #log(f" [scan] Path does not exist or is not a directory: {path}")
-                log(f"Scan Worker: Path does not exist or is not a directory: {path}", level="warning", category="scan")
+            # Validation: path must exist and be either a directory or a file
+            if not os.path.exists(path):
+                self._mark_item_failed(path, "Path does not exist")
+                log(f"Scan Worker: Path does not exist: {path}", level="warning", category="scan")
                 return
-            
+
+            is_dir = os.path.isdir(path)
+            is_file = os.path.isfile(path)
+            if not is_dir and not is_file:
+                self._mark_item_failed(path, "Path is not a file or directory")
+                log(f"Scan Worker: Path is not a file or directory: {path}", level="warning", category="scan")
+                return
+
+            # Detect media type early
+            media_type = self._detect_media_type(path)
+
+            # --- Video / Mixed path ---
+            if media_type in ("video", "mixed"):
+                video_files = (
+                    [os.path.basename(path)] if is_file
+                    else self._get_video_files(path)
+                )
+
+                if not video_files:
+                    # No videos found despite detection -- fall through to image scan
+                    media_type = "image"
+                else:
+                    self._scan_video_item(path, video_files, is_dir)
+                    return
+
+            # --- Image path (original behaviour) ---
+            if not is_dir:
+                self._mark_item_failed(path, "Path is not a directory")
+                log(f"Scan Worker: Path is not a directory: {path}", level="warning", category="scan")
+                return
+
             # Find images
             files = self._get_image_files(path)
             if not files:
                 self.mark_scan_failed(path, "No images found")
                 log(f"Scan Worker: No images found: {path}", level="warning", category="scan")
-                #log(f" [scan] No images found: {path}")
                 return
-            
+
             # Check for existing gallery
             with QMutexLocker(self.mutex):
                 if path not in self.items:
                     return
                 item = self.items[path]
-                
+
                 # Duplicate checking now handled at GUI level with user dialogs
                 # No longer silently failing duplicates here
-                
+
                 item.total_images = len(files)
                 old_status = item.status
                 item.status = QUEUE_STATE_SCANNING
@@ -454,6 +484,81 @@ class QueueManager(QObject):
         elif has_videos:
             return "video"
         return "image"
+
+    def _scan_video_item(self, path: str, video_files: List[str], is_dir: bool):
+        """Scan a video item and populate metadata on the queue item.
+
+        Args:
+            path: Gallery path (directory or single file).
+            video_files: List of video filenames (basenames).
+            is_dir: True when *path* is a directory, False for a single file.
+        """
+        from src.processing.video_scanner import VideoScanner
+
+        video_path = os.path.join(path, video_files[0]) if is_dir else path
+
+        with QMutexLocker(self.mutex):
+            if path not in self.items:
+                return
+            item = self.items[path]
+            old_status = item.status
+            item.status = QUEUE_STATE_SCANNING
+            item.media_type = "video"
+            self._update_status_count(old_status, QUEUE_STATE_SCANNING)
+
+        self._emit_scan_status()
+
+        scanner = VideoScanner()
+        meta = scanner.scan(video_path)
+
+        if not meta:
+            self.mark_scan_failed(path, "Failed to read video metadata")
+            log(f"Scan Worker: Video scan failed for {video_path}", level="warning", category="scan")
+            return
+
+        with QMutexLocker(self.mutex):
+            if path not in self.items:
+                return
+            item = self.items[path]
+            item.total_size = meta['filesize']
+            item.total_images = len(video_files) if is_dir else 1
+            item.avg_width = float(meta['width'])
+            item.avg_height = float(meta['height'])
+            item.max_width = float(meta['width'])
+            item.max_height = float(meta['height'])
+            item.min_width = float(meta['width'])
+            item.min_height = float(meta['height'])
+            item.video_metadata = meta
+            item.scan_complete = True
+
+            if item.status == QUEUE_STATE_SCANNING:
+                old_status = item.status
+                item.status = QUEUE_STATE_READY
+                self._update_status_count(old_status, QUEUE_STATE_READY)
+                log(f"Video scan complete for {path}: {old_status} -> {QUEUE_STATE_READY}", level="debug", category="scan")
+
+                # Check if auto-start uploads is enabled
+                defaults = load_user_defaults()
+                if defaults.get('auto_start_upload', False):
+                    log(f"Auto-start enabled: queuing {path} for upload", level="info", category="queue")
+                    self._update_status_count(QUEUE_STATE_READY, QUEUE_STATE_QUEUED)
+                    item.status = QUEUE_STATE_QUEUED
+                    self.queue.put(item)
+                    log(f"Auto-queued {path} for immediate upload", level="debug", category="queue")
+
+                self.status_changed.emit(path, old_status, item.status)
+
+        self._emit_scan_status()
+
+        # Persist and refresh (same pattern as image scan)
+        from PyQt6.QtCore import QTimer
+        saved_path = path
+        def save_and_refresh():
+            self.save_persistent_queue([saved_path])
+            from PyQt6.QtCore import QTimer as QT2
+            QT2.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
+        QTimer.singleShot(0, save_and_refresh)
+        self._inc_version()
 
     def _scan_images(self, path: str, files: List[str]) -> dict:
         """Scan images for validation and metadata"""
@@ -1091,6 +1196,7 @@ class QueueManager(QObject):
             'imx_status_checked': item.imx_status_checked,
             'image_host_id': item.image_host_id,
             'media_type': item.media_type,
+            'video_metadata': item.video_metadata,
             'download_links': item.download_links,
             'file_dimensions': item.file_dimensions,
             'cover_source_path': item.cover_source_path,
@@ -1185,7 +1291,7 @@ class QueueManager(QObject):
                      'uploaded_bytes', 'final_kibps', 'error_message',
                      'source_archive_path', 'is_from_archive',
                      'imx_status', 'imx_status_checked', 'tab_id', 'image_host_id',
-                     'media_type', 'download_links', 'file_dimensions',
+                     'media_type', 'video_metadata', 'download_links', 'file_dimensions',
                      'cover_source_path', 'cover_host_id', 'cover_status', 'cover_result']:
             if field in data:
                 setattr(item, field, data[field])

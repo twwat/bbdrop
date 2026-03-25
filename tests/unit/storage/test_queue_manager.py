@@ -1109,3 +1109,179 @@ class TestManualDownloadLinks:
         item = queue_manager._dict_to_item(data)
 
         assert item.download_links == ""
+
+
+class TestVideoMetadataField:
+    """Test video_metadata field on GalleryQueueItem."""
+
+    def test_default_video_metadata_is_empty_dict(self):
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        assert item.video_metadata == {}
+
+    def test_video_metadata_can_be_set(self):
+        meta = {"width": 1920, "height": 1080, "duration": 120.5}
+        item = GalleryQueueItem(path="/tmp/test", name="test", video_metadata=meta)
+        assert item.video_metadata == meta
+
+    def test_video_metadata_in_item_to_dict(self, queue_manager, gallery_dir):
+        queue_manager.add_item(gallery_dir, name="Test")
+        item = queue_manager.items[gallery_dir]
+        item.video_metadata = {"width": 1920, "height": 1080}
+
+        item_dict = queue_manager._item_to_dict(item)
+
+        assert item_dict['video_metadata'] == {"width": 1920, "height": 1080}
+
+    def test_video_metadata_in_dict_to_item(self, queue_manager):
+        data = {
+            'path': '/test/gallery',
+            'name': 'Test Gallery',
+            'status': QUEUE_STATE_READY,
+            'added_time': int(time.time()),
+            'tab_name': 'Main',
+            'video_metadata': {"width": 1920, "height": 1080},
+        }
+
+        item = queue_manager._dict_to_item(data)
+
+        assert item.video_metadata == {"width": 1920, "height": 1080}
+
+    def test_video_metadata_missing_from_dict_defaults_empty(self, queue_manager):
+        data = {
+            'path': '/test/gallery',
+            'name': 'Test Gallery',
+            'status': QUEUE_STATE_READY,
+            'added_time': int(time.time()),
+            'tab_name': 'Main',
+        }
+
+        item = queue_manager._dict_to_item(data)
+
+        assert item.video_metadata == {}
+
+
+class TestComprehensiveScanVideoItem:
+    """Test _comprehensive_scan_item for video files."""
+
+    _FAKE_VIDEO_META = {
+        'width': 1920,
+        'height': 1080,
+        'fps': 29.97,
+        'frame_count': 7192,
+        'duration': 240.0,
+        'filesize': 524_288_000,
+        'video_streams': [{'format': 'AVC', 'width': 1920, 'height': 1080}],
+        'audio_streams': [{'format': 'AAC', 'channels': 2}],
+    }
+
+    def test_video_folder_scans_successfully(self, queue_manager):
+        """A folder containing only video files should scan with media_type='video'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create fake video files
+            open(os.path.join(tmpdir, "clip1.mp4"), 'wb').close()
+            open(os.path.join(tmpdir, "clip2.mp4"), 'wb').close()
+
+            queue_manager.add_item(tmpdir, name="Video Gallery")
+            item = queue_manager.items[tmpdir]
+
+            # Patch VideoScanner.scan to return fake metadata
+            with patch('src.storage.queue_manager.QTimer'):
+                with patch(
+                    'src.processing.video_scanner.VideoScanner.scan',
+                    return_value=self._FAKE_VIDEO_META,
+                ):
+                    queue_manager._comprehensive_scan_item(tmpdir)
+
+            assert item.media_type == "video"
+            assert item.scan_complete is True
+            assert item.total_size == 524_288_000
+            assert item.total_images == 2  # two video files
+            assert item.avg_width == 1920.0
+            assert item.avg_height == 1080.0
+            assert item.video_metadata == self._FAKE_VIDEO_META
+
+    def test_image_folder_still_scans_as_before(self, queue_manager):
+        """A folder with only image files follows the original image scan path."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create minimal valid JPEG files
+            for i in range(3):
+                with open(os.path.join(tmpdir, f"img{i}.jpg"), 'wb') as f:
+                    f.write(b'\xFF\xD8\xFF\xE0')
+
+            queue_manager.add_item(tmpdir, name="Image Gallery")
+            item = queue_manager.items[tmpdir]
+
+            with patch('src.storage.queue_manager.QTimer'):
+                queue_manager._comprehensive_scan_item(tmpdir)
+
+            assert item.media_type == "image"
+            assert item.total_images == 3
+            # scan_complete may or may not be True depending on PIL validation
+            # but the item should NOT have been routed through the video path
+            assert item.video_metadata == {}
+
+    def test_single_video_file_scans_successfully(self, queue_manager):
+        """A single video file path should scan with media_type='video'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_path = os.path.join(tmpdir, "movie.mkv")
+            open(video_path, 'wb').close()
+
+            queue_manager.add_item(video_path, name="Single Video")
+            item = queue_manager.items[video_path]
+
+            with patch('src.storage.queue_manager.QTimer'):
+                with patch(
+                    'src.processing.video_scanner.VideoScanner.scan',
+                    return_value=self._FAKE_VIDEO_META,
+                ):
+                    queue_manager._comprehensive_scan_item(video_path)
+
+            assert item.media_type == "video"
+            assert item.scan_complete is True
+            assert item.total_size == 524_288_000
+            assert item.total_images == 1
+            assert item.max_width == 1920.0
+            assert item.max_height == 1080.0
+            assert item.video_metadata == self._FAKE_VIDEO_META
+
+    def test_video_scan_failure_marks_scan_failed(self, queue_manager):
+        """When VideoScanner.scan returns None the item is marked scan_failed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "broken.mp4"), 'wb').close()
+
+            queue_manager.add_item(tmpdir, name="Bad Video")
+            item = queue_manager.items[tmpdir]
+
+            with patch('src.storage.queue_manager.QTimer'):
+                with patch(
+                    'src.processing.video_scanner.VideoScanner.scan',
+                    return_value=None,
+                ):
+                    queue_manager._comprehensive_scan_item(tmpdir)
+
+            assert item.status == QUEUE_STATE_SCAN_FAILED
+            # mark_scan_failed sets scan_complete=True (scan finished, but with failure)
+            assert item.scan_complete is True
+            assert item.video_metadata == {}
+            assert item.total_size == 0
+
+    def test_mixed_folder_scans_as_video(self, queue_manager):
+        """A folder with both images and videos should scan as video."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "clip.mp4"), 'wb').close()
+            with open(os.path.join(tmpdir, "thumb.jpg"), 'wb') as f:
+                f.write(b'\xFF\xD8\xFF\xE0')
+
+            queue_manager.add_item(tmpdir, name="Mixed Gallery")
+            item = queue_manager.items[tmpdir]
+
+            with patch('src.storage.queue_manager.QTimer'):
+                with patch(
+                    'src.processing.video_scanner.VideoScanner.scan',
+                    return_value=self._FAKE_VIDEO_META,
+                ):
+                    queue_manager._comprehensive_scan_item(tmpdir)
+
+            assert item.media_type == "video"
+            assert item.scan_complete is True
+            assert item.total_images == 1  # only video files counted
