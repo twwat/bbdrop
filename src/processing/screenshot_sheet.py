@@ -159,7 +159,7 @@ class ScreenshotSheetGenerator:
             sheet.paste(frame, (x, y))
 
             if show_ts:
-                ts_text = self._format_timestamp(ts, show_ms=show_ms, show_frame_number=show_frame)
+                ts_text = self._format_timestamp(ts, show_ms=show_ms, frame_number=idx, show_frame_number=show_frame)
                 tx = x + 4
                 ty = y + thumb_h - ts_font_size - 8
                 draw.text((tx + 1, ty + 1), ts_text, fill='#000000', font=ts_font)

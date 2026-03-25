@@ -31,8 +31,8 @@ class VideoScanner:
                 'frame_count': frame_count,
                 'duration': duration,
             }
-        except Exception:
-            log(f"VideoScanner: failed to read metadata from {path}")
+        except Exception as e:
+            log(f"VideoScanner: failed to read metadata from {path}: {e}")
             return None
         finally:
             cap.release()
@@ -86,6 +86,6 @@ class VideoScanner:
                 'video_streams': streams['video'],
                 'audio_streams': streams['audio'],
             }
-        except Exception:
-            log(f"VideoScanner: scan failed for {path}")
+        except Exception as e:
+            log(f"VideoScanner: scan failed for {path}: {e}")
             return None
