@@ -149,6 +149,7 @@ class GalleryTableWidget(QTableWidget):
     COL_HOSTS_STATUS: int
     COL_HOSTS_ACTION: int
     COL_ONLINE_IMX: int
+    COL_MEDIA_TYPE: int
 
     # Column definitions - single source of truth for all column metadata
     COLUMNS = [
@@ -180,6 +181,7 @@ class GalleryTableWidget(QTableWidget):
         (24, 'HOSTS_STATUS',  'file hosts',   150, 'Interactive', False, True),
         (25, 'HOSTS_ACTION',  'hosts action', 80,  'Interactive', False, True),
         (26, 'ONLINE_IMX',    'online (imx)', 130, 'Interactive', True,  False),
+        (27, 'MEDIA_TYPE',    'type',         60,  'Interactive', True,  True),
     ]
 
     # Create class attributes dynamically from COLUMNS definition
