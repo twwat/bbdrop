@@ -104,6 +104,7 @@ class ArchiveManager:
         archive_format: str = 'zip',
         compression: str = 'store',
         split_size_mb: int = 0,
+        media_type: str = 'image',
     ) -> List[Path]:
         """Create a new archive or return existing cached archive paths.
 
@@ -114,6 +115,9 @@ class ArchiveManager:
             archive_format: 'zip' or '7z'
             compression: Compression method (format-dependent)
             split_size_mb: Split size in MB (0 = no split)
+            media_type: 'image' or 'video'. When 'video' and no split is
+                needed, the raw video file(s) are returned directly without
+                creating an archive.
 
         Returns:
             List of archive file paths (1 for non-split, N for split)
@@ -121,6 +125,22 @@ class ArchiveManager:
         Raises:
             Exception: If archive creation fails
         """
+        # Video passthrough: return raw files when no split is required.
+        # These are original user files, so we skip the archive cache to
+        # avoid the release mechanism ever deleting them.
+        if media_type == 'video' and split_size_mb <= 0:
+            folder = Path(folder_path)
+            video_files = self._get_video_files(folder)
+            if video_files:
+                log(
+                    f"Video passthrough for gallery {db_id}: "
+                    f"{len(video_files)} file(s), skipping archive creation",
+                    level="debug", category="file_hosts",
+                )
+                return video_files
+            # No video files found -- fall through to normal archive path
+            # so _get_image_files can raise the appropriate error.
+
         with self.lock:
             if db_id in self.archive_cache:
                 paths, ref_count = self.archive_cache[db_id]
@@ -436,6 +456,19 @@ class ArchiveManager:
         return sorted(
             f for f in folder_path.iterdir()
             if f.is_file() and f.suffix.lower() in image_extensions
+        )
+
+    def _get_video_files(self, folder_path: Path) -> List[Path]:
+        """Get sorted list of video files in a folder."""
+        if not folder_path.exists():
+            raise FileNotFoundError(f"Folder does not exist: {folder_path}")
+        if not folder_path.is_dir():
+            raise ValueError(f"Path is not a directory: {folder_path}")
+
+        from src.core.constants import VIDEO_EXTENSIONS
+        return sorted(
+            f for f in folder_path.iterdir()
+            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS
         )
 
 
