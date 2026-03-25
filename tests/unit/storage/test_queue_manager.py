@@ -948,3 +948,97 @@ class TestGalleryQueueItemMediaType:
     def test_media_type_can_be_set_to_video(self):
         item = GalleryQueueItem(path="/tmp/test", name="test", media_type="video")
         assert item.media_type == "video"
+
+
+class TestMediaTypeDetection:
+    """Test _detect_media_type on QueueManager."""
+
+    def test_detect_video_folder(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "clip.mp4"), 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            media_type = qm._detect_media_type(tmpdir)
+            assert media_type == "video"
+
+    def test_detect_image_folder(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "photo.jpg"), 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            media_type = qm._detect_media_type(tmpdir)
+            assert media_type == "image"
+
+    def test_detect_single_video_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video = os.path.join(tmpdir, "clip.mkv")
+            open(video, 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            media_type = qm._detect_media_type(video)
+            assert media_type == "video"
+
+    def test_detect_single_image_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            image = os.path.join(tmpdir, "photo.png")
+            open(image, 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            media_type = qm._detect_media_type(image)
+            assert media_type == "image"
+
+    def test_detect_mixed_returns_mixed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "photo.jpg"), 'w').close()
+            open(os.path.join(tmpdir, "clip.mp4"), 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            media_type = qm._detect_media_type(tmpdir)
+            assert media_type == "mixed"
+
+    def test_detect_unknown_extension_defaults_to_image(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            unknown = os.path.join(tmpdir, "data.xyz")
+            open(unknown, 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            media_type = qm._detect_media_type(unknown)
+            assert media_type == "image"
+
+    def test_detect_empty_folder_defaults_to_image(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            qm = QueueManager.__new__(QueueManager)
+            media_type = qm._detect_media_type(tmpdir)
+            assert media_type == "image"
+
+
+class TestGetVideoFiles:
+    """Test _get_video_files on QueueManager."""
+
+    def test_returns_only_video_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "clip.mp4"), 'w').close()
+            open(os.path.join(tmpdir, "photo.jpg"), 'w').close()
+            open(os.path.join(tmpdir, "readme.txt"), 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            videos = qm._get_video_files(tmpdir)
+            assert videos == ["clip.mp4"]
+
+    def test_returns_multiple_video_extensions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "a.mkv"), 'w').close()
+            open(os.path.join(tmpdir, "b.avi"), 'w').close()
+            open(os.path.join(tmpdir, "c.webm"), 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            videos = sorted(qm._get_video_files(tmpdir))
+            assert videos == ["a.mkv", "b.avi", "c.webm"]
+
+    def test_returns_empty_for_no_videos(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "photo.jpg"), 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            videos = qm._get_video_files(tmpdir)
+            assert videos == []
+
+    def test_ignores_subdirectories(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a subdirectory with a video-like name
+            os.makedirs(os.path.join(tmpdir, "fake.mp4"))
+            open(os.path.join(tmpdir, "real.mp4"), 'w').close()
+            qm = QueueManager.__new__(QueueManager)
+            videos = qm._get_video_files(tmpdir)
+            assert videos == ["real.mp4"]

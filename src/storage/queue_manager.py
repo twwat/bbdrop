@@ -22,7 +22,7 @@ from src.core.constants import (
     QUEUE_STATE_COMPLETED, QUEUE_STATE_FAILED, QUEUE_STATE_SCAN_FAILED,
     QUEUE_STATE_UPLOAD_FAILED, QUEUE_STATE_PAUSED, QUEUE_STATE_INCOMPLETE,
     QUEUE_STATE_SCANNING, QUEUE_STATE_VALIDATING,
-    IMAGE_EXTENSIONS, DEFAULT_COVER_PATTERNS
+    IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, DEFAULT_COVER_PATTERNS
 )
 
 
@@ -422,7 +422,36 @@ class QueueManager(QObject):
                 if os.path.isfile(fp):
                     files.append(f)
         return files
-    
+
+    def _get_video_files(self, path: str) -> List[str]:
+        """Return list of video filenames in directory."""
+        files = []
+        for f in os.listdir(path):
+            if f.lower().endswith(VIDEO_EXTENSIONS):
+                fp = os.path.join(path, f)
+                if os.path.isfile(fp):
+                    files.append(f)
+        return files
+
+    def _detect_media_type(self, path: str) -> str:
+        """Detect whether path contains images, videos, or both."""
+        if os.path.isfile(path):
+            ext = os.path.splitext(path)[1].lower()
+            if ext in VIDEO_EXTENSIONS:
+                return "video"
+            if ext in IMAGE_EXTENSIONS:
+                return "image"
+            return "image"  # fallback
+
+        has_images = bool(self._get_image_files(path))
+        has_videos = bool(self._get_video_files(path))
+
+        if has_images and has_videos:
+            return "mixed"
+        elif has_videos:
+            return "video"
+        return "image"
+
     def _scan_images(self, path: str, files: List[str]) -> dict:
         """Scan images for validation and metadata"""
         gallery_name = os.path.basename(path)
