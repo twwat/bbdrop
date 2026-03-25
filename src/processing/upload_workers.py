@@ -310,20 +310,24 @@ class UploadWorker(QThread):
                 self.queue_manager.update_item_status(item.path, "incomplete")
                 return
 
-            # Get per-host upload settings (3-tier fallback: INI -> JSON -> hardcoded)
-            thumbnail_size = get_image_host_setting(host_id, 'thumbnail_size', 'int')
-            thumbnail_format = get_image_host_setting(host_id, 'thumbnail_format', 'int')
-            max_retries = get_image_host_setting(host_id, 'max_retries', 'int')
-            parallel_batch_size = get_image_host_setting(host_id, 'parallel_batch_size', 'int')
-            # Pass the item directly for precalculated dimensions (engine uses getattr on it)
-            if item.scan_complete and (item.avg_width or item.avg_height):
-                log(f"Using precalculated dimensions for {item.name}: {item.avg_width}x{item.avg_height}", level="debug", category="uploads")
+            # Branch on media type
+            if getattr(item, 'media_type', 'image') == 'video':
+                results = self._upload_video_gallery(item, host_id)
+            else:
+                # Get per-host upload settings (3-tier fallback: INI -> JSON -> hardcoded)
+                thumbnail_size = get_image_host_setting(host_id, 'thumbnail_size', 'int')
+                thumbnail_format = get_image_host_setting(host_id, 'thumbnail_format', 'int')
+                max_retries = get_image_host_setting(host_id, 'max_retries', 'int')
+                parallel_batch_size = get_image_host_setting(host_id, 'parallel_batch_size', 'int')
+                # Pass the item directly for precalculated dimensions (engine uses getattr on it)
+                if item.scan_complete and (item.avg_width or item.avg_height):
+                    log(f"Using precalculated dimensions for {item.name}: {item.avg_width}x{item.avg_height}", level="debug", category="uploads")
 
-            # Run upload engine directly with any ImageHostClient (host-agnostic)
-            results = self._run_upload_engine(
-                item, thumbnail_size, thumbnail_format,
-                max_retries, parallel_batch_size,
-            )
+                # Run upload engine directly with any ImageHostClient (host-agnostic)
+                results = self._run_upload_engine(
+                    item, thumbnail_size, thumbnail_format,
+                    max_retries, parallel_batch_size,
+                )
 
             # Handle paused state
             if item.status == "paused":
@@ -415,6 +419,128 @@ class UploadWorker(QThread):
                 log(f"Downloaded cover from hook URL: {cover_url}", level="info", category="cover")
             except Exception as e:
                 log(f"Failed to download cover from hook URL: {e}", level="warning", category="cover")
+
+    def _upload_video_gallery(self, item: GalleryQueueItem, host_id: str) -> dict:
+        """Process a video item: generate screenshot sheet and upload it.
+
+        Uses VideoStrategy to generate a composite screenshot sheet from the
+        video file, then uploads that single image to the configured image host.
+
+        Returns a results dict compatible with ``_process_upload_results``.
+        """
+        from src.core.media_strategy import create_media_strategy
+
+        strategy = create_media_strategy("video")
+        video_settings = self._get_video_settings()
+
+        # Emit 0% progress while generating the screenshot sheet
+        self.progress_updated.emit(item.path, 0, 1, 0, "Generating screenshot sheet...")
+
+        sheet_result = strategy.generate_primary_content(item, video_settings)
+        if sheet_result['status'] == 'error':
+            error_msg = sheet_result.get('error', 'Screenshot sheet generation failed')
+            log(f"Video processing failed for {item.name}: {error_msg}",
+                level="error", category="uploads")
+            self.queue_manager.mark_upload_failed(item.path, error_msg)
+            self.gallery_failed.emit(item.path, error_msg)
+            return {}
+
+        # Store video metadata on the item
+        if sheet_result.get('metadata'):
+            item.video_metadata = sheet_result['metadata']
+
+        sheet_path = sheet_result['screenshot_sheet_path']
+        log(f"Screenshot sheet generated for {item.name}: {sheet_path}",
+            level="info", category="uploads")
+
+        # Upload the screenshot sheet to the image host
+        self.progress_updated.emit(item.path, 0, 1, 0, "Uploading screenshot sheet...")
+
+        thumbnail_size = get_image_host_setting(host_id, 'thumbnail_size', 'int')
+        thumbnail_format = get_image_host_setting(host_id, 'thumbnail_format', 'int')
+
+        try:
+            response = self.uploader.upload_image(
+                sheet_path,
+                gallery_id=None,
+                thumbnail_size=thumbnail_size,
+                thumbnail_format=thumbnail_format,
+            )
+        except Exception as e:
+            error_msg = f"Screenshot sheet upload failed: {e}"
+            log(error_msg, level="error", category="uploads")
+            self.queue_manager.mark_upload_failed(item.path, error_msg)
+            self.gallery_failed.emit(item.path, error_msg)
+            return {}
+
+        if not response or response.get('status') != 'success':
+            error_msg = (response or {}).get('error', 'Screenshot sheet upload failed')
+            log(f"Screenshot sheet upload failed for {item.name}: {error_msg}",
+                level="error", category="uploads")
+            self.queue_manager.mark_upload_failed(item.path, error_msg)
+            self.gallery_failed.emit(item.path, error_msg)
+            return {}
+
+        data = response.get('data', {})
+
+        # For hosts that require fetch_batch_results (Turbo, Pixhost)
+        if not data.get('bbcode') and hasattr(self.uploader, 'fetch_batch_results'):
+            try:
+                batch = self.uploader.fetch_batch_results()
+                if batch:
+                    for img in batch.get('images', []):
+                        data['bbcode'] = img.get('bbcode', '') or data.get('bbcode', '')
+                        data['image_url'] = img.get('image_url', '') or data.get('image_url', '')
+                        data['thumb_url'] = img.get('thumb_url', '') or data.get('thumb_url', '')
+            except Exception as e:
+                log(f"fetch_batch_results failed for video sheet: {e}",
+                    level="warning", category="uploads")
+
+        self.progress_updated.emit(item.path, 1, 1, 100, "Screenshot sheet uploaded")
+
+        # Build results dict in the same shape as _run_upload_engine returns
+        results = {
+            'successful_count': 1,
+            'failed_count': 0,
+            'total_images': 1,
+            'gallery_id': data.get('gallery_id', ''),
+            'gallery_url': data.get('gallery_url', ''),
+            'images': [{
+                'original_filename': os.path.basename(sheet_path),
+                'image_url': data.get('image_url', ''),
+                'thumb_url': data.get('thumb_url', ''),
+                'bbcode': data.get('bbcode', ''),
+            }],
+            'screenshot_sheet_path': sheet_path,
+        }
+
+        # Track uploaded bytes
+        try:
+            sheet_size = os.path.getsize(sheet_path)
+            item.uploaded_bytes = (item.uploaded_bytes or 0) + sheet_size
+            results['uploaded_size'] = sheet_size
+        except OSError:
+            pass
+
+        return results
+
+    def _get_video_settings(self) -> dict:
+        """Read video processing settings from QSettings."""
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        settings.beginGroup("Video")
+        result = {
+            'rows': settings.value("grid_rows", 4, int),
+            'cols': settings.value("grid_cols", 4, int),
+            'show_timestamps': settings.value("show_timestamps", True, bool),
+            'show_ms': settings.value("show_ms", False, bool),
+            'show_frame_number': settings.value("show_frame_number", False, bool),
+            'font_color': settings.value("font_color", "#ffffff"),
+            'bg_color': settings.value("bg_color", "#000000"),
+            'output_format': settings.value("output_format", "PNG"),
+            'image_overlay_template': settings.value("image_overlay_template", ""),
+        }
+        settings.endGroup()
+        return result
 
     def _upload_cover(self, item: GalleryQueueItem, gallery_id: str = "") -> Optional[list]:
         """Upload detected cover photo(s) using the configured host and settings.

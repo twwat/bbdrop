@@ -812,3 +812,482 @@ class TestCompletionWorkerArtifactLogging:
 
         # Should not raise exception
         worker._log_artifact_locations(results)
+
+
+class TestUploadWorkerVideoStrategy:
+    """Test video item routing through MediaStrategy pipeline"""
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    @patch('src.processing.upload_workers.execute_gallery_hooks')
+    @patch('src.processing.upload_workers.get_image_host_setting')
+    @patch('src.processing.upload_workers.is_image_host_enabled', return_value=True)
+    @patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True})
+    def test_video_item_uses_video_strategy(self, mock_enabled_hosts, mock_is_enabled,
+                                             mock_get_setting, mock_hooks,
+                                             mock_rename_worker_class):
+        """Video item calls _upload_video_gallery instead of _run_upload_engine"""
+        mock_get_setting.return_value = 3
+        mock_hooks.return_value = {}
+
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/video"
+        mock_item.name = "Test Video"
+        mock_item.tab_name = "Main"
+        mock_item.total_images = 1
+        mock_item.status = "uploading"
+        mock_item.image_host_id = "imx"
+        mock_item.start_time = 0.0
+        mock_item.uploaded_bytes = 0
+        mock_item.cover_source_path = None
+        mock_item.cover_result = None
+        mock_item.observed_peak_kbps = 0.0
+        mock_item.scan_complete = False
+        mock_item.media_type = "video"
+
+        video_results = {
+            'successful_count': 1,
+            'failed_count': 0,
+            'total_images': 1,
+            'gallery_id': 'vid123',
+            'gallery_url': 'http://example.com/vid123',
+        }
+
+        with patch.object(worker, '_upload_video_gallery', return_value=video_results) as mock_video, \
+             patch.object(worker, '_run_upload_engine') as mock_engine, \
+             patch.object(worker, '_process_upload_results'):
+            worker.upload_gallery(mock_item)
+
+        # Give background hook thread time to complete
+        time.sleep(0.1)
+
+        mock_video.assert_called_once_with(mock_item, "imx")
+        mock_engine.assert_not_called()
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    @patch('src.processing.upload_workers.execute_gallery_hooks')
+    @patch('src.processing.upload_workers.get_image_host_setting')
+    @patch('src.processing.upload_workers.is_image_host_enabled', return_value=True)
+    @patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True})
+    def test_image_item_uses_existing_pipeline(self, mock_enabled_hosts, mock_is_enabled,
+                                                mock_get_setting, mock_hooks,
+                                                mock_rename_worker_class):
+        """Image item calls _run_upload_engine, not _upload_video_gallery"""
+        mock_get_setting.return_value = 3
+        mock_hooks.return_value = {}
+
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/gallery"
+        mock_item.name = "Test Gallery"
+        mock_item.tab_name = "Main"
+        mock_item.total_images = 50
+        mock_item.status = "uploading"
+        mock_item.image_host_id = "imx"
+        mock_item.start_time = 0.0
+        mock_item.uploaded_bytes = 0
+        mock_item.cover_source_path = None
+        mock_item.cover_result = None
+        mock_item.observed_peak_kbps = 0.0
+        mock_item.scan_complete = True
+        mock_item.avg_width = 1920
+        mock_item.avg_height = 1080
+        mock_item.media_type = "image"
+
+        engine_results = {
+            'successful_count': 50,
+            'failed_count': 0,
+            'gallery_id': 'gal123',
+        }
+
+        with patch.object(worker, '_upload_video_gallery') as mock_video, \
+             patch.object(worker, '_run_upload_engine', return_value=engine_results) as mock_engine, \
+             patch.object(worker, '_process_upload_results'):
+            worker.upload_gallery(mock_item)
+
+        # Give background hook thread time to complete
+        time.sleep(0.1)
+
+        mock_engine.assert_called_once()
+        mock_video.assert_not_called()
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    @patch('src.processing.upload_workers.execute_gallery_hooks')
+    @patch('src.processing.upload_workers.get_image_host_setting')
+    @patch('src.processing.upload_workers.is_image_host_enabled', return_value=True)
+    @patch('src.processing.upload_workers.get_enabled_hosts', return_value={'imx': True})
+    def test_default_media_type_uses_image_pipeline(self, mock_enabled_hosts, mock_is_enabled,
+                                                     mock_get_setting, mock_hooks,
+                                                     mock_rename_worker_class):
+        """Item with no media_type attribute defaults to image pipeline"""
+        mock_get_setting.return_value = 3
+        mock_hooks.return_value = {}
+
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        mock_item = Mock(spec=[
+            'path', 'name', 'tab_name', 'total_images', 'status',
+            'image_host_id', 'start_time', 'uploaded_bytes', 'cover_source_path',
+            'cover_result', 'observed_peak_kbps', 'scan_complete',
+            'avg_width', 'avg_height',
+        ])
+        mock_item.path = "/path/to/gallery"
+        mock_item.name = "Test Gallery"
+        mock_item.tab_name = "Main"
+        mock_item.total_images = 10
+        mock_item.status = "uploading"
+        mock_item.image_host_id = "imx"
+        mock_item.start_time = 0.0
+        mock_item.uploaded_bytes = 0
+        mock_item.cover_source_path = None
+        mock_item.cover_result = None
+        mock_item.observed_peak_kbps = 0.0
+        mock_item.scan_complete = False
+        mock_item.avg_width = 0
+        mock_item.avg_height = 0
+
+        engine_results = {'successful_count': 10, 'failed_count': 0}
+
+        with patch.object(worker, '_upload_video_gallery') as mock_video, \
+             patch.object(worker, '_run_upload_engine', return_value=engine_results), \
+             patch.object(worker, '_process_upload_results'):
+            worker.upload_gallery(mock_item)
+
+        time.sleep(0.1)
+        mock_video.assert_not_called()
+
+
+class TestUploadVideoGallery:
+    """Test _upload_video_gallery method"""
+
+    @patch('src.processing.upload_workers.get_image_host_setting', return_value=3)
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_successful_video_upload(self, mock_rename_worker_class, mock_get_setting):
+        """Screenshot sheet generated and uploaded successfully"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        mock_uploader.upload_image.return_value = {
+            'status': 'success',
+            'data': {
+                'image_url': 'http://imx.to/i/abc123.jpg',
+                'thumb_url': 'http://imx.to/t/abc123.jpg',
+                'gallery_id': 'gal456',
+                'bbcode': '[url=http://imx.to/i/abc123.jpg][img]http://imx.to/t/abc123.jpg[/img][/url]',
+            }
+        }
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/video.mkv"
+        mock_item.name = "Test Video"
+        mock_item.uploaded_bytes = 0
+        mock_item.video_metadata = {}
+
+        mock_strategy = Mock()
+        mock_strategy.generate_primary_content.return_value = {
+            'status': 'success',
+            'screenshot_sheet_path': '/tmp/sheet.png',
+            'metadata': {'duration': 3600, 'width': 1920, 'height': 1080},
+        }
+
+        with patch('src.core.media_strategy.create_media_strategy', return_value=mock_strategy) as mock_factory, \
+             patch.object(worker, '_get_video_settings', return_value={'rows': 4, 'cols': 4}), \
+             patch('os.path.getsize', return_value=500_000):
+            results = worker._upload_video_gallery(mock_item, "imx")
+
+        mock_factory.assert_called_once_with("video")
+        mock_strategy.generate_primary_content.assert_called_once_with(
+            mock_item, {'rows': 4, 'cols': 4})
+        mock_uploader.upload_image.assert_called_once()
+
+        assert results['successful_count'] == 1
+        assert results['failed_count'] == 0
+        assert results['gallery_id'] == 'gal456'
+        assert results['screenshot_sheet_path'] == '/tmp/sheet.png'
+        assert len(results['images']) == 1
+        assert results['images'][0]['bbcode'] != ''
+        assert mock_item.video_metadata == {'duration': 3600, 'width': 1920, 'height': 1080}
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_sheet_generation_failure(self, mock_rename_worker_class):
+        """Strategy returns error for sheet generation"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+        worker.uploader = Mock()
+        worker._current_host_id = "imx"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/corrupt.mkv"
+        mock_item.name = "Corrupt Video"
+        mock_item.uploaded_bytes = 0
+
+        mock_strategy = Mock()
+        mock_strategy.generate_primary_content.return_value = {
+            'status': 'error',
+            'error': 'Failed to scan video',
+        }
+
+        failed_spy = Mock()
+        worker.gallery_failed.connect(failed_spy)
+
+        with patch('src.core.media_strategy.create_media_strategy', return_value=mock_strategy), \
+             patch.object(worker, '_get_video_settings', return_value={}):
+            results = worker._upload_video_gallery(mock_item, "imx")
+
+        assert results == {}
+        mock_queue_manager.mark_upload_failed.assert_called_once()
+        failed_spy.assert_called_once()
+        assert "Failed to scan video" in failed_spy.call_args[0][1]
+
+    @patch('src.processing.upload_workers.get_image_host_setting', return_value=3)
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_sheet_upload_failure(self, mock_rename_worker_class, mock_get_setting):
+        """Image host returns error for sheet upload"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        mock_uploader.upload_image.return_value = {
+            'status': 'error',
+            'error': 'Upload rejected',
+            'data': {},
+        }
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/video.mkv"
+        mock_item.name = "Test Video"
+        mock_item.uploaded_bytes = 0
+        mock_item.video_metadata = {}
+
+        mock_strategy = Mock()
+        mock_strategy.generate_primary_content.return_value = {
+            'status': 'success',
+            'screenshot_sheet_path': '/tmp/sheet.png',
+            'metadata': {'duration': 120},
+        }
+
+        failed_spy = Mock()
+        worker.gallery_failed.connect(failed_spy)
+
+        with patch('src.core.media_strategy.create_media_strategy', return_value=mock_strategy), \
+             patch.object(worker, '_get_video_settings', return_value={}):
+            results = worker._upload_video_gallery(mock_item, "imx")
+
+        assert results == {}
+        failed_spy.assert_called_once()
+
+    @patch('src.processing.upload_workers.get_image_host_setting', return_value=3)
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_sheet_upload_exception(self, mock_rename_worker_class, mock_get_setting):
+        """Image host throws exception during sheet upload"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        mock_uploader.upload_image.side_effect = ConnectionError("Network down")
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/video.mkv"
+        mock_item.name = "Test Video"
+        mock_item.uploaded_bytes = 0
+        mock_item.video_metadata = {}
+
+        mock_strategy = Mock()
+        mock_strategy.generate_primary_content.return_value = {
+            'status': 'success',
+            'screenshot_sheet_path': '/tmp/sheet.png',
+            'metadata': {},
+        }
+
+        failed_spy = Mock()
+        worker.gallery_failed.connect(failed_spy)
+
+        with patch('src.core.media_strategy.create_media_strategy', return_value=mock_strategy), \
+             patch.object(worker, '_get_video_settings', return_value={}):
+            results = worker._upload_video_gallery(mock_item, "imx")
+
+        assert results == {}
+        failed_spy.assert_called_once()
+        assert "Network down" in failed_spy.call_args[0][1]
+
+    @patch('src.processing.upload_workers.get_image_host_setting', return_value=3)
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_stores_video_metadata_on_item(self, mock_rename_worker_class, mock_get_setting):
+        """Video metadata from strategy is stored on the queue item"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        mock_uploader.upload_image.return_value = {
+            'status': 'success',
+            'data': {
+                'image_url': 'http://example.com/img.jpg',
+                'thumb_url': 'http://example.com/thumb.jpg',
+                'gallery_id': '',
+                'bbcode': '[img]http://example.com/thumb.jpg[/img]',
+            }
+        }
+        worker.uploader = mock_uploader
+        worker._current_host_id = "imx"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/video.mkv"
+        mock_item.name = "Test Video"
+        mock_item.uploaded_bytes = 0
+        mock_item.video_metadata = {}
+
+        expected_metadata = {
+            'duration': 7200,
+            'width': 3840,
+            'height': 2160,
+            'video_streams': [{'format': 'HEVC'}],
+            'audio_streams': [{'format': 'AAC', 'channels': 6}],
+        }
+
+        mock_strategy = Mock()
+        mock_strategy.generate_primary_content.return_value = {
+            'status': 'success',
+            'screenshot_sheet_path': '/tmp/sheet.png',
+            'metadata': expected_metadata,
+        }
+
+        with patch('src.core.media_strategy.create_media_strategy', return_value=mock_strategy), \
+             patch.object(worker, '_get_video_settings', return_value={}), \
+             patch('os.path.getsize', return_value=100_000):
+            worker._upload_video_gallery(mock_item, "imx")
+
+        assert mock_item.video_metadata == expected_metadata
+
+    @patch('src.processing.upload_workers.get_image_host_setting', return_value=3)
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_batch_host_fetch_results(self, mock_rename_worker_class, mock_get_setting):
+        """Hosts with fetch_batch_results (Turbo/Pixhost) get data enriched"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        mock_uploader = Mock()
+        # Initial upload returns no bbcode (like Turbo)
+        mock_uploader.upload_image.return_value = {
+            'status': 'success',
+            'data': {
+                'image_url': '',
+                'thumb_url': '',
+                'gallery_id': '',
+                'bbcode': '',
+            }
+        }
+        mock_uploader.fetch_batch_results.return_value = {
+            'images': [{
+                'image_url': 'http://turbo.to/full.jpg',
+                'thumb_url': 'http://turbo.to/thumb.jpg',
+                'bbcode': '[url=...][img]...[/img][/url]',
+            }]
+        }
+        worker.uploader = mock_uploader
+        worker._current_host_id = "turbo"
+
+        mock_item = Mock()
+        mock_item.path = "/path/to/video.mkv"
+        mock_item.name = "Test Video"
+        mock_item.uploaded_bytes = 0
+        mock_item.video_metadata = {}
+
+        mock_strategy = Mock()
+        mock_strategy.generate_primary_content.return_value = {
+            'status': 'success',
+            'screenshot_sheet_path': '/tmp/sheet.png',
+            'metadata': {'duration': 60},
+        }
+
+        with patch('src.core.media_strategy.create_media_strategy', return_value=mock_strategy), \
+             patch.object(worker, '_get_video_settings', return_value={}), \
+             patch('os.path.getsize', return_value=100_000):
+            results = worker._upload_video_gallery(mock_item, "turbo")
+
+        mock_uploader.fetch_batch_results.assert_called_once()
+        assert results['images'][0]['image_url'] == 'http://turbo.to/full.jpg'
+        assert results['images'][0]['bbcode'] == '[url=...][img]...[/img][/url]'
+
+
+class TestGetVideoSettings:
+    """Test _get_video_settings helper"""
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_returns_default_settings(self, mock_rename_worker_class):
+        """Settings method returns expected keys with defaults"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        with patch('src.processing.upload_workers.QSettings') as mock_qsettings_class:
+            mock_settings = Mock()
+            mock_qsettings_class.return_value = mock_settings
+            # Return defaults for each .value() call
+            mock_settings.value.side_effect = lambda key, default, *args: default
+
+            result = worker._get_video_settings()
+
+        assert result['rows'] == 4
+        assert result['cols'] == 4
+        assert result['show_timestamps'] is True
+        assert result['show_ms'] is False
+        assert result['show_frame_number'] is False
+        assert result['font_color'] == '#ffffff'
+        assert result['bg_color'] == '#000000'
+        assert result['output_format'] == 'PNG'
+        assert result['image_overlay_template'] == ''
+        mock_settings.beginGroup.assert_called_once_with("Video")
+        mock_settings.endGroup.assert_called_once()
+
+    @patch('src.processing.upload_workers.RenameWorker')
+    def test_reads_custom_settings(self, mock_rename_worker_class):
+        """Settings method reads user-configured values from QSettings"""
+        mock_queue_manager = Mock()
+        worker = UploadWorker(mock_queue_manager)
+
+        custom_values = {
+            "grid_rows": 6,
+            "grid_cols": 3,
+            "show_timestamps": False,
+            "show_ms": True,
+            "show_frame_number": True,
+            "font_color": "#ff0000",
+            "bg_color": "#333333",
+            "output_format": "JPEG",
+            "image_overlay_template": "{filename} - {duration}",
+        }
+
+        with patch('src.processing.upload_workers.QSettings') as mock_qsettings_class:
+            mock_settings = Mock()
+            mock_qsettings_class.return_value = mock_settings
+            mock_settings.value.side_effect = lambda key, default, *args: custom_values.get(key, default)
+
+            result = worker._get_video_settings()
+
+        assert result['rows'] == 6
+        assert result['cols'] == 3
+        assert result['show_timestamps'] is False
+        assert result['output_format'] == 'JPEG'
