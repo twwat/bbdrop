@@ -73,6 +73,17 @@ custom4: [if custom4]#custom4#[else]no custom4 value set[/if]
 
     return templates
 
+def _camel_to_snake(name):
+    """Convert camelCase placeholder name to snake_case data key.
+
+    Template placeholders use camelCase (e.g. downloadLinks, videoDetails)
+    while data dicts use snake_case (e.g. download_links, video_details).
+    """
+    import re
+    # Insert underscore before uppercase letters and lowercase the result
+    return re.sub(r'(?<=[a-z0-9])([A-Z])', r'_\1', name).lower()
+
+
 def process_conditionals(template_content, data):
     """Process conditional logic in templates before placeholder replacement.
 
@@ -84,6 +95,7 @@ def process_conditionals(template_content, data):
     - Multiple inline conditionals on the same line
     - Nested conditionals (processed inside-out)
     - Empty lines from removed conditionals are stripped
+    - Placeholder names are matched as camelCase (template) or snake_case (data)
     """
     import re
 
@@ -105,8 +117,14 @@ def process_conditionals(template_content, data):
         expected_value = match.group(3)  # None if no = comparison
         conditional_block = match.group(4)  # Content between [if] and [/if]
 
-        # Get the actual value from data
+        # Get the actual value from data -- try camelCase name first,
+        # then fall back to snake_case conversion so that [if downloadLinks]
+        # finds data['download_links'].
         actual_value = data.get(placeholder_name, '')
+        if not actual_value:
+            snake_key = _camel_to_snake(placeholder_name)
+            if snake_key != placeholder_name:
+                actual_value = data.get(snake_key, '')
 
         # Check for [else] clause (only at top level, not nested)
         else_pattern = r'^(.*?)\[else\](.*?)$'
@@ -171,6 +189,9 @@ def apply_template(template_content, data):
         '#hostLinks#': data.get('host_links', ''),
         '#allImages#': data.get('all_images', ''),
         '#cover#': data.get('cover', ''),
+        '#videoDetails#': data.get('video_details', ''),
+        '#screenshotSheet#': data.get('screenshot_sheet', ''),
+        '#downloadLinks#': data.get('download_links', ''),
     }
     for placeholder, value in composite_replacements.items():
         result = result.replace(placeholder, str(value or ''))
@@ -191,7 +212,16 @@ def apply_template(template_content, data):
         '#ext1#': str(data.get('ext1') or ''),
         '#ext2#': str(data.get('ext2') or ''),
         '#ext3#': str(data.get('ext3') or ''),
-        '#ext4#': str(data.get('ext4') or '')
+        '#ext4#': str(data.get('ext4') or ''),
+        '#filename#': str(data.get('filename', '')),
+        '#duration#': str(data.get('duration', '')),
+        '#resolution#': str(data.get('resolution', '')),
+        '#fps#': str(data.get('fps', '')),
+        '#bitrate#': str(data.get('bitrate', '')),
+        '#videoCodec#': str(data.get('video_codec', '')),
+        '#audioCodec#': str(data.get('audio_codec', '')),
+        '#audioTracks#': str(data.get('audio_tracks', '')),
+        '#filesize#': str(data.get('filesize', '')),
     }
     for placeholder, value in replacements.items():
         result = result.replace(placeholder, str(value or ''))
