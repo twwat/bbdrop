@@ -13,7 +13,7 @@ Handles:
 import os
 from typing import TYPE_CHECKING, List
 
-from PyQt6.QtCore import QObject, QTimer, Qt, QMutexLocker
+from PyQt6.QtCore import QObject, QSettings, QTimer, Qt, QMutexLocker
 from PyQt6.QtWidgets import (
     QFileDialog, QListView, QTreeView, QAbstractItemView,
     QProgressDialog, QMessageBox
@@ -53,6 +53,80 @@ class GalleryQueueController(QObject):
         """
         super().__init__()
         self._main_window = main_window
+
+    # =========================================================================
+    # Media Type Detection
+    # =========================================================================
+
+    def _resolve_media_type(self, path: str) -> str:
+        """Detect media type for a path and handle mixed content interactively.
+
+        For folders containing both images and videos, checks QSettings for a
+        remembered user choice. If no remembered choice exists, shows the
+        MixedMediaDialog to let the user decide.
+
+        Args:
+            path: Folder or file path to check.
+
+        Returns:
+            One of "image", "video", or "mixed" (mixed means keep both).
+        """
+        mw = self._main_window
+        detected = mw.queue_manager._detect_media_type(path)
+
+        if detected != "mixed":
+            return detected
+
+        # Check for a remembered choice in QSettings
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        remembered = settings.value("Video/remember_mixed_choice", False, type=bool)
+        if remembered:
+            saved_choice = settings.value("Video/mixed_choice", "exclude", type=str)
+            if saved_choice == "include":
+                return "mixed"
+            return "video"
+
+        # Show dialog for user decision
+        from src.gui.dialogs.mixed_media_dialog import MixedMediaDialog
+
+        folder_name = os.path.basename(path)
+        image_count = len(mw.queue_manager._get_image_files(path))
+        video_count = len(mw.queue_manager._get_video_files(path))
+
+        dialog = MixedMediaDialog(
+            folder_name=folder_name,
+            image_count=image_count,
+            video_count=video_count,
+            parent=mw,
+        )
+
+        if dialog.exec() == MixedMediaDialog.DialogCode.Accepted:
+            choice = dialog.result_choice
+            if dialog.should_remember:
+                settings.setValue("Video/remember_mixed_choice", True)
+                settings.setValue("Video/mixed_choice", choice)
+        else:
+            # User closed the dialog without choosing -- default to exclude images
+            choice = MixedMediaDialog.EXCLUDE_IMAGES
+
+        if choice == MixedMediaDialog.INCLUDE_IMAGES:
+            return "mixed"
+        return "video"
+
+    def _apply_media_type(self, path: str, media_type: str) -> None:
+        """Set media_type on an already-added queue item and persist it.
+
+        Args:
+            path: The item path (key in queue_manager.items).
+            media_type: The resolved media type string.
+        """
+        mw = self._main_window
+        item = mw.queue_manager.get_item(path)
+        if item and item.media_type != media_type:
+            item.media_type = media_type
+            mw.queue_manager._save_single_item(item)
+            log(f"Set media_type={media_type} for {os.path.basename(path)}",
+                level="debug", category="queue")
 
     # =========================================================================
     # Queue Addition Methods
@@ -193,6 +267,9 @@ class GalleryQueueController(QObject):
             if msg.exec() != QMessageBox.StandardButton.Yes:
                 return  # User chose not to upload
 
+        # Detect media type before adding (may show dialog for mixed content)
+        media_type = self._resolve_media_type(path)
+
         # Proceed with adding
         template_name = mw.template_combo.currentText()
         current_tab = (
@@ -212,6 +289,7 @@ class GalleryQueueController(QObject):
         if result:
             log(f"Added to queue: {os.path.basename(path)}",
                 category="queue", level="info")
+            self._apply_media_type(path, media_type)
             item = mw.queue_manager.get_item(path)
             if item:
                 mw._add_gallery_to_table(item)
@@ -251,6 +329,10 @@ class GalleryQueueController(QObject):
 
         actual_tab = "Main" if current_tab == "All Tabs" else current_tab
         selected_host = mw._get_default_host()
+
+        # Detect media type before adding (may show dialog for mixed content)
+        media_type = self._resolve_media_type(folder_path)
+
         result = mw.queue_manager.add_item(
             folder_path,
             name=gallery_name,
@@ -260,6 +342,7 @@ class GalleryQueueController(QObject):
         )
 
         if result:
+            self._apply_media_type(folder_path, media_type)
             item = mw.queue_manager.get_item(folder_path)
             if item:
                 item.source_archive_path = archive_path
@@ -309,6 +392,8 @@ class GalleryQueueController(QObject):
                         if actual_tab != "Main" and tab_info:
                             item.tab_name = actual_tab
                         item.image_host_id = selected_host
+                        media_type = self._resolve_media_type(path)
+                        item.media_type = media_type
                         mw.queue_manager._save_single_item(item)
 
             progress.setValue(len(folder_paths))
@@ -378,6 +463,7 @@ class GalleryQueueController(QObject):
 
                 for folder_path in folders_to_add_normally:
                     try:
+                        media_type = self._resolve_media_type(folder_path)
                         result = mw.queue_manager.add_item(
                             folder_path,
                             template_name=template_name,
@@ -385,6 +471,7 @@ class GalleryQueueController(QObject):
                             image_host_id=selected_host
                         )
                         if result:
+                            self._apply_media_type(folder_path, media_type)
                             item = mw.queue_manager.get_item(folder_path)
                             if item:
                                 mw._add_gallery_to_table(item)
@@ -404,6 +491,8 @@ class GalleryQueueController(QObject):
 
                 for folder_path in folders_to_replace_in_queue:
                     try:
+                        media_type = self._resolve_media_type(folder_path)
+
                         # Remove existing item from both queue and table
                         mw.queue_manager.remove_item(folder_path)
                         mw._remove_gallery_from_table(folder_path)
@@ -416,6 +505,7 @@ class GalleryQueueController(QObject):
                             image_host_id=selected_host
                         )
                         if result:
+                            self._apply_media_type(folder_path, media_type)
                             item = mw.queue_manager.get_item(folder_path)
                             if item:
                                 mw._add_gallery_to_table(item)
