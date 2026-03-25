@@ -178,9 +178,6 @@ def format_timestamp_for_display(timestamp_value, include_seconds=False):
     except (ValueError, OSError, OverflowError):
         return "", ""
 
-# Import network classes
-from src.network.client import SingleInstanceServer
-
 # Single instance communication port
 COMMUNICATION_PORT = 27849
 
@@ -327,6 +324,7 @@ class SingleInstanceServer(QThread):
         super().__init__()
         self.port = port
         self.running = True
+        self._server_socket = None
         
     def run(self):
         import time
@@ -350,6 +348,7 @@ class SingleInstanceServer(QThread):
 
             server_socket.listen(1)
             server_socket.settimeout(1.0)  # Timeout for checking self.running
+            self._server_socket = server_socket  # Store ref so stop() can close it
 
             while self.running:
                 try:
@@ -376,7 +375,13 @@ class SingleInstanceServer(QThread):
     
     def stop(self):
         self.running = False
-        self.wait()
+        # Close the socket to unblock accept() immediately
+        try:
+            if self._server_socket:
+                self._server_socket.close()
+        except Exception:
+            pass
+        self.wait(2000)  # Wait up to 2s, don't block forever
 
 class BBDropGUI(QMainWindow):
     """Main application window for BBDrop GUI.
