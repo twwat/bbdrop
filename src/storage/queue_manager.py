@@ -107,6 +107,9 @@ class GalleryQueueItem:
     # Multi-host support
     image_host_id: str = "imx"  # Default to IMX for backward compatibility
 
+    # Media type: "image" or "video"
+    media_type: str = "image"
+
     # Per-file metadata from scanning: {filename: (width, height)}
     file_dimensions: dict = field(default_factory=dict)
 
@@ -1055,6 +1058,7 @@ class QueueManager(QObject):
             'imx_status': item.imx_status,
             'imx_status_checked': item.imx_status_checked,
             'image_host_id': item.image_host_id,
+            'media_type': item.media_type,
             'file_dimensions': item.file_dimensions,
             'cover_source_path': item.cover_source_path,
             'cover_host_id': item.cover_host_id,
@@ -1148,7 +1152,7 @@ class QueueManager(QObject):
                      'uploaded_bytes', 'final_kibps', 'error_message',
                      'source_archive_path', 'is_from_archive',
                      'imx_status', 'imx_status_checked', 'tab_id', 'image_host_id',
-                     'file_dimensions',
+                     'media_type', 'file_dimensions',
                      'cover_source_path', 'cover_host_id', 'cover_status', 'cover_result']:
             if field in data:
                 setattr(item, field, data[field])

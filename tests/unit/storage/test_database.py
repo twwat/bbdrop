@@ -1141,3 +1141,30 @@ class TestCoverPersistence:
 
         items = queue_store.load_all_items()
         assert items[0]['cover_result'] is None  # Fallback, not crash
+
+
+class TestMediaTypeMigration:
+    """Test media_type column in galleries table."""
+
+    def test_galleries_table_has_media_type_column(self, temp_db):
+        store = QueueStore(db_path=temp_db)
+        from src.storage.database import _ConnectionContext
+        with _ConnectionContext(store.db_path) as conn:
+            cursor = conn.execute("PRAGMA table_info(galleries)")
+            columns = [row[1] for row in cursor.fetchall()]
+            assert "media_type" in columns
+        store._executor.shutdown(wait=True)
+
+    def test_media_type_defaults_to_image(self, temp_db):
+        store = QueueStore(db_path=temp_db)
+        from src.storage.database import _ConnectionContext
+        with _ConnectionContext(store.db_path) as conn:
+            conn.execute(
+                "INSERT INTO galleries (path, name, status, added_ts) VALUES (?, ?, ?, ?)",
+                ("/tmp/test", "test", "ready", 0),
+            )
+            row = conn.execute(
+                "SELECT media_type FROM galleries WHERE path = ?", ("/tmp/test",)
+            ).fetchone()
+            assert row[0] == "image"
+        store._executor.shutdown(wait=True)

@@ -936,3 +936,15 @@ class TestDictToItem:
         item = queue_manager._dict_to_item(data)
 
         assert item.progress == 100
+
+
+class TestGalleryQueueItemMediaType:
+    """Test media_type field on GalleryQueueItem."""
+
+    def test_default_media_type_is_image(self):
+        item = GalleryQueueItem(path="/tmp/test", name="test")
+        assert item.media_type == "image"
+
+    def test_media_type_can_be_set_to_video(self):
+        item = GalleryQueueItem(path="/tmp/test", name="test", media_type="video")
+        assert item.media_type == "video"
