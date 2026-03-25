@@ -307,6 +307,17 @@ def get_central_storage_path():
     os.makedirs(galleries_path, exist_ok=True)
     return galleries_path
 
+def get_video_artifacts_path() -> str:
+    """Return path for video artifacts (~/.bbdrop/videos/).
+
+    Ensures the directory exists before returning.
+    """
+    base = get_central_store_base_path()
+    videos_path = os.path.join(base, "videos")
+    os.makedirs(videos_path, exist_ok=True)
+    return videos_path
+
+
 def load_user_defaults():
     """Load user defaults from config file
 
