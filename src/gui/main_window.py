@@ -1155,22 +1155,19 @@ class BBDropGUI(QMainWindow):
         self._disk_monitor.start()
 
     def _on_disk_tier_changed(self, tier: str):
-        """Handle tier transitions — update label style and show dialog if critical."""
+        """Handle tier transitions — update label style and show/hide dialog."""
         if tier == "ok":
             self.disk_status_label.setStyleSheet("")
-            self._disk_dialog_shown_for_tier = None
+            if self._disk_warning_dialog and self._disk_warning_dialog.isVisible():
+                self._disk_warning_dialog.hide()
         elif tier == "warning":
             self.disk_status_label.setStyleSheet("color: #f0ad4e; font-weight: bold;")
         elif tier in ("critical", "emergency"):
             self.disk_status_label.setStyleSheet("color: #d9534f; font-weight: bold;")
 
-            # Show dialog once per critical entry
-            if self._disk_dialog_shown_for_tier != tier:
-                self._disk_dialog_shown_for_tier = tier
-                # Defer the dialog — if the window isn't visible yet (e.g. still
-                # behind the splash screen), a modal QMessageBox would be hidden
-                # and appear to freeze the app.
-                QTimer.singleShot(0, lambda t=tier: self._show_disk_warning_dialog(t))
+        # Show/update dialog for any non-ok tier
+        if tier != "ok":
+            QTimer.singleShot(0, lambda t=tier: self._show_disk_warning_dialog(t))
 
         # Fire notification for warning/critical/emergency tiers
         if tier in ('warning', 'critical', 'emergency'):
@@ -1178,26 +1175,25 @@ class BBDropGUI(QMainWindow):
                 self.notification_manager.notify('disk_space_warning', detail=f'Disk space: {tier}')
 
     def _show_disk_warning_dialog(self, tier: str):
-        """Show the low disk space warning, deferring if the window isn't visible yet."""
+        """Show or update the persistent disk space warning dialog."""
         if not self.isVisible():
-            # Window still hidden (splash screen up) — retry after event loop settles
             QTimer.singleShot(500, lambda t=tier: self._show_disk_warning_dialog(t))
             return
 
+        from src.gui.dialogs.disk_space_warning_dialog import DiskSpaceWarningDialog
         from src.utils.system_utils import format_bytes
+
         free_space_str = format_bytes(min(
             self._disk_monitor.data_free,
             self._disk_monitor.temp_free
         ))
 
-        from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.warning(
-            self,
-            "Low Disk Space",
-            f"Only {free_space_str} of disk space remaining.\n\n"
-            f"New uploads have been paused until more space is available.\n\n"
-            f"Free up disk space to resume uploading.",
-        )
+        if not self._disk_warning_dialog:
+            self._disk_warning_dialog = DiskSpaceWarningDialog(parent=self)
+
+        self._disk_warning_dialog.update_tier(tier, free_space_str)
+        self._disk_warning_dialog.show()
+        self._disk_warning_dialog.raise_()
 
     def _on_disk_space_updated(self, data_free: int, temp_free: int):
         """Update the status bar label with current free space."""
@@ -2035,7 +2031,7 @@ class BBDropGUI(QMainWindow):
         self.memory_status_timer.start(1000)  # Update every 1 second
 
         # Setup disk space monitor
-        self._disk_dialog_shown_for_tier = None
+        self._disk_warning_dialog = None
         self._setup_disk_monitor()
 
         # Set minimum height for worker status group
