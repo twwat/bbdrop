@@ -663,13 +663,15 @@ class TestInitEnabledHosts:
         mock_config_path.return_value = '/config.ini'
 
         mock_host_config = Mock()
+        mock_host_config.requires_auth = True
         mock_config_mgr.return_value.hosts = {'rapidgator': mock_host_config}
 
         # Mock INI file reading to return enabled=True for rapidgator
 
         with patch.object(manager, 'enable_host') as mock_enable, \
              patch('os.path.exists', return_value=True), \
-             patch('configparser.ConfigParser') as mock_config_parser:
+             patch('configparser.ConfigParser') as mock_config_parser, \
+             patch('src.processing.file_host_worker_manager.get_credential', return_value='encrypted_creds'):
 
             mock_parser_instance = Mock()
             mock_config_parser.return_value = mock_parser_instance
@@ -733,9 +735,9 @@ class TestInitEnabledHosts:
         mock_config_path.return_value = '/config.ini'
 
         hosts_config = {
-            'rapidgator': Mock(),
-            'mega': Mock(),
-            'filehost': Mock()
+            'rapidgator': Mock(requires_auth=True),
+            'mega': Mock(requires_auth=True),
+            'filehost': Mock(requires_auth=True)
         }
         mock_config_mgr.return_value.hosts = hosts_config
 
@@ -749,7 +751,8 @@ class TestInitEnabledHosts:
 
         with patch.object(manager, 'enable_host') as mock_enable, \
              patch('os.path.exists', return_value=True), \
-             patch('configparser.ConfigParser') as mock_config_parser:
+             patch('configparser.ConfigParser') as mock_config_parser, \
+             patch('src.processing.file_host_worker_manager.get_credential', return_value='encrypted_creds'):
 
             mock_parser_instance = Mock()
             mock_config_parser.return_value = mock_parser_instance

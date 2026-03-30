@@ -472,9 +472,12 @@ class WorkerSignalHandler(QObject):
                 log(f"File host startup complete ({mw._file_host_startup_expected} worker{'s' if mw._file_host_startup_expected != 1 else ''})",
                     level="info", category="startup")
 
-        # Fire notification on successful spinup (outside mutex)
-        if not error:
-            mw = self._mw
+        # Update worker status widget (outside mutex)
+        if error:
+            worker_id = f"filehost_{host_id.lower().replace(' ', '_')}"
+            if hasattr(mw, 'worker_status_widget') and mw.worker_status_widget:
+                mw.worker_status_widget.update_worker_error(worker_id, error)
+        else:
             if hasattr(mw, 'notification_manager'):
                 mw.notification_manager.notify('filehost_spinup_complete')
 

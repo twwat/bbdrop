@@ -13,6 +13,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from src.core.file_host_config import get_config_manager
 from src.processing.file_host_workers import FileHostWorker
 from src.storage.database import QueueStore
+from src.utils.credentials import get_credential
 from src.utils.logger import log
 
 
@@ -90,9 +91,19 @@ class FileHostWorkerManager(QObject):
             log(f"INI file does not exist at {config_file}, no hosts enabled by default",
                 level="debug", category="file_hosts")
 
-        # Initialize workers for enabled hosts
+        # Initialize workers for enabled hosts (skip those missing credentials)
         for host_id in enabled_hosts:
             try:
+                host_config = config_manager.get_host(host_id)
+                if host_config and host_config.requires_auth:
+                    from src.utils.credentials import get_credential
+                    encrypted_creds = get_credential(f'file_host_{host_id}_credentials')
+                    if not encrypted_creds:
+                        log(f"{host_id}: enabled but no credentials configured, skipping worker",
+                            level="warning", category="file_hosts")
+                        # Don't persist — INI stays enabled so it retries next launch
+                        continue
+
                 # enable_host() already handles worker creation and spinup
                 # Skip persistence during startup (values already in INI)
                 self.enable_host(host_id, persist=False)
