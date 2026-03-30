@@ -507,7 +507,8 @@ class GalleryTableController(QObject):
                     if name_item and name_item.data(Qt.ItemDataRole.UserRole) in gallery_paths:
                         host_cell = table.item(row_idx, GalleryTableWidget.COL_IMAGE_HOST)
                         if host_cell:
-                            host_cell.setText(host_id)
+                            from src.core.host_registry import get_display_name
+                            host_cell.setText(get_display_name(host_id))
 
             from src.utils.format_utils import timestamp
             config_mgr = get_image_host_config_manager()
