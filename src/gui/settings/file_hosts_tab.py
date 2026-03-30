@@ -340,7 +340,14 @@ class FileHostsSettingsWidget(QWidget):
             else:
                 return "Disabled"
 
-        # Host is enabled - check auto-upload trigger
+        # Host is enabled — but are credentials actually configured?
+        if host_config.requires_auth:
+            test_results = self._load_test_results_from_settings(host_id)
+            has_credentials = test_results and test_results.get('credentials_valid', False)
+            if not has_credentials:
+                return "Credentials Required"
+
+        # Host is enabled and credentials OK - check auto-upload trigger
         trigger = get_file_host_setting(host_id, "trigger", "str")
         is_auto = trigger in ["on_added", "on_started", "on_completed"]
 
