@@ -1,46 +1,44 @@
 # Application components
 
-This C4 Level 2 diagram shows the major components inside BBDrop and how they
-interact. Each box represents a significant module or subsystem; arrows show the
-primary communication paths.
+This diagram shows the major components inside BBDrop and how they interact.
+Each box represents a significant module or subsystem; arrows show the primary
+communication paths.
 
 ```mermaid
-C4Container
-    title Container Diagram — BBDrop
+graph TD
+    user(("👤 User"))
 
-    Person(user, "User", "Uploads galleries, views BBCode")
+    subgraph app ["BBDrop Application"]
+        gui["PyQt6 GUI<br/><small>Main window, widgets, dialogs</small>"]
+        workers["Upload Workers<br/><small>UploadWorker, FileHostWorker, RenameWorker</small>"]
+        engine["Upload Engine<br/><small>Host-agnostic orchestration, ThreadPoolExecutor</small>"]
+        queue["Queue Store<br/><small>SQLite WAL, QMutex-protected state</small>"]
+        img_clients["Image Host Clients<br/><small>ImageHostClient ABC, factory pattern</small>"]
+        file_client["File Host Client<br/><small>Config-driven pycurl, 7 hosts</small>"]
+        archive["Archive Manager<br/><small>ZIP/7Z creation, split sizes</small>"]
+        creds["Credential Manager<br/><small>Fernet encryption, CSPRNG master key</small>"]
+        proxy_pool["Proxy Pool<br/><small>3-level resolver, health checks, Tor</small>"]
+    end
 
-    Container_Boundary(app, "BBDrop Application") {
-        Container(gui, "PyQt6 GUI", "Python, PyQt6", "Main window, widgets, dialogs. Signal/slot communication with workers.")
-        Container(engine, "Upload Engine", "Python", "Host-agnostic upload orchestration. ThreadPoolExecutor for parallel image uploads.")
-        Container(queue, "Queue Store", "Python, SQLite WAL", "Persistent gallery queue. GalleryQueueItem dataclass, QMutex-protected state.")
-        Container(img_clients, "Image Host Clients", "Python, pycurl / requests", "ImageHostClient ABC, factory pattern. IMX (requests), Pixhost and Turbo (pycurl).")
-        Container(file_client, "File Host Client", "Python, pycurl", "Config-driven pycurl client for 7 file hosts. Thread-local handles.")
-        Container(workers, "Upload Workers", "Python, QThread", "UploadWorker, FileHostWorker, RenameWorker. Signal-based progress reporting.")
-        Container(creds, "Credential Manager", "Python, cryptography, keyring", "Fernet encryption with CSPRNG master key in OS keyring.")
-        Container(proxy_pool, "Proxy Pool", "Python, pycurl", "3-level resolver (global / category / service), health checking, Tor integration.")
-        Container(archive, "Archive Manager", "Python", "ZIP/7Z creation and extraction with configurable compression and split sizes.")
-    }
+    image_hosts[/"IMX.to · Pixhost · TurboImageHost"/]
+    file_hosts[/"RapidGator · Keep2Share · FileBoom<br/>TezFiles · Filedot · Filespace · Katfile"/]
+    keyring[("OS Keyring")]
 
-    System_Ext(image_hosts, "Image Hosts", "IMX.to, Pixhost, TurboImageHost")
-    System_Ext(file_hosts, "File Hosts", "RapidGator, Keep2Share, FileBoom, TezFiles, Filedot, Filespace, Katfile")
-    System_Ext(keyring, "OS Keyring", "Platform credential storage")
-
-    Rel(user, gui, "Interacts with")
-    Rel(gui, queue, "Reads and writes gallery queue")
-    Rel(gui, workers, "Starts workers, receives signals")
-    Rel(workers, engine, "Delegates upload orchestration")
-    Rel(workers, queue, "Updates gallery state")
-    Rel(engine, img_clients, "Calls ImageHostClient ABC methods")
-    Rel(workers, file_client, "Uploads archive files")
-    Rel(img_clients, image_hosts, "HTTP uploads")
-    Rel(file_client, file_hosts, "HTTP uploads")
-    Rel(img_clients, proxy_pool, "Resolves proxy per host")
-    Rel(file_client, proxy_pool, "Resolves proxy per host")
-    Rel(img_clients, creds, "Retrieves API keys and passwords")
-    Rel(file_client, creds, "Retrieves credentials")
-    Rel(creds, keyring, "Reads/writes master key")
-    Rel(workers, archive, "Creates archives for file host uploads")
+    user --> gui
+    gui -- "reads/writes queue" --> queue
+    gui -- "starts workers, receives signals" --> workers
+    workers -- "delegates orchestration" --> engine
+    workers -- "updates state" --> queue
+    workers -- "creates archives" --> archive
+    workers -- "uploads archives" --> file_client
+    engine -- "calls ABC methods" --> img_clients
+    img_clients -- "HTTP uploads" --> image_hosts
+    file_client -- "HTTP uploads" --> file_hosts
+    img_clients -.-> proxy_pool
+    file_client -.-> proxy_pool
+    img_clients -.-> creds
+    file_client -.-> creds
+    creds --> keyring
 ```
 
 ## Component roles
