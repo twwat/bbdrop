@@ -4,6 +4,25 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.5] - 2026-03-31 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.4...v0.9.5))
+
+### Added
+- **Video support**: Full pipeline for video galleries — metadata extraction via pymediainfo, screenshot sheet generation with OpenCV, video-specific BBCode placeholders, strategy selection, and a dedicated Video settings tab
+  - Mixed media dialog when folders contain both images and videos
+  - Media type column in the queue table
+  - Video files pass through to archives without re-encoding
+  - Screenshot sheet preview dialog
+  - Manual download links field for video galleries
+- **Host context menu**: Primary/cover host selection via right-click on worker status widget
+
+### Fixed
+- **Unconfigured file hosts**: Workers no longer attempt startup when credentials are missing; shows "Credentials Required" status instead
+- **Disk space warnings**: Replaced stacking QMessageBox dialogs with a single persistent warning dialog
+- **Image host display names**: Host column and log messages now show display names instead of internal IDs
+- **Worker status icons**: Runtime worker state now correctly reflected in icons and context menu
+- **Cloudflare challenge detection**: File host login now detects and reports Cloudflare challenges instead of silently failing
+- **Signal type overflow**: Large upload byte values no longer overflow pyqtSignal integer types
+
 ## [0.9.4] - 2026-03-18 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.3...v0.9.4))
 
 ### Changed
