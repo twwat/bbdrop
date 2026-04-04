@@ -12,7 +12,6 @@ from src.core.image_host_config import (
 from src.gui.widgets.image_host_config_panel import (
     ImageHostConfigPanel, _CredentialTestThread
 )
-from src.utils.credentials import get_credential, decrypt_password
 
 
 class ImageHostConfigDialog(QDialog):
@@ -175,32 +174,9 @@ class ImageHostConfigDialog(QDialog):
             self.enable_error_label.setText(message)
 
     def _gather_credentials(self) -> dict:
-        credentials = {}
-        auth_type = self.host_config.auth_type or ""
-
-        if "api_key" in auth_type:
-            encrypted_key = get_credential('api_key', self.host_id)
-            if encrypted_key:
-                try:
-                    credentials['api_key'] = decrypt_password(encrypted_key)
-                except Exception:
-                    pass
-
-        encrypted_username = get_credential('username', self.host_id)
-        if encrypted_username:
-            try:
-                credentials['username'] = decrypt_password(encrypted_username)
-            except Exception:
-                pass
-
-        encrypted_pw = get_credential('password', self.host_id)
-        if encrypted_pw:
-            try:
-                credentials['password'] = decrypt_password(encrypted_pw)
-            except Exception:
-                pass
-
-        return credentials
+        """Gather non-empty credentials from the panel's inline fields."""
+        creds = self.panel.get_credentials()
+        return {k: v for k, v in creds.items() if v}
 
     def enabled_changed(self) -> bool:
         return self._current_enabled != self._initial_enabled

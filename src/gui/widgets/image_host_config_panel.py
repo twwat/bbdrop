@@ -9,11 +9,12 @@ Provides UI for credentials, connection settings, thumbnails, and host-specific 
 import os
 import configparser
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout, QLabel,
     QGroupBox, QPushButton, QSlider, QComboBox, QCheckBox, QLineEdit,
-    QDialog, QMessageBox, QStyle, QRadioButton, QButtonGroup, QFrame
+    QMessageBox, QRadioButton, QButtonGroup, QFrame
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QThread
+from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
 from src.core.image_host_config import (
     ImageHostConfig,
@@ -86,42 +87,43 @@ class ImageHostConfigPanel(QWidget):
 
         main_layout.addLayout(grid)
 
-    def _create_credential_row(self, label: str, attr_prefix: str,
-                                change_slot, remove_slot) -> QHBoxLayout:
-        """Build a status row: bold label, status text, Set/Unset buttons.
+    def _create_inline_field(self, placeholder: str) -> tuple:
+        """Create an inline QLineEdit with eye toggle button.
 
-        Sets self.<attr_prefix>_status_label, self.<attr_prefix>_change_btn,
-        and self.<attr_prefix>_remove_btn.
+        Returns:
+            tuple: (QLineEdit, QPushButton) - the input field and toggle button
         """
-        row = QHBoxLayout()
-        row.addWidget(QLabel(f"<b>{label}</b>: "))
+        field = QLineEdit()
+        field.setFont(QFont("Consolas", 10))
+        field.setEchoMode(QLineEdit.EchoMode.Password)
+        field.setPlaceholderText(placeholder)
 
-        status_label = QLabel("NOT SET")
-        status_label.setProperty("class", "status-muted")
-        row.addWidget(status_label)
-        row.addStretch()
+        toggle_btn = QPushButton()
+        try:
+            from src.gui.icon_manager import get_icon_manager
+            icon_manager = get_icon_manager()
+            if icon_manager:
+                toggle_btn.setIcon(icon_manager.get_icon('action_view'))
+        except Exception:
+            pass
+        toggle_btn.setMaximumWidth(30)
+        toggle_btn.setCheckable(True)
+        toggle_btn.setToolTip("Show/hide")
+        toggle_btn.clicked.connect(
+            lambda checked, f=field: f.setEchoMode(
+                QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+            )
+        )
 
-        change_btn = QPushButton(" Set")
-        change_btn.clicked.connect(change_slot)
-        row.addWidget(change_btn)
-
-        remove_btn = QPushButton(" Unset")
-        remove_btn.clicked.connect(remove_slot)
-        row.addWidget(remove_btn)
-
-        setattr(self, f'{attr_prefix}_status_label', status_label)
-        setattr(self, f'{attr_prefix}_change_btn', change_btn)
-        setattr(self, f'{attr_prefix}_remove_btn', remove_btn)
-
-        return row
+        return field, toggle_btn
 
     def _create_credentials_group(self) -> QGroupBox:
         """Create the credentials configuration group.
 
         Three branches based on auth_type:
         - "none" (Pixhost): No-account notice
-        - "api_key_or_session" (IMX): API Key + Login hybrid
-        - "session_optional" (Turbo): Optional username/password
+        - "api_key_or_session" (IMX): API Key + Username + Password inline fields
+        - "session_optional" (Turbo): Username + Password inline fields
         """
         auth_type = self.config.auth_type or ""
         needs_api_key = "api_key" in auth_type
@@ -156,15 +158,9 @@ class ImageHostConfigPanel(QWidget):
             layout.addLayout(notice_row)
 
             # Set ALL dummy attributes so other methods don't crash
-            self.api_key_status_label = None
-            self.api_key_change_btn = None
-            self.api_key_remove_btn = None
-            self.username_status_label = None
-            self.username_change_btn = None
-            self.username_remove_btn = None
-            self.password_status_label = None
-            self.password_change_btn = None
-            self.password_remove_btn = None
+            self.api_key_input = None
+            self.username_input = None
+            self.password_input = None
             self.cookies_status_label = None
             self.cookies_enable_btn = None
             self.cookies_disable_btn = None
@@ -194,10 +190,16 @@ class ImageHostConfigPanel(QWidget):
             api_key_info.setProperty("class", "info-panel")
             layout.addWidget(api_key_info)
 
-            # API Key status row
-            layout.addLayout(self._create_credential_row(
-                "API Key", "api_key", self.change_api_key, self.remove_api_key
-            ))
+            # Inline API Key field with eye toggle
+            self.api_key_input, api_key_toggle = self._create_inline_field("Enter API key...")
+            api_key_row = QHBoxLayout()
+            api_key_row.addWidget(self.api_key_input)
+            api_key_row.addWidget(api_key_toggle)
+
+            form = QFormLayout()
+            form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+            form.addRow("API Key:", api_key_row)
+            layout.addLayout(form)
 
             # Separator
             separator = QFrame()
@@ -219,13 +221,22 @@ class ImageHostConfigPanel(QWidget):
             login_info.setProperty("class", "info-panel")
             layout.addWidget(login_info)
 
-            # Username + Password rows
-            layout.addLayout(self._create_credential_row(
-                "Username", "username", self.change_username, self.remove_username
-            ))
-            layout.addLayout(self._create_credential_row(
-                "Password", "password", self.change_password, self.remove_password
-            ))
+            # Inline Username + Password fields with eye toggles
+            self.username_input, username_toggle = self._create_inline_field("Enter username...")
+            username_row = QHBoxLayout()
+            username_row.addWidget(self.username_input)
+            username_row.addWidget(username_toggle)
+
+            self.password_input, password_toggle = self._create_inline_field("Enter password...")
+            password_row = QHBoxLayout()
+            password_row.addWidget(self.password_input)
+            password_row.addWidget(password_toggle)
+
+            login_form = QFormLayout()
+            login_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+            login_form.addRow("Username:", username_row)
+            login_form.addRow("Password:", password_row)
+            layout.addLayout(login_form)
 
             # Firefox Cookies row
             cookies_row = QHBoxLayout()
@@ -272,21 +283,28 @@ class ImageHostConfigPanel(QWidget):
             optional_info.setProperty("class", "info-panel")
             layout.addWidget(optional_info)
 
-            # No API key row, no cookies row
-            self.api_key_status_label = None
-            self.api_key_change_btn = None
-            self.api_key_remove_btn = None
+            # No API key, no cookies
+            self.api_key_input = None
             self.cookies_status_label = None
             self.cookies_enable_btn = None
             self.cookies_disable_btn = None
 
-            # Username + Password rows
-            layout.addLayout(self._create_credential_row(
-                "Username", "username", self.change_username, self.remove_username
-            ))
-            layout.addLayout(self._create_credential_row(
-                "Password", "password", self.change_password, self.remove_password
-            ))
+            # Inline Username + Password fields with eye toggles
+            self.username_input, username_toggle = self._create_inline_field("Enter username...")
+            username_row = QHBoxLayout()
+            username_row.addWidget(self.username_input)
+            username_row.addWidget(username_toggle)
+
+            self.password_input, password_toggle = self._create_inline_field("Enter password...")
+            password_row = QHBoxLayout()
+            password_row.addWidget(self.password_input)
+            password_row.addWidget(password_toggle)
+
+            login_form = QFormLayout()
+            login_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+            login_form.addRow("Username:", username_row)
+            login_form.addRow("Password:", password_row)
+            layout.addLayout(login_form)
 
         # Test Credentials button and result (shared by IMX and Turbo)
         test_row = QHBoxLayout()
@@ -734,11 +752,12 @@ class ImageHostConfigPanel(QWidget):
 
     def save(self) -> tuple:
         """
-        Save non-credential settings to INI.
+        Save credentials and non-credential settings.
 
         Returns:
             tuple: (old_batch_size, new_batch_size)
         """
+        self.save_credentials()
         old_batch = get_image_host_setting(self.host_id, 'parallel_batch_size', 'int')
 
         save_image_host_setting(self.host_id, 'max_retries', self.max_retries_slider.value())
@@ -788,87 +807,29 @@ class ImageHostConfigPanel(QWidget):
     # ========== CREDENTIAL MANAGEMENT METHODS ==========
 
     def load_current_credentials(self):
-        """Load and display current credentials."""
-        if not hasattr(self, 'username_status_label') or self.username_status_label is None:
+        """Load and populate inline credential fields from keyring."""
+        if self.username_input is None:
             return
 
-        # Username
-        encrypted_username = get_credential('username', self.host_id)
-        username = None
-        if encrypted_username:
-            try:
-                username = decrypt_password(encrypted_username)
-            except Exception:
-                username = None
-        if username:
-            self.username_status_label.setText(username)
-            self.username_status_label.setProperty("class", "status-success")
-            style = self.username_status_label.style()
-            if style:
-                style.polish(self.username_status_label)
-            self.username_change_btn.setText(" Change")
-            self.username_remove_btn.setEnabled(True)
-        else:
-            self.username_status_label.setText("NOT SET")
-            self.username_status_label.setProperty("class", "status-muted")
-            style = self.username_status_label.style()
-            if style:
-                style.polish(self.username_status_label)
-            self.username_change_btn.setText(" Set")
-            self.username_remove_btn.setEnabled(False)
-
-        # Password
-        password = get_credential('password', self.host_id)
-        if password:
-            self.password_status_label.setText("********************************")
-            self.password_status_label.setProperty("class", "status-success")
-            style = self.password_status_label.style()
-            if style:
-                style.polish(self.password_status_label)
-            self.password_change_btn.setText(" Change")
-            self.password_remove_btn.setEnabled(True)
-        else:
-            self.password_status_label.setText("NOT SET")
-            self.password_status_label.setProperty("class", "status-muted")
-            style = self.password_status_label.style()
-            if style:
-                style.polish(self.password_status_label)
-            self.password_change_btn.setText(" Set")
-            self.password_remove_btn.setEnabled(False)
-
-        # API Key (only if row exists for this host)
-        if self.api_key_status_label is not None:
-            encrypted_api_key = get_credential('api_key', self.host_id)
-            if encrypted_api_key:
+        # Helper to decrypt and populate a field
+        def _populate_field(field, credential_key):
+            if field is None:
+                return
+            encrypted = get_credential(credential_key, self.host_id)
+            if encrypted:
                 try:
-                    api_key = decrypt_password(encrypted_api_key)
-                    if api_key and len(api_key) > 8:
-                        masked_key = api_key[:4] + "*" * 24 + api_key[-4:]
-                        self.api_key_status_label.setText(masked_key)
-                    else:
-                        self.api_key_status_label.setText("SET")
-                    self.api_key_status_label.setProperty("class", "status-success")
-                    style = self.api_key_status_label.style()
-                    if style:
-                        style.polish(self.api_key_status_label)
-                    self.api_key_change_btn.setText(" Change")
-                    self.api_key_remove_btn.setEnabled(True)
-                except (AttributeError, RuntimeError):
-                    self.api_key_status_label.setText("SET")
-                    self.api_key_status_label.setProperty("class", "status-success")
-                    style = self.api_key_status_label.style()
-                    if style:
-                        style.polish(self.api_key_status_label)
-                    self.api_key_change_btn.setText(" Change")
-                    self.api_key_remove_btn.setEnabled(True)
-            else:
-                self.api_key_status_label.setText("NOT SET")
-                self.api_key_status_label.setProperty("class", "status-muted")
-                style = self.api_key_status_label.style()
-                if style:
-                    style.polish(self.api_key_status_label)
-                self.api_key_change_btn.setText(" Set")
-                self.api_key_remove_btn.setEnabled(False)
+                    value = decrypt_password(encrypted)
+                    if value:
+                        field.blockSignals(True)
+                        field.setText(value)
+                        field.blockSignals(False)
+                        return
+                except Exception:
+                    pass
+
+        _populate_field(self.api_key_input, 'api_key')
+        _populate_field(self.username_input, 'username')
+        _populate_field(self.password_input, 'password')
 
         # Firefox Cookies (only if row exists for this host)
         if self.cookies_status_label is None:
@@ -897,253 +858,37 @@ class ImageHostConfigPanel(QWidget):
         self.cookies_enable_btn.setEnabled(not cookies_enabled)
         self.cookies_disable_btn.setEnabled(cookies_enabled)
 
-    def change_api_key(self):
-        """Open dialog to change API key."""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Set API Key")
-        dialog.setModal(True)
-        dialog.resize(400, 150)
+    def get_credentials(self) -> dict:
+        """Read current credential values from the inline fields.
 
-        layout = QVBoxLayout(dialog)
+        Returns:
+            dict: Keys are 'api_key', 'username', 'password' (only for fields
+                  that exist on this host). Values are stripped strings.
+        """
+        creds = {}
+        if self.api_key_input is not None:
+            creds['api_key'] = self.api_key_input.text().strip()
+        if self.username_input is not None:
+            creds['username'] = self.username_input.text().strip()
+        if self.password_input is not None:
+            creds['password'] = self.password_input.text().strip()
+        return creds
 
-        # API Key input
-        api_key_layout = QHBoxLayout()
-        api_key_layout.addWidget(QLabel("API Key:"))
-        api_key_edit = QLineEdit()
-        api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        api_key_layout.addWidget(api_key_edit)
-        layout.addLayout(api_key_layout)
+    def save_credentials(self):
+        """Persist credential field values to the OS keyring.
 
-        # Buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        save_btn = QPushButton("Save")
-        style = self.style()
-        if style:
-            save_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
-        save_btn.setIconSize(QSize(16, 16))
-        if not save_btn.text().startswith(" "):
-            save_btn.setText(" " + save_btn.text())
-        save_btn.clicked.connect(dialog.accept)
-        button_layout.addWidget(save_btn)
-
-        cancel_btn = QPushButton("Cancel")
-        if style:
-            cancel_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
-        cancel_btn.setIconSize(QSize(16, 16))
-        if not cancel_btn.text().startswith(" "):
-            cancel_btn.setText(" " + cancel_btn.text())
-        cancel_btn.clicked.connect(dialog.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-        # Non-blocking show
-        def handle_api_key_result(result):
-            self._handle_api_key_dialog_result(result, api_key_edit.text().strip())
-
-        dialog.show()
-        dialog.finished.connect(handle_api_key_result)
-
-    def _handle_api_key_dialog_result(self, result, api_key):
-        """Handle API key dialog result without blocking GUI."""
-        if result == QDialog.DialogCode.Accepted:
-            if api_key:
-                try:
-                    set_credential('api_key', encrypt_password(api_key), self.host_id)
-                    self.load_current_credentials()
-                    QMessageBox.information(self, "Success", "API key saved successfully!")
-                except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to save API key: {str(e)}")
+        Non-empty values are encrypted and stored.
+        Empty values trigger removal of any previously stored credential.
+        """
+        creds = self.get_credentials()
+        for key in ['api_key', 'username', 'password']:
+            if key not in creds:
+                continue
+            value = creds[key]
+            if value:
+                set_credential(key, encrypt_password(value), self.host_id)
             else:
-                QMessageBox.warning(self, "Missing Information", "Please enter your API key.")
-
-    def change_username(self):
-        """Open dialog to change username."""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Set Username")
-        dialog.setModal(True)
-        dialog.resize(400, 140)
-
-        layout = QVBoxLayout(dialog)
-
-        # Username input
-        username_layout = QHBoxLayout()
-        username_layout.addWidget(QLabel("Username:"))
-        username_edit = QLineEdit()
-        username_layout.addWidget(username_edit)
-        layout.addLayout(username_layout)
-
-        # Buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        save_btn = QPushButton("Save")
-        style = self.style()
-        if style:
-            save_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
-        save_btn.setIconSize(QSize(16, 16))
-        if not save_btn.text().startswith(" "):
-            save_btn.setText(" " + save_btn.text())
-        save_btn.clicked.connect(dialog.accept)
-        button_layout.addWidget(save_btn)
-
-        cancel_btn = QPushButton("Cancel")
-        if style:
-            cancel_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
-        cancel_btn.setIconSize(QSize(16, 16))
-        if not cancel_btn.text().startswith(" "):
-            cancel_btn.setText(" " + cancel_btn.text())
-        cancel_btn.clicked.connect(dialog.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-        # Non-blocking show
-        def handle_username_result(result):
-            self._handle_username_dialog_result(result, username_edit.text().strip())
-
-        dialog.show()
-        dialog.finished.connect(handle_username_result)
-
-    def _handle_username_dialog_result(self, result, username):
-        """Handle username dialog result without blocking GUI."""
-        if result == QDialog.DialogCode.Accepted:
-            if username:
-                try:
-                    set_credential('username', username, self.host_id)
-                    self.load_current_credentials()
-                    QMessageBox.information(self, "Success", "Username saved successfully!")
-                except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to save username: {str(e)}")
-            else:
-                QMessageBox.warning(self, "Missing Information", "Please enter a username.")
-
-    def change_password(self):
-        """Open dialog to change password."""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Set Password")
-        dialog.setModal(True)
-        dialog.resize(400, 140)
-
-        layout = QVBoxLayout(dialog)
-
-        # Password input
-        password_layout = QHBoxLayout()
-        password_layout.addWidget(QLabel("Password:"))
-        password_edit = QLineEdit()
-        password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        password_layout.addWidget(password_edit)
-        layout.addLayout(password_layout)
-
-        # Buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        save_btn = QPushButton("Save")
-        style = self.style()
-        if style:
-            save_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
-        save_btn.setIconSize(QSize(16, 16))
-        if not save_btn.text().startswith(" "):
-            save_btn.setText(" " + save_btn.text())
-        save_btn.clicked.connect(dialog.accept)
-        button_layout.addWidget(save_btn)
-
-        cancel_btn = QPushButton("Cancel")
-        if style:
-            cancel_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
-        cancel_btn.setIconSize(QSize(16, 16))
-        if not cancel_btn.text().startswith(" "):
-            cancel_btn.setText(" " + cancel_btn.text())
-        cancel_btn.clicked.connect(dialog.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-        # Non-blocking show
-        def handle_password_result(result):
-            self._handle_password_dialog_result(result, password_edit.text())
-
-        dialog.show()
-        dialog.finished.connect(handle_password_result)
-
-    def _handle_password_dialog_result(self, result, password):
-        """Handle password dialog result without blocking GUI."""
-        if result == QDialog.DialogCode.Accepted:
-            if password:
-                try:
-                    set_credential('password', encrypt_password(password), self.host_id)
-                    self.load_current_credentials()
-                    QMessageBox.information(self, "Success", "Password saved successfully!")
-                except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to save password: {str(e)}")
-            else:
-                QMessageBox.warning(self, "Missing Information", "Please enter a password.")
-
-    def remove_api_key(self):
-        """Remove stored API key with confirmation."""
-        msgbox = QMessageBox(self)
-        msgbox.setWindowTitle("Remove API Key")
-        msgbox.setText("Without an API key, it is not possible to upload anything.\n\nRemove the stored API key?")
-        msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msgbox.setDefaultButton(QMessageBox.StandardButton.No)
-        msgbox.open()
-        msgbox.finished.connect(self._handle_remove_api_key_confirmation)
-
-    def _handle_remove_api_key_confirmation(self, result):
-        """Handle API key removal confirmation."""
-        if result != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            remove_credential('api_key', self.host_id)
-            self.load_current_credentials()
-            QMessageBox.information(self, "Removed", "API key removed.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to remove API key: {str(e)}")
-
-    def remove_username(self):
-        """Remove stored username with confirmation."""
-        msgbox = QMessageBox(self)
-        msgbox.setWindowTitle("Remove Username")
-        msgbox.setText("Without username/password, all galleries will be titled 'untitled gallery'.\n\nRemove the stored username?")
-        msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msgbox.setDefaultButton(QMessageBox.StandardButton.No)
-        msgbox.open()
-        msgbox.finished.connect(self._handle_remove_username_confirmation)
-
-    def _handle_remove_username_confirmation(self, result):
-        """Handle username removal confirmation."""
-        if result != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            remove_credential('username', self.host_id)
-            self.load_current_credentials()
-            QMessageBox.information(self, "Removed", "Username removed.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to remove username: {str(e)}")
-
-    def remove_password(self):
-        """Remove stored password with confirmation."""
-        msgbox = QMessageBox(self)
-        msgbox.setWindowTitle("Remove Password")
-        msgbox.setText("Without username/password, all galleries will be titled 'untitled gallery'.\n\nRemove the stored password?")
-        msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msgbox.setDefaultButton(QMessageBox.StandardButton.No)
-        msgbox.open()
-        msgbox.finished.connect(self._handle_remove_password_confirmation)
-
-    def _handle_remove_password_confirmation(self, result):
-        """Handle password removal confirmation."""
-        if result != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            remove_credential('password', self.host_id)
-            self.load_current_credentials()
-            QMessageBox.information(self, "Removed", "Password removed.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to remove password: {str(e)}")
+                remove_credential(key, self.host_id)
 
     def enable_cookies_setting(self):
         """Enable Firefox cookies usage for login."""
@@ -1180,35 +925,13 @@ class ImageHostConfigPanel(QWidget):
     # ========== CREDENTIAL TESTING ==========
 
     def _start_credential_test(self):
-        """Start a background credential test."""
-        # Gather credentials for the current host
-        credentials = {}
-
-        if self._has_api_key_row:
-            encrypted_key = get_credential('api_key', self.host_id)
-            if encrypted_key:
-                try:
-                    credentials['api_key'] = decrypt_password(encrypted_key)
-                except Exception:
-                    pass
-
-        encrypted_username = get_credential('username', self.host_id)
-        if encrypted_username:
-            try:
-                credentials['username'] = decrypt_password(encrypted_username)
-            except Exception:
-                pass
-
-        encrypted_pw = get_credential('password', self.host_id)
-        if encrypted_pw:
-            try:
-                credentials['password'] = decrypt_password(encrypted_pw)
-            except Exception:
-                pass
+        """Start a background credential test using current field values."""
+        creds = self.get_credentials()
+        credentials = {k: v for k, v in creds.items() if v}
 
         if not credentials:
             self.test_result_label.setText(
-                "<span style='color:orange;'>No credentials set to test</span>"
+                "<span style='color:orange;'>No credentials entered to test</span>"
             )
             return
 
