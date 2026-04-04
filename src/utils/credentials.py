@@ -197,6 +197,33 @@ def migrate_credentials_from_ini():
             config.write(f)
         log("Migrated credentials from INI to Registry", level="info", category="auth")
 
+def migrate_plaintext_usernames():
+    """One-time migration: encrypt any plaintext usernames still in keyring.
+
+    Tries to decrypt each known username key. If decryption fails, the value
+    is plaintext and gets encrypted. If decryption succeeds, it's already
+    encrypted and is left alone. Idempotent — safe to call multiple times.
+    """
+    username_keys = ['username', 'imx_username', 'turbo_username']
+
+    for key in username_keys:
+        value = get_credential(key)
+        if not value:
+            continue
+
+        try:
+            decrypt_password(value)
+            # Decrypted successfully — already encrypted, skip
+        except Exception:
+            # Not valid Fernet — plaintext, needs encryption
+            try:
+                encrypted = encrypt_password(value)
+                set_credential(key, encrypted)
+                log(f"Encrypted plaintext username '{key}'", level="info", category="auth")
+            except Exception as e:
+                log(f"Failed to encrypt username '{key}': {e}", level="warning", category="auth")
+
+
 def _migrate_encryption_keys():
     """One-time migration: re-encrypt all credentials from SHA-256-derived key to CSPRNG key.
 
@@ -288,12 +315,13 @@ def _migrate_encryption_keys():
                 log(f"Failed to migrate credential '{cred_key}': {e}",
                     level="warning", category="auth")
 
-    # Migrate plaintext credentials (just ensure they're in keyring)
+    # Migrate plaintext usernames — encrypt with new key
     for cred_key in plaintext_keys:
         value = _read_from_both(cred_key)
         if value:
             try:
-                set_credential(cred_key, value)
+                new_encrypted = new_fernet.encrypt(value.encode()).decode()
+                set_credential(cred_key, new_encrypted)
             except Exception:
                 pass
 
@@ -348,7 +376,7 @@ def setup_secure_password():
 
 def _save_credentials(username, password):
     """Save credentials to OS keyring"""
-    set_credential('username', username)
+    set_credential('username', encrypt_password(username))
     set_credential('password', encrypt_password(password))
-    log("Username and encrypted password saved to Registry", level="info", category="auth")
+    log("Encrypted credentials saved to keyring", level="info", category="auth")
     return True
