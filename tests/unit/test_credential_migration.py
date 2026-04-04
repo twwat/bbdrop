@@ -212,8 +212,8 @@ class TestMigrateEncryptionKeys:
 
     @patch('keyring.set_password')
     @patch('keyring.get_password')
-    def test_migration_preserves_plaintext_usernames(self, mock_get, mock_set):
-        """Migration copies plaintext username values as-is."""
+    def test_migration_encrypts_plaintext_usernames(self, mock_get, mock_set):
+        """Migration encrypts plaintext username values with the new key."""
         from src.utils.credentials import _migrate_encryption_keys
 
         def keyring_get(service, key):
@@ -228,13 +228,17 @@ class TestMigrateEncryptionKeys:
             mock_qs.value.return_value = ""
             MockQSettings.return_value = mock_qs
 
-            _result = _migrate_encryption_keys()
+            new_key = _migrate_encryption_keys()
 
-        # Username should be stored as-is
+        # Username should be stored encrypted with the new key
         username_calls = [c for c in mock_set.call_args_list
                          if c[0][1] == 'username']
         assert len(username_calls) == 1
-        assert username_calls[0][0][2] == 'myuser'
+        new_encrypted = username_calls[0][0][2]
+        # Verify the stored value decrypts to the original username
+        new_fernet = Fernet(new_key)
+        decrypted = new_fernet.decrypt(new_encrypted.encode()).decode()
+        assert decrypted == 'myuser'
 
     @patch('keyring.set_password')
     @patch('keyring.get_password')

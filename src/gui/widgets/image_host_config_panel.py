@@ -793,7 +793,13 @@ class ImageHostConfigPanel(QWidget):
             return
 
         # Username
-        username = get_credential('username', self.host_id)
+        encrypted_username = get_credential('username', self.host_id)
+        username = None
+        if encrypted_username:
+            try:
+                username = decrypt_password(encrypted_username)
+            except Exception:
+                username = None
         if username:
             self.username_status_label.setText(username)
             self.username_status_label.setProperty("class", "status-success")
@@ -1186,9 +1192,12 @@ class ImageHostConfigPanel(QWidget):
                 except Exception:
                     pass
 
-        username = get_credential('username', self.host_id)
-        if username:
-            credentials['username'] = username
+        encrypted_username = get_credential('username', self.host_id)
+        if encrypted_username:
+            try:
+                credentials['username'] = decrypt_password(encrypted_username)
+            except Exception:
+                pass
 
         encrypted_pw = get_credential('password', self.host_id)
         if encrypted_pw:

@@ -186,9 +186,12 @@ class ImageHostConfigDialog(QDialog):
                 except Exception:
                     pass
 
-        username = get_credential('username', self.host_id)
-        if username:
-            credentials['username'] = username
+        encrypted_username = get_credential('username', self.host_id)
+        if encrypted_username:
+            try:
+                credentials['username'] = decrypt_password(encrypted_username)
+            except Exception:
+                pass
 
         encrypted_pw = get_credential('password', self.host_id)
         if encrypted_pw:

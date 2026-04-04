@@ -20,6 +20,7 @@ import pycurl
 import certifi
 
 from src.utils.logger import log
+from src.utils.credentials import get_credential, decrypt_password
 from src.network.image_host_client import ImageHostClient
 from src.core.image_host_config import (
     get_image_host_config_manager,
@@ -38,13 +39,13 @@ class ImxToUploader(ImageHostClient):
 
     def _get_credentials(self):
         """Get credentials from stored config (username/password or API key)"""
-        from src.utils.credentials import get_credential, decrypt_password
         # Read from QSettings (Registry) - migration happens at app startup
-        username = get_credential('username')
+        encrypted_username = get_credential('username')
         encrypted_password = get_credential('password')
         encrypted_api_key = get_credential('api_key')
 
         # Decrypt if they exist
+        username = decrypt_password(encrypted_username) if encrypted_username else None
         password = decrypt_password(encrypted_password) if encrypted_password else None
         api_key = decrypt_password(encrypted_api_key) if encrypted_api_key else None
 

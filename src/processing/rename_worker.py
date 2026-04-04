@@ -14,6 +14,7 @@ import os
 from typing import List, Dict, Optional, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.utils.logger import log
+from src.utils.credentials import decrypt_password, get_credential
 
 
 def save_session_cookies_to_keyring(session_cookies):
@@ -137,7 +138,6 @@ class RenameWorker(QObject):
         from src.network.cookies import get_firefox_cookies, load_cookies_from_file
         from src.storage.gallery_management import (get_unnamed_galleries,
                           remove_unnamed_gallery, sanitize_gallery_name)
-        from src.utils.credentials import decrypt_password, get_credential
 
         # Store references to these functions
         self._get_config_path = get_config_path
@@ -177,7 +177,8 @@ class RenameWorker(QObject):
         self.session = None
 
         # Load credentials from QSettings (Registry)
-        self.username = get_credential('username')
+        encrypted_username = get_credential('username')
+        self.username = decrypt_password(encrypted_username) if encrypted_username else None
         encrypted_password = get_credential('password')
         if self.username and encrypted_password:
             self.password = decrypt_password(encrypted_password)
