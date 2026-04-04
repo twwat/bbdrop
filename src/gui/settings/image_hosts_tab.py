@@ -320,7 +320,7 @@ class ImageHostsSettingsWidget(QWidget):
             # Host doesn't require auth (e.g. TurboImageHost)
             username = get_credential('username', host_id)
             if username:
-                status_label.setText(f"<span style='color:green;'>Logged in as {username}</span>")
+                status_label.setText("<span style='color:green;'>Credentials: Set</span>")
             else:
                 status_label.setText("<span style='color:green;'>Ready (no auth required)</span>")
             return
