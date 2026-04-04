@@ -116,17 +116,30 @@ class VideoSettingsTab(QWidget):
 
     def load_settings(self, settings: QSettings):
         """Load current values from QSettings."""
-        settings.beginGroup("Video")
-        self.grid_rows.setValue(settings.value("grid_rows", 4, int))
-        self.grid_cols.setValue(settings.value("grid_cols", 4, int))
-        self.show_timestamps.setChecked(settings.value("show_timestamps", True, bool))
-        self.show_ms.setChecked(settings.value("show_ms", False, bool))
-        self.show_frame_number.setChecked(settings.value("show_frame_number", False, bool))
-        self.font_color.setText(settings.value("font_color", "#ffffff"))
-        self.bg_color.setText(settings.value("bg_color", "#000000"))
-        self.output_format.setCurrentText(settings.value("output_format", "PNG"))
-        self.remember_mixed.setChecked(settings.value("remember_mixed_choice", False, bool))
-        settings.endGroup()
+        widgets = [
+            self.grid_rows, self.grid_cols, self.output_format,
+            self.show_timestamps, self.show_ms, self.show_frame_number,
+            self.font_family, self.font_color, self.bg_color,
+            self.remember_mixed, self.mixed_choice,
+            self.default_template, self.image_host_override,
+        ]
+        for w in widgets:
+            w.blockSignals(True)
+        try:
+            settings.beginGroup("Video")
+            self.grid_rows.setValue(settings.value("grid_rows", 4, int))
+            self.grid_cols.setValue(settings.value("grid_cols", 4, int))
+            self.show_timestamps.setChecked(settings.value("show_timestamps", True, bool))
+            self.show_ms.setChecked(settings.value("show_ms", False, bool))
+            self.show_frame_number.setChecked(settings.value("show_frame_number", False, bool))
+            self.font_color.setText(settings.value("font_color", "#ffffff"))
+            self.bg_color.setText(settings.value("bg_color", "#000000"))
+            self.output_format.setCurrentText(settings.value("output_format", "PNG"))
+            self.remember_mixed.setChecked(settings.value("remember_mixed_choice", False, bool))
+            settings.endGroup()
+        finally:
+            for w in widgets:
+                w.blockSignals(False)
 
     def save_settings(self, settings: QSettings):
         """Save current values to QSettings."""

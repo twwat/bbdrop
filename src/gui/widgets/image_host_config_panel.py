@@ -74,16 +74,16 @@ class ImageHostConfigPanel(QWidget):
         grid.addWidget(upload_settings_group, 0, 0)
 
         thumbnails_group = self._create_thumbnails_group()
-        grid.addWidget(thumbnails_group, 0, 1)
+        grid.addWidget(thumbnails_group, 0, 1, Qt.AlignmentFlag.AlignTop)
 
         # Row 1: Options (left), Cover Gallery (right, skip for pixhost)
         options_group = self._create_options_group()
-        grid.addWidget(options_group, 1, 0)
+        grid.addWidget(options_group, 1, 0, Qt.AlignmentFlag.AlignTop)
 
         self._has_cover_gallery = self.config.requires_auth or (self.config.auth_type and 'session' in self.config.auth_type)
         if self._has_cover_gallery:
             cover_group = self._create_cover_group()
-            grid.addWidget(cover_group, 1, 1)
+            grid.addWidget(cover_group, 1, 1, Qt.AlignmentFlag.AlignTop)
 
         main_layout.addLayout(grid)
 
