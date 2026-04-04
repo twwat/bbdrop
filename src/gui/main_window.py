@@ -211,40 +211,6 @@ def get_icon(icon_key: str, theme_mode: str | None = None) -> QIcon:
         return icon_mgr.get_icon(icon_key, theme_mode=theme_mode)
     return QIcon()
 
-def check_stored_credentials():
-    """Check if valid IMX.to credentials exist in Windows Registry (QSettings).
-
-    Returns:
-        bool: True if username+password OR api_key are stored
-
-    Note:
-        Credentials are stored encrypted in Windows Registry under
-        HKEY_CURRENT_USER\\Software\\BBDropUploader\\BBDropGUI
-    """
-    from src.utils.credentials import get_credential
-
-    username = get_credential('username')
-    encrypted_password = get_credential('password')
-    encrypted_api_key = get_credential('api_key')
-
-    # Have username+password OR api_key
-    if (username and encrypted_password) or encrypted_api_key:
-        return True
-    return False
-
-def api_key_is_set() -> bool:
-    """Check if an API key exists in Windows Registry.
-
-    Returns:
-        bool: True if encrypted API key is stored in QSettings
-
-    Note:
-        API key authentication is preferred over username/password.
-    """
-    from src.utils.credentials import get_credential
-    encrypted_api_key = get_credential('api_key')
-    return bool(encrypted_api_key)
-
 
 class LogTextEdit(QTextEdit):
     """QTextEdit subclass that emits signal on double-click for log viewer popup.
@@ -886,7 +852,6 @@ class BBDropGUI(QMainWindow):
 
         self.update_timer.timeout.connect(_tick)
         self.update_timer.start(500)  # Start the timer
-        self.check_credentials() # Check for stored credentials (only prompt if API key missing)
         self.worker_signal_handler.start_worker() # Start worker thread
         # Gallery loading moved to main() with progress dialog for better perceived performance
         # Button counts and progress will be updated by refresh_filter() after filter is applied
@@ -2299,15 +2264,6 @@ class BBDropGUI(QMainWindow):
         """Show License dialog. Delegated to MenuManager."""
         self.menu_manager.show_license_dialog()
 
-    def check_credentials(self):
-        """Prompt to set credentials only if API key is not set."""
-        if not api_key_is_set():
-            log(f"No API key set. Opening settings at Image Hosts tab...", level="warning", category="auth")
-            from src.gui.settings import TabIndex
-            self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
-        else:
-            log("IMX API key found", category="auth", level="debug")
-        
     def retry_login(self, credentials_only: bool = False):
         """Invalidate RenameWorker session to force re-login on next rename."""
         try:

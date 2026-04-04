@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from src.gui.main_window import (
     BBDropGUI, CompletionWorker, SingleInstanceServer,
     LogTextEdit, NumericTableWidgetItem, get_icon,
-    check_stored_credentials, api_key_is_set, format_timestamp_for_display
+    format_timestamp_for_display
 )
 from src.gui.menu_manager import MenuManager
 
@@ -53,46 +53,6 @@ class TestModuleFunctions:
         # Should handle gracefully
         assert isinstance(display, str)
         assert isinstance(tooltip, str)
-
-    @patch('src.utils.credentials.get_credential')
-    def test_check_stored_credentials_with_username_password(self, mock_get_cred):
-        """Test credential check with username and password"""
-        mock_get_cred.side_effect = lambda x: {
-            'username': 'testuser',
-            'password': 'encrypted_pass',
-            'api_key': None
-        }.get(x)
-
-        assert check_stored_credentials() is True
-
-    @patch('src.utils.credentials.get_credential')
-    def test_check_stored_credentials_with_api_key(self, mock_get_cred):
-        """Test credential check with API key only"""
-        mock_get_cred.side_effect = lambda x: {
-            'username': None,
-            'password': None,
-            'api_key': 'encrypted_api_key'
-        }.get(x)
-
-        assert check_stored_credentials() is True
-
-    @patch('src.utils.credentials.get_credential')
-    def test_check_stored_credentials_none(self, mock_get_cred):
-        """Test credential check with no credentials"""
-        mock_get_cred.return_value = None
-        assert check_stored_credentials() is False
-
-    @patch('src.utils.credentials.get_credential')
-    def test_api_key_is_set_true(self, mock_get_cred):
-        """Test API key check when set"""
-        mock_get_cred.return_value = 'encrypted_api_key'
-        assert api_key_is_set() is True
-
-    @patch('src.utils.credentials.get_credential')
-    def test_api_key_is_set_false(self, mock_get_cred):
-        """Test API key check when not set"""
-        mock_get_cred.return_value = None
-        assert api_key_is_set() is False
 
     @patch('src.gui.main_window.get_icon_manager')
     def test_get_icon_success(self, mock_icon_mgr):
@@ -440,13 +400,12 @@ class TestBBDropGUIInitialization:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert window is not None
-                            assert isinstance(window, QMainWindow)
+                        assert window is not None
+                        assert isinstance(window, QMainWindow)
 
     @patch('src.gui.main_window.QSettings')
     def test_main_window_has_queue_manager(self, mock_qsettings, qtbot, mock_dependencies):
@@ -459,12 +418,11 @@ class TestBBDropGUIInitialization:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert hasattr(window, 'queue_manager')
+                        assert hasattr(window, 'queue_manager')
 
     @patch('src.gui.main_window.QSettings')
     def test_main_window_has_completion_worker(self, mock_qsettings, qtbot, mock_dependencies):
@@ -477,12 +435,11 @@ class TestBBDropGUIInitialization:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert hasattr(window, 'completion_worker')
+                        assert hasattr(window, 'completion_worker')
 
     @patch('src.gui.main_window.QSettings')
     def test_main_window_has_single_instance_server(self, mock_qsettings, qtbot, mock_dependencies):
@@ -495,12 +452,11 @@ class TestBBDropGUIInitialization:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert hasattr(window, 'server')
+                        assert hasattr(window, 'server')
 
     @patch('src.gui.main_window.QSettings')
     def test_main_window_accepts_drops(self, mock_qsettings, qtbot, mock_dependencies):
@@ -513,12 +469,11 @@ class TestBBDropGUIInitialization:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert window.acceptDrops() is True
+                        assert window.acceptDrops() is True
 
 
 # ============================================================================
@@ -539,13 +494,12 @@ class TestBBDropGUISetup:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            # setup_ui is called as part of initialization
-                            assert hasattr(window, 'gallery_table')
+                        # setup_ui is called as part of initialization
+                        assert hasattr(window, 'gallery_table')
 
     @patch('src.gui.main_window.QSettings')
     def test_setup_menu_bar_called(self, mock_qsettings, qtbot, mock_dependencies):
@@ -558,12 +512,11 @@ class TestBBDropGUISetup:
             with patch.object(MenuManager, 'setup_menu_bar') as mock_menu:
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            mock_menu.assert_called_once()
+                        mock_menu.assert_called_once()
 
     @patch('src.gui.main_window.QSettings')
     def test_setup_system_tray_called(self, mock_qsettings, qtbot, mock_dependencies):
@@ -576,12 +529,11 @@ class TestBBDropGUISetup:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray') as mock_tray:
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            mock_tray.assert_called_once()
+                        mock_tray.assert_called_once()
 
 
 # ============================================================================
@@ -602,18 +554,17 @@ class TestBBDropGUIHelpers:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Test KiB/s
-                            result = window._format_rate_consistent(500)
-                            assert "KiB/s" in result
+                            # Test KiB/s
+                        result = window._format_rate_consistent(500)
+                        assert "KiB/s" in result
 
-                                # Test MiB/s
-                            result = window._format_rate_consistent(1500)
-                            assert "MiB/s" in result
+                            # Test MiB/s
+                        result = window._format_rate_consistent(1500)
+                        assert "MiB/s" in result
 
     @patch('src.gui.main_window.QSettings')
     def test_format_size_consistent(self, mock_qsettings, qtbot, mock_dependencies):
@@ -626,26 +577,25 @@ class TestBBDropGUIHelpers:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Test bytes
-                            result = window._format_size_consistent(512)
-                            assert "B" in result
+                            # Test bytes
+                        result = window._format_size_consistent(512)
+                        assert "B" in result
 
-                                # Test KiB
-                            result = window._format_size_consistent(1024 * 10)
-                            assert "KiB" in result
+                            # Test KiB
+                        result = window._format_size_consistent(1024 * 10)
+                        assert "KiB" in result
 
-                                # Test MiB
-                            result = window._format_size_consistent(1024 * 1024 * 5)
-                            assert "MiB" in result
+                            # Test MiB
+                        result = window._format_size_consistent(1024 * 1024 * 5)
+                        assert "MiB" in result
 
-                                # Test GiB
-                            result = window._format_size_consistent(1024 * 1024 * 1024 * 2)
-                            assert "GiB" in result
+                            # Test GiB
+                        result = window._format_size_consistent(1024 * 1024 * 1024 * 2)
+                        assert "GiB" in result
 
     @patch('src.gui.main_window.QSettings')
     def test_format_size_empty(self, mock_qsettings, qtbot, mock_dependencies):
@@ -658,16 +608,15 @@ class TestBBDropGUIHelpers:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            result = window._format_size_consistent(0)
-                            assert result == ""
+                        result = window._format_size_consistent(0)
+                        assert result == ""
 
-                            result = window._format_size_consistent(None)
-                            assert result == ""
+                        result = window._format_size_consistent(None)
+                        assert result == ""
 
 
 # ============================================================================
@@ -688,14 +637,13 @@ class TestBBDropGUISignals:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Verify signals exist
-                            assert hasattr(window.completion_worker, 'completion_processed')
-                            assert hasattr(window.completion_worker, 'log_message')
+                            # Verify signals exist
+                        assert hasattr(window.completion_worker, 'completion_processed')
+                        assert hasattr(window.completion_worker, 'log_message')
 
     @patch('src.gui.main_window.QSettings')
     def test_server_signals_connected(self, mock_qsettings, qtbot, mock_dependencies):
@@ -708,13 +656,12 @@ class TestBBDropGUISignals:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Verify signal exists
-                            assert hasattr(window.server, 'folder_received')
+                            # Verify signal exists
+                        assert hasattr(window.server, 'folder_received')
 
 
 # ============================================================================
@@ -735,13 +682,12 @@ class TestBBDropGUICleanup:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Verify worker exists
-                            assert hasattr(window, 'completion_worker')
+                            # Verify worker exists
+                        assert hasattr(window, 'completion_worker')
 
 
 # ============================================================================
@@ -762,21 +708,20 @@ class TestBBDropGUIResize:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Create mock right panel
-                            mock_panel = Mock()
-                            window.right_panel = mock_panel
+                            # Create mock right panel
+                        mock_panel = Mock()
+                        window.right_panel = mock_panel
 
-                                # Trigger resize
-                            window.resize(1000, 800)
-                            qtbot.wait(100)
+                            # Trigger resize
+                        window.resize(1000, 800)
+                        qtbot.wait(100)
 
-                                # Panel should exist
-                            assert hasattr(window, 'right_panel')
+                            # Panel should exist
+                        assert hasattr(window, 'right_panel')
 
 
 # ============================================================================
@@ -797,21 +742,20 @@ class TestBBDropGUIFilter:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Mock gallery_table
-                            mock_table = Mock()
-                            mock_table.refresh_filter = Mock()
-                            window.gallery_table = mock_table
+                            # Mock gallery_table
+                        mock_table = Mock()
+                        mock_table.refresh_filter = Mock()
+                        window.gallery_table = mock_table
 
-                                # Call refresh
-                            window.refresh_filter()
+                            # Call refresh
+                        window.refresh_filter()
 
-                                # Should call gallery_table's refresh_filter
-                            mock_table.refresh_filter.assert_called_once()
+                            # Should call gallery_table's refresh_filter
+                        mock_table.refresh_filter.assert_called_once()
 
 
 # ============================================================================
@@ -832,20 +776,19 @@ class TestBBDropGUIIcons:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Mock gallery_table
-                            mock_table = Mock()
-                            mock_table.table = Mock()
-                            mock_table.table.rowCount.return_value = 0
-                            mock_table.table.viewport.return_value = Mock()
-                            window.gallery_table = mock_table
+                            # Mock gallery_table
+                        mock_table = Mock()
+                        mock_table.table = Mock()
+                        mock_table.table.rowCount.return_value = 0
+                        mock_table.table.viewport.return_value = Mock()
+                        window.gallery_table = mock_table
 
-                                # Should not raise
-                            window.refresh_icons()
+                            # Should not raise
+                        window.refresh_icons()
 
 
 # ============================================================================
@@ -870,14 +813,13 @@ class TestBBDropGUIConfirmation:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            result = window._confirm_removal(['/path/1'], ['Gallery 1'])
-                            assert result is True
-                            mock_msg.assert_called_once()
+                        result = window._confirm_removal(['/path/1'], ['Gallery 1'])
+                        assert result is True
+                        mock_msg.assert_called_once()
 
     @patch('src.gui.main_window.QSettings')
     @patch('src.gui.main_window.load_user_defaults')
@@ -892,13 +834,12 @@ class TestBBDropGUIConfirmation:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            result = window._confirm_removal(['/path/1'], ['Gallery 1'])
-                            assert result is True  # Should auto-confirm
+                        result = window._confirm_removal(['/path/1'], ['Gallery 1'])
+                        assert result is True  # Should auto-confirm
 
     @patch('src.gui.main_window.QSettings')
     @patch('src.gui.main_window.load_user_defaults')
@@ -915,15 +856,14 @@ class TestBBDropGUIConfirmation:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            paths = [f'/path/{i}' for i in range(60)]
-                            window._confirm_removal(paths)
-                                # Should show confirmation for >50 galleries
-                            mock_msg.assert_called_once()
+                        paths = [f'/path/{i}' for i in range(60)]
+                        window._confirm_removal(paths)
+                            # Should show confirmation for >50 galleries
+                        mock_msg.assert_called_once()
 
 
 # ============================================================================
@@ -944,14 +884,13 @@ class TestBBDropGUIBackgroundUpdates:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Should have background update tracking
-                            assert hasattr(window, '_background_tab_updates')
-                            assert isinstance(window._background_tab_updates, dict)
+                            # Should have background update tracking
+                        assert hasattr(window, '_background_tab_updates')
+                        assert isinstance(window._background_tab_updates, dict)
 
     @patch('src.gui.main_window.QSettings')
     def test_clear_background_tab_updates(self, mock_qsettings, qtbot, mock_dependencies):
@@ -964,19 +903,18 @@ class TestBBDropGUIBackgroundUpdates:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            # Add fake update
-                            window._background_tab_updates['test'] = ('item', 'progress', 0)
+                        # Add fake update
+                        window._background_tab_updates['test'] = ('item', 'progress', 0)
 
-                            # Clear - delegates to table_row_manager which is mocked
-                            window.clear_background_tab_updates()
+                        # Clear - delegates to table_row_manager which is mocked
+                        window.clear_background_tab_updates()
 
-                            # Verify the method was called on the delegate
-                            window.table_row_manager.clear_background_tab_updates.assert_called_once()
+                        # Verify the method was called on the delegate
+                        window.table_row_manager.clear_background_tab_updates.assert_called_once()
 
 
 # ============================================================================
@@ -997,13 +935,12 @@ class TestBBDropGUIAnimation:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert hasattr(window, '_upload_animation_timer')
-                            assert hasattr(window, '_upload_animation_frame')
+                        assert hasattr(window, '_upload_animation_timer')
+                        assert hasattr(window, '_upload_animation_frame')
 
 
 # ============================================================================
@@ -1024,15 +961,14 @@ class TestBBDropGUIPathMapping:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert hasattr(window, 'path_to_row')
-                            assert hasattr(window, 'row_to_path')
-                            assert isinstance(window.path_to_row, dict)
-                            assert isinstance(window.row_to_path, dict)
+                        assert hasattr(window, 'path_to_row')
+                        assert hasattr(window, 'row_to_path')
+                        assert isinstance(window.path_to_row, dict)
+                        assert isinstance(window.row_to_path, dict)
 
 
 # ============================================================================
@@ -1053,12 +989,11 @@ class TestBBDropGUISettings:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert hasattr(window, 'settings')
+                        assert hasattr(window, 'settings')
 
 
 # ============================================================================
@@ -1079,14 +1014,13 @@ class TestBBDropGUILogDisplay:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                                # Should have log display settings cached
-                            assert hasattr(window, '_log_show_level')
-                            assert hasattr(window, '_log_show_category')
+                            # Should have log display settings cached
+                        assert hasattr(window, '_log_show_level')
+                        assert hasattr(window, '_log_show_category')
 
 
 # ============================================================================
@@ -1107,9 +1041,8 @@ class TestBBDropGUIUpdateTimer:
             with patch.object(MenuManager, 'setup_menu_bar'):
                 with patch.object(BBDropGUI, 'setup_system_tray'):
                     with patch.object(BBDropGUI, 'restore_settings'):
-                        with patch.object(BBDropGUI, 'check_credentials'):
-                            window = BBDropGUI()
-                            window.closeEvent = lambda event: event.accept()
-                            qtbot.addWidget(window)
+                        window = BBDropGUI()
+                        window.closeEvent = lambda event: event.accept()
+                        qtbot.addWidget(window)
 
-                            assert hasattr(window, 'update_timer')
+                        assert hasattr(window, 'update_timer')
