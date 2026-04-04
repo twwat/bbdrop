@@ -117,9 +117,7 @@ class ImxToUploader(ImageHostClient):
         has_credentials = (self.username and self.password) or self.api_key
 
         if not has_credentials:
-            log("Failed to get credentials. Please set up credentials in the GUI or run --setup-secure first.", level="warning", category="auth")
-            # Don't exit in GUI mode - let the user set credentials through the dialog
-            # Only exit if running in CLI mode (when there's no way to set credentials interactively)
+            # In CLI mode, exit — no way to set credentials interactively
             is_gui_mode = os.environ.get('BBDROP_GUI_MODE') == '1'
             if not is_gui_mode:
                 sys.exit(1)
