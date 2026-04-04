@@ -189,7 +189,11 @@ def dialog_patches(mock_qsettings, monkeypatch):
                 'auto_retry': True,
                 'max_retries': 3,
                 'max_connections': 5,
+                'connect_timeout': 30,
                 'max_file_size_mb': 0,
+                'inactivity_timeout': 300,
+                'upload_timeout': 0,
+                'bbcode_format': '',
             }.get(key, None)
 
             with patch('src.core.file_host_config.save_file_host_setting'):

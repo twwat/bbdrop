@@ -17,6 +17,7 @@ import time
 from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.gui.widgets.custom_widgets import CopyableLogListWidget
 from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
+from src.gui.widgets.info_button import InfoButton
 from src.gui.dialogs.connection_test_dialog import ConnectionTestDialog
 
 
@@ -356,9 +357,18 @@ class FileHostConfigDialog(QDialog):
         triggers_group = QGroupBox("Auto-Upload Trigger")
         triggers_layout = QVBoxLayout(triggers_group)
 
-        triggers_layout.addWidget(QLabel(
+        trigger_label_row = QHBoxLayout()
+        trigger_label_row.addWidget(QLabel(
             "Select when to automatically upload galleries to this host:"
         ))
+        trigger_label_row.addWidget(InfoButton(
+            "When to automatically start uploading galleries to this file host. "
+            "'On Completed' waits until all images are uploaded. 'On Started' "
+            "begins as soon as gallery upload starts. 'On Added' triggers when "
+            "a gallery is added to the queue."
+        ))
+        trigger_label_row.addStretch()
+        triggers_layout.addLayout(trigger_label_row)
 
         self.trigger_combo = QComboBox()
         self.trigger_combo.addItem("Disabled / Manual", None)
@@ -391,46 +401,96 @@ class FileHostConfigDialog(QDialog):
             self.creds_password_input.textChanged.connect(self._mark_dirty)
         self.trigger_combo.currentIndexChanged.connect(self._mark_dirty)
 
-        # Host Settings (editable) - Read from settings layer
-        settings_group = QGroupBox("Host Settings")
+        # Upload Settings (editable) - Read from settings layer
+        settings_group = QGroupBox("Upload Settings")
         settings_layout = QFormLayout(settings_group)
 
         # Load current values
-        auto_retry = get_file_host_setting(self.host_id, "auto_retry", "bool")
-        max_retries = get_file_host_setting(self.host_id, "max_retries", "int")
         max_connections = get_file_host_setting(self.host_id, "max_connections", "int")
         max_file_size_mb = get_file_host_setting(self.host_id, "max_file_size_mb", "int")
 
-        # 1. auto_retry - QCheckBox
-        self.auto_retry_check = QCheckBox("Enable automatic retry on upload failure")
-        self.auto_retry_check.setChecked(auto_retry)
-        self.auto_retry_check.stateChanged.connect(self._mark_dirty)
-        settings_layout.addRow("Auto-retry:", self.auto_retry_check)
+        # 1. auto_retry + max_retries - unified row
+        retry_row = QHBoxLayout()
 
-        # 2. max_retries - QSpinBox
+        retry_label = QLabel("Auto-retry")
+        retry_row.addWidget(retry_label)
+        retry_row.addWidget(InfoButton(
+            "When enabled, failed uploads are automatically retried up to the "
+            "specified number of times. Each retry uses a fresh connection. "
+            "The delay between retries increases with each attempt."
+        ))
+        self.auto_retry_check = QCheckBox()
+        self.auto_retry_check.setChecked(get_file_host_setting(self.host_id, 'auto_retry', 'bool'))
+        self.auto_retry_check.stateChanged.connect(self._mark_dirty)
+        retry_row.addWidget(self.auto_retry_check)
+
+        separator = QLabel("|")
+        separator.setProperty("class", "label-muted")
+        retry_row.addWidget(separator)
+
+        retry_row.addWidget(QLabel("Max retries"))
         self.max_retries_spin = QSpinBox()
         self.max_retries_spin.setRange(1, 10)
-        self.max_retries_spin.setValue(max_retries)
-        self.max_retries_spin.setSuffix(" attempts")
-        self.max_retries_spin.setToolTip("Maximum number of retry attempts for failed uploads")
-        self.max_retries_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow("Max retries:", self.max_retries_spin)
-        # Disable max retries when auto-retry is unchecked
-        self.auto_retry_check.toggled.connect(self.max_retries_spin.setEnabled)
-        # Set initial state based on checkbox
+        self.max_retries_spin.setValue(get_file_host_setting(self.host_id, 'max_retries', 'int'))
         self.max_retries_spin.setEnabled(self.auto_retry_check.isChecked())
+        self.max_retries_spin.valueChanged.connect(self._mark_dirty)
+        self.auto_retry_check.toggled.connect(self.max_retries_spin.setEnabled)
+        retry_row.addWidget(self.max_retries_spin)
+        retry_row.addStretch()
 
+        retry_row_widget = QWidget()
+        retry_row_widget.setLayout(retry_row)
+        settings_layout.addRow(retry_row_widget)
 
-        # 3. max_connections - QSpinBox
+        # 2. max_connections - QSpinBox
+        concurrent_label_row = QHBoxLayout()
+        concurrent_label_row.addWidget(QLabel("Concurrent uploads"))
+        concurrent_label_row.addWidget(InfoButton(
+            "Number of files uploaded simultaneously to this host. Higher values "
+            "are faster but most file hosts limit concurrent connections. The "
+            "global limit across all file hosts is 3."
+        ))
+        concurrent_label_widget = QWidget()
+        concurrent_label_widget.setLayout(concurrent_label_row)
+
         self.max_connections_spin = QSpinBox()
         self.max_connections_spin.setRange(1, 10)
         self.max_connections_spin.setValue(max_connections)
         self.max_connections_spin.setSuffix(" connections")
         self.max_connections_spin.setToolTip("Maximum concurrent upload connections to this host")
         self.max_connections_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow("Max connections:", self.max_connections_spin)
+        settings_layout.addRow(concurrent_label_widget, self.max_connections_spin)
+
+        # 3. connect_timeout - QSpinBox (new setting)
+        connect_timeout_label_row = QHBoxLayout()
+        connect_timeout_label_row.addWidget(QLabel("Connect timeout"))
+        connect_timeout_label_row.addWidget(InfoButton(
+            "How long to wait when establishing a connection to the host before "
+            "giving up. Increase if you're on a slow or unreliable network. "
+            "Most connections complete in under 10 seconds."
+        ))
+        connect_timeout_label_widget = QWidget()
+        connect_timeout_label_widget.setLayout(connect_timeout_label_row)
+
+        connect_timeout = get_file_host_setting(self.host_id, 'connect_timeout', 'int')
+        self.connect_timeout_spin = QSpinBox()
+        self.connect_timeout_spin.setRange(10, 180)
+        self.connect_timeout_spin.setSuffix("s")
+        self.connect_timeout_spin.setValue(connect_timeout if connect_timeout is not None else 30)
+        self.connect_timeout_spin.valueChanged.connect(self._mark_dirty)
+        settings_layout.addRow(connect_timeout_label_widget, self.connect_timeout_spin)
 
         # 4. max_file_size_mb - QSpinBox (nullable)
+        max_file_size_label_row = QHBoxLayout()
+        max_file_size_label_row.addWidget(QLabel("Max file size"))
+        max_file_size_label_row.addWidget(InfoButton(
+            "Maximum file size this host accepts. Files larger than this will be "
+            "skipped. The default is the host's documented limit — increase only "
+            "if your account has higher limits."
+        ))
+        max_file_size_label_widget = QWidget()
+        max_file_size_label_widget.setLayout(max_file_size_label_row)
+
         self.max_file_size_spin = QSpinBox()
         self.max_file_size_spin.setRange(0, 10000)
         self.max_file_size_spin.setValue(max_file_size_mb if max_file_size_mb else 0)
@@ -438,7 +498,7 @@ class FileHostConfigDialog(QDialog):
         self.max_file_size_spin.setSpecialValueText("No limit")
         self.max_file_size_spin.setToolTip("Maximum file size for uploads (0 = no limit)")
         self.max_file_size_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow("Max file size:", self.max_file_size_spin)
+        settings_layout.addRow(max_file_size_label_widget, self.max_file_size_spin)
 
         # 5. inactivity_timeout - QSpinBox
         inactivity_timeout = get_file_host_setting(self.host_id, "inactivity_timeout", "int")
@@ -446,19 +506,39 @@ class FileHostConfigDialog(QDialog):
             # Get from host config if not in INI
             inactivity_timeout = self.host_config.inactivity_timeout if self.host_config else 300
 
+        inactivity_label_row = QHBoxLayout()
+        inactivity_label_row.addWidget(QLabel("Inactivity timeout"))
+        inactivity_label_row.addWidget(InfoButton(
+            "How long to wait for data during an active upload before treating it "
+            "as stalled. File host uploads can be large (multiple GB), so brief "
+            "pauses are normal. Increase for slow connections."
+        ))
+        inactivity_label_widget = QWidget()
+        inactivity_label_widget.setLayout(inactivity_label_row)
+
         self.inactivity_timeout_spin = QSpinBox()
         self.inactivity_timeout_spin.setRange(30, 3600)
         self.inactivity_timeout_spin.setValue(inactivity_timeout)
         self.inactivity_timeout_spin.setSuffix(" seconds")
         self.inactivity_timeout_spin.setToolTip("Abort upload if no progress for this many seconds (default: 300)")
         self.inactivity_timeout_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow("Inactivity timeout:", self.inactivity_timeout_spin)
+        settings_layout.addRow(inactivity_label_widget, self.inactivity_timeout_spin)
 
         # 6. upload_timeout - QSpinBox (nullable)
         upload_timeout = get_file_host_setting(self.host_id, "upload_timeout", "int")
         if upload_timeout is None:
             # Get from host config if not in INI
             upload_timeout = self.host_config.upload_timeout if self.host_config else None
+
+        upload_timeout_label_row = QHBoxLayout()
+        upload_timeout_label_row.addWidget(QLabel("Max upload time"))
+        upload_timeout_label_row.addWidget(InfoButton(
+            "Maximum total time allowed for a single file upload. Set to 0 to "
+            "disable. Large archives can take a long time — set this high enough "
+            "to accommodate your largest uploads on your connection speed."
+        ))
+        upload_timeout_label_widget = QWidget()
+        upload_timeout_label_widget.setLayout(upload_timeout_label_row)
 
         self.upload_timeout_spin = QSpinBox()
         self.upload_timeout_spin.setRange(0, 7200)
@@ -467,10 +547,21 @@ class FileHostConfigDialog(QDialog):
         self.upload_timeout_spin.setSpecialValueText("Unlimited")
         self.upload_timeout_spin.setToolTip("Maximum total upload time (0 = unlimited, not recommended)")
         self.upload_timeout_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow("Max upload time:", self.upload_timeout_spin)
+        settings_layout.addRow(upload_timeout_label_widget, self.upload_timeout_spin)
 
         # 7. bbcode_format - QPlainTextEdit (auto-expanding up to 3 lines)
         bbcode_format = get_file_host_setting(self.host_id, "bbcode_format", "str")
+
+        bbcode_label_row = QHBoxLayout()
+        bbcode_label_row.addWidget(QLabel("BBCode format"))
+        bbcode_label_row.addWidget(InfoButton(
+            "Template for the download link BBCode. Use #link# for the download "
+            "URL and #hostName# for the host display name. This is inserted into "
+            "your gallery template's #hostLinks# placeholder."
+        ))
+        bbcode_label_widget = QWidget()
+        bbcode_label_widget.setLayout(bbcode_label_row)
+
         self.bbcode_format_edit = QPlainTextEdit()
         self.bbcode_format_edit.setPlainText(bbcode_format if bbcode_format else "")
         self.bbcode_format_edit.setPlaceholderText("[url=#link#]#hostName#[/url]")
@@ -489,9 +580,19 @@ class FileHostConfigDialog(QDialog):
         self.bbcode_format_edit.textChanged.connect(self._mark_dirty)
         self.bbcode_format_edit.textChanged.connect(self._adjust_bbcode_height)
         self._adjust_bbcode_height()  # Initial adjustment
-        settings_layout.addRow("BBCode Format:", self.bbcode_format_edit)
+        settings_layout.addRow(bbcode_label_widget, self.bbcode_format_edit)
 
         # 8. Proxy - SimpleProxyDropdown widget with test button
+        proxy_label_row = QHBoxLayout()
+        proxy_label_row.addWidget(QLabel("Proxy"))
+        proxy_label_row.addWidget(InfoButton(
+            "Route uploads through a proxy server. Select a proxy profile from "
+            "your configured proxy pools, or use 'Direct' for no proxy. Click "
+            "'Test' to verify the proxy can reach this host."
+        ))
+        proxy_label_widget = QWidget()
+        proxy_label_widget.setLayout(proxy_label_row)
+
         proxy_widget = QWidget()
         proxy_layout = QHBoxLayout(proxy_widget)
         proxy_layout.setContentsMargins(0, 0, 0, 0)
@@ -516,7 +617,7 @@ class FileHostConfigDialog(QDialog):
         # Update test button state based on current selection
         self._update_proxy_test_button()
 
-        settings_layout.addRow("Proxy:", proxy_widget)
+        settings_layout.addRow(proxy_label_widget, proxy_widget)
 
         content_layout.addWidget(settings_group)
 
@@ -1681,6 +1782,7 @@ class FileHostConfigDialog(QDialog):
             save_file_host_setting(self.host_id, "auto_retry", self.auto_retry_check.isChecked())
             save_file_host_setting(self.host_id, "max_retries", self.max_retries_spin.value())
             save_file_host_setting(self.host_id, "max_connections", self.max_connections_spin.value())
+            save_file_host_setting(self.host_id, "connect_timeout", self.connect_timeout_spin.value())
 
             # Handle nullable max_file_size_mb (0 = None)
             file_size_value = self.max_file_size_spin.value()
