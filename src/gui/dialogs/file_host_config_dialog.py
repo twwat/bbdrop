@@ -154,6 +154,8 @@ class FileHostConfigDialog(QDialog):
 
             creds_group = QGroupBox("Credentials")
             creds_layout = QFormLayout(creds_group)
+            creds_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+            creds_layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
             creds_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
             # Load current credentials from encrypted storage
@@ -535,7 +537,7 @@ class FileHostConfigDialog(QDialog):
         self.max_connections_spin = QSpinBox()
         self.max_connections_spin.setRange(1, 10)
         self.max_connections_spin.setValue(max_connections)
-        self.max_connections_spin.setSuffix(" connections")
+        self.max_connections_spin.setMaximumWidth(150)
         self.max_connections_spin.setToolTip("Maximum concurrent upload connections to this host")
         self.max_connections_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow(concurrent_label_widget, self.max_connections_spin)
@@ -555,6 +557,7 @@ class FileHostConfigDialog(QDialog):
         self.connect_timeout_spin = QSpinBox()
         self.connect_timeout_spin.setRange(10, 180)
         self.connect_timeout_spin.setSuffix("s")
+        self.connect_timeout_spin.setMaximumWidth(150)
         self.connect_timeout_spin.setValue(connect_timeout if connect_timeout is not None else 30)
         self.connect_timeout_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow(connect_timeout_label_widget, self.connect_timeout_spin)
@@ -575,6 +578,7 @@ class FileHostConfigDialog(QDialog):
         self.max_file_size_spin.setValue(max_file_size_mb if max_file_size_mb else 0)
         self.max_file_size_spin.setSuffix(" MiB")
         self.max_file_size_spin.setSpecialValueText("No limit")
+        self.max_file_size_spin.setMaximumWidth(150)
         self.max_file_size_spin.setToolTip("Maximum file size for uploads (0 = no limit)")
         self.max_file_size_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow(max_file_size_label_widget, self.max_file_size_spin)
@@ -599,6 +603,7 @@ class FileHostConfigDialog(QDialog):
         self.inactivity_timeout_spin.setRange(30, 3600)
         self.inactivity_timeout_spin.setValue(inactivity_timeout)
         self.inactivity_timeout_spin.setSuffix("s")
+        self.inactivity_timeout_spin.setMaximumWidth(150)
         self.inactivity_timeout_spin.setToolTip("Abort upload if no progress for this many seconds (default: 300)")
         self.inactivity_timeout_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow(inactivity_label_widget, self.inactivity_timeout_spin)
@@ -624,6 +629,7 @@ class FileHostConfigDialog(QDialog):
         self.upload_timeout_spin.setValue(upload_timeout if upload_timeout else 0)
         self.upload_timeout_spin.setSuffix("s")
         self.upload_timeout_spin.setSpecialValueText("Off")
+        self.upload_timeout_spin.setMaximumWidth(150)
         self.upload_timeout_spin.setToolTip("Maximum total upload time (0 = unlimited, not recommended)")
         self.upload_timeout_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow(upload_timeout_label_widget, self.upload_timeout_spin)
@@ -848,7 +854,7 @@ class FileHostConfigDialog(QDialog):
         test_row_layout.addStretch()
 
         if isinstance(parent_layout, QFormLayout):
-            parent_layout.addRow("Connection Test:", test_row_widget)
+            parent_layout.addRow("", test_row_widget)
         else:
             test_group = QGroupBox("Connection Test (optional)")
             test_group_layout = QVBoxLayout(test_group)

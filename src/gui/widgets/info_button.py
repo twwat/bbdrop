@@ -29,16 +29,27 @@ class InfoButton(QToolButton):
             self.setIcon(icon_mgr.get_icon('more_info'))
 
     def _toggle_popover(self):
-        # Clean up stale popover (e.g. disappeared after alt-tab)
-        if InfoButton._active_popover is not None and not InfoButton._active_popover.isVisible():
-            InfoButton._active_popover.deleteLater()
-            InfoButton._active_popover = None
-            InfoButton._active_source = None
+        # Clean up stale popover (e.g. disappeared after alt-tab, or parent deleted)
+        if InfoButton._active_popover is not None:
+            try:
+                still_visible = InfoButton._active_popover.isVisible()
+            except RuntimeError:
+                # C++ object deleted — clear the reference
+                InfoButton._active_popover = None
+                InfoButton._active_source = None
+                still_visible = False
+            if not still_visible and InfoButton._active_popover is not None:
+                InfoButton._active_popover.deleteLater()
+                InfoButton._active_popover = None
+                InfoButton._active_source = None
 
         # Close any existing popover
         if InfoButton._active_popover is not None:
-            InfoButton._active_popover.close()
-            InfoButton._active_popover.deleteLater()
+            try:
+                InfoButton._active_popover.close()
+                InfoButton._active_popover.deleteLater()
+            except RuntimeError:
+                pass
             was_self = InfoButton._active_source is self
             InfoButton._active_popover = None
             InfoButton._active_source = None

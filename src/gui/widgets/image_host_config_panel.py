@@ -142,7 +142,7 @@ class ImageHostConfigPanel(QWidget):
             notice_row = QHBoxLayout()
             notice_label = QLabel(
                 "Pixhost does not require an account. Uploads are anonymous"
-                " &mdash; once uploaded, images cannot be deleted or managed."
+                " \u2014 once uploaded, images cannot be deleted or managed."
             )
             notice_label.setWordWrap(True)
             notice_label.setProperty("class", "info-panel")
@@ -320,7 +320,7 @@ class ImageHostConfigPanel(QWidget):
 
         # Test Credentials button and result (shared by IMX and Turbo)
         test_row = QHBoxLayout()
-        self.test_credentials_btn = QPushButton(" Test Credentials")
+        self.test_credentials_btn = QPushButton("Test Connection...")
         self.test_credentials_btn.setToolTip("Verify stored credentials work")
         self.test_credentials_btn.clicked.connect(self._start_credential_test)
         test_row.addWidget(self.test_credentials_btn)
@@ -684,12 +684,12 @@ class ImageHostConfigPanel(QWidget):
             strategy_header_label = QLabel("<b>Failed Upload Strategy</b>")
             strategy_header_row.addWidget(strategy_header_label)
             strategy_header_row.addWidget(InfoButton(
-                "Pixhost occasionally returns fake &ldquo;success&rdquo;"
+                "Pixhost occasionally returns fake \u201csuccess\u201d"
                 " responses (HTTP 200) for uploads that actually failed."
                 " When BBDrop detects this, it needs to decide how to"
                 " retry.<br><br>"
                 "The trade-off is between bandwidth usage and whether"
-                " retried images are included in the gallery&rsquo;s"
+                " retried images are included in the gallery\u2019s"
                 " zip download on Pixhost."
             ))
             strategy_header_row.addStretch()
@@ -708,7 +708,7 @@ class ImageHostConfigPanel(QWidget):
 
             retry_image_sublabel = QLabel(
                 "Re-uploads just the failed image. Saves bandwidth but the"
-                " retried image won&rsquo;t be included in the gallery&rsquo;s"
+                " retried image won\u2019t be included in the gallery\u2019s"
                 " zip download on Pixhost."
             )
             retry_image_sublabel.setWordWrap(True)
