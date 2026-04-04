@@ -189,6 +189,18 @@ class FileHostConfigDialog(QDialog):
             # Determine which fields to show based on auth_type
             if self.host_config.auth_type in ["api_key", "bearer"]:
                 # API Key only
+                header = QHBoxLayout()
+                header.addWidget(QLabel("<b>API Key</b>"))
+                desc = QLabel(" \u2013 <i>required for uploads</i>")
+                desc.setProperty("class", "label-muted")
+                header.addWidget(desc)
+                header.addWidget(InfoButton(
+                    f"Your {self.host_config.name} API key authenticates your uploads. "
+                    "Find it in your account settings on the host's website."
+                ))
+                header.addStretch()
+                creds_layout.addRow("", header)
+
                 self.creds_api_key_input = AsteriskPasswordEdit()
                 self.creds_api_key_input.setFont(QFont("Consolas", 10))
                 self.creds_api_key_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -214,6 +226,18 @@ class FileHostConfigDialog(QDialog):
 
             elif self.host_config.auth_type == "mixed":
                 # Both API key and username/password
+                header = QHBoxLayout()
+                header.addWidget(QLabel("<b>API Key</b>"))
+                desc = QLabel(" \u2013 <i>required for uploads</i>")
+                desc.setProperty("class", "label-muted")
+                header.addWidget(desc)
+                header.addWidget(InfoButton(
+                    f"Your {self.host_config.name} API key authenticates your uploads. "
+                    "Find it in your account settings on the host's website."
+                ))
+                header.addStretch()
+                creds_layout.addRow("", header)
+
                 self.creds_api_key_input = AsteriskPasswordEdit()
                 self.creds_api_key_input.setFont(QFont("Consolas", 10))
                 self.creds_api_key_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -236,6 +260,18 @@ class FileHostConfigDialog(QDialog):
                 api_key_row.addWidget(show_api_btn)
 
                 creds_layout.addRow("API Key:", api_key_row)
+
+                login_header = QHBoxLayout()
+                login_header.addWidget(QLabel("<b>Login</b>"))
+                desc = QLabel(" \u2013 <i>for account info and storage tracking</i>")
+                desc.setProperty("class", "label-muted")
+                login_header.addWidget(desc)
+                login_header.addWidget(InfoButton(
+                    f"Your {self.host_config.name} login credentials are used to "
+                    "authenticate uploads and track your account storage usage."
+                ))
+                login_header.addStretch()
+                creds_layout.addRow("", login_header)
 
                 self.creds_username_input = AsteriskPasswordEdit()
                 self.creds_username_input.setFont(QFont("Consolas", 10))
@@ -285,6 +321,18 @@ class FileHostConfigDialog(QDialog):
 
             else:
                 # Username and password only (token_login, session, etc.)
+                header = QHBoxLayout()
+                header.addWidget(QLabel("<b>Login</b>"))
+                desc = QLabel(" \u2013 <i>for authentication and storage tracking</i>")
+                desc.setProperty("class", "label-muted")
+                header.addWidget(desc)
+                header.addWidget(InfoButton(
+                    f"Your {self.host_config.name} login credentials are used to authenticate "
+                    "uploads and track your account storage usage."
+                ))
+                header.addStretch()
+                creds_layout.addRow("", header)
+
                 self.creds_username_input = AsteriskPasswordEdit()
                 self.creds_username_input.setFont(QFont("Consolas", 10))
                 self.creds_username_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -332,10 +380,44 @@ class FileHostConfigDialog(QDialog):
                 creds_layout.addRow("Password:", password_row)
 
             self.setup_test_results_section(creds_group.layout())
+
+            security_row = QHBoxLayout()
+            security_label = QLabel("<small>Credentials are securely stored and encrypted</small>")
+            security_label.setProperty("class", "label-muted")
+            security_row.addWidget(security_label)
+            security_row.addWidget(InfoButton(
+                "Your credentials are protected with multiple layers of security:<br><br>"
+                "<b>Encryption:</b> Credentials are encrypted using Fernet, which combines "
+                "AES-128 encryption (the same standard used by banks) with HMAC-SHA256 "
+                "to detect any tampering.<br><br>"
+                "<b>Key generation:</b> The encryption key is generated using a "
+                "cryptographically secure random number generator (CSPRNG), meaning "
+                "it's truly random and not derived from a password that could be guessed.<br><br>"
+                "<b>Secure storage:</b> Encrypted credentials are stored in your operating "
+                "system's keyring \u2014 Windows Credential Manager, macOS Keychain, or Linux "
+                "Secret Service. They're tied to your user account and protected by your "
+                "OS login.<br><br>"
+                "This means credentials won't transfer to other computers and can't be "
+                "read by other users on the same machine."
+            ))
+            security_row.addStretch()
+            creds_group.layout().addRow("", security_row)
+
             content_layout.addWidget(creds_group)
         # Storage section
         self.storage_bar = None
-        if self.host_config.user_info_url and (self.host_config.storage_left_path or self.host_config.storage_regex):
+        has_storage_support = self.host_config.user_info_url and (
+            self.host_config.storage_left_path or self.host_config.storage_regex
+        )
+
+        has_cached_data = False
+        has_credentials = False
+        if has_storage_support:
+            total_str = self.settings.value(f"FileHosts/{self.host_id}/storage_total", "0")
+            has_cached_data = bool(total_str) and total_str != "0"
+            has_credentials = bool(self.saved_credentials)
+
+        if has_storage_support and (has_cached_data or has_credentials):
             storage_group = QGroupBox("Storage")
             storage_layout = QVBoxLayout(storage_group)
 
@@ -343,7 +425,10 @@ class FileHostConfigDialog(QDialog):
             self.storage_bar.setMaximum(100)
             self.storage_bar.setValue(0)
             self.storage_bar.setTextVisible(True)
-            self.storage_bar.setFormat("Loading...")
+            if has_cached_data:
+                self.storage_bar.setFormat("Loading...")  # Will be replaced by actual data shortly
+            else:
+                self.storage_bar.setFormat("Fetching...")
             self.storage_bar.setMaximumHeight(20)
             self.storage_bar.setProperty("class", "storage-bar")
 
