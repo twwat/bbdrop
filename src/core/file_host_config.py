@@ -237,6 +237,7 @@ _HARDCODED_DEFAULTS = {
     "bbcode_format": "",
     "spinup_retry_enabled": True,
     "spinup_retry_max_time": 1800,  # 30 minutes in seconds
+    "connect_timeout": 30,
 }
 
 

@@ -19,6 +19,7 @@
         {"id": 3, "label": "Square"},
         {"id": 4, "label": "Fixed height"}
     ],
+    "max_file_size_mb": 100,
     "defaults": {
         "max_retries": 3,
         "parallel_batch_size": 4,
@@ -28,6 +29,8 @@
         "thumbnail_format": 2,
         "cover_thumbnail_format": 2,
         "cover_gallery": "",
-        "auto_rename": true
+        "auto_rename": true,
+        "auto_retry": true,
+        "max_upload_time": 0
     }
 }

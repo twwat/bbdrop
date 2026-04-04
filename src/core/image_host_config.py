@@ -96,6 +96,9 @@ _HARDCODED_DEFAULTS = {
     "cover_gallery": "",
     "cover_thumbnail_format": 2,
     "cover_thumbnail_size": 600,
+    "auto_retry": True,
+    "max_upload_time": 0,
+    "max_file_size_mb": 0,
 }
 
 

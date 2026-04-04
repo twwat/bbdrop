@@ -30,6 +30,8 @@
         "auto_finalize_gallery": true,
         "cover_gallery": "",
         "cover_thumbnail_format": 2,
-        "cover_thumbnail_size": 600
+        "cover_thumbnail_size": 600,
+        "auto_retry": true,
+        "max_upload_time": 0
     }
 }
