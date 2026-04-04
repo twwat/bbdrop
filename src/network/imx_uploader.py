@@ -115,6 +115,7 @@ class ImxToUploader(ImageHostClient):
 
         # Check if we have either username/password or API key
         has_credentials = (self.username and self.password) or self.api_key
+        self._has_credentials = has_credentials
 
         if not has_credentials:
             # In CLI mode, exit — no way to set credentials interactively

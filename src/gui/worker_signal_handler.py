@@ -44,7 +44,6 @@ class WorkerSignalHandler(QObject):
         self._filehost_base_bytes: Dict[str, int] = {}
         self._filehost_base_files: Dict[str, int] = {}
 
-
     @property
     def _mw(self):
         """Get main window reference, or None if C++ object was deleted."""

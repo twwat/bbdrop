@@ -258,6 +258,22 @@ class UploadWorker(QThread):
             if not hasattr(self, '_current_host_id') or self._current_host_id != host_id:
                 self._initialize_uploader(host_id)
 
+            # Check if host requires credentials that aren't configured
+            if self.uploader and not getattr(self.uploader, '_has_credentials', True):
+                from src.core.image_host_config import get_image_host_config_manager
+                config_mgr = get_image_host_config_manager()
+                host_cfg = config_mgr.get_host(host_id)
+                host_name = host_cfg.name if host_cfg else host_id
+                if host_cfg and host_cfg.requires_auth:
+                    error_msg = (
+                        f"{host_name} requires credentials to upload. "
+                        f"Set up your API key or login in Settings > Image Hosts."
+                    )
+                    item.error_message = error_msg
+                    self.queue_manager.mark_upload_failed(item.path, error_msg)
+                    self.gallery_failed.emit(item.path, error_msg)
+                    return
+
             # Check for soft-stop request BEFORE clearing
             soft_stop_requested = getattr(self, '_soft_stop_requested_for', None) == item.path
 
