@@ -189,7 +189,7 @@ class TestSettingsDialogGeneralTab:
         assert hasattr(dialog, 'stack_widget')
         assert dialog.stack_widget.count() > 0
 
-        # Note: Some widgets like max_retries_slider may be on sub-panels
+        # Note: Some widgets like max_retries_spin may be on sub-panels
         # (e.g., in image_host_config_panel), not directly on the dialog
 
     def test_slider_value_labels_update(self, qtbot,
@@ -205,8 +205,8 @@ class TestSettingsDialogGeneralTab:
         panel = ImageHostConfigPanel('imx', config)
         qtbot.addWidget(panel)
 
-        panel.max_retries_slider.setValue(4)
-        assert panel.max_retries_value.text() == '4'
+        panel.max_retries_spin.setValue(4)
+        assert panel.max_retries_spin.value() == 4
 
     def test_slider_ranges(self, qtbot,
                           mock_config_file, mock_bbdrop_functions):
@@ -217,10 +217,10 @@ class TestSettingsDialogGeneralTab:
         panel = ImageHostConfigPanel('imx', config)
         qtbot.addWidget(panel)
 
-        assert panel.max_retries_slider.minimum() == 1
-        assert panel.max_retries_slider.maximum() == 5
-        assert panel.batch_size_slider.minimum() == 1
-        assert panel.batch_size_slider.maximum() == 8
+        assert panel.max_retries_spin.minimum() == 1
+        assert panel.max_retries_spin.maximum() == 10
+        assert panel.concurrent_uploads_spin.minimum() == 1
+        assert panel.concurrent_uploads_spin.maximum() == 8
 
     def test_storage_radio_buttons(self, qtbot,
                                    mock_config_file, mock_bbdrop_functions):
@@ -612,11 +612,11 @@ class TestSettingsDialogResetExtended:
         qtbot.addWidget(panel)
 
         # Change values from defaults
-        panel.max_retries_slider.setValue(5)
-        panel.batch_size_slider.setValue(8)
+        panel.max_retries_spin.setValue(5)
+        panel.concurrent_uploads_spin.setValue(8)
 
-        assert panel.max_retries_slider.value() == 5
-        assert panel.batch_size_slider.value() == 8
+        assert panel.max_retries_spin.value() == 5
+        assert panel.concurrent_uploads_spin.value() == 8
 
         # Verify dialog-level reset method exists
         dialog = ComprehensiveSettingsDialog()
@@ -817,11 +817,11 @@ class TestSettingsDialogEdgeCasesExtended:
         panel = ImageHostConfigPanel('imx', config)
         qtbot.addWidget(panel)
 
-        panel.max_retries_slider.setValue(panel.max_retries_slider.minimum())
-        assert panel.max_retries_slider.value() == panel.max_retries_slider.minimum()
+        panel.max_retries_spin.setValue(panel.max_retries_spin.minimum())
+        assert panel.max_retries_spin.value() == panel.max_retries_spin.minimum()
 
-        panel.max_retries_slider.setValue(panel.max_retries_slider.maximum())
-        assert panel.max_retries_slider.value() == panel.max_retries_slider.maximum()
+        panel.max_retries_spin.setValue(panel.max_retries_spin.maximum())
+        assert panel.max_retries_spin.value() == panel.max_retries_spin.maximum()
 
     def test_special_characters_in_patterns(self, qtbot,
                                             mock_config_file, mock_bbdrop_functions):
@@ -846,12 +846,12 @@ class TestSettingsDialogEdgeCasesExtended:
         qtbot.addWidget(panel)
 
         for i in range(1, 6):
-            panel.max_retries_slider.setValue(i)
+            panel.max_retries_spin.setValue(i)
         for i in range(1, 9):
-            panel.batch_size_slider.setValue(i)
+            panel.concurrent_uploads_spin.setValue(i)
 
-        assert panel.max_retries_slider.value() == 5
-        assert panel.batch_size_slider.value() == 8
+        assert panel.max_retries_spin.value() == 5
+        assert panel.concurrent_uploads_spin.value() == 8
 
 
 # ============================================================================
@@ -870,8 +870,8 @@ class TestSettingsDialogSignals:
         panel = ImageHostConfigPanel('imx', config)
         qtbot.addWidget(panel)
 
-        with qtbot.waitSignal(panel.max_retries_slider.valueChanged, timeout=1000):
-            panel.max_retries_slider.setValue(4)
+        with qtbot.waitSignal(panel.max_retries_spin.valueChanged, timeout=1000):
+            panel.max_retries_spin.setValue(4)
 
     def test_checkbox_signals_emit(self, qtbot,
                                    mock_config_file, mock_bbdrop_functions):

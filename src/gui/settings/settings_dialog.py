@@ -468,10 +468,13 @@ class ComprehensiveSettingsDialog(QDialog):
             if hasattr(self, 'image_hosts_widget') and self.image_hosts_widget:
                 for panel in self.image_hosts_widget.panels.values():
                     # Rebuild panel UI to reflect reset values
-                    panel.max_retries_slider.setValue(3)
-                    panel.batch_size_slider.setValue(4)
-                    panel.connect_timeout_slider.setValue(30)
-                    panel.read_timeout_slider.setValue(120)
+                    panel.auto_retry_check.setChecked(False)
+                    panel.max_retries_spin.setValue(3)
+                    panel.concurrent_uploads_spin.setValue(4)
+                    panel.connect_timeout_spin.setValue(30)
+                    panel.inactivity_timeout_spin.setValue(120)
+                    panel.max_upload_time_spin.setValue(0)
+                    panel.max_file_size_spin.setValue(0)
                     panel.thumbnail_size_combo.setCurrentIndex(2)
                     panel.thumbnail_format_combo.setCurrentIndex(1)
                     if hasattr(panel, 'auto_rename_check'):

@@ -11,7 +11,7 @@ import configparser
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout, QLabel,
     QGroupBox, QPushButton, QSlider, QComboBox, QCheckBox, QLineEdit,
-    QMessageBox, QRadioButton, QButtonGroup, QFrame
+    QMessageBox, QRadioButton, QButtonGroup, QFrame, QSpinBox
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
@@ -69,9 +69,9 @@ class ImageHostConfigPanel(QWidget):
         grid.setColumnStretch(1, 1)
         grid.setVerticalSpacing(12)
 
-        # Row 0: Connection (left), Thumbnails (right)
-        connection_group = self._create_connection_group()
-        grid.addWidget(connection_group, 0, 0)
+        # Row 0: Upload Settings (left), Thumbnails (right)
+        upload_settings_group = self._create_upload_settings_group()
+        grid.addWidget(upload_settings_group, 0, 0)
 
         thumbnails_group = self._create_thumbnails_group()
         grid.addWidget(thumbnails_group, 0, 1)
@@ -338,102 +338,156 @@ class ImageHostConfigPanel(QWidget):
 
         return group
 
-    def _create_connection_group(self) -> QGroupBox:
-        """Create the connection settings group."""
-        group = QGroupBox("Connection")
-        layout = QGridLayout(group)
+    def _make_label_with_info(self, text: str, tooltip: str) -> QWidget:
+        """Create a label + InfoButton widget for use in QFormLayout rows."""
+        container = QWidget()
+        h = QHBoxLayout(container)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(QLabel(text))
+        h.addWidget(InfoButton(tooltip))
+        h.addStretch()
+        return container
 
-        # Max Retries
-        layout.addWidget(QLabel("<b>Max Retries</b>:"), 0, 0)
-        self.max_retries_slider = QSlider(Qt.Orientation.Horizontal)
-        self.max_retries_slider.setMinimum(1)
-        self.max_retries_slider.setMaximum(5)
-        self.max_retries_slider.setValue(
+    def _create_upload_settings_group(self) -> QGroupBox:
+        """Create the upload settings group with spinboxes."""
+        group = QGroupBox("Upload Settings")
+        layout = QFormLayout(group)
+
+        # --- 1. Unified retry row ---
+        retry_row_widget = QWidget()
+        retry_row = QHBoxLayout(retry_row_widget)
+        retry_row.setContentsMargins(0, 0, 0, 0)
+
+        retry_row.addWidget(QLabel("Auto-retry"))
+        retry_row.addWidget(InfoButton(
+            "When enabled, failed uploads are automatically retried up to the "
+            "specified number of times. Each retry uses a fresh connection. "
+            "The delay between retries increases with each attempt."
+        ))
+
+        self.auto_retry_check = QCheckBox()
+        self.auto_retry_check.setChecked(
+            get_image_host_setting(self.host_id, 'auto_retry', 'bool')
+        )
+        self.auto_retry_check.toggled.connect(self._mark_modified)
+        retry_row.addWidget(self.auto_retry_check)
+
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        retry_row.addWidget(separator)
+
+        retry_row.addWidget(QLabel("Max retries"))
+        self.max_retries_spin = QSpinBox()
+        self.max_retries_spin.setMinimum(1)
+        self.max_retries_spin.setMaximum(10)
+        self.max_retries_spin.setValue(
             get_image_host_setting(self.host_id, 'max_retries', 'int')
         )
-        self.max_retries_slider.valueChanged.connect(self._mark_modified)
-        layout.addWidget(self.max_retries_slider, 0, 1)
+        self.max_retries_spin.setEnabled(self.auto_retry_check.isChecked())
+        self.auto_retry_check.toggled.connect(self.max_retries_spin.setEnabled)
+        self.max_retries_spin.valueChanged.connect(self._mark_modified)
+        retry_row.addWidget(self.max_retries_spin)
+        retry_row.addStretch()
 
-        self.max_retries_value = QLabel(str(self.max_retries_slider.value()))
-        self.max_retries_slider.valueChanged.connect(
-            lambda v: self.max_retries_value.setText(str(v))
-        )
-        layout.addWidget(self.max_retries_value, 0, 2)
+        layout.addRow(retry_row_widget)
 
-        # Concurrent Uploads
-        concurrent_label_row = QHBoxLayout()
-        concurrent_label_row.addWidget(QLabel("<b>Concurrent Uploads</b>:"))
-        concurrent_label_row.addWidget(InfoButton(
-            "Number of images uploaded simultaneously within a single gallery. "
-            "Higher = faster but uses more bandwidth and connections.<br><br>"
-            "Most hosts handle 3&ndash;4 well. Going above 5 may trigger "
-            "rate limiting."
-        ))
-        concurrent_label_row.addStretch()
-        layout.addLayout(concurrent_label_row, 1, 0)
-        self.batch_size_slider = QSlider(Qt.Orientation.Horizontal)
-        self.batch_size_slider.setMinimum(1)
-        self.batch_size_slider.setMaximum(8)
-        self.batch_size_slider.setValue(
+        # --- 2. Concurrent uploads ---
+        self.concurrent_uploads_spin = QSpinBox()
+        self.concurrent_uploads_spin.setMinimum(1)
+        self.concurrent_uploads_spin.setMaximum(8)
+        self.concurrent_uploads_spin.setValue(
             get_image_host_setting(self.host_id, 'parallel_batch_size', 'int')
         )
-        self.batch_size_slider.valueChanged.connect(self._mark_modified)
-        layout.addWidget(self.batch_size_slider, 1, 1)
-
-        self.batch_size_value = QLabel(str(self.batch_size_slider.value()))
-        self.batch_size_slider.valueChanged.connect(
-            lambda v: self.batch_size_value.setText(str(v))
+        self.concurrent_uploads_spin.valueChanged.connect(self._mark_modified)
+        layout.addRow(
+            self._make_label_with_info(
+                "Concurrent uploads",
+                "Number of images uploaded simultaneously within a gallery. "
+                "Higher values are faster but may trigger rate limiting on some "
+                "hosts. Most hosts work well with 3-4."
+            ),
+            self.concurrent_uploads_spin,
         )
-        layout.addWidget(self.batch_size_value, 1, 2)
 
-        # Connect Timeout
-        timeout_label_row = QHBoxLayout()
-        timeout_label_row.addWidget(QLabel("<b>Connect Timeout (s)</b>:"))
-        timeout_label_row.addWidget(InfoButton(
-            "<b>Connect timeout:</b> How long to wait for the initial TCP "
-            "connection to the server. If the server doesn't respond within "
-            "this time, the upload fails.<br><br>"
-            "<b>Read timeout:</b> How long to wait for the server to process "
-            "and respond after the upload data is sent. Large images on slow "
-            "hosts may need higher values.<br><br>"
-            "If you get frequent timeout errors, increase read timeout first "
-            "(it's the more common bottleneck)."
-        ))
-        timeout_label_row.addStretch()
-        layout.addLayout(timeout_label_row, 2, 0)
-        self.connect_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.connect_timeout_slider.setMinimum(10)
-        self.connect_timeout_slider.setMaximum(180)
-        self.connect_timeout_slider.setValue(
+        # --- 3. Connect timeout ---
+        self.connect_timeout_spin = QSpinBox()
+        self.connect_timeout_spin.setMinimum(10)
+        self.connect_timeout_spin.setMaximum(180)
+        self.connect_timeout_spin.setSuffix("s")
+        self.connect_timeout_spin.setValue(
             get_image_host_setting(self.host_id, 'upload_connect_timeout', 'int')
         )
-        self.connect_timeout_slider.valueChanged.connect(self._mark_modified)
-        layout.addWidget(self.connect_timeout_slider, 2, 1)
-
-        self.connect_timeout_value = QLabel(str(self.connect_timeout_slider.value()))
-        self.connect_timeout_value.setMinimumWidth(30)
-        self.connect_timeout_slider.valueChanged.connect(
-            lambda v: self.connect_timeout_value.setText(str(v))
+        self.connect_timeout_spin.valueChanged.connect(self._mark_modified)
+        layout.addRow(
+            self._make_label_with_info(
+                "Connect timeout",
+                "How long to wait when establishing a connection to the host "
+                "before giving up. Increase if you're on a slow or unreliable "
+                "network. Most connections complete in under 10 seconds."
+            ),
+            self.connect_timeout_spin,
         )
-        layout.addWidget(self.connect_timeout_value, 2, 2)
 
-        # Read Timeout
-        layout.addWidget(QLabel("<b>Read Timeout (s)</b>:"), 3, 0)
-        self.read_timeout_slider = QSlider(Qt.Orientation.Horizontal)
-        self.read_timeout_slider.setMinimum(20)
-        self.read_timeout_slider.setMaximum(600)
-        self.read_timeout_slider.setValue(
+        # --- 4. Inactivity timeout ---
+        self.inactivity_timeout_spin = QSpinBox()
+        self.inactivity_timeout_spin.setMinimum(20)
+        self.inactivity_timeout_spin.setMaximum(600)
+        self.inactivity_timeout_spin.setSuffix("s")
+        self.inactivity_timeout_spin.setValue(
             get_image_host_setting(self.host_id, 'upload_read_timeout', 'int')
         )
-        self.read_timeout_slider.valueChanged.connect(self._mark_modified)
-        layout.addWidget(self.read_timeout_slider, 3, 1)
-
-        self.read_timeout_value = QLabel(str(self.read_timeout_slider.value()))
-        self.read_timeout_value.setMinimumWidth(30)
-        self.read_timeout_slider.valueChanged.connect(
-            lambda v: self.read_timeout_value.setText(str(v))
+        self.inactivity_timeout_spin.valueChanged.connect(self._mark_modified)
+        layout.addRow(
+            self._make_label_with_info(
+                "Inactivity timeout",
+                "How long to wait for data during an active upload before "
+                "treating it as stalled. If no data is received for this long, "
+                "the upload is considered failed. Increase for slow connections "
+                "or large files."
+            ),
+            self.inactivity_timeout_spin,
         )
-        layout.addWidget(self.read_timeout_value, 3, 2)
+
+        # --- 5. Max upload time ---
+        self.max_upload_time_spin = QSpinBox()
+        self.max_upload_time_spin.setMinimum(0)
+        self.max_upload_time_spin.setMaximum(7200)
+        self.max_upload_time_spin.setSuffix("s")
+        self.max_upload_time_spin.setSpecialValueText("Off")
+        self.max_upload_time_spin.setValue(
+            get_image_host_setting(self.host_id, 'max_upload_time', 'int')
+        )
+        self.max_upload_time_spin.valueChanged.connect(self._mark_modified)
+        layout.addRow(
+            self._make_label_with_info(
+                "Max upload time",
+                "Maximum total time allowed for a single image upload. Set to "
+                "0 to disable. Useful as a safety net to prevent uploads from "
+                "hanging indefinitely."
+            ),
+            self.max_upload_time_spin,
+        )
+
+        # --- 6. Max file size ---
+        self.max_file_size_spin = QSpinBox()
+        self.max_file_size_spin.setMinimum(0)
+        self.max_file_size_spin.setMaximum(10000)
+        self.max_file_size_spin.setSuffix(" MiB")
+        self.max_file_size_spin.setSpecialValueText("No limit")
+        self.max_file_size_spin.setValue(
+            get_image_host_setting(self.host_id, 'max_file_size_mb', 'int')
+        )
+        self.max_file_size_spin.valueChanged.connect(self._mark_modified)
+        layout.addRow(
+            self._make_label_with_info(
+                "Max file size",
+                "Maximum file size this host accepts. Files larger than this "
+                "will be skipped. The default is the host\u2019s documented limit "
+                "\u2014 increase only if your account has higher limits."
+            ),
+            self.max_file_size_spin,
+        )
 
         return group
 
@@ -760,10 +814,13 @@ class ImageHostConfigPanel(QWidget):
         self.save_credentials()
         old_batch = get_image_host_setting(self.host_id, 'parallel_batch_size', 'int')
 
-        save_image_host_setting(self.host_id, 'max_retries', self.max_retries_slider.value())
-        save_image_host_setting(self.host_id, 'parallel_batch_size', self.batch_size_slider.value())
-        save_image_host_setting(self.host_id, 'upload_connect_timeout', self.connect_timeout_slider.value())
-        save_image_host_setting(self.host_id, 'upload_read_timeout', self.read_timeout_slider.value())
+        save_image_host_setting(self.host_id, 'auto_retry', self.auto_retry_check.isChecked())
+        save_image_host_setting(self.host_id, 'max_retries', self.max_retries_spin.value())
+        save_image_host_setting(self.host_id, 'parallel_batch_size', self.concurrent_uploads_spin.value())
+        save_image_host_setting(self.host_id, 'upload_connect_timeout', self.connect_timeout_spin.value())
+        save_image_host_setting(self.host_id, 'upload_read_timeout', self.inactivity_timeout_spin.value())
+        save_image_host_setting(self.host_id, 'max_upload_time', self.max_upload_time_spin.value())
+        save_image_host_setting(self.host_id, 'max_file_size_mb', self.max_file_size_spin.value())
 
         # Save thumbnail size - either slider value (variable) or combo index (fixed)
         if self.thumb_slider is not None:
@@ -802,7 +859,7 @@ class ImageHostConfigPanel(QWidget):
             self.cover_gallery_changed.emit(self.host_id, self.cover_gallery_edit.text())
 
         self._modified = False
-        return (old_batch, self.batch_size_slider.value())
+        return (old_batch, self.concurrent_uploads_spin.value())
 
     # ========== CREDENTIAL MANAGEMENT METHODS ==========
 

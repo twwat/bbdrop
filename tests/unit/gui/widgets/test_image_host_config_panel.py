@@ -293,7 +293,7 @@ class TestDualWideLayout:
 
     def test_imx_has_all_groups(self):
         panel = _make_panel('imx')
-        assert panel.max_retries_slider is not None
+        assert panel.max_retries_spin is not None
         assert panel._has_cover_gallery
         assert hasattr(panel, 'cover_gallery_edit')
         assert hasattr(panel, 'auto_rename_check')
@@ -394,3 +394,62 @@ class TestSaveWithRadios:
             rename_calls = [c for c in mock_save.call_args_list if c[0][1] == 'auto_rename']
             assert len(rename_calls) == 1
             assert rename_calls[0][0][2] is True
+
+
+class TestUploadSettingsGroup:
+    """Upload Settings group replaces old Connection group with spinboxes."""
+
+    def test_has_concurrent_uploads_spinbox(self):
+        panel = _make_panel('imx')
+        assert hasattr(panel, 'concurrent_uploads_spin')
+        from PyQt6.QtWidgets import QSpinBox
+        assert isinstance(panel.concurrent_uploads_spin, QSpinBox)
+
+    def test_has_connect_timeout_spinbox(self):
+        panel = _make_panel('imx')
+        assert hasattr(panel, 'connect_timeout_spin')
+        from PyQt6.QtWidgets import QSpinBox
+        assert isinstance(panel.connect_timeout_spin, QSpinBox)
+
+    def test_has_inactivity_timeout_spinbox(self):
+        panel = _make_panel('imx')
+        assert hasattr(panel, 'inactivity_timeout_spin')
+        from PyQt6.QtWidgets import QSpinBox
+        assert isinstance(panel.inactivity_timeout_spin, QSpinBox)
+
+    def test_has_max_upload_time_spinbox(self):
+        panel = _make_panel('imx')
+        assert hasattr(panel, 'max_upload_time_spin')
+        from PyQt6.QtWidgets import QSpinBox
+        assert isinstance(panel.max_upload_time_spin, QSpinBox)
+
+    def test_has_max_file_size_spinbox(self):
+        panel = _make_panel('imx')
+        assert hasattr(panel, 'max_file_size_spin')
+        from PyQt6.QtWidgets import QSpinBox
+        assert isinstance(panel.max_file_size_spin, QSpinBox)
+
+    def test_has_auto_retry_toggle(self):
+        panel = _make_panel('imx')
+        assert hasattr(panel, 'auto_retry_check')
+        from PyQt6.QtWidgets import QCheckBox
+        assert isinstance(panel.auto_retry_check, QCheckBox)
+
+    def test_has_max_retries_spinbox(self):
+        panel = _make_panel('imx')
+        assert hasattr(panel, 'max_retries_spin')
+        from PyQt6.QtWidgets import QSpinBox
+        assert isinstance(panel.max_retries_spin, QSpinBox)
+
+    def test_no_old_sliders(self):
+        """Old slider attributes should be gone."""
+        panel = _make_panel('imx')
+        assert not hasattr(panel, 'max_retries_slider')
+        assert not hasattr(panel, 'batch_size_slider')
+        assert not hasattr(panel, 'connect_timeout_slider')
+        assert not hasattr(panel, 'read_timeout_slider')
+
+    def test_max_retries_disabled_when_auto_retry_off(self):
+        panel = _make_panel('imx')
+        panel.auto_retry_check.setChecked(False)
+        assert not panel.max_retries_spin.isEnabled()

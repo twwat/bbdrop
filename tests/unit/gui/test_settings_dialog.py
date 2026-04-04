@@ -513,9 +513,9 @@ class TestSettingsDialogValidation:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if hasattr(dialog, 'max_retries_slider'):
-            min_val = dialog.max_retries_slider.minimum()
-            max_val = dialog.max_retries_slider.maximum()
+        if hasattr(dialog, 'max_retries_spin'):
+            min_val = dialog.max_retries_spin.minimum()
+            max_val = dialog.max_retries_spin.maximum()
             assert min_val >= 0
             assert max_val > min_val
 
@@ -657,9 +657,9 @@ class TestSettingsDialogWidgets:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        if hasattr(dialog, 'max_retries_slider'):
-            dialog.max_retries_slider.setValue(5)
-            assert dialog.max_retries_slider.value() == 5
+        if hasattr(dialog, 'max_retries_spin'):
+            dialog.max_retries_spin.setValue(5)
+            assert dialog.max_retries_spin.value() == 5
 
 
 # ============================================================================
