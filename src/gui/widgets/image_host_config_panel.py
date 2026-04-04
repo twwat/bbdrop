@@ -175,20 +175,20 @@ class ImageHostConfigPanel(QWidget):
             group = QGroupBox("Credentials")
             layout = QVBoxLayout(group)
 
-            # Bold "API Key" header
-            api_key_header = QLabel("<b>API Key</b>")
-            layout.addWidget(api_key_header)
-
-            # Info-panel with link
-            api_key_info = QLabel(
-                '<span class="info-panel">Required for uploading files &mdash;'
-                ' get your API key from'
-                ' <a href="https://imx.to/user/api">imx.to/user/api</a></span>'
-            )
-            api_key_info.setWordWrap(True)
-            api_key_info.setOpenExternalLinks(True)
-            api_key_info.setProperty("class", "info-panel")
-            layout.addWidget(api_key_info)
+            # "API Key" header with description and infobutton
+            api_key_header = QHBoxLayout()
+            api_key_label = QLabel("<b>API Key</b>")
+            api_key_desc = QLabel(" \u2013 <i>required for uploading</i>")
+            api_key_desc.setProperty("class", "label-muted")
+            api_key_header.addWidget(api_key_label)
+            api_key_header.addWidget(api_key_desc)
+            api_key_header.addWidget(InfoButton(
+                "Your IMX.to API key is required to upload images. "
+                "Get your key from <a href='https://imx.to/user/api'>imx.to/user/api</a>.<br><br>"
+                "The API key authenticates your uploads and links them to your account."
+            ))
+            api_key_header.addStretch()
+            layout.addLayout(api_key_header)
 
             # Inline API Key field with eye toggle
             self.api_key_input, api_key_toggle = self._create_inline_field("Enter API key...")
@@ -207,19 +207,25 @@ class ImageHostConfigPanel(QWidget):
             separator.setFrameShadow(QFrame.Shadow.Sunken)
             layout.addWidget(separator)
 
-            # Bold "Login" header
-            login_header = QLabel("<b>Login</b>")
-            layout.addWidget(login_header)
-
-            # Login info-panel
-            login_info = QLabel(
-                "Required for renaming galleries and checking online status"
-                " via Link Scanner. Without login credentials, all galleries"
-                " will be named &ldquo;untitled gallery&rdquo;."
-            )
-            login_info.setWordWrap(True)
-            login_info.setProperty("class", "info-panel")
-            layout.addWidget(login_info)
+            # "Login" header with description and infobutton
+            login_header = QHBoxLayout()
+            login_label = QLabel("<b>Login</b>")
+            login_desc = QLabel(" \u2013 <i>required for gallery naming and checking online status</i>")
+            login_desc.setProperty("class", "label-muted")
+            login_header.addWidget(login_label)
+            login_header.addWidget(login_desc)
+            login_header.addWidget(InfoButton(
+                "Login credentials are used for two features:<br><br>"
+                "<b>Gallery naming:</b> Without login, all galleries are named "
+                "'untitled gallery' on IMX.to. With login, BBDrop can rename them "
+                "to match your folder names.<br><br>"
+                "<b>Link Scanner:</b> Checking whether your images are still online "
+                "requires an authenticated session.<br><br>"
+                "You can also enable Firefox Cookies below as an alternative to "
+                "entering your password here."
+            ))
+            login_header.addStretch()
+            layout.addLayout(login_header)
 
             # Inline Username + Password fields with eye toggles
             self.username_input, username_toggle = self._create_inline_field("Enter username...")
@@ -274,14 +280,20 @@ class ImageHostConfigPanel(QWidget):
             group = QGroupBox("Credentials (Optional)") if is_optional else QGroupBox("Credentials")
             layout = QVBoxLayout(group)
 
-            # Info-panel
-            optional_info = QLabel(
-                "Optional &mdash; an account lets you manage uploaded"
-                " galleries and use cover galleries."
-            )
-            optional_info.setWordWrap(True)
-            optional_info.setProperty("class", "info-panel")
-            layout.addWidget(optional_info)
+            # "Login" header with description and infobutton
+            login_header = QHBoxLayout()
+            login_label = QLabel("<b>Login</b>")
+            login_desc = QLabel(" \u2013 <i>optional, enables gallery management and cover galleries</i>")
+            login_desc.setProperty("class", "label-muted")
+            login_header.addWidget(login_label)
+            login_header.addWidget(login_desc)
+            login_header.addWidget(InfoButton(
+                "A TurboImageHost account is optional \u2014 uploads work anonymously.<br><br>"
+                "With an account, you can manage uploaded galleries and use the "
+                "cover gallery feature for hero images."
+            ))
+            login_header.addStretch()
+            layout.addLayout(login_header)
 
             # No API key, no cookies
             self.api_key_input = None
@@ -323,18 +335,28 @@ class ImageHostConfigPanel(QWidget):
         # Keep reference to the test thread so it doesn't get GC'd
         self._test_thread = None
 
-        # Credential storage note
-        encryption_note = QLabel(
-            "<small>Credentials are encrypted with Fernet"
-            " (AES-128-CBC + HMAC-SHA256) using a CSPRNG master key,"
-            " then stored in your OS keyring (Windows Credential"
-            " Manager / macOS Keychain / Linux Secret Service)."
-            "<br><br>They are tied to your user account and"
-            " won't transfer to other computers.</small>"
-        )
-        encryption_note.setWordWrap(True)
-        encryption_note.setProperty("class", "label-credential-note")
-        layout.addWidget(encryption_note)
+        # Compact credential storage note with infobutton
+        security_row = QHBoxLayout()
+        security_label = QLabel("<small>Credentials are securely stored and encrypted</small>")
+        security_label.setProperty("class", "label-muted")
+        security_row.addWidget(security_label)
+        security_row.addWidget(InfoButton(
+            "Your credentials are protected with multiple layers of security:<br><br>"
+            "<b>Encryption:</b> Credentials are encrypted using Fernet, which combines "
+            "AES-128 encryption (the same standard used by banks) with HMAC-SHA256 "
+            "to detect any tampering.<br><br>"
+            "<b>Key generation:</b> The encryption key is generated using a "
+            "cryptographically secure random number generator (CSPRNG), meaning "
+            "it's truly random and not derived from a password that could be guessed.<br><br>"
+            "<b>Secure storage:</b> Encrypted credentials are stored in your operating "
+            "system's keyring \u2014 Windows Credential Manager, macOS Keychain, or Linux "
+            "Secret Service. They're tied to your user account and protected by your "
+            "OS login.<br><br>"
+            "This means credentials won't transfer to other computers and can't be "
+            "read by other users on the same machine."
+        ))
+        security_row.addStretch()
+        layout.addLayout(security_row)
 
         return group
 
@@ -499,7 +521,14 @@ class ImageHostConfigPanel(QWidget):
         current_row = 0
 
         # Thumbnail Size - check if host uses variable mode (slider) or fixed mode (dropdown)
-        layout.addWidget(QLabel("<b>Thumbnail Size</b>:"), current_row, 0)
+        layout.addWidget(
+            self._make_label_with_info(
+                "<b>Thumbnail Size</b>:",
+                "Size of the thumbnail images generated by the host. Larger thumbnails "
+                "show more detail but take more space in BBCode output."
+            ),
+            current_row, 0
+        )
 
         # Initialize both controls as None so save() can check which exists
         self.thumbnail_size_combo = None
@@ -547,7 +576,15 @@ class ImageHostConfigPanel(QWidget):
         # Thumbnail Format (only if formats are defined)
         self.thumbnail_format_combo = None
         if self.config.thumbnail_formats:
-            layout.addWidget(QLabel("<b>Thumbnail Format</b>:"), current_row, 0)
+            layout.addWidget(
+                self._make_label_with_info(
+                    "<b>Thumbnail Format</b>:",
+                    "How the thumbnail is cropped or resized. 'Proportional' maintains "
+                    "the original aspect ratio. 'Square' crops to a square. 'Fixed width' "
+                    "or 'Fixed height' scales to a specific dimension."
+                ),
+                current_row, 0
+            )
             self.thumbnail_format_combo = QComboBox()
             for item in self.config.thumbnail_formats:
                 self.thumbnail_format_combo.addItem(item["label"])
@@ -576,8 +613,15 @@ class ImageHostConfigPanel(QWidget):
 
         # Content Rating (if host defines content_types)
         if self.config.content_types:
-            content_rating_label = QLabel("<b>Content Rating</b>")
-            layout.addWidget(content_rating_label)
+            content_rating_row = QHBoxLayout()
+            content_rating_row.addWidget(QLabel("<b>Content Rating</b>"))
+            content_rating_row.addWidget(InfoButton(
+                "Content classification for uploads. 'Family Safe' marks content as "
+                "suitable for all audiences. 'Adult Content' allows NSFW material. "
+                "The host may restrict visibility based on this setting."
+            ))
+            content_rating_row.addStretch()
+            layout.addLayout(content_rating_row)
 
             self._content_type_group = QButtonGroup(self)
             saved_content_type = get_image_host_setting(self.host_id, 'content_type', 'str')
@@ -600,12 +644,20 @@ class ImageHostConfigPanel(QWidget):
 
         # IMX: Auto-rename checkbox
         if self.host_id == "imx":
+            auto_rename_row = QHBoxLayout()
             self.auto_rename_check = QCheckBox("Automatically rename galleries on imx.to")
             self.auto_rename_check.setChecked(
                 get_image_host_setting(self.host_id, 'auto_rename', 'bool')
             )
             self.auto_rename_check.toggled.connect(self._mark_modified)
-            layout.addWidget(self.auto_rename_check)
+            auto_rename_row.addWidget(self.auto_rename_check)
+            auto_rename_row.addWidget(InfoButton(
+                "When enabled, BBDrop automatically renames galleries on IMX.to to match "
+                "your local folder names. Requires login credentials. Without this, "
+                "galleries are named 'untitled gallery'."
+            ))
+            auto_rename_row.addStretch()
+            layout.addLayout(auto_rename_row)
 
         # Pixhost-only additions
         if self.host_id == "pixhost":
@@ -698,6 +750,11 @@ class ImageHostConfigPanel(QWidget):
 
         gallery_row = QHBoxLayout()
         gallery_row.addWidget(QLabel("<b>Cover Gallery ID</b>:"))
+        gallery_row.addWidget(InfoButton(
+            "Gallery ID where cover photos are uploaded separately from the main gallery. "
+            "You can paste a full gallery URL and the ID will be extracted automatically. "
+            "Click 'Create' to make a new gallery on the host."
+        ))
 
         self.cover_gallery_edit = QLineEdit()
         self.cover_gallery_edit.setPlaceholderText("Gallery ID for cover uploads")
