@@ -411,13 +411,11 @@ class FileHostConfigDialog(QDialog):
         )
 
         has_cached_data = False
-        has_credentials = False
         if has_storage_support:
             total_str = self.settings.value(f"FileHosts/{self.host_id}/storage_total", "0")
             has_cached_data = bool(total_str) and total_str != "0"
-            has_credentials = bool(self.saved_credentials)
 
-        if has_storage_support and (has_cached_data or has_credentials):
+        if has_storage_support and has_cached_data:
             storage_group = QGroupBox("Storage")
             storage_layout = QVBoxLayout(storage_group)
 
@@ -425,10 +423,6 @@ class FileHostConfigDialog(QDialog):
             self.storage_bar.setMaximum(100)
             self.storage_bar.setValue(0)
             self.storage_bar.setTextVisible(True)
-            if has_cached_data:
-                self.storage_bar.setFormat("Loading...")  # Will be replaced by actual data shortly
-            else:
-                self.storage_bar.setFormat("Fetching...")
             self.storage_bar.setMaximumHeight(20)
             self.storage_bar.setProperty("class", "storage-bar")
 
@@ -579,7 +573,7 @@ class FileHostConfigDialog(QDialog):
         self.max_file_size_spin = QSpinBox()
         self.max_file_size_spin.setRange(0, 10000)
         self.max_file_size_spin.setValue(max_file_size_mb if max_file_size_mb else 0)
-        self.max_file_size_spin.setSuffix(" MB")
+        self.max_file_size_spin.setSuffix(" MiB")
         self.max_file_size_spin.setSpecialValueText("No limit")
         self.max_file_size_spin.setToolTip("Maximum file size for uploads (0 = no limit)")
         self.max_file_size_spin.valueChanged.connect(self._mark_dirty)
@@ -604,7 +598,7 @@ class FileHostConfigDialog(QDialog):
         self.inactivity_timeout_spin = QSpinBox()
         self.inactivity_timeout_spin.setRange(30, 3600)
         self.inactivity_timeout_spin.setValue(inactivity_timeout)
-        self.inactivity_timeout_spin.setSuffix(" seconds")
+        self.inactivity_timeout_spin.setSuffix("s")
         self.inactivity_timeout_spin.setToolTip("Abort upload if no progress for this many seconds (default: 300)")
         self.inactivity_timeout_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow(inactivity_label_widget, self.inactivity_timeout_spin)
@@ -628,8 +622,8 @@ class FileHostConfigDialog(QDialog):
         self.upload_timeout_spin = QSpinBox()
         self.upload_timeout_spin.setRange(0, 7200)
         self.upload_timeout_spin.setValue(upload_timeout if upload_timeout else 0)
-        self.upload_timeout_spin.setSuffix(" seconds")
-        self.upload_timeout_spin.setSpecialValueText("Unlimited")
+        self.upload_timeout_spin.setSuffix("s")
+        self.upload_timeout_spin.setSpecialValueText("Off")
         self.upload_timeout_spin.setToolTip("Maximum total upload time (0 = unlimited, not recommended)")
         self.upload_timeout_spin.valueChanged.connect(self._mark_dirty)
         settings_layout.addRow(upload_timeout_label_widget, self.upload_timeout_spin)

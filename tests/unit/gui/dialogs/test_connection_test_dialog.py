@@ -27,11 +27,6 @@ class TestConnectionTestDialogStructure:
             content = f.read()
         assert "test_error_label" in content
 
-    def test_has_update_result_method(self):
-        with open("src/gui/dialogs/connection_test_dialog.py") as f:
-            content = f.read()
-        assert "def update_result" in content
-
     def test_has_set_all_running_method(self):
         with open("src/gui/dialogs/connection_test_dialog.py") as f:
             content = f.read()

@@ -60,30 +60,6 @@ class ConnectionTestDialog(QDialog):
         buttons.rejected.connect(self.close)
         layout.addWidget(buttons)
 
-    def update_result(self, step: str, passed: bool, message: str = ""):
-        """Update a test step result.
-
-        Args:
-            step: One of 'credentials', 'userinfo', 'upload', 'delete'
-            passed: Whether the step passed
-            message: Optional message (unused currently, reserved for future detail)
-        """
-        label_map = {
-            'credentials': self.test_credentials_label,
-            'userinfo': self.test_userinfo_label,
-            'upload': self.test_upload_label,
-            'delete': self.test_delete_label,
-        }
-        label = label_map.get(step)
-        if not label:
-            return
-        if passed:
-            label.setText("✓ Passed")
-            label.setStyleSheet("color: green;")
-        else:
-            label.setText("✗ Failed")
-            label.setStyleSheet("color: red;")
-
     def set_error(self, error: str):
         """Show error details."""
         self.test_error_label.setText(error)
