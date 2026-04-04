@@ -232,14 +232,28 @@ class FileHostConfigDialog(QDialog):
 
                 creds_layout.addRow("API Key:", api_key_row)
 
-                self.creds_username_input = QLineEdit()
+                self.creds_username_input = AsteriskPasswordEdit()
                 self.creds_username_input.setFont(QFont("Consolas", 10))
                 self.creds_username_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_username_input.setPlaceholderText("Enter username...")
                 self.creds_username_input.blockSignals(True)
                 self.creds_username_input.setText(username_val)
                 self.creds_username_input.blockSignals(False)
-                creds_layout.addRow("Username:", self.creds_username_input)
+
+                username_row = QHBoxLayout()
+                username_row.addWidget(self.creds_username_input)
+
+                show_user_btn = QPushButton()
+                show_user_btn.setIcon(icon_manager.get_icon('action_view'))
+                show_user_btn.setMaximumWidth(30)
+                show_user_btn.setCheckable(True)
+                show_user_btn.setToolTip("Show/hide username")
+                show_user_btn.clicked.connect(
+                    lambda checked: self.creds_username_input.set_masked(not checked)
+                )
+                username_row.addWidget(show_user_btn)
+
+                creds_layout.addRow("Username:", username_row)
 
                 self.creds_password_input = AsteriskPasswordEdit()
                 self.creds_password_input.setFont(QFont("Consolas", 10))
@@ -266,14 +280,28 @@ class FileHostConfigDialog(QDialog):
 
             else:
                 # Username and password only (token_login, session, etc.)
-                self.creds_username_input = QLineEdit()
+                self.creds_username_input = AsteriskPasswordEdit()
                 self.creds_username_input.setFont(QFont("Consolas", 10))
                 self.creds_username_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.creds_username_input.setPlaceholderText("Enter username...")
                 self.creds_username_input.blockSignals(True)
                 self.creds_username_input.setText(username_val)
                 self.creds_username_input.blockSignals(False)
-                creds_layout.addRow("Username:", self.creds_username_input)
+
+                username_row = QHBoxLayout()
+                username_row.addWidget(self.creds_username_input)
+
+                show_user_btn = QPushButton()
+                show_user_btn.setIcon(icon_manager.get_icon('action_view'))
+                show_user_btn.setMaximumWidth(30)
+                show_user_btn.setCheckable(True)
+                show_user_btn.setToolTip("Show/hide username")
+                show_user_btn.clicked.connect(
+                    lambda checked: self.creds_username_input.set_masked(not checked)
+                )
+                username_row.addWidget(show_user_btn)
+
+                creds_layout.addRow("Username:", username_row)
 
                 self.creds_password_input = AsteriskPasswordEdit()
                 self.creds_password_input.setFont(QFont("Consolas", 10))
@@ -298,6 +326,7 @@ class FileHostConfigDialog(QDialog):
 
                 creds_layout.addRow("Password:", password_row)
 
+            self.setup_test_results_section(creds_group.layout())
             content_layout.addWidget(creds_group)
         # Storage section
         self.storage_bar = None
@@ -487,8 +516,9 @@ class FileHostConfigDialog(QDialog):
 
         content_layout.addWidget(settings_group)
 
-        # Test Results section
-        self.setup_test_results_section(content_layout)
+        # Test Results section (only for no-auth hosts; auth hosts have it in credentials group)
+        if not self.host_config.requires_auth:
+            self.setup_test_results_section(content_layout)
 
         content_layout.addStretch()
 
@@ -609,22 +639,17 @@ class FileHostConfigDialog(QDialog):
         layout.addLayout(button_layout)
 
     def setup_test_results_section(self, parent_layout):
-        """Setup the test results section with test button"""
-        test_group = QGroupBox("Connection Test (optional)")
-        test_group_layout = QVBoxLayout(test_group)
+        """Setup the test results section with test button.
 
-        # Test button at top
-        test_button_layout = QHBoxLayout()
+        When parent_layout is a QFormLayout (credentials group), elements are added
+        directly as form rows without a wrapping group box to avoid nested group boxes.
+        When parent_layout is a QVBoxLayout (no-auth hosts), a group box is used for
+        visual grouping.
+        """
+        # Test button
         self.test_connection_btn = QPushButton("Test Connection")
         self.test_connection_btn.setToolTip("Run full test: credentials, user info, upload, and delete")
-        # Set initial state: disabled if host is not enabled (worker is None)
         self.test_connection_btn.setEnabled(True)
-        test_button_layout.addWidget(self.test_connection_btn)
-        test_button_layout.addStretch()
-        test_group_layout.addLayout(test_button_layout)
-
-        # Test results display
-        test_results_layout = QFormLayout()
 
         # Create labels that will be updated
         self.test_timestamp_label = QLabel("Not tested yet")
@@ -637,15 +662,41 @@ class FileHostConfigDialog(QDialog):
         # Use QSS class for theme-aware styling
         self.test_error_label.setProperty("class", "error-small")
 
-        test_results_layout.addRow("Last tested:", self.test_timestamp_label)
-        test_results_layout.addRow("Credentials:", self.test_credentials_label)
-        test_results_layout.addRow("User info:", self.test_userinfo_label)
-        test_results_layout.addRow("Upload test:", self.test_upload_label)
-        test_results_layout.addRow("Delete test:", self.test_delete_label)
-        test_results_layout.addRow("", self.test_error_label)
+        if isinstance(parent_layout, QFormLayout):
+            # Add directly into the credentials form — no nested group box
+            test_button_widget = QWidget()
+            test_button_layout = QHBoxLayout(test_button_widget)
+            test_button_layout.setContentsMargins(0, 0, 0, 0)
+            test_button_layout.addWidget(self.test_connection_btn)
+            test_button_layout.addStretch()
 
-        test_group_layout.addLayout(test_results_layout)
-        parent_layout.addWidget(test_group)
+            parent_layout.addRow("Connection Test:", test_button_widget)
+            parent_layout.addRow("Last tested:", self.test_timestamp_label)
+            parent_layout.addRow("Credentials:", self.test_credentials_label)
+            parent_layout.addRow("User info:", self.test_userinfo_label)
+            parent_layout.addRow("Upload test:", self.test_upload_label)
+            parent_layout.addRow("Delete test:", self.test_delete_label)
+            parent_layout.addRow("", self.test_error_label)
+        else:
+            # No-auth hosts: wrap in group box for visual grouping
+            test_group = QGroupBox("Connection Test (optional)")
+            test_group_layout = QVBoxLayout(test_group)
+
+            test_button_layout = QHBoxLayout()
+            test_button_layout.addWidget(self.test_connection_btn)
+            test_button_layout.addStretch()
+            test_group_layout.addLayout(test_button_layout)
+
+            test_results_layout = QFormLayout()
+            test_results_layout.addRow("Last tested:", self.test_timestamp_label)
+            test_results_layout.addRow("Credentials:", self.test_credentials_label)
+            test_results_layout.addRow("User info:", self.test_userinfo_label)
+            test_results_layout.addRow("Upload test:", self.test_upload_label)
+            test_results_layout.addRow("Delete test:", self.test_delete_label)
+            test_results_layout.addRow("", self.test_error_label)
+            test_group_layout.addLayout(test_results_layout)
+
+            parent_layout.addWidget(test_group)
 
         # Load and display existing test results
         self.load_and_display_test_results()
