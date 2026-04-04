@@ -933,7 +933,7 @@ class TestConnectionTesting:
         with patch.object(dialog, '_check_unsaved_changes', return_value=True):
             dialog.run_full_test()
 
-        assert "No credentials" in dialog.test_timestamp_label.text()
+        assert "No credentials" in dialog.test_status_label.text()
 
     def test_test_connection_runs_standalone_when_no_worker(self, qtbot, mock_host_config,
                                                            mock_worker_manager, mock_main_widgets,
@@ -957,7 +957,7 @@ class TestConnectionTesting:
              patch.object(dialog, '_run_standalone_test'):
             dialog.run_full_test()
 
-        assert "host disabled" in dialog.test_timestamp_label.text()
+        assert "Testing..." in dialog.test_status_label.text()
 
     def test_test_connection_queues_test_request(self, qtbot, mock_host_config,
                                                   mock_worker_manager, mock_main_widgets,
@@ -1015,17 +1015,21 @@ class TestConnectionTesting:
             dialog.run_full_test()
 
         # Should show testing state
-        assert "Testing..." in dialog.test_timestamp_label.text()
+        assert "Testing..." in dialog.test_status_label.text()
         assert not dialog.test_connection_btn.isEnabled()
 
     def test_test_completed_updates_results(self, qtbot, mock_host_config, mock_worker_manager,
                                             mock_main_widgets, dialog_patches):
-        """Test _on_worker_test_completed updates test results"""
+        """Test _on_worker_test_completed updates inline status and dialog labels"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
             mock_main_widgets, mock_worker_manager
         )
         qtbot.addWidget(dialog)
+
+        # Open the test dialog so results are written to dialog labels
+        dialog._open_test_dialog()
+        qtbot.addWidget(dialog._test_dialog)
 
         results = {
             'timestamp': 1700000000,
@@ -1038,11 +1042,15 @@ class TestConnectionTesting:
 
         dialog._on_worker_test_completed("testhost", results)
 
-        assert "Pass" in dialog.test_credentials_label.text()
-        assert "Pass" in dialog.test_userinfo_label.text()
-        assert "Pass" in dialog.test_upload_label.text()
-        assert "Pass" in dialog.test_delete_label.text()
+        # Check inline status label shows summary
+        assert "4/4" in dialog.test_status_label.text()
         assert dialog.test_connection_btn.isEnabled()
+
+        # Check dialog labels show individual results
+        assert "Pass" in dialog._test_dialog.test_credentials_label.text()
+        assert "Pass" in dialog._test_dialog.test_userinfo_label.text()
+        assert "Pass" in dialog._test_dialog.test_upload_label.text()
+        assert "Pass" in dialog._test_dialog.test_delete_label.text()
 
 
 # ============================================================================

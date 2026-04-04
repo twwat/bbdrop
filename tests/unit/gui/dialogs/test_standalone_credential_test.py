@@ -181,7 +181,7 @@ class TestRunFullTestUsesStandaloneWhenNoWorker:
             with patch.object(dialog, '_run_standalone_test') as mock_standalone:
                 dialog.run_full_test()
                 mock_standalone.assert_called_once()
-                assert "Host not enabled" not in dialog.test_timestamp_label.text()
+                assert "Host not enabled" not in dialog.test_status_label.text()
 
     def test_run_full_test_no_error_without_worker(
         self, qtbot, mock_host_config, mock_worker_manager_no_worker,
@@ -201,7 +201,7 @@ class TestRunFullTestUsesStandaloneWhenNoWorker:
             with patch.object(dialog, '_run_standalone_test'):
                 dialog.run_full_test()
                 # Should NOT show the old error message
-                assert "Error: Host not enabled" not in dialog.test_timestamp_label.text()
+                assert "Error: Host not enabled" not in dialog.test_status_label.text()
 
 
 class TestStandaloneTestEdgeCases:
@@ -223,7 +223,7 @@ class TestStandaloneTestEdgeCases:
 
         with patch.object(dialog, '_check_unsaved_changes', return_value=True):
             dialog.run_full_test()
-            assert "No credentials" in dialog.test_timestamp_label.text()
+            assert "No credentials" in dialog.test_status_label.text()
 
     def test_standalone_test_with_api_key_auth(
         self, qtbot, mock_host_config_api_key, mock_worker_manager_no_worker,

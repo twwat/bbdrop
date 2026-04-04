@@ -17,6 +17,7 @@ import time
 from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.gui.widgets.custom_widgets import CopyableLogListWidget
 from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
+from src.gui.dialogs.connection_test_dialog import ConnectionTestDialog
 
 
 class AsteriskPasswordEdit(QLineEdit):
@@ -71,6 +72,9 @@ class FileHostConfigDialog(QDialog):
 
         # Track dirty state (unsaved changes)
         self.has_unsaved_changes = False
+
+        # Connection test dialog (lazily created)
+        self._test_dialog = None
 
         self.setWindowTitle(f"File Host Configuration: {host_config.name}")
         self.setModal(True)
@@ -639,70 +643,188 @@ class FileHostConfigDialog(QDialog):
         layout.addLayout(button_layout)
 
     def setup_test_results_section(self, parent_layout):
-        """Setup the test results section with test button.
+        """Setup compact test connection row: button + inline status label.
 
-        When parent_layout is a QFormLayout (credentials group), elements are added
-        directly as form rows without a wrapping group box to avoid nested group boxes.
-        When parent_layout is a QVBoxLayout (no-auth hosts), a group box is used for
-        visual grouping.
+        Full test results are shown in the ConnectionTestDialog, opened via
+        the "Test Connection..." button. The inline status label shows a
+        one-line summary (e.g. "✓ 4/4 passed 2h ago" or "Not tested").
+
+        When parent_layout is a QFormLayout (credentials group), the row is
+        added directly. When it's a QVBoxLayout (no-auth hosts), it's wrapped
+        in a group box.
         """
-        # Test button
-        self.test_connection_btn = QPushButton("Test Connection")
-        self.test_connection_btn.setToolTip("Run full test: credentials, user info, upload, and delete")
+        # Compact row: button + inline status
+        self.test_connection_btn = QPushButton("Test Connection...")
+        self.test_connection_btn.setToolTip("Open connection test dialog")
         self.test_connection_btn.setEnabled(True)
 
-        # Create labels that will be updated
-        self.test_timestamp_label = QLabel("Not tested yet")
-        self.test_credentials_label = QLabel("○ Not tested")
-        self.test_userinfo_label = QLabel("○ Not tested")
-        self.test_upload_label = QLabel("○ Not tested")
-        self.test_delete_label = QLabel("○ Not tested")
-        self.test_error_label = QLabel("")
-        self.test_error_label.setWordWrap(True)
-        # Use QSS class for theme-aware styling
-        self.test_error_label.setProperty("class", "error-small")
+        self.test_status_label = QLabel("Not tested")
+
+        test_row_widget = QWidget()
+        test_row_layout = QHBoxLayout(test_row_widget)
+        test_row_layout.setContentsMargins(0, 0, 0, 0)
+        test_row_layout.addWidget(self.test_connection_btn)
+        test_row_layout.addWidget(self.test_status_label)
+        test_row_layout.addStretch()
 
         if isinstance(parent_layout, QFormLayout):
-            # Add directly into the credentials form — no nested group box
-            test_button_widget = QWidget()
-            test_button_layout = QHBoxLayout(test_button_widget)
-            test_button_layout.setContentsMargins(0, 0, 0, 0)
-            test_button_layout.addWidget(self.test_connection_btn)
-            test_button_layout.addStretch()
-
-            parent_layout.addRow("Connection Test:", test_button_widget)
-            parent_layout.addRow("Last tested:", self.test_timestamp_label)
-            parent_layout.addRow("Credentials:", self.test_credentials_label)
-            parent_layout.addRow("User info:", self.test_userinfo_label)
-            parent_layout.addRow("Upload test:", self.test_upload_label)
-            parent_layout.addRow("Delete test:", self.test_delete_label)
-            parent_layout.addRow("", self.test_error_label)
+            parent_layout.addRow("Connection Test:", test_row_widget)
         else:
-            # No-auth hosts: wrap in group box for visual grouping
             test_group = QGroupBox("Connection Test (optional)")
             test_group_layout = QVBoxLayout(test_group)
-
-            test_button_layout = QHBoxLayout()
-            test_button_layout.addWidget(self.test_connection_btn)
-            test_button_layout.addStretch()
-            test_group_layout.addLayout(test_button_layout)
-
-            test_results_layout = QFormLayout()
-            test_results_layout.addRow("Last tested:", self.test_timestamp_label)
-            test_results_layout.addRow("Credentials:", self.test_credentials_label)
-            test_results_layout.addRow("User info:", self.test_userinfo_label)
-            test_results_layout.addRow("Upload test:", self.test_upload_label)
-            test_results_layout.addRow("Delete test:", self.test_delete_label)
-            test_results_layout.addRow("", self.test_error_label)
-            test_group_layout.addLayout(test_results_layout)
-
+            test_group_layout.addWidget(test_row_widget)
             parent_layout.addWidget(test_group)
 
-        # Load and display existing test results
-        self.load_and_display_test_results()
+        # Load cached results into the inline status label
+        self._load_inline_test_status()
 
-        # Connect test button
-        self.test_connection_btn.clicked.connect(self.run_full_test)
+        # Connect button to open the ConnectionTestDialog
+        self.test_connection_btn.clicked.connect(self._open_test_dialog)
+
+    def _open_test_dialog(self):
+        """Open (or show) the ConnectionTestDialog."""
+        if self._test_dialog is None:
+            self._test_dialog = ConnectionTestDialog(self.host_config.name, parent=self)
+            self._test_dialog.test_btn.clicked.connect(self.run_full_test)
+            # Non-modal: user can leave it open
+            self._test_dialog.setModal(False)
+            # Load cached results into the dialog
+            self._load_dialog_test_results()
+
+        self._test_dialog.show()
+        self._test_dialog.raise_()
+        self._test_dialog.activateWindow()
+
+    def _load_inline_test_status(self):
+        """Load cached test results into the inline status label."""
+        prefix = f"FileHosts/TestResults/{self.host_id}"
+        timestamp = self.settings.value(f"{prefix}/timestamp", 0, type=int)
+
+        if timestamp <= 0:
+            self.test_status_label.setText("Not tested")
+            return
+
+        test_results = {
+            'credentials_valid': self.settings.value(f"{prefix}/credentials_valid", False, type=bool),
+            'user_info_valid': self.settings.value(f"{prefix}/user_info_valid", False, type=bool),
+            'upload_success': self.settings.value(f"{prefix}/upload_success", False, type=bool),
+            'delete_success': self.settings.value(f"{prefix}/delete_success", False, type=bool),
+        }
+
+        passed = sum(1 for v in test_results.values() if v)
+        total = 4
+
+        # Format relative time
+        test_time = datetime.fromtimestamp(timestamp)
+        time_str = test_time.strftime("%Y-%m-%d %H:%M")
+
+        if passed == total:
+            self.test_status_label.setText(f"✓ {passed}/{total} passed ({time_str})")
+            self.test_status_label.setProperty("class", "status-success")
+        elif passed == 0:
+            self.test_status_label.setText(f"✗ {passed}/{total} passed ({time_str})")
+            self.test_status_label.setProperty("class", "status-error")
+        else:
+            self.test_status_label.setText(f"⚠ {passed}/{total} passed ({time_str})")
+            self.test_status_label.setProperty("class", "status-warning")
+        self.test_status_label.style().unpolish(self.test_status_label)
+        self.test_status_label.style().polish(self.test_status_label)
+
+    def _update_inline_test_status(self, passed: int, total: int, time_str: str):
+        """Update the inline status label with test results summary."""
+        if passed == total:
+            self.test_status_label.setText(f"✓ {passed}/{total} passed ({time_str})")
+            self.test_status_label.setProperty("class", "status-success")
+        elif passed == 0:
+            self.test_status_label.setText(f"✗ {passed}/{total} passed ({time_str})")
+            self.test_status_label.setProperty("class", "status-error")
+        else:
+            self.test_status_label.setText(f"⚠ {passed}/{total} passed ({time_str})")
+            self.test_status_label.setProperty("class", "status-warning")
+        self.test_status_label.style().unpolish(self.test_status_label)
+        self.test_status_label.style().polish(self.test_status_label)
+
+    def _load_dialog_test_results(self):
+        """Load cached test results into the ConnectionTestDialog labels."""
+        if not self._test_dialog:
+            return
+
+        prefix = f"FileHosts/TestResults/{self.host_id}"
+        test_results = {
+            'timestamp': self.settings.value(f"{prefix}/timestamp", 0, type=int),
+            'credentials_valid': self.settings.value(f"{prefix}/credentials_valid", False, type=bool),
+            'user_info_valid': self.settings.value(f"{prefix}/user_info_valid", False, type=bool),
+            'upload_success': self.settings.value(f"{prefix}/upload_success", False, type=bool),
+            'delete_success': self.settings.value(f"{prefix}/delete_success", False, type=bool),
+            'error_message': self.settings.value(f"{prefix}/error_message", '', type=str)
+        }
+
+        if test_results['timestamp'] > 0:
+            test_time = datetime.fromtimestamp(test_results['timestamp'])
+            time_str = test_time.strftime("%Y-%m-%d %H:%M")
+
+            tests = [
+                test_results.get('credentials_valid'),
+                test_results.get('user_info_valid'),
+                test_results.get('upload_success'),
+                test_results.get('delete_success')
+            ]
+            passed = sum(1 for t in tests if t)
+            total = 4
+
+            self._test_dialog.set_timestamp(f"{time_str} ({passed}/{total} tests passed)")
+
+            self._set_dialog_test_label('credentials', test_results.get('credentials_valid'))
+            self._set_dialog_test_label('userinfo', test_results.get('user_info_valid'))
+            self._set_dialog_test_label('upload', test_results.get('upload_success'))
+
+            # Delete test can be skipped
+            if test_results.get('delete_success'):
+                self._set_dialog_test_label('delete', True)
+            elif test_results.get('upload_success') and not test_results.get('delete_success'):
+                self._test_dialog.test_delete_label.setText("Unknown")
+                self._test_dialog.test_delete_label.setProperty("class", "status-warning-light")
+                self._test_dialog.test_delete_label.style().unpolish(self._test_dialog.test_delete_label)
+                self._test_dialog.test_delete_label.style().polish(self._test_dialog.test_delete_label)
+            else:
+                self._set_dialog_test_label('delete', False)
+
+            if test_results.get('error_message'):
+                self._test_dialog.set_error(test_results['error_message'])
+            else:
+                self._test_dialog.set_error("")
+
+    def _set_dialog_test_label(self, step: str, passed):
+        """Helper to set a test label in the ConnectionTestDialog with QSS styling.
+
+        Args:
+            step: One of 'credentials', 'userinfo', 'upload', 'delete'
+            passed: True/False/None for pass/fail/unknown
+        """
+        if not self._test_dialog:
+            return
+
+        label_map = {
+            'credentials': self._test_dialog.test_credentials_label,
+            'userinfo': self._test_dialog.test_userinfo_label,
+            'upload': self._test_dialog.test_upload_label,
+            'delete': self._test_dialog.test_delete_label,
+        }
+        label = label_map.get(step)
+        if not label:
+            return
+
+        if passed is True:
+            label.setText("Pass")
+            label.setProperty("class", "status-success")
+        elif passed is False:
+            label.setText("Fail")
+            label.setProperty("class", "status-error")
+        else:
+            label.setText("Unknown")
+            label.setProperty("class", "status-warning-light")
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _load_host_logo(self, host_id: str) -> Optional[QLabel]:
         """Load and create a clickable QLabel with the host's logo.
@@ -924,83 +1046,15 @@ class FileHostConfigDialog(QDialog):
         self.storage_bar.style().polish(self.storage_bar)
 
     def load_and_display_test_results(self):
-        """Load and display existing test results from QSettings cache"""
-        # Read directly from QSettings - doesn't require worker to exist
-        prefix = f"FileHosts/TestResults/{self.host_id}"
-        test_results = {
-            'timestamp': self.settings.value(f"{prefix}/timestamp", 0, type=int),
-            'credentials_valid': self.settings.value(f"{prefix}/credentials_valid", False, type=bool),
-            'user_info_valid': self.settings.value(f"{prefix}/user_info_valid", False, type=bool),
-            'upload_success': self.settings.value(f"{prefix}/upload_success", False, type=bool),
-            'delete_success': self.settings.value(f"{prefix}/delete_success", False, type=bool),
-            'error_message': self.settings.value(f"{prefix}/error_message", '', type=str)
-        }
+        """Load and display existing test results from QSettings cache.
 
-        if test_results['timestamp'] > 0:
-            # Format timestamp as YYYY-MM-DD HH:MM
-            test_time = datetime.fromtimestamp(test_results['timestamp'])
-            time_str = test_time.strftime("%Y-%m-%d %H:%M")
-
-            # Count passed tests
-            tests = [
-                test_results.get('credentials_valid'),
-                test_results.get('user_info_valid'),
-                test_results.get('upload_success'),
-                test_results.get('delete_success')
-            ]
-            passed = sum(1 for t in tests if t)
-            total = 4
-
-            # Set timestamp with pass count and color
-            timestamp_text = f"{time_str} ({passed}/{total} tests passed)"
-            self.test_timestamp_label.setText(timestamp_text)
-
-            # Use QSS classes for theme-aware styling
-            if passed == total:
-                self.test_timestamp_label.setProperty("class", "status-success")
-            elif passed == 0:
-                self.test_timestamp_label.setProperty("class", "status-error")
-            else:
-                self.test_timestamp_label.setProperty("class", "status-warning")
-            self.test_timestamp_label.style().unpolish(self.test_timestamp_label)
-            self.test_timestamp_label.style().polish(self.test_timestamp_label)
-
-            # Set individual test labels with Pass/Fail/Unknown
-            self._set_test_label(self.test_credentials_label, test_results.get('credentials_valid'))
-            self._set_test_label(self.test_userinfo_label, test_results.get('user_info_valid'))
-            self._set_test_label(self.test_upload_label, test_results.get('upload_success'))
-
-            # Delete test can be skipped
-            if test_results.get('delete_success'):
-                self._set_test_label(self.test_delete_label, True)
-            elif test_results.get('upload_success') and not test_results.get('delete_success'):
-                self.test_delete_label.setText("Unknown")
-                # Use QSS class for theme-aware styling
-                self.test_delete_label.setProperty("class", "status-warning-light")
-                self.test_delete_label.style().unpolish(self.test_delete_label)
-                self.test_delete_label.style().polish(self.test_delete_label)
-            else:
-                self._set_test_label(self.test_delete_label, False)
-
-            if test_results.get('error_message'):
-                self.test_error_label.setText(test_results['error_message'])
-            else:
-                self.test_error_label.setText("")
-
-    def _set_test_label(self, label, passed: Optional[bool]):
-        """Helper to set test label with color"""
-        # Use QSS classes for theme-aware styling
-        if passed is True:
-            label.setText("Pass")
-            label.setProperty("class", "status-success")
-        elif passed is False:
-            label.setText("Fail")
-            label.setProperty("class", "status-error")
-        else:
-            label.setText("Unknown")
-            label.setProperty("class", "status-warning-light")
-        label.style().unpolish(label)
-        label.style().polish(label)
+        Updates both the inline status label and the ConnectionTestDialog
+        (if it is open).
+        """
+        # Update inline status label
+        self._load_inline_test_status()
+        # Update dialog labels if open
+        self._load_dialog_test_results()
 
     def _run_standalone_test(self, credentials: str):
         """Run standalone test without worker (for disabled hosts).
@@ -1082,24 +1136,10 @@ class FileHostConfigDialog(QDialog):
         self.settings.setValue(f"{prefix}/error_message", results['error_message'])
         self.settings.sync()
 
-        # Update UI with results (same as _on_worker_test_completed)
+        # Re-enable buttons
         self.test_connection_btn.setEnabled(True)
 
-        self._set_test_label(self.test_credentials_label, results['credentials_valid'])
-        self._set_test_label(self.test_userinfo_label, results['user_info_valid'])
-        # Mark upload/delete as "Not tested" for standalone test
-        self.test_upload_label.setText("Not tested (host disabled)")
-        self.test_upload_label.setProperty("class", "status-warning-light")
-        self.test_upload_label.style().unpolish(self.test_upload_label)
-        self.test_upload_label.style().polish(self.test_upload_label)
-        self.test_delete_label.setText("Not tested (host disabled)")
-        self.test_delete_label.setProperty("class", "status-warning-light")
-        self.test_delete_label.style().unpolish(self.test_delete_label)
-        self.test_delete_label.style().polish(self.test_delete_label)
-
-        self.test_error_label.setText(results['error_message'])
-
-        # Update timestamp
+        # Update timestamp for summary
         test_time = datetime.fromtimestamp(results['timestamp'])
         time_str = test_time.strftime("%Y-%m-%d %H:%M")
 
@@ -1108,16 +1148,25 @@ class FileHostConfigDialog(QDialog):
             results['user_info_valid']
         ])
 
-        self.test_timestamp_label.setText(f"{time_str} ({tests_passed}/2 credential tests passed)")
+        # Update inline status label
+        self._update_inline_test_status(tests_passed, 2, time_str)
 
-        if tests_passed == 2:
-            self.test_timestamp_label.setProperty("class", "status-success")
-        elif tests_passed == 0:
-            self.test_timestamp_label.setProperty("class", "status-error")
-        else:
-            self.test_timestamp_label.setProperty("class", "status-warning")
-        self.test_timestamp_label.style().unpolish(self.test_timestamp_label)
-        self.test_timestamp_label.style().polish(self.test_timestamp_label)
+        # Update dialog labels if open
+        if self._test_dialog:
+            self._test_dialog.test_btn.setEnabled(True)
+            self._set_dialog_test_label('credentials', results['credentials_valid'])
+            self._set_dialog_test_label('userinfo', results['user_info_valid'])
+            # Mark upload/delete as "Not tested" for standalone test
+            self._test_dialog.test_upload_label.setText("Not tested (host disabled)")
+            self._test_dialog.test_upload_label.setProperty("class", "status-warning-light")
+            self._test_dialog.test_upload_label.style().unpolish(self._test_dialog.test_upload_label)
+            self._test_dialog.test_upload_label.style().polish(self._test_dialog.test_upload_label)
+            self._test_dialog.test_delete_label.setText("Not tested (host disabled)")
+            self._test_dialog.test_delete_label.setProperty("class", "status-warning-light")
+            self._test_dialog.test_delete_label.style().unpolish(self._test_dialog.test_delete_label)
+            self._test_dialog.test_delete_label.style().polish(self._test_dialog.test_delete_label)
+            self._test_dialog.set_error(results['error_message'])
+            self._test_dialog.set_timestamp(f"{time_str} ({tests_passed}/2 credential tests passed)")
 
     def run_full_test(self):
         """Run complete test sequence via worker: credentials, user info, upload, delete"""
@@ -1128,71 +1177,56 @@ class FileHostConfigDialog(QDialog):
         # Get credentials from multi-field layout
         credentials = self.get_credentials()
         if not credentials:
-            self.test_timestamp_label.setText("Error: No credentials entered")
-            # Use QSS class for theme-aware styling
-            self.test_timestamp_label.setProperty("class", "status-error")
-            self.test_timestamp_label.style().unpolish(self.test_timestamp_label)
-            self.test_timestamp_label.style().polish(self.test_timestamp_label)
+            self.test_status_label.setText("✗ No credentials entered")
+            self.test_status_label.setProperty("class", "status-error")
+            self.test_status_label.style().unpolish(self.test_status_label)
+            self.test_status_label.style().polish(self.test_status_label)
+            if self._test_dialog:
+                self._test_dialog.set_timestamp("Error: No credentials entered")
             return
 
         # Check if worker available - use standalone test if not
         if not self.worker:
             # Update UI to show testing
             self.test_connection_btn.setEnabled(False)
-            self.test_timestamp_label.setText("Testing credentials (host disabled)...")
-            self.test_credentials_label.setText("Running...")
-            self.test_userinfo_label.setText("Waiting...")
-            self.test_upload_label.setText("Skipped (host disabled)")
-            self.test_delete_label.setText("Skipped (host disabled)")
-            self.test_error_label.setText("")
+            self.test_status_label.setText("Testing...")
+            if self._test_dialog:
+                self._test_dialog.test_btn.setEnabled(False)
+                self._test_dialog.set_timestamp("Testing credentials (host disabled)...")
+                self._test_dialog.test_credentials_label.setText("Running...")
+                self._test_dialog.test_userinfo_label.setText("Waiting...")
+                self._test_dialog.test_upload_label.setText("Skipped (host disabled)")
+                self._test_dialog.test_delete_label.setText("Skipped (host disabled)")
+                self._test_dialog.set_error("")
             # Run standalone test (credentials only, no upload/delete)
             self._run_standalone_test(credentials)
             return
 
         # Update UI to show testing
         self.test_connection_btn.setEnabled(False)
-        self.test_timestamp_label.setText("Testing...")
-        self.test_credentials_label.setText("⏳ Running...")
-        self.test_userinfo_label.setText("⏳ Waiting...")
-        self.test_upload_label.setText("⏳ Waiting...")
-        self.test_delete_label.setText("⏳ Waiting...")
-        self.test_error_label.setText("")
+        self.test_status_label.setText("Testing...")
+        if self._test_dialog:
+            self._test_dialog.test_btn.setEnabled(False)
+            self._test_dialog.set_timestamp("Testing...")
+            self._test_dialog.set_all_running()
 
         # Queue test request to be processed in worker's run() loop (non-blocking)
         # This ensures test executes in worker thread context where it belongs
         self.worker.queue_test_request(credentials)
 
     def _on_worker_test_completed(self, host_id: str, results: dict):
-        """Handle test completion from worker"""
+        """Handle test completion from worker.
+
+        Updates both the inline status label and the ConnectionTestDialog
+        (if it is open).
+        """
         if host_id != self.host_id:
             return  # Not for us
 
-        # Re-enable button
+        # Re-enable buttons
         self.test_connection_btn.setEnabled(True)
 
-        # Update UI from results
-        self._set_test_label(
-            self.test_credentials_label,
-            results.get('credentials_valid', False)
-        )
-        self._set_test_label(
-            self.test_userinfo_label,
-            results.get('user_info_valid', False)
-        )
-        self._set_test_label(
-            self.test_upload_label,
-            results.get('upload_success', False)
-        )
-        self._set_test_label(
-            self.test_delete_label,
-            results.get('delete_success', False)
-        )
-
-        # Show error if any
-        error_msg = results.get('error_message', '')
-        self.test_error_label.setText(error_msg)
-
-        # Update timestamp
+        # Calculate summary
         test_time = datetime.fromtimestamp(results['timestamp'])
         time_str = test_time.strftime("%Y-%m-%d %H:%M")
 
@@ -1203,17 +1237,18 @@ class FileHostConfigDialog(QDialog):
             results.get('delete_success', False)
         ])
 
-        self.test_timestamp_label.setText(f"{time_str} ({tests_passed}/4 tests passed)")
+        # Update inline status label
+        self._update_inline_test_status(tests_passed, 4, time_str)
 
-        # Use QSS classes for theme-aware styling
-        if tests_passed == 4:
-            self.test_timestamp_label.setProperty("class", "status-success")
-        elif tests_passed == 0:
-            self.test_timestamp_label.setProperty("class", "status-error")
-        else:
-            self.test_timestamp_label.setProperty("class", "status-warning")
-        self.test_timestamp_label.style().unpolish(self.test_timestamp_label)
-        self.test_timestamp_label.style().polish(self.test_timestamp_label)
+        # Update dialog labels if open
+        if self._test_dialog:
+            self._test_dialog.test_btn.setEnabled(True)
+            self._set_dialog_test_label('credentials', results.get('credentials_valid', False))
+            self._set_dialog_test_label('userinfo', results.get('user_info_valid', False))
+            self._set_dialog_test_label('upload', results.get('upload_success', False))
+            self._set_dialog_test_label('delete', results.get('delete_success', False))
+            self._test_dialog.set_error(results.get('error_message', ''))
+            self._test_dialog.set_timestamp(f"{time_str} ({tests_passed}/4 tests passed)")
 
     def _on_worker_storage_updated(self, host_id: str, total, left):
         """Handle storage update from worker"""
