@@ -199,6 +199,9 @@ class MenuManager(QObject):
             action_statistics.triggered.connect(mw.open_statistics_dialog)
             tools_menu.addSeparator()
 
+            action_file_manager = tools_menu.addAction("File Manager...")
+            action_file_manager.triggered.connect(mw.open_file_manager_dialog)
+
             action_unrenamed = tools_menu.addAction("Unnamed Galleries")
             action_unrenamed.triggered.connect(mw.open_unrenamed_galleries_dialog)
 

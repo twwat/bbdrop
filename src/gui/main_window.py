@@ -2544,6 +2544,24 @@ class BBDropGUI(QMainWindow):
         # Use non-blocking show() for help dialog
         dialog.show()
 
+    def open_file_manager_dialog(self) -> None:
+        """Open the File Manager dialog (non-modal, reuses existing)."""
+        from src.gui.dialogs.file_manager_dialog import FileManagerDialog
+
+        if hasattr(self, '_file_manager_dialog') and self._file_manager_dialog is not None:
+            try:
+                self._file_manager_dialog.raise_()
+                self._file_manager_dialog.activateWindow()
+                return
+            except RuntimeError:
+                self._file_manager_dialog = None
+
+        dialog = FileManagerDialog(parent=self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.destroyed.connect(lambda: setattr(self, '_file_manager_dialog', None))
+        self._file_manager_dialog = dialog
+        dialog.show()
+
     def open_statistics_dialog(self) -> None:
         """Open the Statistics dialog.
 
