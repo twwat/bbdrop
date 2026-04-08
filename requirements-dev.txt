@@ -8,3 +8,5 @@ PyQt6-stubs
 pytest==8.0.0  # For running tests when implemented
 mypy==1.8.0    # For static type checking
 black>=26.3.1  # For code formatting (CVE-2026-32274)
+pytest-xdist>=3.8.0  # for Parallel test running
+pytest-timeout>=2.4.0
