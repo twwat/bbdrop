@@ -166,23 +166,28 @@ class GalleryQueueController(QObject):
                 self.add_folders_or_archives(selected_paths)
 
     def add_folders_or_archives(self, paths: List[str]):
-        """Add folders or archives to upload queue.
+        """Add folders, archives, or video files to upload queue.
 
-        Separates paths into folders and archives, then processes each appropriately.
-        Folders are added directly, archives are extracted in background threads.
+        Separates paths into folders, archives, and video files, then processes
+        each appropriately. Folders are added directly, archives are extracted
+        in background threads, and video files are added as single-file items.
 
         Args:
-            paths: List of folder or archive file paths to add
+            paths: List of folder, archive, or video file paths to add
         """
+        from src.core.constants import VIDEO_EXTENSIONS
         mw = self._main_window
         folders = []
         archives = []
+        video_files = []
 
         for path in paths:
             if os.path.isdir(path):
                 folders.append(path)
             elif os.path.isfile(path) and is_archive_file(path):
                 archives.append(path)
+            elif os.path.isfile(path) and path.lower().endswith(VIDEO_EXTENSIONS):
+                video_files.append(path)
 
         # Process folders normally
         if folders:
@@ -196,6 +201,96 @@ class GalleryQueueController(QObject):
             mw._thread_pool.start(worker)
             log(f"Started background extraction for: {os.path.basename(archive_path)}",
                 level="debug", category="ui")
+
+        # Process single video files (scan worker handles single file paths)
+        for video_path in video_files:
+            self._add_single_video_file(video_path)
+
+    def _add_single_video_file(self, path: str):
+        """Add a single video file to the upload queue.
+
+        Handles duplicate detection and previously-uploaded checks, then adds
+        the file directly. The scan worker detects single video files via
+        _detect_media_type and routes to _scan_video_item for metadata extraction.
+
+        Args:
+            path: Path to the video file
+        """
+        mw = self._main_window
+        video_name = os.path.splitext(os.path.basename(path))[0]
+
+        # Check if already in queue
+        existing_item = mw.queue_manager.get_item(path)
+        if existing_item:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setWindowTitle("Already in Queue")
+            msg.setText(f"'{video_name}' is already in the queue.")
+            msg.setInformativeText(
+                f"Current status: {existing_item.status}\n\nDo you want to replace it?"
+            )
+            msg.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            msg.setDefaultButton(QMessageBox.StandardButton.No)
+
+            if msg.exec() == QMessageBox.StandardButton.Yes:
+                mw.queue_manager.remove_item(path)
+                mw._remove_gallery_from_table(path)
+            else:
+                return
+
+        # Check if previously uploaded
+        existing_files = mw._check_if_gallery_exists(video_name)
+        if existing_files:
+            files_text = ', '.join(existing_files) if existing_files else "gallery files"
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Previously Uploaded")
+            msg.setText(f"'{video_name}' appears to have been uploaded before.")
+            msg.setInformativeText(
+                f"Found: {files_text}\n\nAre you sure you want to upload it again?"
+            )
+            msg.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            msg.setDefaultButton(QMessageBox.StandardButton.No)
+
+            if msg.exec() != QMessageBox.StandardButton.Yes:
+                return
+
+        template_name = mw.template_combo.currentText()
+        current_tab = (
+            mw.gallery_table.current_tab
+            if hasattr(mw.gallery_table, 'current_tab')
+            else "Main"
+        )
+        actual_tab = "Main" if current_tab == "All Tabs" else current_tab
+        selected_host = mw._get_default_host()
+
+        result = mw.queue_manager.add_item(
+            path, name=video_name, template_name=template_name,
+            tab_name=actual_tab, image_host_id=selected_host
+        )
+
+        if result:
+            log(f"Added video to queue: {os.path.basename(path)}",
+                category="queue", level="info")
+            self._apply_media_type(path, "video")
+            item = mw.queue_manager.get_item(path)
+            if item:
+                mw._add_gallery_to_table(item)
+                QTimer.singleShot(
+                    100,
+                    lambda: (
+                        mw.gallery_table._update_tab_tooltips()
+                        if hasattr(mw.gallery_table, '_update_tab_tooltips')
+                        else None
+                    )
+                )
+        else:
+            log(f"Failed to add video: {os.path.basename(path)}",
+                category="queue", level="warning")
 
     def add_folders(self, folder_paths: List[str]):
         """Add folders to the upload queue with duplicate detection.

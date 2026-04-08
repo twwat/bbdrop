@@ -99,7 +99,7 @@ from src.gui.dialogs.help_dialog import HelpDialog
 
 
 from src.core.engine import UploadEngine
-from src.core.constants import IMAGE_EXTENSIONS
+from src.core.constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from src.storage.database import QueueStore
 from src.utils.logging import get_logger
 from src.gui.settings import ComprehensiveSettingsDialog
@@ -3942,8 +3942,9 @@ class BBDropGUI(QMainWindow):
                 if is_wsl2() and original_path != converted_path:
                     log(f"dropEvent: WSL2 conversion: {original_path} → {converted_path}", level="trace", category="drag_drop")
 
-                # Validate the converted path
-                if os.path.isdir(converted_path) or is_archive_file(converted_path):
+                # Validate the converted path (directories, archives, or video files)
+                is_video_file = os.path.isfile(converted_path) and converted_path.lower().endswith(VIDEO_EXTENSIONS)
+                if os.path.isdir(converted_path) or is_archive_file(converted_path) or is_video_file:
                     paths.append(converted_path)
                     log(f"dropEvent: Path validated: {converted_path}", level="trace", category="drag_drop")
                 else:
