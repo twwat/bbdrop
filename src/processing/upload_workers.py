@@ -515,11 +515,18 @@ class UploadWorker(QThread):
         self.progress_updated.emit(item.path, 1, 1, 100, "Screenshot sheet uploaded")
 
         # Build results dict in the same shape as _run_upload_engine returns
+        meta = item.video_metadata or {}
+        try:
+            upload_time = (time.time() - float(item.start_time)) if item.start_time else 0
+        except (TypeError, ValueError):
+            upload_time = 0
+
         results = {
             'successful_count': 1,
             'failed_count': 0,
             'total_images': 1,
             'gallery_id': data.get('gallery_id', ''),
+            'gallery_name': item.name,
             'gallery_url': data.get('gallery_url', ''),
             'images': [{
                 'original_filename': os.path.basename(sheet_path),
@@ -528,6 +535,18 @@ class UploadWorker(QThread):
                 'bbcode': data.get('bbcode', ''),
             }],
             'screenshot_sheet_path': sheet_path,
+            'media_type': 'video',
+            'video_metadata': meta,
+            'upload_time': upload_time,
+            'total_size': meta.get('filesize', 0),
+            'avg_width': meta.get('width', 0),
+            'avg_height': meta.get('height', 0),
+            'max_width': meta.get('width', 0),
+            'max_height': meta.get('height', 0),
+            'min_width': meta.get('width', 0),
+            'min_height': meta.get('height', 0),
+            'thumbnail_size': thumbnail_size,
+            'thumbnail_format': thumbnail_format,
         }
 
         # Track uploaded bytes

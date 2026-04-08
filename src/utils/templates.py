@@ -52,6 +52,23 @@ custom4: [if custom4]#custom4#[else]no custom4 value set[/if]
 [if hostLinks][b]Download links:[/b]
 #hostLinks#[/if]"""
 
+    # Add Video template
+    templates["Video"] = """[b]#folderName#[/b]
+
+#screenshotSheet#
+
+[b]Video Info[/b]
+File: #filename# (#filesize#)
+Duration: #duration# | Resolution: #resolution# | FPS: #fps#
+Video: #videoCodec#[if audioCodec] | Audio: #audioCodec#[/if]
+[if audioTracks]
+[b]Audio Tracks[/b]
+#audioTracks#[/if]
+[if downloadLinks]
+[b]Download[/b]
+#downloadLinks#[/if][if hostLinks]
+#hostLinks#[/if]"""
+
     # Load custom templates
     if os.path.exists(template_path):
         for filename in os.listdir(template_path):
@@ -274,8 +291,9 @@ def save_gallery_artifacts(
     if not gallery_id or not gallery_name:
         return {}
 
-    # Ensure .uploaded exists if needed
-    uploaded_subdir = os.path.join(folder_path, ".uploaded")
+    # Ensure .uploaded exists if needed (for video files, use parent directory)
+    base_dir = folder_path if os.path.isdir(folder_path) else os.path.dirname(folder_path)
+    uploaded_subdir = os.path.join(base_dir, ".uploaded")
     if store_in_uploaded:
         os.makedirs(uploaded_subdir, exist_ok=True)
 
@@ -397,6 +415,63 @@ def save_gallery_artifacts(
         'ext3': (custom_fields or {}).get('ext3', ''),
         'ext4': (custom_fields or {}).get('ext4', '')
     }
+
+    # Merge video metadata fields when present
+    video_meta = results.get('video_metadata')
+    if video_meta:
+        video_streams = video_meta.get('video_streams', [])
+        audio_streams = video_meta.get('audio_streams', [])
+
+        # Build audio tracks summary
+        track_lines = []
+        for track in audio_streams:
+            fmt = track.get('format', 'Unknown')
+            ch = track.get('channels', '?')
+            rate = track.get('sampling_rate', '?')
+            br = track.get('bit_rate', '?')
+            track_lines.append(f"{fmt}: {ch}-CH {rate}Hz {br} bps")
+
+        # Format duration
+        dur_secs = max(0, int(video_meta.get('duration') or 0))
+        h, m, s = dur_secs // 3600, (dur_secs % 3600) // 60, dur_secs % 60
+        duration_str = f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
+
+        # Format filesize
+        raw_size = video_meta.get('filesize') or 0
+        if not raw_size:
+            filesize_str = "Unknown"
+        elif raw_size >= 1024 * 1024 * 1024:
+            filesize_str = f"{raw_size / (1024**3):.2f} GB"
+        elif raw_size >= 1024 * 1024:
+            filesize_str = f"{raw_size / (1024**2):.1f} MB"
+        else:
+            filesize_str = f"{raw_size / 1024:.0f} KB"
+
+        v_codec = video_streams[0].get('format', '') if video_streams else ''
+        a_codec = audio_streams[0].get('format', '') if audio_streams else ''
+        resolution = f"{video_meta.get('width', '')}x{video_meta.get('height', '')}"
+
+        # Screenshot sheet BBCode = the uploaded sheet image's BBCode
+        screenshot_bbcode = ''
+        images = results.get('images', [])
+        if images and results.get('media_type') == 'video':
+            screenshot_bbcode = images[0].get('bbcode', '')
+
+        template_data.update({
+            'filename': os.path.basename(folder_path),
+            'duration': duration_str,
+            'resolution': resolution,
+            'fps': str(video_meta.get('fps', '')),
+            'bitrate': str(video_meta.get('bitrate', '')),
+            'video_codec': v_codec,
+            'audio_codec': a_codec,
+            'audio_tracks': '\n'.join(track_lines),
+            'filesize': filesize_str,
+            'screenshot_sheet': screenshot_bbcode,
+            'video_details': f"{resolution} | {duration_str} | {v_codec}" + (f" / {a_codec}" if a_codec else ''),
+            'download_links': results.get('download_links', ''),
+        })
+
     bbcode_content = generate_bbcode_from_template(template_name, template_data)
 
     # Compose JSON payload (align with CLI structure)
