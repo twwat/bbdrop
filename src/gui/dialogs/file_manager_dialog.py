@@ -17,6 +17,8 @@ from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
+    QSizePolicy,
     QSplitter,
     QVBoxLayout,
 )
@@ -48,6 +50,12 @@ class FileManagerDialog(QDialog):
 
         self._setup_ui()
 
+        # Initialize status-timer slot before anything can call show_status.
+        # _restore_state() below triggers setCurrentIndex on the host combo,
+        # which fires _on_host_changed → set_host → show_status synchronously,
+        # so _status_timer must already exist by then.
+        self._status_timer: Optional[QTimer] = None
+
         # Controller handles all logic
         self._controller = FileManagerController(self)
 
@@ -62,7 +70,6 @@ class FileManagerDialog(QDialog):
         self._restore_state()
 
         # Auto-select first available host
-        self._status_timer: Optional[QTimer] = None
         if self._host_combo.count() > 0:
             QTimer.singleShot(0, self._on_host_changed)
 
@@ -101,6 +108,18 @@ class FileManagerDialog(QDialog):
         top_layout.addWidget(self._host_combo)
 
         top_layout.addSpacing(16)
+
+        self._storage_bar = QProgressBar()
+        self._storage_bar.setMinimumWidth(280)
+        self._storage_bar.setMaximumHeight(20)
+        self._storage_bar.setMaximum(100)
+        self._storage_bar.setValue(0)
+        self._storage_bar.setTextVisible(True)
+        self._storage_bar.setFormat("")
+        self._storage_bar.setProperty("class", "storage-bar")
+        self._storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._storage_bar.setVisible(False)
+        top_layout.addWidget(self._storage_bar)
 
         self._account_label = QLabel("")
         self._account_label.setStyleSheet("color: palette(placeholder-text);")
@@ -258,30 +277,74 @@ class FileManagerDialog(QDialog):
     # ------------------------------------------------------------------
 
     def update_account_info(self, info: dict):
-        """Update account info display."""
+        """Update account info display — storage bar + adjacent label."""
         from src.utils.format_utils import format_binary_size
-        parts = []
 
-        # RapidGator storage info
+        # --- Storage bar ---
         storage_total = info.get("storage_total")
         storage_left = info.get("storage_left")
-        if storage_total and storage_left:
-            used = int(storage_total) - int(storage_left)
-            parts.append(f"Storage: {format_binary_size(used)} / {format_binary_size(int(storage_total))}")
-        elif storage_left:
-            parts.append(f"Storage free: {format_binary_size(int(storage_left))}")
+        storage_used_direct = info.get("storage_used")
 
-        # Account expiry
-        expires = info.get("account_expires")
-        if expires:
-            parts.append(f"Expires: {expires}")
+        total = int(storage_total) if storage_total else 0
+        left = int(storage_left) if storage_left else 0
 
-        # Premium status
+        # Filedot returns storage_used directly; compute left from it if needed
+        if storage_used_direct is not None and not storage_total:
+            # Only used available — can't fill the bar meaningfully; hide it
+            total = 0
+            left = 0
+
+        has_storage = total > 0 and left >= 0 and left <= total
+        if has_storage:
+            used = total - left
+            percent_used = int((used / total) * 100)
+            percent_free = 100 - percent_used
+
+            left_formatted = format_binary_size(left)
+            total_formatted = format_binary_size(total)
+            used_formatted = format_binary_size(used)
+
+            compact_format = self._format_storage_compact(left, total)
+
+            self._storage_bar.setValue(percent_free)
+            self._storage_bar.setFormat(compact_format)
+
+            tooltip = (
+                f"Storage: {left_formatted} free / {total_formatted} total\n"
+                f"Used: {used_formatted} ({percent_used}%)"
+            )
+            self._storage_bar.setToolTip(tooltip)
+
+            # Color coding matching file_hosts_tab
+            if percent_used >= 90:
+                self._storage_bar.setProperty("storage_status", "low")
+            elif percent_used >= 75:
+                self._storage_bar.setProperty("storage_status", "medium")
+            else:
+                self._storage_bar.setProperty("storage_status", "plenty")
+
+            self._storage_bar.style().unpolish(self._storage_bar)
+            self._storage_bar.style().polish(self._storage_bar)
+            self._storage_bar.setVisible(True)
+        else:
+            self._storage_bar.setVisible(False)
+
+        # --- Adjacent label: premium status + expiry ---
+        label_parts = []
         is_premium = info.get("is_premium")
         if is_premium is not None:
-            parts.append("Premium" if is_premium else "Free")
+            label_parts.append("Premium" if is_premium else "Free")
+        expires = info.get("account_expires")
+        if expires:
+            label_parts.append(f"Expires: {expires}")
+        self._account_label.setText("  |  ".join(label_parts) if label_parts else "")
 
-        self._account_label.setText("  |  ".join(parts) if parts else "")
+    def _format_storage_compact(self, left: int, total: int) -> str:
+        """Return compact storage string, e.g. '15.2 GiB free'."""
+        from src.utils.format_utils import format_binary_size
+        if total <= 0:
+            return "N/A"
+        return f"{format_binary_size(left)} free"
 
     def show_status(self, message: str, error: bool = False):
         """Show a status message that auto-clears."""
