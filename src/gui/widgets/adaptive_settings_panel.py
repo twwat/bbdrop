@@ -49,6 +49,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
         self.theme_toggle_btn = None
         self.statistics_btn = None
         self.link_scanner_btn = None
+        self.file_manager_btn = None
 
         # Layout mode tracking
         self._current_mode = None
@@ -92,7 +93,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
     def set_buttons(self, settings_btn, credentials_btn, templates_btn, file_hosts_btn,
                     hooks_btn, log_viewer_btn, help_btn, theme_toggle_btn,
-                    statistics_btn=None, link_scanner_btn=None):
+                    statistics_btn=None, link_scanner_btn=None, file_manager_btn=None):
         """
         Set the button references to manage
 
@@ -107,6 +108,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
             theme_toggle_btn: Theme toggle button
             statistics_btn: Statistics dialog button (optional)
             link_scanner_btn: Online checker dashboard button (optional)
+            file_manager_btn: Remote file manager dialog button (optional)
         """
         self.settings_btn = settings_btn
         self.credentials_btn = credentials_btn
@@ -118,6 +120,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
         self.theme_toggle_btn = theme_toggle_btn
         self.statistics_btn = statistics_btn
         self.link_scanner_btn = link_scanner_btn
+        self.file_manager_btn = file_manager_btn
 
         # Store original button text for restoration
         self._button_labels = {
@@ -130,7 +133,8 @@ class AdaptiveQuickSettingsPanel(QWidget):
             'help': ' Docs',
             'theme': '',  # Theme button never shows text in 2-row/3-row/4-row modes
             'statistics': ' Stats',
-            'link_scanner': ' Link Scan'
+            'link_scanner': ' Link Scan',
+            'file_manager': ' File Mgr'
         }
 
         # Initialize state based on current height
@@ -220,7 +224,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
         elif self._num_rows == 3:
             # Row 1: Settings checks width, Theme is icon-only
             # Row 2: Credentials, Templates, File Hosts check width
-            # Row 3: Hooks, Logs, Help, Statistics, Online Checker check width
+            # Row 3: Hooks, Logs, Help, Statistics, Online Checker, File Manager check width
             buttons_to_check = [
                 (self.settings_btn, 'settings'),
                 (self.credentials_btn, 'credentials'),
@@ -231,12 +235,13 @@ class AdaptiveQuickSettingsPanel(QWidget):
                 (self.help_btn, 'help'),
                 (self.statistics_btn, 'statistics'),
                 (self.link_scanner_btn, 'link_scanner'),
+                (self.file_manager_btn, 'file_manager'),
             ]
         elif self._num_rows == 4:
             # Row 1: Settings checks width, Theme is icon-only
             # Row 2: Credentials, Templates check width
             # Row 3: File Hosts, Hooks check width
-            # Row 4: Logs, Help, Statistics, Online Checker check width
+            # Row 4: Logs, Help, Statistics, Online Checker, File Manager check width
             buttons_to_check = [
                 (self.settings_btn, 'settings'),
                 (self.credentials_btn, 'credentials'),
@@ -247,6 +252,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
                 (self.help_btn, 'help'),
                 (self.statistics_btn, 'statistics'),
                 (self.link_scanner_btn, 'link_scanner'),
+                (self.file_manager_btn, 'file_manager'),
             ]
 
         for btn, label_key in buttons_to_check:
@@ -312,7 +318,8 @@ class AdaptiveQuickSettingsPanel(QWidget):
             self.log_viewer_btn,
             self.help_btn,
             self.statistics_btn,
-            self.link_scanner_btn
+            self.link_scanner_btn,
+            self.file_manager_btn
         ]
 
         for btn in row2_buttons:
@@ -398,7 +405,8 @@ class AdaptiveQuickSettingsPanel(QWidget):
             self.log_viewer_btn,
             self.help_btn,
             self.statistics_btn,
-            self.link_scanner_btn
+            self.link_scanner_btn,
+            self.file_manager_btn
         ]
 
         for btn in row3_buttons:
@@ -503,7 +511,8 @@ class AdaptiveQuickSettingsPanel(QWidget):
             self.log_viewer_btn,
             self.help_btn,
             self.statistics_btn,
-            self.link_scanner_btn
+            self.link_scanner_btn,
+            self.file_manager_btn
         ]
 
         for btn in row4_buttons:

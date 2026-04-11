@@ -83,6 +83,7 @@ class IconManager:
         'cover_photo':          'cover_photo.png',
         'toggle_theme':         ['toggle_theme-light.png',      'toggle_theme-dark.png'],
         'statistics':           'statistics.png',
+        'file_manager':         'remote_file_manager.png',
         'log_viewer':           'log_viewer.png',
         'radio_check':          ['radio_check-light.png',       'radio_check-dark.png'],
         'check':                'check.png',          #green, also used for rename

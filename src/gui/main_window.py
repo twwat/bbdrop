@@ -1922,6 +1922,22 @@ class BBDropGUI(QMainWindow):
         self.statistics_btn.clicked.connect(self.open_statistics_dialog)
         self.statistics_btn.setProperty("class", "quick-settings-btn")
 
+        # File Manager button (opens remote file manager dialog)
+        self.file_manager_btn = QPushButton("")
+        self.file_manager_btn.setToolTip("Browse and manage files on remote file hosts")
+        try:
+            icon_mgr = get_icon_manager()
+            if icon_mgr:
+                fm_icon = icon_mgr.get_icon('file_manager')
+                if not fm_icon.isNull():
+                    self.file_manager_btn.setIcon(fm_icon)
+                    self.file_manager_btn.setIconSize(QSize(20, 20))
+        except Exception as e:
+            log(f"Exception loading file manager icon: {e}", level="error", category="ui")
+            raise
+        self.file_manager_btn.clicked.connect(self.open_file_manager_dialog)
+        self.file_manager_btn.setProperty("class", "quick-settings-btn")
+
         # Link Scanner button (opens link scanner dashboard)
         self.link_scanner_btn = QPushButton("")
         self.link_scanner_btn.setToolTip("Scan gallery links to check online status")
@@ -1953,7 +1969,8 @@ class BBDropGUI(QMainWindow):
             self.help_btn,                  # Help
             self.theme_toggle_btn,          # Theme
             self.statistics_btn,            # Statistics
-            self.link_scanner_btn           # Link Scanner
+            self.link_scanner_btn,          # Link Scanner
+            self.file_manager_btn           # File Manager
         )
 
         # Apply icons-only mode if setting is enabled
