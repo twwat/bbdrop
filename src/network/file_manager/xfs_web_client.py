@@ -25,6 +25,7 @@ Two id types matter for every XFS host:
 
 from __future__ import annotations
 
+import html
 import re
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlencode
@@ -195,10 +196,10 @@ class XFSWebFileManagerBase(FileManagerClient):
     # ---- Scraping ---------------------------------------------------------
 
     def _scrape_page(self, folder_id: str, page: int) -> Tuple[list, list]:
-        html = self._web_get(self._folder_url(folder_id, page))
+        page_html = self._web_get(self._folder_url(folder_id, page))
 
         if self.USES_CSRF_TOKEN:
-            token_match = self._TOKEN_RE.search(html)
+            token_match = self._TOKEN_RE.search(page_html)
             if token_match:
                 self._action_token = token_match.group(1)
 
@@ -210,10 +211,10 @@ class XFSWebFileManagerBase(FileManagerClient):
         )
 
         folders = []
-        for match in self._FOLDER_ROW_RE.finditer(html):
+        for match in self._FOLDER_ROW_RE.finditer(page_html):
             fld_id = match.group(1)
             raw_name = match.group(2)
-            name = re.sub(r'<[^>]+>', '', raw_name).strip()
+            name = html.unescape(re.sub(r'<[^>]+>', '', raw_name).strip())
             self._known_folder_ids.add(fld_id)
             folders.append(FileInfo(
                 id=fld_id,
@@ -223,11 +224,11 @@ class XFSWebFileManagerBase(FileManagerClient):
             ))
 
         files = []
-        for match in self._FILE_ROW_RE.finditer(html):
+        for match in self._FILE_ROW_RE.finditer(page_html):
             numeric_id = match.group(1)
             file_code = match.group(2)
             raw_name = match.group(3)
-            name = re.sub(r'<[^>]+>', '', raw_name).strip()
+            name = html.unescape(re.sub(r'<[^>]+>', '', raw_name).strip())
             size_str = match.group(4)
             self._file_code_to_numeric[file_code] = numeric_id
             files.append(FileInfo(
