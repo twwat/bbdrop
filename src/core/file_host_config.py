@@ -328,7 +328,8 @@ def save_file_host_setting(host_id: str, key: str, value: Any) -> None:
     # Validate key (whitelist approach)
     valid_keys = {"enabled", "trigger", "max_connections", "max_file_size_mb",
                   "auto_retry", "max_retries", "inactivity_timeout", "upload_timeout",
-                  "bbcode_format", "spinup_retry_enabled", "spinup_retry_max_time"}
+                  "bbcode_format", "spinup_retry_enabled", "spinup_retry_max_time",
+                  "connect_timeout"}
     if key not in valid_keys:
         raise ValueError(f"Invalid setting key: {key}")
 
@@ -352,6 +353,11 @@ def save_file_host_setting(host_id: str, key: str, value: Any) -> None:
             raise ValueError(f"{key} must be int, not bool")
         if not isinstance(value, int) or value < 30 or value > 3600:
             raise ValueError(f"{key} must be int between 30-3600, got {value}")
+    elif key == "connect_timeout":
+        if isinstance(value, bool):
+            raise ValueError(f"{key} must be int, not bool")
+        if not isinstance(value, int) or value < 10 or value > 180:
+            raise ValueError(f"{key} must be int between 10-180, got {value}")
     elif key in {"max_file_size_mb", "upload_timeout"}:
         # Reject booleans explicitly (bool is subclass of int in Python)
         if isinstance(value, bool):
