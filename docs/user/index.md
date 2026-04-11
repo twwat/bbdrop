@@ -64,7 +64,7 @@ Quick lookup for settings, shortcuts, and parameters.
 
 - [Settings](reference/settings-reference.md) — All settings by category
 - [Keyboard Shortcuts](reference/keyboard-shortcuts.md) — Complete shortcut reference
-- [Template Placeholders](reference/template-placeholders.md) — All 18 placeholders
+- [Template Placeholders](reference/template-placeholders.md) — All placeholders including video
 - [External App Parameters](reference/external-apps-parameters.md) — Hook variable reference
 - [Quick Reference](reference/quick-reference.md) — One-page cheat sheet
 

@@ -22,6 +22,28 @@ Used in BBCode templates (`Settings > Templates`). Replaced with gallery data wh
 | `#custom1#` - `#custom4#` | User-defined fields | Any text |
 | `#ext1#` - `#ext4#` | Fields from hooks | Any text |
 
+## Video Placeholders
+
+Available when a queue item is a video gallery (folder of video files). These are populated automatically from the video file's metadata.
+
+| Placeholder | Description | Example Value |
+|---|---|---|
+| `#videoDetails#` | Formatted summary of video metadata | "1920x1080 · 23.976fps · H.264 · AAC · 01:32:14" |
+| `#filename#` | Video filename (without extension) | "movie_2026" |
+| `#duration#` | Video duration | "01:32:14" |
+| `#resolution#` | Video resolution | "1920x1080" |
+| `#fps#` | Frame rate | "23.976" |
+| `#bitrate#` | Total bitrate | "4800 kbps" |
+| `#videoCodec#` | Video codec | "H.264" |
+| `#audioCodec#` | Audio codec | "AAC" |
+| `#audioTracks#` | Number of audio tracks | "2" |
+| `#filesize#` | File size | "3.2 GiB" |
+| `#screenshotSheet#` | BBCode for contact sheet of screenshots | `[img]...[/img]` |
+| `#downloadLinks#` | File host download links (video-specific alias) | Same as `#hostLinks#` |
+
+!!! note
+    Video placeholders resolve to empty string in image galleries, so templates can be shared between gallery types using `[if videoDetails]...[/if]` conditionals.
+
 ## File Host Link Placeholders
 
 Used in each file host's **BBCode Format** setting (`Settings > File Hosts > Configure Host`). These placeholders work inside the `#hostLinks#` expansion.
