@@ -105,9 +105,10 @@ class FileManagerWorker(QThread):
 
     def _get_client(self, host_id: str, auth_token: Optional[str] = None, *,
                     file_host_client: Optional[Any] = None) -> FileManagerClient:
-        # Session-based hosts (filedot): never cache — always construct fresh
-        # from the passed FileHostClient so the shared cookie jar stays current.
-        if host_id == "filedot" and file_host_client is not None:
+        # Session-based hosts (filedot, filespace): never cache — always
+        # construct fresh from the passed FileHostClient so the shared
+        # cookie jar stays current.
+        if host_id in ("filedot", "filespace") and file_host_client is not None:
             return create_file_manager_client(host_id, file_host_client=file_host_client)
         if host_id not in self._clients or auth_token:
             self._clients[host_id] = create_file_manager_client(

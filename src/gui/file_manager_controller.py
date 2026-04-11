@@ -24,6 +24,7 @@ from src.network.file_manager.client import (
     OperationResult,
 )
 from src.core.file_host_config import get_config_manager
+from src.core.host_registry import get_display_name
 from src.network.file_manager.factory import get_supported_hosts, is_host_supported
 from src.processing.file_manager_worker import FileManagerWorker
 from src.utils.logger import log
@@ -161,7 +162,7 @@ class FileManagerController(QObject):
             return self._capabilities[host_id], None
 
         # Hosts that must route through the running FileHostWorker's session
-        _SESSION_BASED_HOSTS = {"filedot"}
+        _SESSION_BASED_HOSTS = {"filedot", "filespace"}
 
         file_host_client = None
         if host_id in _SESSION_BASED_HOSTS:
@@ -174,7 +175,7 @@ class FileManagerController(QObject):
             if worker is None:
                 return (
                     None,
-                    "Enable Filedot in File Hosts settings — the file manager uses the upload worker's session.",
+                    f"Enable {get_display_name(host_id)} in File Hosts settings — the file manager uses the upload worker's session.",
                 )
             host_config = get_config_manager().get_host(host_id)
             file_host_client = worker._create_client(host_config)
@@ -411,7 +412,7 @@ class FileManagerController(QObject):
             "host_id": self._current_host,
             **params,
         }
-        if self._current_host == "filedot":
+        if self._current_host in ("filedot", "filespace"):
             # Pass the worker's FileHostClient through so the worker thread
             # uses the same session the upload worker maintains.
             session_client = getattr(self, "_session_client", None)
