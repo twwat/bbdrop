@@ -189,6 +189,11 @@ class FileManagerDialog(QDialog):
         self.toolbar.copy_link_clicked.connect(c.copy_link)
         self.toolbar.change_access_clicked.connect(c.change_access)
 
+        # Filedot-style properties + flag actions
+        self.toolbar.properties_clicked.connect(c.edit_properties_selected)
+        self.toolbar.set_public_clicked.connect(c.set_public_selected)
+        self.toolbar.set_premium_clicked.connect(c.set_premium_selected)
+
         # Trash actions
         self.toolbar.trash_toggled.connect(c.toggle_trash)
         self.toolbar.trash_restore_clicked.connect(c.trash_restore)

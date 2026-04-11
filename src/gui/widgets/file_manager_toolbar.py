@@ -8,11 +8,14 @@ Buttons are enabled/disabled based on FileManagerCapabilities.
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -37,6 +40,10 @@ class FileManagerToolbar(QWidget):
     copy_clicked = pyqtSignal()
     copy_link_clicked = pyqtSignal()
     change_access_clicked = pyqtSignal()
+    # Filedot-style edit + flag signals
+    properties_clicked = pyqtSignal()
+    set_public_clicked = pyqtSignal(bool)
+    set_premium_clicked = pyqtSignal(bool)
     trash_toggled = pyqtSignal(bool)        # True = show trash
     trash_restore_clicked = pyqtSignal()
     trash_empty_clicked = pyqtSignal()
@@ -129,6 +136,36 @@ class FileManagerToolbar(QWidget):
         self._btn_change_access.setEnabled(False)
         action_layout.addWidget(self._btn_change_access)
 
+        self._btn_properties = QPushButton("Properties")
+        self._btn_properties.setToolTip("Edit file description, password, and price")
+        self._btn_properties.clicked.connect(self.properties_clicked)
+        self._btn_properties.setEnabled(False)
+        self._btn_properties.setVisible(False)
+        action_layout.addWidget(self._btn_properties)
+
+        self._btn_flags = QToolButton()
+        self._btn_flags.setText("Flags")
+        self._btn_flags.setToolTip("Toggle public / premium-only flags")
+        self._btn_flags.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        flags_menu = QMenu(self._btn_flags)
+        act_publish = QAction("Publish (public)", flags_menu)
+        act_publish.triggered.connect(lambda: self.set_public_clicked.emit(True))
+        flags_menu.addAction(act_publish)
+        act_unpublish = QAction("Unpublish (not public)", flags_menu)
+        act_unpublish.triggered.connect(lambda: self.set_public_clicked.emit(False))
+        flags_menu.addAction(act_unpublish)
+        flags_menu.addSeparator()
+        act_set_prem = QAction("Set premium-only", flags_menu)
+        act_set_prem.triggered.connect(lambda: self.set_premium_clicked.emit(True))
+        flags_menu.addAction(act_set_prem)
+        act_unset_prem = QAction("Unset premium-only", flags_menu)
+        act_unset_prem.triggered.connect(lambda: self.set_premium_clicked.emit(False))
+        flags_menu.addAction(act_unset_prem)
+        self._btn_flags.setMenu(flags_menu)
+        self._btn_flags.setEnabled(False)
+        self._btn_flags.setVisible(False)
+        action_layout.addWidget(self._btn_flags)
+
         self._btn_delete = QPushButton("Delete")
         self._btn_delete.clicked.connect(self.delete_clicked)
         self._btn_delete.setEnabled(False)
@@ -169,6 +206,12 @@ class FileManagerToolbar(QWidget):
         self._btn_delete.setVisible(caps.can_delete)
         self._btn_copy_link.setVisible(caps.can_get_download_link)
         self._btn_change_access.setVisible(caps.can_change_access)
+        self._btn_properties.setVisible(
+            getattr(caps, "can_edit_properties", False)
+        )
+        self._btn_flags.setVisible(
+            getattr(caps, "can_set_file_flags", False)
+        )
         self._btn_trash.setVisible(caps.can_trash)
         self._btn_trash_restore.setVisible(caps.can_trash)
         self._btn_trash_empty.setVisible(caps.can_trash)
@@ -188,6 +231,8 @@ class FileManagerToolbar(QWidget):
         self._btn_delete.setEnabled(has_selection and not in_trash)
         self._btn_copy_link.setEnabled(single_selection and has_files and not in_trash)
         self._btn_change_access.setEnabled(has_selection and not in_trash)
+        self._btn_properties.setEnabled(has_selection and has_files and not in_trash)
+        self._btn_flags.setEnabled(has_selection and has_files and not in_trash)
         self._btn_trash_restore.setEnabled(has_selection and in_trash)
 
     def set_breadcrumb(self, path_parts: list[tuple[str, str]]):

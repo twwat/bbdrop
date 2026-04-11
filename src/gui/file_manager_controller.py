@@ -13,7 +13,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import QObject, QTimer, Qt
-from PyQt6.QtWidgets import QApplication, QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QApplication, QDialog, QInputDialog, QMessageBox
 
 from src.network.file_manager.client import (
     BatchResult,
@@ -82,6 +82,9 @@ class FileManagerController(QObject):
         self._pending_ops: Dict[str, str] = {}  # op_id -> action name
         self._pending_folder_parents: Dict[str, Tuple[str, str]] = {}  # op_id -> (host_id, parent_id)
         self._pending_file_folders: Dict[str, Tuple[str, str]] = {}   # op_id -> (host_id, folder_id)
+        # op_id -> FileInfo of the file whose Properties dialog should
+        # open once read_file_properties returns.
+        self._pending_read_props: Dict[str, FileInfo] = {}
 
         # Session refs for session-based hosts (e.g. filedot) set in _probe_host
         self._session_client = None
@@ -561,6 +564,96 @@ class FileManagerController(QObject):
             })
 
     # ------------------------------------------------------------------
+    # Filedot-style flag toggles and per-file properties
+    # ------------------------------------------------------------------
+
+    def set_public_selected(self, value: bool):
+        """Toggle the public flag on the currently selected files."""
+        selected = self._dialog.file_list.get_selected_files()
+        file_codes = [fi.id for fi in selected if not fi.is_folder]
+        if not file_codes:
+            return
+        self._submit("set_file_public", {
+            "item_ids": file_codes,
+            "value": value,
+        })
+
+    def set_premium_selected(self, value: bool):
+        """Toggle the premium-only flag on the currently selected files."""
+        selected = self._dialog.file_list.get_selected_files()
+        file_codes = [fi.id for fi in selected if not fi.is_folder]
+        if not file_codes:
+            return
+        self._submit("set_file_premium", {
+            "item_ids": file_codes,
+            "value": value,
+        })
+
+    def edit_properties_selected(self):
+        """Open the Properties dialog for selected files.
+
+        Single file: worker-fetch current properties via read_file_properties,
+        then open the dialog pre-populated (via _on_operation_complete).
+        Multi-file: open the dialog immediately with blank defaults and
+        post a diff-only update on accept.
+        """
+        selected = self._dialog.file_list.get_selected_files()
+        file_items = [fi for fi in selected if not fi.is_folder]
+        if not file_items:
+            return
+
+        if len(file_items) == 1:
+            fi = file_items[0]
+            op_id = self._submit(
+                "read_file_properties", {"file_code": fi.id},
+            )
+            self._pending_read_props[op_id] = fi
+            return
+
+        # Multi-file — open dialog immediately, no round-trip
+        from src.gui.dialogs.filedot_properties_dialog import (
+            FiledotPropertiesDialog,
+        )
+        dlg = FiledotPropertiesDialog(multi=True, parent=self._dialog)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        diff = dlg.get_changed_fields()
+        if not diff:
+            self._dialog.show_status("No changes to apply")
+            return
+
+        self._submit("update_file_properties", {
+            "file_codes": [fi.id for fi in file_items],
+            "fields": diff,
+            "round_trip": False,
+        })
+
+    def _open_properties_dialog_single(
+        self, fi: Optional[FileInfo], initial: Dict[str, str],
+    ):
+        """Open the Properties dialog for a single file, pre-populated."""
+        from src.gui.dialogs.filedot_properties_dialog import (
+            FiledotPropertiesDialog,
+        )
+        dlg = FiledotPropertiesDialog(
+            initial=initial, multi=False, parent=self._dialog,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted or fi is None:
+            return
+
+        diff = dlg.get_changed_fields()
+        if not diff:
+            self._dialog.show_status("No changes to apply")
+            return
+
+        self._submit("update_file_properties", {
+            "file_codes": [fi.id],
+            "fields": diff,
+            "round_trip": True,
+        })
+
+    # ------------------------------------------------------------------
     # Trash operations
     # ------------------------------------------------------------------
 
@@ -684,12 +777,23 @@ class FileManagerController(QObject):
                         self._dialog.show_status("Link copied to clipboard")
                     return
 
+                # read_file_properties returns the scraped form values —
+                # open the Properties dialog pre-populated with them.
+                if action == "read_file_properties":
+                    fi = self._pending_read_props.pop(op_id, None)
+                    initial = dict(result.data or {})
+                    initial.pop("_file_code", None)
+                    self._open_properties_dialog_single(fi, initial)
+                    return
+
                 self._dialog.show_status(result.message or "Done")
                 # Refresh after mutations
                 if action in ("create_folder", "rename"):
                     self.refresh()
             else:
                 self._dialog.show_status(f"Error: {result.message}", error=True)
+                if action == "read_file_properties":
+                    self._pending_read_props.pop(op_id, None)
 
         elif isinstance(result, BatchResult):
             if result.all_succeeded:
