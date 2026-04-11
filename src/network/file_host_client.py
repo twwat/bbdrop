@@ -12,7 +12,7 @@ import base64
 import zipfile
 import threading
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable, List, Union
+from typing import Dict, Any, Optional, Callable, List, Tuple, Union
 from io import BytesIO
 from urllib.parse import quote
 
@@ -1840,6 +1840,120 @@ class FileHostClient:
             'token': self.auth_token,
             'timestamp': self._session_token_timestamp
         }
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Optional[Dict[str, str]] = None,
+        body: Optional[bytes] = None,
+        follow_redirects: bool = True,
+        count_bandwidth: bool = True,
+        timeout: int = 60,
+    ) -> Tuple[int, Dict[str, str], bytes]:
+        """General-purpose HTTP request through this client's session.
+
+        Wraps pycurl with the class's existing proxy, SSL, cookie jar, and
+        bandwidth counter plumbing, then runs inside _with_token_retry so a
+        stale session triggers the same reauth path used by uploads and
+        user-info calls.
+
+        Args:
+            method: HTTP method ("GET", "POST", etc.)
+            url: Target URL.
+            headers: Optional extra request headers (name -> value).
+            body: Optional request body as bytes (for POST/PUT).
+            follow_redirects: Whether to follow 3xx redirects.
+            count_bandwidth: If True, response body bytes are added to
+                self.bandwidth_counter so file-manager activity shows up in
+                the worker's bandwidth tracking.
+            timeout: Total request timeout in seconds.
+
+        Returns:
+            Tuple of (status_code, response_headers_dict, response_body_bytes).
+            response_headers_dict has lowercase header names; multi-valued
+            headers (Set-Cookie) are parsed into self.cookie_jar directly.
+
+        Raises:
+            ValueError: On 401/403 so _with_token_retry can trigger reauth.
+        """
+        def _request_impl(**kwargs) -> Tuple[int, Dict[str, str], bytes]:
+            curl = pycurl.Curl()
+            self._configure_ssl(curl)
+            self._configure_proxy(curl)
+            response_buffer = BytesIO()
+            header_buffer = BytesIO()
+
+            try:
+                curl.setopt(pycurl.URL, url)
+                curl.setopt(pycurl.WRITEDATA, response_buffer)
+                curl.setopt(pycurl.HEADERFUNCTION, header_buffer.write)
+                curl.setopt(pycurl.TIMEOUT, timeout)
+                curl.setopt(pycurl.USERAGENT, _CHROME_UA)
+                curl.setopt(pycurl.FOLLOWLOCATION, follow_redirects)
+
+                method_upper = method.upper()
+                if method_upper == "GET":
+                    curl.setopt(pycurl.HTTPGET, 1)
+                elif method_upper == "POST":
+                    curl.setopt(pycurl.POST, 1)
+                    if body is not None:
+                        curl.setopt(pycurl.POSTFIELDS, body)
+                else:
+                    curl.setopt(pycurl.CUSTOMREQUEST, method_upper)
+                    if body is not None:
+                        curl.setopt(pycurl.POSTFIELDS, body)
+
+                # Session cookies from the jar (reuses the upload session)
+                if self.cookie_jar:
+                    cookie_str = "; ".join(
+                        f"{k}={v}" for k, v in self.cookie_jar.items()
+                    )
+                    curl.setopt(pycurl.COOKIE, cookie_str)
+
+                # Caller-supplied headers
+                if headers:
+                    header_list = [f"{name}: {value}" for name, value in headers.items()]
+                    curl.setopt(pycurl.HTTPHEADER, header_list)
+
+                curl.perform()
+                status = curl.getinfo(pycurl.RESPONSE_CODE)
+
+                # Surface auth failures so _with_token_retry reauths
+                if status == 401:
+                    raise ValueError(f"Unauthorized (401) for {url}")
+                if status == 403:
+                    raise ValueError(f"Forbidden (403) for {url}")
+
+                # Parse response headers and capture Set-Cookie rotations
+                response_headers: Dict[str, str] = {}
+                header_text = header_buffer.getvalue().decode(
+                    "utf-8", errors="replace"
+                )
+                for line in header_text.split("\r\n"):
+                    if ":" not in line:
+                        continue
+                    name, _, value = line.partition(":")
+                    name_lower = name.strip().lower()
+                    value = value.strip()
+                    if name_lower == "set-cookie":
+                        cookie_pair = value.split(";", 1)[0]
+                        if "=" in cookie_pair:
+                            ck_name, ck_value = cookie_pair.split("=", 1)
+                            self.cookie_jar[ck_name.strip()] = ck_value.strip()
+                    response_headers[name_lower] = value
+
+                response_body = response_buffer.getvalue()
+                if count_bandwidth and response_body:
+                    self.bandwidth_counter.add(len(response_body))
+
+                return status, response_headers, response_body
+
+            finally:
+                curl.close()
+
+        return self._with_token_retry(_request_impl)
 
     def test_credentials(self) -> Dict[str, Any]:
         """Test if credentials are valid.
