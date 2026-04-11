@@ -136,7 +136,8 @@ Every host supports automatic retry, connection pooling, and token caching.
 
 - 🚀 **Upload engine** — concurrent workers, drag-and-drop queue, batch processing, resume, duplicate detection, and real-time progress tracking
 - 🌐 **Multi-host pipeline** — 3 image hosts and 7 file hosts through a host-agnostic architecture; queue a gallery once, upload everywhere
-- 📝 **BBCode templates** — 18 placeholders, conditional blocks (`[if]...[else]...[/if]`), multiple templates, hot-swap without restarting
+- 📁 **File manager** — in-app browser for remote file hosts; browse, rename, move, copy, delete, trash, and submit remote URL uploads across all supported hosts
+- 📝 **BBCode templates** — 18+ placeholders, conditional blocks (`[if]...[else]...[/if]`), multiple templates, hot-swap without restarting
 - 🖼️ **Cover photos** — automatic detection by filename pattern, dimensions, or file size; multi-cover support with deduplication, max-cover limiting, and per-host cover galleries
 - 📦 **Archive management** — create ZIP/7Z archives with configurable compression and split sizes; extract ZIP, 7Z, RAR, TAR
 - 💾 **Disk space monitoring** — tiered warnings with adaptive polling, pre-flight checks before uploads and archive creation
@@ -150,7 +151,7 @@ Every host supports automatic retry, connection pooling, and token caching.
 
 ## BBCode Placeholders
 
-Templates support 18 placeholders and `[if placeholder]...[else]...[/if]` conditional blocks.
+Templates support gallery and video placeholders with `[if placeholder]...[else]...[/if]` conditional blocks.
 
 <details>
 <summary>All placeholders</summary>

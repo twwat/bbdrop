@@ -23,8 +23,9 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 
 **Core Guides:**
 - [GUI Guide](user/guides/gui-guide.md) - Complete GUI documentation
-- [Image Hosts](user/guides/image-hosts.md) - IMX.to and TurboImageHost configuration
+- [Image Hosts](user/guides/image-hosts.md) - IMX.to, TurboImageHost, and Pixhost configuration
 - [Multi-Host Upload](user/guides/multi-host-upload.md) - Upload to multiple file hosts
+- [File Manager](user/guides/file-manager.md) - Browse and manage files on remote hosts
 - [Queue Management](user/guides/queue-management.md) - Queue operations and context menu
 - [Scanning & Covers](user/guides/scanning.md) - Image scanning, link checking, cover photos
 - [BBCode Templates](user/guides/bbcode-templates.md) - Custom BBCode templates and placeholders
@@ -69,12 +70,13 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 |---------|---------------|
 | **Image Hosts** | [Image Hosts Guide](user/guides/image-hosts.md) |
 | **Multi-Host Upload** | [Multi-Host Upload Guide](user/guides/multi-host-upload.md) |
+| **File Manager** | [File Manager Guide](user/guides/file-manager.md) |
 | **Archive/ZIP Management** | [Archive Management](user/guides/archive-management.md) |
 | **BBCode Templates** | [BBCode Templates Guide](user/guides/bbcode-templates.md) |
 | **Proxies** | [Proxies Guide](user/guides/proxies.md) |
 | **Credentials** | [Credential Management](user/guides/credential-management.md) |
 | **Hooks** | [Hooks & Automation](user/guides/hooks.md) |
-| **Keyboard Shortcuts** | [Keyboard Shortcuts](user/getting-started/keyboard-shortcuts.md) |
+| **Keyboard Shortcuts** | [Keyboard Shortcuts](user/reference/keyboard-shortcuts.md) |
 | **Troubleshooting** | [Troubleshooting Guide](user/troubleshooting/troubleshooting.md) |
 
 ### By Role

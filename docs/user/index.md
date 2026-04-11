@@ -33,9 +33,10 @@ Task-oriented instructions for specific features.
 - [GUI Guide](guides/gui-guide.md) — Interface walkthrough, tabs, and queue management
 - [Image Hosts](guides/image-hosts.md) — IMX.to, Pixhost, and TurboImageHost configuration
 - [Multi-Host Upload](guides/multi-host-upload.md) — Upload to 7 premium file hosts
+- [File Manager](guides/file-manager.md) — Browse and manage files on remote file hosts
 - [Queue Management](guides/queue-management.md) — Queue operations, tabs, columns, context menu
 - [Scanning & Link Checking](guides/scanning.md) — Image scanning, link checker, cover photos
-- [BBCode Templates](guides/bbcode-templates.md) — 18 placeholders and conditional logic
+- [BBCode Templates](guides/bbcode-templates.md) — Placeholders and conditional logic
 - [Proxies & Tor](guides/proxies.md) — Proxy pools, per-host proxy, Tor integration
 
 ### Advanced

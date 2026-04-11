@@ -83,6 +83,7 @@ nav:
     - Archive Management: guides/archive-management.md
     - Duplicate Detection: guides/duplicate-detection.md
     - Hooks & Automation: guides/hooks.md
+    - File Manager: guides/file-manager.md
     - Credential Management: guides/credential-management.md
     - Theme Customization: guides/theme-customization.md
   - Explanation:

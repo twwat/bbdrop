@@ -7,17 +7,19 @@
 ## Table of Contents
 
 1. [Gallery Management](#gallery-management)
-2. [Multi-Host Upload System](#multi-host-upload-system)
-3. [Archive & Compression](#archive--compression)
-4. [BBCode Generation & Templates](#bbcode-generation--templates)
-5. [File Host Integration](#file-host-integration)
-6. [Template System](#template-system)
-7. [Automation & Hooks](#automation--hooks)
-8. [Configuration & Settings](#configuration--settings)
-9. [User Interface](#user-interface)
-10. [Advanced Features](#advanced-features)
-11. [Database & Storage](#database--storage)
-12. [Network & Performance](#network--performance)
+2. [Image Hosts](#image-hosts)
+3. [Multi-Host Upload System](#multi-host-upload-system)
+4. [File Manager](#file-manager)
+5. [Archive & Compression](#archive--compression)
+6. [BBCode Generation & Templates](#bbcode-generation--templates)
+7. [File Host Integration](#file-host-integration)
+8. [Template System](#template-system)
+9. [Automation & Hooks](#automation--hooks)
+10. [Configuration & Settings](#configuration--settings)
+11. [User Interface](#user-interface)
+12. [Advanced Features](#advanced-features)
+13. [Database & Storage](#database--storage)
+14. [Network & Performance](#network--performance)
 
 ---
 
@@ -128,6 +130,39 @@ CREATE TABLE galleries (
 - Batch rename with pattern matching
 - Preview new names before applying
 - Persistent tracking in `~/.bbdrop/unnamed_galleries.json`
+
+---
+
+## Image Hosts
+
+**Description:** Upload gallery images to image hosting services. BBDrop supports three image hosts.
+
+### IMX.to
+
+- **Authentication:** API key or username/password session
+- **Max File Size:** Unlimited
+- **Thumbnail Sizes:** 100×100, 150×150, 180×180, 250×250, 300×300 px
+- **Thumbnail Formats:** JPEG 70%, JPEG 90%, PNG, WebP
+- **Gallery Visibility:** Public or private
+- **Gallery Rename:** Automatic background renaming via RenameWorker after upload
+- **Unnamed Gallery Tracking:** Lists galleries pending rename under **Tools > Unnamed Galleries**
+
+### TurboImageHost
+
+- **Authentication:** Optional (anonymous upload supported)
+- **Max File Size:** 35 MB
+- **Max Gallery Size:** 500 images
+- **Thumbnail Sizes:** Variable 150–600 px slider
+- **Thumbnail Formats:** Proportional or square crop
+- **Content Type:** Family Safe or Adult
+
+### Pixhost
+
+- **Authentication:** None — fully anonymous
+- **Max File Size:** 10 MB
+- **Thumbnail Sizes:** Variable 150–500 px slider
+- **Content Type:** Family Safe or Adult
+- **Batch Finalisation:** Gallery results are returned together on completion rather than per-image
 
 ---
 
@@ -1554,6 +1589,38 @@ LOG_LEVELS = {
 - **WARNING**: Yellow
 - **ERROR**: Orange
 - **CRITICAL**: Red
+
+---
+
+## File Manager
+
+**Description:** In-app browser for managing files stored on remote file hosts. Accessible via **Tools > File Manager** or the **File Manager** button in the quick settings panel. Non-modal — stays open while uploads run.
+
+**Supported Hosts:** K2S / TezFiles / FileBoom, RapidGator, Katfile, Filespace, Filedot
+
+**Operations by Host:**
+
+| Operation | K2S / Tez / FBoom | RapidGator | Katfile | Filespace | Filedot |
+|---|---|---|---|---|---|
+| Browse files | Yes | Yes | Yes | Yes | Yes (scraping) |
+| Create folder | Yes | Yes | Yes | Yes | — |
+| Rename | Yes | Yes | Yes | Yes | — |
+| Move | Yes (batch) | Yes | Yes | Yes | — |
+| Copy | — | Yes | Clone | Clone | — |
+| Delete | Yes | Yes | Yes | Yes | Yes |
+| Trash / restore | — | Yes | — | — | — |
+| Remote URL upload | Yes | Yes | — | — | — |
+| File properties | — | — | — | — | Yes |
+
+**Keyboard Shortcuts:**
+- `Delete` — Remove selected files/folders
+- `F2` — Rename
+- `F5` — Refresh
+- `Ctrl+C` — Copy download link
+- `Backspace` — Navigate back
+- `Alt+Up` — Go to parent folder
+
+**Authentication:** Uses the same credentials as the upload workers. No separate login required.
 
 ---
 

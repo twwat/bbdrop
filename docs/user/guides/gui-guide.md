@@ -121,6 +121,28 @@ Thresholds are configurable in **Settings > Advanced**. Polling frequency increa
 
 ---
 
+## File Manager
+
+Open **Tools > File Manager** (or click the **File Manager** button in the quick settings panel) to browse and manage files stored on your remote file hosts.
+
+The file manager is a non-modal dialog — you can keep it open while uploading. Switch between hosts using the dropdown at the top.
+
+| Operation | Hosts |
+|---|---|
+| Browse files and folders | All hosts |
+| Create folders | K2S family, RapidGator, Katfile, Filespace |
+| Rename files and folders | K2S family, RapidGator, Katfile, Filespace |
+| Move files | K2S family, RapidGator, Katfile, Filespace |
+| Copy files | RapidGator (full copy); Katfile, Filespace (clone/reference) |
+| Delete files | All hosts |
+| Trash / restore | RapidGator only |
+| Remote URL upload | K2S family, RapidGator |
+| File properties | Filedot (extended metadata) |
+
+See [File Manager](file-manager.md) for the full guide.
+
+---
+
 ## Statistics
 
 Open **Tools > Statistics** to see upload metrics:
@@ -143,7 +165,7 @@ The app keeps running in the background when minimized — uploads continue unin
 - **Theme toggle** — switch between dark and light modes in **Settings > General**
 - **Archives** — drop ZIP, RAR, or 7Z files just like folders
 - **Single instance** — opening BBDrop again adds galleries to the existing window instead of launching a second copy
-- **Keyboard shortcuts** — press **Ctrl+.** to see all available shortcuts, or see [Keyboard Shortcuts](../getting-started/keyboard-shortcuts.md)
+- **Keyboard shortcuts** — press **Ctrl+.** to see all available shortcuts, or see [Keyboard Shortcuts](../reference/keyboard-shortcuts.md)
 
 ---
 

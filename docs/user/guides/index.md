@@ -7,11 +7,12 @@ Detailed guides for using BBDrop's features effectively. Learn how to upload gal
 Essential guides for everyday use.
 
 - [GUI Guide](./gui-guide.md) - Complete interface walkthrough including tabs, queue management, and progress tracking
-- [Image Hosts](./image-hosts.md) - Configure IMX.to and TurboImageHost
-- [Multi-Host Upload](./multi-host-upload.md) - Upload to 7 file hosting services: Fileboom, Filedot, Filespace, Katfile, Keep2Share, Rapidgator, and Tezfiles
+- [Image Hosts](./image-hosts.md) - Configure IMX.to, Pixhost, and TurboImageHost
+- [Multi-Host Upload](./multi-host-upload.md) - Upload to 7 file hosting services: FileBoom, Filedot, Filespace, Katfile, Keep2Share, RapidGator, and TezFiles
+- [File Manager](./file-manager.md) - Browse and manage files on remote file hosts
 - [Queue Management](./queue-management.md) - Queue operations, tabs, columns, and context menu
 - [Scanning](./scanning.md) - Image scanning, link checking, and cover photos
-- [BBCode Templates](./bbcode-templates.md) - Generate customizable forum post templates with 18 dynamic placeholders and conditional logic
+- [BBCode Templates](./bbcode-templates.md) - Customisable forum post templates with placeholders and conditional logic
 - [Proxies](./proxies.md) - Proxy pools, per-host proxy, and Tor support
 
 ## Advanced Features
