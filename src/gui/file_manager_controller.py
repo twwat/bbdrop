@@ -23,6 +23,7 @@ from src.network.file_manager.client import (
     FolderListResult,
     OperationResult,
 )
+from src.core.file_host_config import get_config_manager
 from src.network.file_manager.factory import get_supported_hosts, is_host_supported
 from src.processing.file_manager_worker import FileManagerWorker
 from src.utils.logger import log
@@ -82,6 +83,10 @@ class FileManagerController(QObject):
         self._pending_folder_parents: Dict[str, Tuple[str, str]] = {}  # op_id -> (host_id, parent_id)
         self._pending_file_folders: Dict[str, Tuple[str, str]] = {}   # op_id -> (host_id, folder_id)
 
+        # Session refs for session-based hosts (e.g. filedot) set in _probe_host
+        self._session_client = None
+        self._session_worker = None
+
         # Error popup dedup/throttle
         self._last_error_key: Optional[Tuple[str, str]] = None
         self._last_error_time: float = 0.0
@@ -100,43 +105,105 @@ class FileManagerController(QObject):
         if host_id == self._current_host:
             return
 
+        # Clear stale session refs from any previous session-based host
+        self._session_client = None
+        self._session_worker = None
+
         self._current_host = host_id
         self._pending_ops.clear()
         self._pending_folder_parents.clear()
         self._pending_file_folders.clear()
 
-        # Restore last folder for this host, or start at root
+        # Reset per-host state
         self._current_folder = self._host_folder.get(host_id, "/")
         self._current_page = 1
         self._breadcrumb = [("/", "/")]
+        self._in_trash = False
 
-        # Get capabilities (may be cached)
-        if host_id in self._capabilities:
-            self._dialog.toolbar.update_capabilities(self._capabilities[host_id])
-        else:
-            caps = self._get_client_capabilities(host_id)
-            if caps:
-                self._capabilities[host_id] = caps
-                self._dialog.toolbar.update_capabilities(caps)
-
-        # Load root
+        # Clear display immediately so stale data from the previous host
+        # doesn't linger while the new host loads (or fails to load).
+        self._dialog.file_list.clear()
         self._dialog.folder_tree.set_root()
+        self._dialog.update_account_info({})
+        self._update_nav_state()
+
+        # Probe the client synchronously — this surfaces missing-credential
+        # errors up front with a single friendly status message instead of
+        # three worker-thread failures (list_files, list_folders, account_info)
+        # each firing its own popup.
+        caps, error = self._probe_host(host_id)
+        if error is not None:
+            self._dialog.show_status(error, error=True)
+            # Disable toolbar actions since nothing will work
+            self._dialog.toolbar.update_capabilities(FileManagerCapabilities())
+            return
+
+        if caps is not None:
+            self._capabilities[host_id] = caps
+            self._dialog.toolbar.update_capabilities(caps)
+
+        # Client is ready — load data
         self._load_folder_tree("/")
         self._load_files()
         self._load_account_info()
 
-    def _get_client_capabilities(self, host_id: str) -> Optional[FileManagerCapabilities]:
-        """Synchronously get capabilities (they're static per client type)."""
+    def _probe_host(self, host_id: str) -> Tuple[Optional[FileManagerCapabilities], Optional[str]]:
+        """Try to create a client for the host and return (caps, error_message).
+
+        Returns (caps, None) on success, (None, message) on failure. The
+        message is suitable for display in the dialog status bar.
+        """
+        # Reuse cached capabilities if we've successfully probed this host before
+        if host_id in self._capabilities:
+            return self._capabilities[host_id], None
+
+        # Hosts that must route through the running FileHostWorker's session
+        _SESSION_BASED_HOSTS = {"filedot"}
+
+        file_host_client = None
+        if host_id in _SESSION_BASED_HOSTS:
+            main_window = self._dialog.parent() if self._dialog is not None else None
+            worker = None
+            if main_window is not None:
+                fhm = getattr(main_window, "file_host_manager", None)
+                if fhm is not None:
+                    worker = fhm.get_worker(host_id)
+            if worker is None:
+                return (
+                    None,
+                    "Enable Filedot in File Hosts settings — the file manager uses the upload worker's session.",
+                )
+            host_config = get_config_manager().get_host(host_id)
+            file_host_client = worker._create_client(host_config)
+            # Stash references so US-005 can persist session state after operations
+            self._session_client = file_host_client
+            self._session_worker = worker
+
         try:
             from src.network.file_manager.factory import create_file_manager_client
-            client = create_file_manager_client(host_id)
-            return client.get_capabilities()
-        except Exception:
-            return None
+            if file_host_client is not None:
+                client = create_file_manager_client(host_id, file_host_client=file_host_client)
+            else:
+                client = create_file_manager_client(host_id)
+            return client.get_capabilities(), None
+        except ValueError as e:
+            msg = str(e)
+            if "credentials" in msg.lower() or "api key" in msg.lower() or "session cookie" in msg.lower():
+                return None, f"No credentials configured for {host_id}. Open Settings → File Hosts to add them."
+            return None, f"Cannot access {host_id}: {msg}"
+        except Exception as e:
+            log(f"File manager: failed to probe {host_id}: {e}",
+                level="error", category="file_manager")
+            return None, f"Cannot access {host_id}: {e}"
 
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
+
+    def _host_list_files_includes_folders(self) -> bool:
+        """Return True if the current host's list_files result includes folder entries."""
+        caps = self._capabilities.get(self._current_host)
+        return bool(caps and caps.list_files_includes_folders)
 
     def load_children(self, folder_id: str, _folder_name: str = ""):
         """Load children for a folder in the tree without navigating.
@@ -146,8 +213,9 @@ class FileManagerController(QObject):
         """
         if not self._current_host:
             return
-        if self._dialog.folder_tree.needs_children(folder_id):
-            self._load_folder_tree(folder_id)
+        if not self._host_list_files_includes_folders():
+            if self._dialog.folder_tree.needs_children(folder_id):
+                self._load_folder_tree(folder_id)
 
     def navigate_to(self, folder_id: str, folder_name: str = ""):
         """Navigate into a folder."""
@@ -177,9 +245,11 @@ class FileManagerController(QObject):
         self._update_nav_state()
         self._load_files()
 
-        # Load folder tree children if needed
-        if self._dialog.folder_tree.needs_children(folder_id):
-            self._load_folder_tree(folder_id)
+        # Load folder tree children if needed — skip for hosts where
+        # list_files already returns folder entries inline.
+        if not self._host_list_files_includes_folders():
+            if self._dialog.folder_tree.needs_children(folder_id):
+                self._load_folder_tree(folder_id)
 
         self._dialog.folder_tree.select_folder(folder_id)
 
@@ -233,7 +303,8 @@ class FileManagerController(QObject):
             self._load_trash()
         else:
             self._load_files()
-            self._load_folder_tree(self._current_folder)
+            if not self._host_list_files_includes_folders():
+                self._load_folder_tree(self._current_folder)
 
     def _update_nav_state(self):
         history = self._history.get(self._current_host, [])
@@ -331,12 +402,22 @@ class FileManagerController(QObject):
             self._pending_file_folders[op_id] = file_folder
         if folder_parent is not None:
             self._pending_folder_parents[op_id] = folder_parent
-        self._worker.submit({
+        op_dict = {
             "op_id": op_id,
             "action": action,
             "host_id": self._current_host,
             **params,
-        })
+        }
+        if self._current_host == "filedot":
+            # Pass the worker's FileHostClient through so the worker thread
+            # uses the same session the upload worker maintains.
+            session_client = getattr(self, "_session_client", None)
+            session_worker = getattr(self, "_session_worker", None)
+            if session_client is not None:
+                op_dict["file_host_client"] = session_client
+            if session_worker is not None:
+                op_dict["file_host_worker"] = session_worker
+        self._worker.submit(op_dict)
         return op_id
 
     # ------------------------------------------------------------------
@@ -560,6 +641,12 @@ class FileManagerController(QObject):
             if request_host == self._current_host and request_folder == current_view_folder:
                 self._dialog.file_list.set_files(result)
                 self._dialog.reapply_filter()
+
+            # For hosts where list_files includes folder entries inline,
+            # push those folders to the tree so list_folders is never called.
+            if self._host_list_files_includes_folders() and request_host == self._current_host:
+                folders = [fi for fi in result.files if fi.is_folder]
+                self._dialog.folder_tree.populate_children(request_folder, folders)
 
     def _on_folders_loaded(self, op_id: str, result: FolderListResult):
         self._pending_ops.pop(op_id, None)

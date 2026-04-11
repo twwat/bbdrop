@@ -24,25 +24,41 @@ def create_file_manager_client(
     auth_token: Optional[str] = None,
     session_cookie: Optional[str] = None,
     sess_id: Optional[str] = None,
+    *,
+    file_host_client: Optional["FileHostClient"] = None,
 ) -> FileManagerClient:
     """Create a file manager client for the given host.
 
     Args:
         host_id: Host identifier (e.g. 'keep2share', 'rapidgator').
         auth_token: Pre-decrypted auth token/API key. If None, loads from keyring.
-        session_cookie: Session cookie for session-based hosts (Filespace, Filedot).
-        sess_id: CSRF session ID for Filedot.
+        session_cookie: Session cookie for session-based hosts (Filespace).
+        sess_id: CSRF session ID. Legacy param kept for backwards compat.
+        file_host_client: Required for filedot — the running upload worker's
+            FileHostClient. The file manager client delegates all HTTP to it
+            so proxy, bandwidth counter, session reuse, and reauth flow
+            through the same pipeline as uploads.
 
     Returns:
         A FileManagerClient instance.
 
     Raises:
-        ValueError: If host is unsupported or no credentials available.
+        ValueError: If host is unsupported, credentials missing, or a
+            session-based host was requested without a live FileHostClient.
     """
     if host_id not in SUPPORTED_HOSTS:
         raise ValueError(f"File manager not supported for host: {host_id}")
 
-    # Load credentials if not provided
+    # Filedot requires a live FileHostClient from the running upload worker —
+    # without it, we have no authenticated session and would hit a login page.
+    if host_id == "filedot" and file_host_client is None:
+        raise ValueError(
+            "Enable Filedot in File Hosts settings — the file manager "
+            "uses the upload worker's session."
+        )
+
+    # Load credentials if not provided (non-filedot session hosts still
+    # use the legacy keyring path until their own refactor lands).
     if not auth_token and host_id not in SESSION_HOSTS:
         auth_token = _load_auth_token(host_id)
     if not auth_token and host_id not in SESSION_HOSTS:
@@ -72,13 +88,9 @@ def create_file_manager_client(
 
     if host_id == "filedot":
         from src.network.file_manager.filedot_client import FiledotFileManagerClient
-        cookie = session_cookie or _load_session_cookie(host_id)
-        if not cookie:
-            raise ValueError("No session cookie available for Filedot")
-        sid = sess_id or ""
-        return FiledotFileManagerClient(
-            session_cookie=cookie, sess_id=sid
-        )
+        # file_host_client is guaranteed non-None by the early-return above
+        assert file_host_client is not None
+        return FiledotFileManagerClient(file_host_client=file_host_client)
 
     raise ValueError(f"No file manager client for host: {host_id}")
 

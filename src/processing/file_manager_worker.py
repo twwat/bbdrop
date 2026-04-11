@@ -103,7 +103,12 @@ class FileManagerWorker(QThread):
     # Client management
     # ------------------------------------------------------------------
 
-    def _get_client(self, host_id: str, auth_token: Optional[str] = None) -> FileManagerClient:
+    def _get_client(self, host_id: str, auth_token: Optional[str] = None, *,
+                    file_host_client: Optional[Any] = None) -> FileManagerClient:
+        # Session-based hosts (filedot): never cache — always construct fresh
+        # from the passed FileHostClient so the shared cookie jar stays current.
+        if host_id == "filedot" and file_host_client is not None:
+            return create_file_manager_client(host_id, file_host_client=file_host_client)
         if host_id not in self._clients or auth_token:
             self._clients[host_id] = create_file_manager_client(
                 host_id, auth_token=auth_token
@@ -119,14 +124,26 @@ class FileManagerWorker(QThread):
         op_id = op.get("op_id", "unknown")
         host_id = op["host_id"]
         auth_token = op.get("auth_token")
-        client = self._get_client(host_id, auth_token)
+        file_host_client = op.get("file_host_client")
+        file_host_worker = op.get("file_host_worker")
+        client = self._get_client(host_id, auth_token, file_host_client=file_host_client)
 
         handler = getattr(self, f"_do_{action}", None)
         if handler is None:
             self.error.emit(op_id, f"Unknown action: {action}")
             return
 
-        handler(client, op_id, op)
+        try:
+            handler(client, op_id, op)
+        finally:
+            # After every session-based op, persist any cookie rotation back to
+            # the worker so the upload session stays in sync.
+            if file_host_worker is not None and file_host_client is not None:
+                try:
+                    file_host_worker._update_session_from_client(file_host_client)
+                except Exception as e:
+                    log(f"Failed to persist session state for {host_id}: {e}",
+                        level="warning", category="file_manager")
 
     # ------------------------------------------------------------------
     # Action handlers

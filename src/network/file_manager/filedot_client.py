@@ -1,26 +1,31 @@
 """Filedot file manager client (web scraping).
 
 Filedot runs XFileSharing Pro but has NOT enabled the API mod.
-All operations go through the web panel with session cookie auth.
+All operations go through the web panel using the session already
+maintained by the upload worker's FileHostClient — this client
+delegates all HTTP to that shared client so proxy, bandwidth
+counter, session reuse, and reauth all happen through the same
+pipeline as uploads.
 
 Currently supports:
-- List files (scrape /?op=my_files)
-- Delete files (POST /?op=my_files with del_code)
+- List files and folders (scrape /files/?fld_id=N)
+- Navigate into folders (via fld_id query param)
+- Delete files (GET /files?del_code=...&token=...)
 
-Other operations (rename, move, create folder) are not confirmed
-available and are reported as unsupported via get_capabilities().
+Move, copy, rename, and folder creation use the same web panel but
+aren't implemented yet — the action panel form parameters are known
+(to_folder_move / to_folder_copy / create_folder_submit) and can be
+added as a follow-up.
 """
 
 from __future__ import annotations
 
 import re
-import pycurl
-import certifi
-from io import BytesIO
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlencode
 
+from src.network.file_host_client import FileHostClient
 from src.network.file_manager.client import (
-    CHROME_UA,
     BatchResult,
     FileInfo,
     FileListResult,
@@ -42,22 +47,32 @@ FILEDOT_CAPABILITIES = FileManagerCapabilities(
     can_trash=False,
     can_get_download_link=True,
     has_batch_operations=False,
+    list_files_includes_folders=True,
     max_items_per_page=50,
     sortable_columns=["name"],
 )
 
-# Regex patterns for scraping the my_files page
+# File row: <tr class="filerow"> ... checkbox value="numeric" ... <a href=".../file_code">name</a> ... <td class="tdinfo">size</td>
 _FILE_ROW_RE = re.compile(
-    r'<a[^>]*href="https?://filedot\.(?:to|xyz)/([a-z0-9]+)[^"]*"[^>]*>'
+    r'<tr class="filerow">'
+    r'.*?name="file_id"\s+value="(\d+)"'
+    r'.*?<td class="filename">\s*<a[^>]+href="https?://filedot\.(?:to|xyz)/([a-zA-Z0-9]+)"[^>]*>'
     r'\s*(.*?)\s*</a>'
-    r'.*?<td[^>]*>\s*([\d.]+\s*[KMGT]?B)\s*</td>',
-    re.DOTALL | re.IGNORECASE,
+    r'.*?<td class="tdinfo">\s*([^<]+?)\s*</td>',
+    re.DOTALL,
 )
 
-_PAGE_COUNT_RE = re.compile(
-    r'>\s*(\d+)\s*</a>\s*(?:</div>|<a[^>]*>Next)',
-    re.IGNORECASE,
+# Folder row: <tr class="folderrow"> ... <a href=".../files?fld_id=N">name</a>
+_FOLDER_ROW_RE = re.compile(
+    r'<tr class="folderrow">'
+    r'.*?href="https?://filedot\.(?:to|xyz)/files\?fld_id=(\d+)"[^>]*>'
+    r'\s*(.*?)\s*</a>',
+    re.DOTALL,
 )
+
+# CSRF token from any action link (delete/move use the same page token).
+# The page encodes & as &amp; in attribute values, so don't anchor on [?&].
+_TOKEN_RE = re.compile(r'token=([a-f0-9]{16,})', re.IGNORECASE)
 
 # Size parsing
 _SIZE_MULTIPLIERS = {
@@ -78,82 +93,118 @@ def _parse_size(size_str: str) -> int:
 
 
 class FiledotFileManagerClient(FileManagerClient):
-    """File manager for Filedot via web scraping."""
+    """File manager for Filedot via web scraping.
 
-    def __init__(self, session_cookie: str, sess_id: str = "", timeout: int = 30):
+    All HTTP is delegated to an injected FileHostClient so proxy,
+    bandwidth tracking, session reuse, and reauth go through the same
+    pipeline the upload worker already uses.
+    """
+
+    def __init__(self, file_host_client: FileHostClient, timeout: int = 30):
         """
         Args:
-            session_cookie: Session cookie value from login.
-            sess_id: CSRF-like session ID scraped from the upload page.
-            timeout: Request timeout in seconds.
+            file_host_client: The upload worker's FileHostClient for
+                this host. All HTTP requests go through it, inheriting
+                proxy, bandwidth counter, session cookies, and reauth.
+            timeout: Per-request timeout in seconds.
         """
-        self.session_cookie = session_cookie
-        self.sess_id = sess_id
+        self._http = file_host_client
         self.timeout = timeout
+        # CSRF token scraped from the most recent list_files call.
+        # Used by delete() since delete URLs require ?token=<hex>.
+        self._action_token: str = ""
 
     # ------------------------------------------------------------------
-    # Low-level web request
+    # Low-level web request — thin wrappers around FileHostClient.request
     # ------------------------------------------------------------------
 
     def _web_get(self, url: str) -> str:
-        """GET request with session cookie."""
-        curl = pycurl.Curl()
-        buf = BytesIO()
-        header_buf = BytesIO()
+        """GET request through the shared FileHostClient."""
+        _status, _headers, body = self._http.request(
+            "GET", url, timeout=self.timeout
+        )
+        return body.decode("utf-8", errors="replace")
 
-        try:
-            curl.setopt(pycurl.URL, url)
-            curl.setopt(pycurl.CAINFO, certifi.where())
-            curl.setopt(pycurl.SSL_VERIFYPEER, 1)
-            curl.setopt(pycurl.SSL_VERIFYHOST, 2)
-            curl.setopt(pycurl.WRITEDATA, buf)
-            curl.setopt(pycurl.HEADERFUNCTION, header_buf.write)
-            curl.setopt(pycurl.TIMEOUT, self.timeout)
-            curl.setopt(pycurl.FOLLOWLOCATION, True)
-            curl.setopt(pycurl.COOKIE, self.session_cookie)
-            curl.setopt(pycurl.USERAGENT, CHROME_UA)
+    def _web_post(self, url: str, fields: Dict[str, str]) -> str:
+        """POST form-urlencoded fields through the shared FileHostClient.
 
-            curl.perform()
-            status = curl.getinfo(pycurl.RESPONSE_CODE)
-        finally:
-            curl.close()
+        Used by future move/copy/create_folder implementations; delete
+        currently uses GET and goes through _web_get.
+        """
+        body = urlencode(fields).encode("utf-8")
+        _status, _headers, resp = self._http.request(
+            "POST",
+            url,
+            body=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=self.timeout,
+        )
+        return resp.decode("utf-8", errors="replace")
 
-        if status != 200:
-            raise RuntimeError(f"Filedot web request returned HTTP {status}")
+    # ------------------------------------------------------------------
+    # URL helpers
+    # ------------------------------------------------------------------
 
-        return buf.getvalue().decode("utf-8", errors="replace")
+    def _folder_url(self, folder_id: str, page: int = 1) -> str:
+        """Build the file-listing URL for a given folder.
 
-    def _web_post(self, url: str, fields: dict) -> str:
-        """POST form data with session cookie."""
-        curl = pycurl.Curl()
-        buf = BytesIO()
+        Filedot's file manager lives at /files/. Root uses fld_id=0 per
+        the action-panel select dropdown; subfolders use fld_id=<numeric>.
+        """
+        fld = folder_id if folder_id and folder_id not in ("/", "") else "0"
+        return f"https://filedot.to/files/?fld_id={fld}&page={page}"
 
-        # Build multipart form
-        form_data = []
-        for key, value in fields.items():
-            form_data.append((key, (pycurl.FORM_CONTENTS, str(value))))
+    # ------------------------------------------------------------------
+    # Scraping
+    # ------------------------------------------------------------------
 
-        try:
-            curl.setopt(pycurl.URL, url)
-            curl.setopt(pycurl.CAINFO, certifi.where())
-            curl.setopt(pycurl.SSL_VERIFYPEER, 1)
-            curl.setopt(pycurl.SSL_VERIFYHOST, 2)
-            curl.setopt(pycurl.WRITEDATA, buf)
-            curl.setopt(pycurl.TIMEOUT, self.timeout)
-            curl.setopt(pycurl.FOLLOWLOCATION, True)
-            curl.setopt(pycurl.COOKIE, self.session_cookie)
-            curl.setopt(pycurl.HTTPPOST, form_data)
-            curl.setopt(pycurl.USERAGENT, CHROME_UA)
+    def _scrape_page(self, folder_id: str, page: int) -> tuple[list, list]:
+        """Fetch a folder page and return (folders, files) as FileInfo lists.
 
-            curl.perform()
-            status = curl.getinfo(pycurl.RESPONSE_CODE)
-        finally:
-            curl.close()
+        Side effects:
+        - Caches the CSRF token from the first action link found, which
+          delete() needs.
+        """
+        html = self._web_get(self._folder_url(folder_id, page))
 
-        if status not in (200, 302):
-            raise RuntimeError(f"Filedot web POST returned HTTP {status}")
+        # Cache CSRF token for this session — any action link has it
+        token_match = _TOKEN_RE.search(html)
+        if token_match:
+            self._action_token = token_match.group(1)
 
-        return buf.getvalue().decode("utf-8", errors="replace")
+        folders = []
+        for match in _FOLDER_ROW_RE.finditer(html):
+            fld_id = match.group(1)
+            raw_name = match.group(2)
+            name = re.sub(r'<[^>]+>', '', raw_name).strip()
+            folders.append(FileInfo(
+                id=fld_id,
+                name=name or fld_id,
+                is_folder=True,
+                parent_id=folder_id if folder_id not in ("/", "") else None,
+            ))
+
+        files = []
+        for match in _FILE_ROW_RE.finditer(html):
+            file_code = match.group(2)
+            raw_name = match.group(3)
+            name = re.sub(r'<[^>]+>', '', raw_name).strip()
+            size_str = match.group(4)
+            files.append(FileInfo(
+                id=file_code,
+                name=name or file_code,
+                is_folder=False,
+                size=_parse_size(size_str),
+                is_available=True,
+                parent_id=folder_id if folder_id not in ("/", "") else None,
+            ))
+
+        log(f"Filedot scraped folder_id={folder_id!r} page={page}: "
+            f"{len(folders)} folders, {len(files)} files "
+            f"(token_cached={bool(self._action_token)})",
+            level="debug", category="file_manager")
+
+        return folders, files
 
     # ------------------------------------------------------------------
     # Abstract method implementations
@@ -167,41 +218,24 @@ class FiledotFileManagerClient(FileManagerClient):
         sort_by: str = "name",
         sort_dir: str = "asc",
     ) -> FileListResult:
-        url = f"https://filedot.to/?op=my_files&page={page}"
+        folders, files = self._scrape_page(folder_id, page)
 
-        html = self._web_get(url)
-
-        files = []
-        for match in _FILE_ROW_RE.finditer(html):
-            file_code = match.group(1)
-            name = re.sub(r'<[^>]+>', '', match.group(2)).strip()
-            size_str = match.group(3)
-
-            files.append(FileInfo(
-                id=file_code,
-                name=name or file_code,
-                is_folder=False,
-                size=_parse_size(size_str),
-                is_available=True,
-            ))
-
-        # Try to find total pages
-        total_pages = 1
-        page_matches = _PAGE_COUNT_RE.findall(html)
-        if page_matches:
-            try:
-                total_pages = max(int(p) for p in page_matches)
-            except ValueError:
-                pass
-
-        # Estimate total (we don't know exact count from HTML)
-        total = max(len(files), total_pages * per_page) if total_pages > 1 else len(files)
-
-        return FileListResult(files=files, total=total, page=page, per_page=per_page)
+        # Return folders first, then files — the controller's file list
+        # widget treats is_folder entries as navigable rows.
+        items = folders + files
+        return FileListResult(
+            files=items,
+            total=len(items),
+            page=page,
+            per_page=per_page,
+        )
 
     def list_folders(self, parent_id: str = "/") -> FolderListResult:
-        # Filedot web panel doesn't expose folder navigation
-        return FolderListResult(folders=[], breadcrumb=[("/", "/")])
+        """Return immediate child folders of parent_id for the tree widget."""
+        folders, _files = self._scrape_page(parent_id, page=1)
+        return FolderListResult(
+            folders=folders, breadcrumb=[(parent_id, parent_id)]
+        )
 
     def create_folder(
         self, name: str, parent_id: str = "/", access: str = "public"
@@ -215,15 +249,31 @@ class FiledotFileManagerClient(FileManagerClient):
         raise NotImplementedError("Filedot does not support move")
 
     def delete(self, item_ids: List[str]) -> BatchResult:
-        succeeded = []
-        failed = []
+        """Delete files via the web panel.
+
+        Filedot deletes are GETs to /files?del_code=<code>&token=<tok>.
+        The token is scraped from the most recent list_files call — if
+        we don't have one, prime it by hitting the root page.
+        """
+        succeeded: list = []
+        failed: list = []
+
+        if not self._action_token:
+            try:
+                self._scrape_page("/", 1)
+            except Exception as e:
+                return BatchResult(
+                    succeeded=[],
+                    failed=[(i, f"failed to load action token: {e}") for i in item_ids],
+                )
 
         for item_id in item_ids:
             try:
-                fields = {"op": "my_files", "del_code": item_id}
-                if self.sess_id:
-                    fields["sess_id"] = self.sess_id
-                self._web_post("https://filedot.to/?op=my_files", fields)
+                url = (
+                    f"https://filedot.to/files?del_code={item_id}"
+                    f"&token={self._action_token}"
+                )
+                self._web_get(url)
                 succeeded.append(item_id)
             except Exception as e:
                 failed.append((item_id, str(e)))
@@ -250,7 +300,6 @@ class FiledotFileManagerClient(FileManagerClient):
     def get_account_info(self) -> dict:
         try:
             html = self._web_get("https://filedot.to/account/")
-            # Parse storage from HTML
             storage_match = re.search(
                 r'Used space:?\s*</td>\s*<td>\s*<(?:b|strong)>\s*([\d.]+)\s+of\s+([\d.]+)\s+GB',
                 html, re.IGNORECASE,

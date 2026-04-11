@@ -66,6 +66,7 @@ class FileManagerCapabilities:
     can_trash: bool = False
     can_get_download_link: bool = False
     has_batch_operations: bool = False
+    list_files_includes_folders: bool = False
     max_items_per_page: int = 100
     sortable_columns: List[str] = field(
         default_factory=lambda: ["name", "created", "size"]
