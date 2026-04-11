@@ -31,10 +31,17 @@ from src.utils.logger import log
 
 if TYPE_CHECKING:
     from src.gui.dialogs.file_manager_dialog import FileManagerDialog
+    from src.network.file_host_client import FileHostClient
+    from src.processing.file_host_workers import FileHostWorker
 
 # Cache TTL in seconds and max size (LRU eviction when exceeded)
 _CACHE_TTL = 60.0
 _CACHE_MAX_ENTRIES = 256
+
+# Hosts whose file managers route through the running FileHostWorker's
+# session instead of loading credentials themselves. Must match the
+# factory's SESSION_HOSTS set.
+_SESSION_BASED_HOSTS = {"filedot", "filespace"}
 
 
 class FileManagerController(QObject):
@@ -87,9 +94,12 @@ class FileManagerController(QObject):
         # open once read_file_properties returns.
         self._pending_read_props: Dict[str, FileInfo] = {}
 
-        # Session refs for session-based hosts (e.g. filedot) set in _probe_host
-        self._session_client = None
-        self._session_worker = None
+        # Session refs per session-based host (filedot, filespace, ...). Each
+        # host keeps its own slot because their FileHostWorkers run
+        # concurrently — switching hosts in the dialog must not clobber or
+        # clear the previously-probed host's session.
+        self._session_clients: Dict[str, "FileHostClient"] = {}
+        self._session_workers: Dict[str, "FileHostWorker"] = {}
 
         # Error popup dedup/throttle
         self._last_error_key: Optional[Tuple[str, str]] = None
@@ -108,10 +118,6 @@ class FileManagerController(QObject):
         """Switch to a different host."""
         if host_id == self._current_host:
             return
-
-        # Clear stale session refs from any previous session-based host
-        self._session_client = None
-        self._session_worker = None
 
         self._current_host = host_id
         self._pending_ops.clear()
@@ -157,14 +163,10 @@ class FileManagerController(QObject):
         Returns (caps, None) on success, (None, message) on failure. The
         message is suitable for display in the dialog status bar.
         """
-        # Hosts that must route through the running FileHostWorker's session.
-        # Session refs live in a single-slot attribute that is cleared on every
-        # host switch, so they MUST be rebuilt before any early return — even
-        # when capabilities are already cached.
-        _SESSION_BASED_HOSTS = {"filedot", "filespace"}
-
-        file_host_client = None
-        if host_id in _SESSION_BASED_HOSTS:
+        # Session-based hosts route through the running FileHostWorker's
+        # session. Cache the worker + a derived FileHostClient per-host so
+        # switching between session hosts doesn't clobber the slot.
+        if host_id in _SESSION_BASED_HOSTS and host_id not in self._session_workers:
             main_window = self._dialog.parent() if self._dialog is not None else None
             worker = None
             if main_window is not None:
@@ -177,14 +179,14 @@ class FileManagerController(QObject):
                     f"Enable {get_display_name(host_id)} in File Hosts settings — the file manager uses the upload worker's session.",
                 )
             host_config = get_config_manager().get_host(host_id)
-            file_host_client = worker._create_client(host_config)
-            # Stash references so US-005 can persist session state after operations
-            self._session_client = file_host_client
-            self._session_worker = worker
+            self._session_clients[host_id] = worker._create_client(host_config)
+            self._session_workers[host_id] = worker
 
-        # Reuse cached capabilities — session refs above are already rebuilt.
+        # Reuse cached capabilities if we've successfully probed this host before.
         if host_id in self._capabilities:
             return self._capabilities[host_id], None
+
+        file_host_client = self._session_clients.get(host_id)
 
         try:
             from src.network.file_manager.factory import create_file_manager_client
@@ -415,11 +417,11 @@ class FileManagerController(QObject):
             "host_id": self._current_host,
             **params,
         }
-        if self._current_host in ("filedot", "filespace"):
+        if self._current_host in _SESSION_BASED_HOSTS:
             # Pass the worker's FileHostClient through so the worker thread
             # uses the same session the upload worker maintains.
-            session_client = getattr(self, "_session_client", None)
-            session_worker = getattr(self, "_session_worker", None)
+            session_client = self._session_clients.get(self._current_host)
+            session_worker = self._session_workers.get(self._current_host)
             if session_client is not None:
                 op_dict["file_host_client"] = session_client
             if session_worker is not None:
