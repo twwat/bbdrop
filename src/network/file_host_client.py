@@ -20,12 +20,7 @@ from src.core.file_host_config import HostConfig
 from src.core.engine import AtomicCounter
 from src.proxy.pycurl_adapter import PyCurlProxyAdapter
 from src.proxy.models import ProxyEntry
-
-_CHROME_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
+from src.core.constants import CHROME_UA as _CHROME_UA
 
 
 class FileHostClient:
@@ -137,7 +132,7 @@ class FileHostClient:
     # TCP stack batch more data per round-trip.
     _UPLOAD_BUFFERSIZE = 1 * 1024 * 1024  # 1 MB
 
-    _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    _USER_AGENT = _CHROME_UA
 
     def _configure_ssl(self, curl):
         """Configure SSL/TLS certificate verification for a curl handle."""
@@ -390,7 +385,7 @@ class FileHostClient:
             post_curl.setopt(pycurl.FOLLOWLOCATION, True)
             post_curl.setopt(pycurl.HTTPHEADER, [
                 "Content-Type: application/x-www-form-urlencoded",
-                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                f"User-Agent: {_CHROME_UA}",
                 f"Referer: {self.config.login_url}"
             ])
 

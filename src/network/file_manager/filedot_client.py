@@ -20,6 +20,7 @@ from io import BytesIO
 from typing import Dict, List, Optional
 
 from src.network.file_manager.client import (
+    CHROME_UA,
     BatchResult,
     FileInfo,
     FileListResult,
@@ -110,11 +111,7 @@ class FiledotFileManagerClient(FileManagerClient):
             curl.setopt(pycurl.TIMEOUT, self.timeout)
             curl.setopt(pycurl.FOLLOWLOCATION, True)
             curl.setopt(pycurl.COOKIE, self.session_cookie)
-            curl.setopt(pycurl.USERAGENT,
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
+            curl.setopt(pycurl.USERAGENT, CHROME_UA)
 
             curl.perform()
             status = curl.getinfo(pycurl.RESPONSE_CODE)
@@ -146,11 +143,7 @@ class FiledotFileManagerClient(FileManagerClient):
             curl.setopt(pycurl.FOLLOWLOCATION, True)
             curl.setopt(pycurl.COOKIE, self.session_cookie)
             curl.setopt(pycurl.HTTPPOST, form_data)
-            curl.setopt(pycurl.USERAGENT,
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
+            curl.setopt(pycurl.USERAGENT, CHROME_UA)
 
             curl.perform()
             status = curl.getinfo(pycurl.RESPONSE_CODE)
