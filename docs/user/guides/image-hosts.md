@@ -1,6 +1,6 @@
 # Image Hosts
 
-Image hosts are where your gallery images are uploaded and viewed. BBDrop supports two image hosts, each with different features and requirements.
+Image hosts are where your gallery images are uploaded and viewed. BBDrop supports three image hosts, each with different features and requirements.
 
 ## Enabling a Host
 
@@ -10,6 +10,22 @@ There are several ways to access host configuration:
 - **Double-click** a host in the Upload Workers table
 - Click the **Image Hosts** button in the quick settings panel
 - Go to **Settings > Image Hosts**
+
+## Pixhost
+
+Pixhost requires no credentials and has no account system — images are uploaded anonymously and publicly accessible.
+
+### Settings
+
+- **Thumbnail size** — Variable slider from 150px to 500px (default: 300px)
+- **Content type** — Family Safe or Adult Content
+- **Max gallery images** — No hard limit
+- **Max file size** — 10 MB per image (host limit)
+
+!!! note
+    Because Pixhost galleries are finalized in a single batch call after all images upload, gallery results appear together at completion rather than streaming in per-image.
+
+---
 
 ## TurboImageHost
 

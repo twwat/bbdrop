@@ -8,6 +8,7 @@ Image hosts are where your images are uploaded and viewed. BBDrop currently supp
 
 - **IMX.to** — API key or session authentication, gallery renaming, multiple thumbnail sizes and formats
 - **TurboImageHost** — Optional credentials, variable thumbnail sizes (150-600px), up to 500 images per gallery
+- **Pixhost** — Fully anonymous (no account required), variable thumbnail sizes (150-500px)
 
 Each image host has its own settings for thumbnails, content type, retries, and connection limits. You can have multiple hosts enabled and assign different hosts to different galleries.
 
