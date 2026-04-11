@@ -1,32 +1,19 @@
-"""Filespace file manager client.
+"""Filespace file manager client — XFS web-panel scraping subclass.
 
-Extends the XFS base client. Uses the XFS REST API (with API key) for
-list/rename/move/create/clone operations, but falls back to the web
-panel (with session cookie) for delete — the XFS API doesn't expose a
-delete endpoint on Filespace.
-
-Requires two credentials:
-- API key for REST endpoints
-- Session cookie (xfss) for web panel delete (reused from upload session)
+Filespace runs XFileSharing Pro without the JSON API mod. Unlike
+Filedot, Filespace does NOT use CSRF tokens — session cookies alone
+authorize mutating operations. This client delegates all HTTP to the
+running upload worker's FileHostClient so proxy, bandwidth counter,
+session reuse, and reauth flow through the same pipeline as uploads.
 """
 
 from __future__ import annotations
 
-import pycurl
-import certifi
-from io import BytesIO
-from typing import Dict, List, Optional
+import re
+from typing import List, Optional, Tuple
 
-from src.network.file_manager.client import (
-    CHROME_UA,
-    BatchResult,
-    FileManagerCapabilities,
-)
-from src.network.file_manager.xfs_client import XFSFileManagerClient, XFS_API_BASES
-from src.utils.logger import log
-
-# Register Filespace in XFS API bases
-XFS_API_BASES["filespace"] = "https://filespace.com/api"
+from src.network.file_manager.client import FileManagerCapabilities
+from src.network.file_manager.xfs_web_client import XFSWebFileManagerBase
 
 FILESPACE_CAPABILITIES = FileManagerCapabilities(
     can_rename=True,
@@ -34,91 +21,97 @@ FILESPACE_CAPABILITIES = FileManagerCapabilities(
     can_delete=True,
     can_copy=True,
     can_change_access=False,
+    can_edit_properties=True,
+    can_set_file_flags=True,
     can_create_folder=True,
     can_remote_upload=False,
     can_trash=False,
     can_get_download_link=True,
     has_batch_operations=False,
-    max_items_per_page=100,
-    sortable_columns=["name", "created"],
+    list_files_includes_folders=True,
+    max_items_per_page=500,
+    sortable_columns=["name", "size", "created"],
 )
 
 
-class FilespaceFileManagerClient(XFSFileManagerClient):
-    """File manager for Filespace — XFS API + web panel fallback."""
+class FilespaceFileManagerClient(XFSWebFileManagerBase):
+    """File manager for Filespace via web scraping."""
 
-    def __init__(
+    BASE_URL = "https://filespace.com"
+    LINK_PREFIX = "https://filespace.com/"
+    USES_CSRF_TOKEN = False
+
+    # File row: <TR align=center class="hi"> ... file_id value="\d+" ...
+    # href="https://filespace.com/<code>">name</a> ... <TD align=right>size</TD>
+    _FILE_ROW_RE = re.compile(
+        r'<TR align=center class="hi">'
+        r'.*?name="file_id"\s+value="(\d+)"'
+        r'.*?href="https?://filespace\.com/([a-zA-Z0-9]+)"[^>]*>'
+        r'\s*([^<]+?)\s*</a>'
+        r'.*?<TD align=right>\s*([^<]+?)\s*</TD>',
+        re.DOTALL | re.IGNORECASE,
+    )
+    # Folder row: <TR> ... <img alt="Folder"> ... href="?op=my_files&amp;fld_id=N">name</a>
+    # (the italic "root folder" pseudo-row lacks the fld_id href, so it won't match.)
+    # Allow optional HTML comments between <TR> and the first <TD>.
+    _FOLDER_ROW_RE = re.compile(
+        r'<TR>\s*(?:<!--.*?-->\s*)?<TD[^>]*>\s*<img[^>]*alt="Folder"[^>]*>\s*</TD>'
+        r'\s*<TD[^>]*>\s*<a[^>]+href="\?op=my_files&amp;fld_id=(\d+)"[^>]*>'
+        r'\s*(?:<b>)?\s*([^<]+?)\s*(?:</b>)?\s*</a>',
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    # ---- URL builders -----------------------------------------------------
+
+    def _folder_url(self, folder_id: str, page: int = 1) -> str:
+        fld = folder_id if folder_id and folder_id not in ("/", "") else "0"
+        return f"{self.BASE_URL}/?op=my_files&fld_id={fld}&page={page}"
+
+    def _file_edit_url(self, file_code: str) -> str:
+        return f"{self.BASE_URL}/?op=file_edit&file_code={file_code}"
+
+    def _fld_edit_url(self, fld_id: str) -> str:
+        return f"{self.BASE_URL}/?op=fld_edit&fld_id={fld_id}"
+
+    def _delete_file_url(self, file_code: str) -> str:
+        return f"{self.BASE_URL}/?op=my_files&del_code={file_code}"
+
+    def _delete_folder_url(self, fld_id: str) -> str:
+        return f"{self.BASE_URL}/?op=my_files&fld_id=0&del_folder={fld_id}"
+
+    # ---- Flag-toggle shape: one GET per file_id ---------------------------
+
+    def _build_flag_requests(
         self,
-        api_key: str,
-        session_cookie: Optional[str] = None,
-        timeout: int = 30,
-    ):
-        # Add link prefix for Filespace
-        super().__init__(host_id="filespace", api_key=api_key, timeout=timeout)
-        self._link_prefixes["filespace"] = "https://filespace.com/"
-        self._session_cookie = session_cookie
+        numeric_ids: List[str],
+        flag_name: str,
+        value: bool,
+    ) -> List[Tuple[str, str, Optional[bytes]]]:
+        # Filespace inline jah() AJAX uses set_public / set_premium_only
+        # (file_premium_only → set_premium_only).
+        suffix_map = {
+            "file_public": "set_public",
+            "file_premium_only": "set_premium_only",
+        }
+        suffix = suffix_map.get(flag_name)
+        if suffix is None:
+            return []
+        lc = "true" if value else "false"
+        return [
+            (
+                "GET",
+                f"{self.BASE_URL}/?op=my_files&file_id={n}&{suffix}={lc}",
+                None,
+            )
+            for n in numeric_ids
+        ]
+
+    # ---- Capabilities + account info --------------------------------------
 
     def get_capabilities(self) -> FileManagerCapabilities:
         return FILESPACE_CAPABILITIES
 
-    def delete(self, item_ids: List[str]) -> BatchResult:
-        """Delete files via web panel (GET with session cookie).
-
-        The XFS API on Filespace doesn't have a delete endpoint, so we
-        use the web panel: GET /?op=my_files&del_code={file_code}
-        """
-        if not self._session_cookie:
-            # Fall back to API attempt (may work on newer XFS versions)
-            return super().delete(item_ids)
-
-        succeeded = []
-        failed = []
-
-        for item_id in item_ids:
-            try:
-                self._web_delete(item_id)
-                succeeded.append(item_id)
-            except Exception as e:
-                # Try folder delete via API
-                try:
-                    self._api_call("folder/delete", {"fld_id": item_id})
-                    succeeded.append(item_id)
-                except RuntimeError as e2:
-                    failed.append((item_id, str(e)))
-
-        return BatchResult(succeeded=succeeded, failed=failed)
-
-    def _web_delete(self, file_code: str):
-        """Delete a file via web panel GET request with session cookie."""
-        url = f"https://filespace.com/?op=my_files&del_code={file_code}"
-
-        curl = pycurl.Curl()
-        buf = BytesIO()
-
-        try:
-            curl.setopt(pycurl.URL, url)
-            curl.setopt(pycurl.CAINFO, certifi.where())
-            curl.setopt(pycurl.SSL_VERIFYPEER, 1)
-            curl.setopt(pycurl.SSL_VERIFYHOST, 2)
-            curl.setopt(pycurl.USERAGENT, CHROME_UA)
-            curl.setopt(pycurl.WRITEDATA, buf)
-            curl.setopt(pycurl.TIMEOUT, self.timeout)
-            curl.setopt(pycurl.FOLLOWLOCATION, True)
-            curl.setopt(pycurl.COOKIE, f"xfss={self._session_cookie}")
-
-            curl.perform()
-            status = curl.getinfo(pycurl.RESPONSE_CODE)
-        finally:
-            curl.close()
-
-        if status not in (200, 302):
-            raise RuntimeError(f"Filespace web delete returned HTTP {status}")
-
     def get_account_info(self) -> dict:
-        info = super().get_account_info()
-        # Filespace may not return all fields — provide fallback
-        return {
-            "storage_left": info.get("storage_left"),
-            "storage_used": info.get("storage_used"),
-            "premium_expire": info.get("premium_expire"),
-        }
+        # Filespace account-info scraping is not implemented yet — the
+        # controller tolerates missing fields, so return an empty dict.
+        return {}
