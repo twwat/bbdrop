@@ -38,6 +38,23 @@
 |---|---|
 | Enter | Open host configuration dialog |
 
+## File Manager
+
+| Shortcut | Action |
+|---|---|
+| Delete | Remove selected files or folders |
+| F2 | Rename selected file or folder |
+| F5 | Refresh current folder listing |
+| Ctrl+C | Copy download link for selected file |
+| Backspace | Navigate back |
+| Alt+Up | Go to parent folder |
+
+## Log Viewer
+
+| Shortcut | Action |
+|---|---|
+| Ctrl+C | Copy selected log entries to clipboard |
+
 ## Drag and Drop
 
 - **Folders** — Drag image folders into the gallery table to add them to the queue

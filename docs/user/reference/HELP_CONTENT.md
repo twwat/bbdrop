@@ -47,7 +47,7 @@ Upload image galleries to multiple image hosts and premium file hosts with one c
 | `F2` | Rename gallery |
 | `Ctrl+Tab` | Next tab |
 
-See [All Shortcuts](../getting-started/keyboard-shortcuts.md) for the complete list.
+See [All Shortcuts](./keyboard-shortcuts.md) for the complete list.
 
 ---
 

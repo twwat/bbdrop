@@ -422,6 +422,6 @@ No dedicated keyboard shortcut exists for theme toggle by default. If needed, us
 ## See Also
 
 - [GUI Guide](./gui-guide.md) - Complete BBDrop interface walkthrough
-- [Keyboard Shortcuts](../getting-started/keyboard-shortcuts.md) - All keyboard shortcuts
+- [Keyboard Shortcuts](../reference/keyboard-shortcuts.md) — All keyboard shortcuts
 - [FEATURES.md](../reference/FEATURES.md) - Full feature documentation
 - [Troubleshooting](../troubleshooting/troubleshooting.md) - Common issues and solutions

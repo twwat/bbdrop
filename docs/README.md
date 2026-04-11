@@ -35,7 +35,7 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 
 **Reference:**
 - [Features List](user/reference/FEATURES.md) - Complete feature inventory
-- [Keyboard Shortcuts](user/getting-started/keyboard-shortcuts.md) - All keyboard shortcuts
+- [Keyboard Shortcuts](user/reference/keyboard-shortcuts.md) - All keyboard shortcuts
 - [Quick Reference](user/reference/quick-reference.md) - Quick lookup for common tasks
 - [External Apps Parameters](user/reference/external-apps-parameters.md) - Parameters for external applications
 
