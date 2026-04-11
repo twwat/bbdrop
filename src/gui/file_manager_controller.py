@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import QObject, QTimer, Qt
@@ -29,12 +30,15 @@ from src.utils.logger import log
 if TYPE_CHECKING:
     from src.gui.dialogs.file_manager_dialog import FileManagerDialog
 
-# Cache TTL in seconds
+# Cache TTL in seconds and max size (LRU eviction when exceeded)
 _CACHE_TTL = 60.0
+_CACHE_MAX_ENTRIES = 256
 
 
 class FileManagerController(QObject):
     """Orchestrates file manager operations between GUI and worker."""
+
+    _TRASH_KEY = "__trash__"  # sentinel folder-id for trash view
 
     def __init__(self, dialog: 'FileManagerDialog'):
         super().__init__(dialog)
@@ -54,9 +58,9 @@ class FileManagerController(QObject):
         self._capabilities: Dict[str, FileManagerCapabilities] = {}
 
         # Cache: (host_id, folder_id) -> (FileListResult, timestamp)
-        self._file_cache: Dict[Tuple[str, str], Tuple[FileListResult, float]] = {}
-        # Folder tree cache: (host_id, parent_id) -> (list[FileInfo], timestamp)
-        self._folder_cache: Dict[Tuple[str, str], Tuple[list, float]] = {}
+        self._file_cache: "OrderedDict[Tuple[str, str], Tuple[FileListResult, float]]" = OrderedDict()
+        # Folder tree cache: (host_id, parent_id) -> (List[FileInfo], timestamp)
+        self._folder_cache: "OrderedDict[Tuple[str, str], Tuple[List[FileInfo], float]]" = OrderedDict()
 
         # Breadcrumb: current path as [(id, name), ...]
         self._breadcrumb: List[Tuple[str, str]] = []
@@ -75,6 +79,12 @@ class FileManagerController(QObject):
 
         # Pending operation tracking
         self._pending_ops: Dict[str, str] = {}  # op_id -> action name
+        self._pending_folder_parents: Dict[str, Tuple[str, str]] = {}  # op_id -> (host_id, parent_id)
+        self._pending_file_folders: Dict[str, Tuple[str, str]] = {}   # op_id -> (host_id, folder_id)
+
+        # Error popup dedup/throttle
+        self._last_error_key: Optional[Tuple[str, str]] = None
+        self._last_error_time: float = 0.0
 
     def shutdown(self):
         """Stop the worker thread."""
@@ -91,6 +101,9 @@ class FileManagerController(QObject):
             return
 
         self._current_host = host_id
+        self._pending_ops.clear()
+        self._pending_folder_parents.clear()
+        self._pending_file_folders.clear()
 
         # Restore last folder for this host, or start at root
         self._current_folder = self._host_folder.get(host_id, "/")
@@ -125,24 +138,41 @@ class FileManagerController(QObject):
     # Navigation
     # ------------------------------------------------------------------
 
+    def load_children(self, folder_id: str, _folder_name: str = ""):
+        """Load children for a folder in the tree without navigating.
+
+        The second arg matches the children_requested signal signature but
+        is not used — the tree widget already knows the folder's name.
+        """
+        if not self._current_host:
+            return
+        if self._dialog.folder_tree.needs_children(folder_id):
+            self._load_folder_tree(folder_id)
+
     def navigate_to(self, folder_id: str, folder_name: str = ""):
         """Navigate into a folder."""
         if not self._current_host:
             return
 
-        # Push to history
-        history = self._history.setdefault(self._current_host, [])
-        history.append(self._current_folder)
+        # Push to history (only if actually moving to a different folder)
+        if folder_id != self._current_folder:
+            history = self._history.setdefault(self._current_host, [])
+            history.append(self._current_folder)
 
         self._current_folder = folder_id
         self._current_page = 1
         self._host_folder[self._current_host] = folder_id
 
-        # Update breadcrumb
+        # Build breadcrumb from tree hierarchy (handles siblings correctly)
         if folder_id == "/":
             self._breadcrumb = [("/", "/")]
         else:
-            self._breadcrumb.append((folder_id, folder_name or folder_id))
+            tree_path = self._dialog.folder_tree.get_item_path(folder_id)
+            if tree_path:
+                self._breadcrumb = tree_path
+            else:
+                # Fallback for folders not in tree (e.g. file list double-click)
+                self._breadcrumb.append((folder_id, folder_name or folder_id))
 
         self._update_nav_state()
         self._load_files()
@@ -164,11 +194,9 @@ class FileManagerController(QObject):
             self._current_page = 1
             self._host_folder[self._current_host] = prev
 
-            # Trim breadcrumb
-            if self._breadcrumb:
-                self._breadcrumb.pop()
-            if not self._breadcrumb:
-                self._breadcrumb = [("/", "/")]
+            # Rebuild breadcrumb from tree hierarchy
+            tree_path = self._dialog.folder_tree.get_item_path(prev)
+            self._breadcrumb = tree_path if tree_path else [("/", "/")]
 
             self._update_nav_state()
             self._load_files()
@@ -180,13 +208,14 @@ class FileManagerController(QObject):
             return
         # Use breadcrumb to find parent
         if len(self._breadcrumb) > 1:
-            self._breadcrumb.pop()
-            parent_id, parent_name = self._breadcrumb[-1]
+            parent_id = self._breadcrumb[-2][0]
             history = self._history.setdefault(self._current_host, [])
             history.append(self._current_folder)
             self._current_folder = parent_id
             self._current_page = 1
             self._host_folder[self._current_host] = parent_id
+            tree_path = self._dialog.folder_tree.get_item_path(parent_id)
+            self._breadcrumb = tree_path if tree_path else [("/", "/")]
             self._update_nav_state()
             self._load_files()
             self._dialog.folder_tree.select_folder(parent_id)
@@ -200,8 +229,11 @@ class FileManagerController(QObject):
     def refresh(self):
         """Reload current folder (bypass cache)."""
         self._invalidate_cache(self._current_folder)
-        self._load_files()
-        self._load_folder_tree(self._current_folder)
+        if self._in_trash:
+            self._load_trash()
+        else:
+            self._load_files()
+            self._load_folder_tree(self._current_folder)
 
     def _update_nav_state(self):
         history = self._history.get(self._current_host, [])
@@ -216,37 +248,55 @@ class FileManagerController(QObject):
     # ------------------------------------------------------------------
 
     def _load_files(self):
-        """Request file listing for current folder."""
+        """Request file listing for current folder.
+
+        Shows cached data immediately for instant navigation. Only
+        refreshes in the background when the cache is older than TTL,
+        so repeated navigation to recently-visited folders is free.
+        """
         if not self._current_host:
             return
 
-        # Check cache
+        # Show cached data immediately if available
         cache_key = (self._current_host, self._current_folder)
         cached = self._file_cache.get(cache_key)
-        if cached and (time.time() - cached[1]) < _CACHE_TTL:
+        if cached:
             self._dialog.file_list.set_files(cached[0])
-            return
+            self._dialog.reapply_filter()
+            # Skip background fetch if cache is still fresh
+            if (time.time() - cached[1]) < _CACHE_TTL:
+                return
 
-        op_id = self._submit("list_files", {
+        # Fetch fresh data
+        self._submit("list_files", {
             "folder_id": self._current_folder,
             "page": self._current_page,
             "per_page": self._per_page,
             "sort_by": self._sort_by,
             "sort_dir": self._sort_dir,
-        })
+        }, file_folder=(self._current_host, self._current_folder))
 
     def _load_folder_tree(self, parent_id: str):
-        """Request folder listing for tree."""
+        """Request folder listing for tree.
+
+        Shows cached data immediately. Only refreshes from the API when
+        the cache is older than TTL, so expanding recently-loaded folders
+        is free and doesn't disturb already-expanded subtree state.
+        """
         if not self._current_host:
             return
 
+        # Show cached data immediately if available
         cache_key = (self._current_host, parent_id)
         cached = self._folder_cache.get(cache_key)
-        if cached and (time.time() - cached[1]) < _CACHE_TTL:
+        if cached:
             self._dialog.folder_tree.populate_children(parent_id, cached[0])
-            return
+            # Skip background fetch if cache is still fresh
+            if (time.time() - cached[1]) < _CACHE_TTL:
+                return
 
-        self._submit("list_folders", {"parent_id": parent_id})
+        self._submit("list_folders", {"parent_id": parent_id},
+                     folder_parent=(self._current_host, parent_id))
 
     def _load_account_info(self):
         """Request account info for current host."""
@@ -258,10 +308,29 @@ class FileManagerController(QObject):
     # Operation dispatch
     # ------------------------------------------------------------------
 
-    def _submit(self, action: str, params: dict) -> str:
-        """Submit an operation to the worker."""
+    def _submit(self, action: str, params: dict,
+                file_folder: Optional[Tuple[str, str]] = None,
+                folder_parent: Optional[Tuple[str, str]] = None) -> str:
+        """Submit an operation to the worker.
+
+        Pending map assignment must happen BEFORE the worker enqueue to
+        avoid a race where the worker processes the op and emits the
+        response signal before the main thread gets to record the mapping.
+
+        Args:
+            action: Worker action name.
+            params: Action-specific params.
+            file_folder: If this is a file-list request, (host_id, folder_id)
+                to track for display gating and caching.
+            folder_parent: If this is a folder-list request, (host_id, parent_id)
+                to track for the same reasons.
+        """
         op_id = str(uuid.uuid4())[:8]
         self._pending_ops[op_id] = action
+        if file_folder is not None:
+            self._pending_file_folders[op_id] = file_folder
+        if folder_parent is not None:
+            self._pending_folder_parents[op_id] = folder_parent
         self._worker.submit({
             "op_id": op_id,
             "action": action,
@@ -281,18 +350,13 @@ class FileManagerController(QObject):
         else:
             self.show_file_details([fi])
 
-    def on_sort_requested(self, sort_by: str, sort_dir: str):
-        self._sort_by = sort_by
-        self._sort_dir = sort_dir
-        self._current_page = 1
-        self._invalidate_cache(self._current_folder)
-        self._load_files()
-
     def on_page_requested(self, page: int):
         if page < 1:
             return
         self._current_page = page
-        self._invalidate_cache(self._current_folder)
+        # Note: the file cache key doesn't include page, so different pages
+        # overwrite each other. Acceptable for now — most hosts return all
+        # files on page 1 with high per_page limits.
         self._load_files()
 
     def on_selection_changed(self, selected: list):
@@ -428,13 +492,26 @@ class FileManagerController(QObject):
             self._load_files()
 
     def _load_trash(self):
-        """Load trash contents."""
+        """Load trash contents.
+
+        Shows cached trash data immediately, then refreshes in background.
+        """
         if not self._current_host:
             return
+
+        # Show cached trash if available
+        cache_key = (self._current_host, self._TRASH_KEY)
+        cached = self._file_cache.get(cache_key)
+        if cached:
+            self._dialog.file_list.set_files(cached[0])
+            self._dialog.reapply_filter()
+            if (time.time() - cached[1]) < _CACHE_TTL:
+                return
+
         self._submit("trash_list", {
             "page": self._current_page,
             "per_page": self._per_page,
-        })
+        }, file_folder=(self._current_host, self._TRASH_KEY))
 
     def trash_restore(self):
         """Restore selected items from trash."""
@@ -469,26 +546,38 @@ class FileManagerController(QObject):
 
     def _on_files_loaded(self, op_id: str, result: FileListResult):
         self._pending_ops.pop(op_id, None)
-        if self._current_host:
-            cache_key = (self._current_host, self._current_folder)
-            self._file_cache[cache_key] = (result, time.time())
-        self._dialog.file_list.set_files(result)
+        request = self._pending_file_folders.pop(op_id, None)
+
+        # Always cache the response under the host/folder it was actually for,
+        # so future navigation to that host+folder is instant.
+        if request:
+            request_host, request_folder = request
+            self._cache_put(self._file_cache, (request_host, request_folder), (result, time.time()))
+
+            # Only update the display if we're still looking at that view.
+            # The "view" is trash mode or the current folder.
+            current_view_folder = self._TRASH_KEY if self._in_trash else self._current_folder
+            if request_host == self._current_host and request_folder == current_view_folder:
+                self._dialog.file_list.set_files(result)
+                self._dialog.reapply_filter()
 
     def _on_folders_loaded(self, op_id: str, result: FolderListResult):
         self._pending_ops.pop(op_id, None)
-        action = "list_folders"
+        request = self._pending_folder_parents.pop(op_id, None)
 
-        # Find which parent this was for
-        # The folders go to the tree widget
-        parent_id = "/"
-        # Try to extract from breadcrumb
-        if result.breadcrumb:
-            parent_id = result.breadcrumb[-1][0] if result.breadcrumb else "/"
+        if not request:
+            # No pending mapping — we can't know host/parent for sure.
+            # Don't cache or display anything to avoid polluting state.
+            return
 
-        if self._current_host:
-            self._folder_cache[(self._current_host, parent_id)] = (result.folders, time.time())
+        request_host, parent_id = request
 
-        self._dialog.folder_tree.populate_children(parent_id, result.folders)
+        # Always cache (so browsing is instant next time)
+        self._cache_put(self._folder_cache, (request_host, parent_id), (result.folders, time.time()))
+
+        # Only update the tree if we're still on that host
+        if request_host == self._current_host:
+            self._dialog.folder_tree.populate_children(parent_id, result.folders)
 
     def _on_file_info_loaded(self, op_id: str, files: list):
         self._pending_ops.pop(op_id, None)
@@ -535,9 +624,24 @@ class FileManagerController(QObject):
 
     def _on_error(self, op_id: str, message: str):
         action = self._pending_ops.pop(op_id, "unknown")
+        self._pending_folder_parents.pop(op_id, None)
+        self._pending_file_folders.pop(op_id, None)
         log(f"File manager error [{action}]: {message}",
             level="error", category="file_manager")
         self._dialog.show_status(f"Error: {message}", error=True)
+
+        # Throttle popups: suppress identical errors within 3 seconds
+        now = time.time()
+        key = (action, message)
+        if key == self._last_error_key and (now - self._last_error_time) < 3.0:
+            return
+        self._last_error_key = key
+        self._last_error_time = now
+        QMessageBox.warning(
+            self._dialog,
+            "File Manager Error",
+            f"Operation '{action}' failed:\n\n{message}",
+        )
 
     def _on_loading(self, is_loading: bool):
         self._dialog.file_list.set_loading(is_loading)
@@ -546,6 +650,14 @@ class FileManagerController(QObject):
     # Cache management
     # ------------------------------------------------------------------
 
+    def _cache_put(self, cache: OrderedDict, key, value):
+        """Insert a cache entry with LRU eviction."""
+        if key in cache:
+            cache.move_to_end(key)
+        cache[key] = value
+        while len(cache) > _CACHE_MAX_ENTRIES:
+            cache.popitem(last=False)
+
     def _invalidate_cache(self, folder_id: str):
         """Remove cached data for a folder."""
         if self._current_host:
@@ -553,7 +665,3 @@ class FileManagerController(QObject):
             self._file_cache.pop(key, None)
             self._folder_cache.pop(key, None)
 
-    def _invalidate_all_cache(self):
-        """Clear all cached data."""
-        self._file_cache.clear()
-        self._folder_cache.clear()

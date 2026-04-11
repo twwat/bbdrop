@@ -7,6 +7,7 @@ when the user clicks a folder.
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -29,8 +30,9 @@ _PLACEHOLDER = "__placeholder__"
 class FolderTreeWidget(QWidget):
     """Left-pane folder tree for the file manager."""
 
-    folder_selected = pyqtSignal(str, str)  # folder_id, folder_name
-    files_dropped = pyqtSignal(str)        # dest_folder_id
+    folder_selected = pyqtSignal(str, str)   # folder_id, folder_name
+    children_requested = pyqtSignal(str, str)  # folder_id, folder_name
+    files_dropped = pyqtSignal(str)            # dest_folder_id
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -73,8 +75,8 @@ class FolderTreeWidget(QWidget):
         root = QTreeWidgetItem(self._tree, ["/"])
         root.setData(0, Qt.ItemDataRole.UserRole, "/")
         root.setIcon(0, self._folder_icon)
-        root.setExpanded(True)
         self._loaded_folders.add("/")
+        root.setExpanded(True)
 
     def populate_children(self, parent_id: str, folders: list[FileInfo]):
         """Fill in children for a folder after API response.
@@ -87,14 +89,31 @@ class FolderTreeWidget(QWidget):
         if not parent_item:
             return
 
-        # Remove placeholder
+        # Diff: only remove children that aren't in the new list.
+        # Keep matching children in place to preserve their expanded/loaded state.
+        new_ids = {f.id for f in folders}
         for i in range(parent_item.childCount() - 1, -1, -1):
             child = parent_item.child(i)
-            if child and child.data(0, Qt.ItemDataRole.UserRole) == _PLACEHOLDER:
+            if not child:
+                continue
+            cid = child.data(0, Qt.ItemDataRole.UserRole)
+            # Remove placeholders and any children not in the new list
+            if cid == _PLACEHOLDER or cid not in new_ids:
                 parent_item.removeChild(child)
 
-        # Add children
+        # Track which IDs already exist so we don't duplicate them
+        existing_ids = set()
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            if child:
+                cid = child.data(0, Qt.ItemDataRole.UserRole)
+                if cid and cid != _PLACEHOLDER:
+                    existing_ids.add(cid)
+
+        # Add new children (skip ones already present to preserve their state)
         for folder in sorted(folders, key=lambda f: f.name.lower()):
+            if folder.id in existing_ids:
+                continue
             child = QTreeWidgetItem(parent_item, [folder.name])
             child.setData(0, Qt.ItemDataRole.UserRole, folder.id)
             child.setIcon(0, self._folder_icon)
@@ -135,8 +154,27 @@ class FolderTreeWidget(QWidget):
         folder_id = item.data(0, Qt.ItemDataRole.UserRole)
         if folder_id and folder_id != _PLACEHOLDER and folder_id not in self._loaded_folders:
             self._pending_expands[folder_id] = item
-            # Signal that we need to load children — controller listens
-            self.folder_selected.emit(folder_id, item.text(0))
+            # Only request children — don't navigate
+            self.children_requested.emit(folder_id, item.text(0))
+
+    def get_item_path(self, folder_id: str) -> list[tuple[str, str]]:
+        """Build the full breadcrumb path from root to the given folder.
+
+        Returns:
+            List of (folder_id, folder_name) from root to target,
+            or empty list if folder not found in tree.
+        """
+        item = self._find_item(folder_id)
+        if not item:
+            return []
+        path = []
+        while item:
+            fid = item.data(0, Qt.ItemDataRole.UserRole)
+            if fid and fid != _PLACEHOLDER:
+                path.append((fid, item.text(0)))
+            item = item.parent()
+        path.reverse()
+        return path
 
     def needs_children(self, folder_id: str) -> bool:
         """Check if a folder's children haven't been loaded yet."""
@@ -149,15 +187,15 @@ class FolderTreeWidget(QWidget):
     def _find_item(self, folder_id: str) -> Optional[QTreeWidgetItem]:
         """Find a tree item by folder ID (BFS)."""
         root = self._tree.invisibleRootItem()
-        stack = [root.child(i) for i in range(root.childCount())]
-        while stack:
-            item = stack.pop(0)
+        queue = deque(root.child(i) for i in range(root.childCount()))
+        while queue:
+            item = queue.popleft()
             if item is None:
                 continue
             if item.data(0, Qt.ItemDataRole.UserRole) == folder_id:
                 return item
             for i in range(item.childCount()):
-                stack.append(item.child(i))
+                queue.append(item.child(i))
         return None
 
 

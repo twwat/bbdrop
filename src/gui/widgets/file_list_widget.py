@@ -6,6 +6,7 @@ Columns adapt to host capabilities (e.g. download count only for RapidGator).
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -39,7 +40,6 @@ class FileListWidget(QWidget):
 
     file_double_clicked = pyqtSignal(object)        # FileInfo
     selection_changed = pyqtSignal(list)             # List[FileInfo]
-    sort_requested = pyqtSignal(str, str)            # sort_by, sort_dir
     page_requested = pyqtSignal(int)                 # page number
     context_menu_requested = pyqtSignal(object, object)  # QPoint, List[FileInfo]
 
@@ -168,7 +168,10 @@ class FileListWidget(QWidget):
         self._page_label.setText(f"{self._current_page} / {self._total_pages}")
         self._btn_prev.setEnabled(self._current_page > 1)
         self._btn_next.setEnabled(self._current_page < self._total_pages)
-        self._status_label.setText(f"{self._total_items} items")
+        status_parts = [f"{self._total_items} items"]
+        if self._total_pages > 1:
+            status_parts.append("sort applies to current page only")
+        self._status_label.setText("  •  ".join(status_parts))
 
     def get_selected_files(self) -> List[FileInfo]:
         """Return FileInfo objects for all selected rows."""
@@ -213,7 +216,41 @@ class FileListWidget(QWidget):
         else:
             self._sort_by = sort_key
             self._sort_dir = "asc"
-        self.sort_requested.emit(self._sort_by, self._sort_dir)
+        self._resort_current_files()
+
+    def _resort_current_files(self):
+        """Sort the currently loaded files client-side and repopulate the table.
+
+        Folders always stay grouped at the top, with files below.
+        Sort direction applies within each group.
+        """
+        if not self._files:
+            return
+
+        reverse = self._sort_dir == "desc"
+
+        def inner_key(fi):
+            if self._sort_by == "name":
+                return fi.name.lower()
+            if self._sort_by == "size":
+                return fi.size or 0
+            if self._sort_by == "date_created":
+                return fi.created.timestamp() if fi.created else 0.0
+            if self._sort_by == "access":
+                return (fi.access or "").lower()
+            return fi.name.lower()
+
+        folders = sorted((f for f in self._files if f.is_folder), key=inner_key, reverse=reverse)
+        files = sorted((f for f in self._files if not f.is_folder), key=inner_key, reverse=reverse)
+
+        # Let set_files be the single source of truth for self._files
+        result = FileListResult(
+            files=folders + files,
+            total=self._total_items,
+            page=self._current_page,
+            per_page=self._per_page,
+        )
+        self.set_files(result)
 
     # ------------------------------------------------------------------
     # Interaction handlers

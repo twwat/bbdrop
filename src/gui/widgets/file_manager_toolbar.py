@@ -199,8 +199,11 @@ class FileManagerToolbar(QWidget):
         if not path_parts:
             self._breadcrumb.setText("/")
             return
-        text = " / ".join(name for _, name in path_parts)
-        self._breadcrumb.setText(f"/ {text}")
+        parts = [name for fid, name in path_parts if fid != "/"]
+        if parts:
+            self._breadcrumb.setText("/ " + " / ".join(parts))
+        else:
+            self._breadcrumb.setText("/")
 
     def set_navigation_enabled(self, can_back: bool, can_up: bool):
         """Enable/disable back and up buttons."""
@@ -209,3 +212,6 @@ class FileManagerToolbar(QWidget):
 
     def clear_filter(self):
         self._filter_input.clear()
+
+    def get_filter_text(self) -> str:
+        return self._filter_input.text()

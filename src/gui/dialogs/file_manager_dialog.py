@@ -146,12 +146,12 @@ class FileManagerDialog(QDialog):
 
         # Folder tree
         self.folder_tree.folder_selected.connect(c.navigate_to)
+        self.folder_tree.children_requested.connect(c.load_children)
         self.folder_tree.files_dropped.connect(c.on_files_dropped)
 
         # File list
         self.file_list.file_double_clicked.connect(c.on_file_double_clicked)
         self.file_list.selection_changed.connect(c.on_selection_changed)
-        self.file_list.sort_requested.connect(c.on_sort_requested)
         self.file_list.page_requested.connect(c.on_page_requested)
         self.file_list.context_menu_requested.connect(self._show_context_menu)
 
@@ -188,8 +188,16 @@ class FileManagerDialog(QDialog):
             self._controller.set_host(host_id)
 
     def _on_filter_changed(self, text: str):
+        """Handle toolbar filter input changes."""
+        self._apply_filter(text)
+
+    def reapply_filter(self):
+        """Re-apply the current filter — called after file list updates."""
+        self._apply_filter(self.toolbar.get_filter_text())
+
+    def _apply_filter(self, text: str):
         """Client-side filter — hide non-matching rows."""
-        text = text.lower()
+        text = (text or "").lower()
         table = self.file_list._table
         for row in range(table.rowCount()):
             item = table.item(row, 0)
@@ -262,11 +270,6 @@ class FileManagerDialog(QDialog):
             parts.append(f"Storage: {format_binary_size(used)} / {format_binary_size(int(storage_total))}")
         elif storage_left:
             parts.append(f"Storage free: {format_binary_size(int(storage_left))}")
-
-        # K2S traffic
-        traffic = info.get("available_traffic")
-        if traffic:
-            parts.append(f"Traffic: {format_binary_size(int(traffic))}")
 
         # Account expiry
         expires = info.get("account_expires")
