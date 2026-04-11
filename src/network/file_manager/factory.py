@@ -22,8 +22,6 @@ SUPPORTED_HOSTS = K2S_FAMILY | {"rapidgator", "katfile", "filespace", "filedot"}
 def create_file_manager_client(
     host_id: str,
     auth_token: Optional[str] = None,
-    session_cookie: Optional[str] = None,
-    sess_id: Optional[str] = None,
     *,
     file_host_client: Optional["FileHostClient"] = None,
 ) -> FileManagerClient:
@@ -32,12 +30,10 @@ def create_file_manager_client(
     Args:
         host_id: Host identifier (e.g. 'keep2share', 'rapidgator').
         auth_token: Pre-decrypted auth token/API key. If None, loads from keyring.
-        session_cookie: Session cookie for session-based hosts (Filespace).
-        sess_id: CSRF session ID. Legacy param kept for backwards compat.
-        file_host_client: Required for filedot — the running upload worker's
-            FileHostClient. The file manager client delegates all HTTP to it
-            so proxy, bandwidth counter, session reuse, and reauth flow
-            through the same pipeline as uploads.
+        file_host_client: Required for filedot and filespace — the running
+            upload worker's FileHostClient. The file manager client delegates
+            all HTTP to it so proxy, bandwidth counter, session reuse, and
+            reauth flow through the same pipeline as uploads.
 
     Returns:
         A FileManagerClient instance.
@@ -49,16 +45,21 @@ def create_file_manager_client(
     if host_id not in SUPPORTED_HOSTS:
         raise ValueError(f"File manager not supported for host: {host_id}")
 
-    # Filedot requires a live FileHostClient from the running upload worker —
-    # without it, we have no authenticated session and would hit a login page.
-    if host_id == "filedot" and file_host_client is None:
+    # Filedot and Filespace both require a live FileHostClient from the
+    # running upload worker — without it, we have no authenticated
+    # session and would hit a login page.
+    if host_id in SESSION_HOSTS and file_host_client is None:
+        pretty = {"filedot": "Filedot", "filespace": "Filespace"}.get(
+            host_id, host_id
+        )
         raise ValueError(
-            "Enable Filedot in File Hosts settings — the file manager "
-            "uses the upload worker's session."
+            f"Enable {pretty} in File Hosts settings — the file "
+            "manager uses the upload worker's session."
         )
 
-    # Load credentials if not provided (non-filedot session hosts still
-    # use the legacy keyring path until their own refactor lands).
+    # Load credentials for hosts that still use the keyring-based path
+    # (k2s family, rapidgator, katfile). Session-based hosts short-
+    # circuited above via the SESSION_HOSTS guard.
     if not auth_token and host_id not in SESSION_HOSTS:
         auth_token = _load_auth_token(host_id)
     if not auth_token and host_id not in SESSION_HOSTS:
@@ -78,13 +79,9 @@ def create_file_manager_client(
 
     if host_id == "filespace":
         from src.network.file_manager.filespace_client import FilespaceFileManagerClient
-        api_key = auth_token or _load_auth_token(host_id)
-        cookie = session_cookie or _load_session_cookie(host_id)
-        if not api_key:
-            raise ValueError("No API key available for Filespace")
-        return FilespaceFileManagerClient(
-            api_key=api_key, session_cookie=cookie
-        )
+        # file_host_client is guaranteed non-None by the early-return above
+        assert file_host_client is not None
+        return FilespaceFileManagerClient(file_host_client=file_host_client)
 
     if host_id == "filedot":
         from src.network.file_manager.filedot_client import FiledotFileManagerClient
@@ -112,25 +109,6 @@ def _load_auth_token(host_id: str) -> Optional[str]:
             return decrypt_password(encrypted)
     except Exception as e:
         log(f"Failed to load credentials for {host_id}: {e}",
-            level="warning", category="file_manager")
-
-    return None
-
-
-def _load_session_cookie(host_id: str) -> Optional[str]:
-    """Load session cookie for session-based hosts.
-
-    These hosts use session auth — we try to get the cookie from the
-    active FileHostWorker's session state if available.
-    """
-    try:
-        from src.utils.credentials import get_credential, decrypt_password
-
-        encrypted = get_credential(f"file_host_{host_id}_credentials")
-        if encrypted:
-            return decrypt_password(encrypted)
-    except Exception as e:
-        log(f"Failed to load session for {host_id}: {e}",
             level="warning", category="file_manager")
 
     return None

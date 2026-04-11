@@ -8,6 +8,7 @@ import pytest
 
 from src.network.file_manager.factory import create_file_manager_client
 from src.network.file_manager.filedot_client import FiledotFileManagerClient
+from src.network.file_manager.filespace_client import FilespaceFileManagerClient
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +40,20 @@ def test_factory_accepts_filedot_with_client():
     client = create_file_manager_client("filedot", file_host_client=fake)
     assert isinstance(client, FiledotFileManagerClient)
     assert client._http is fake
+
+
+def test_factory_rejects_filespace_without_client():
+    """factory raises ValueError when filespace is requested without file_host_client."""
+    with pytest.raises(ValueError) as exc_info:
+        create_file_manager_client("filespace")
+    assert "Enable Filespace" in str(exc_info.value)
+
+
+def test_factory_accepts_filespace_with_client():
+    """factory returns a FilespaceFileManagerClient wired to the injected client."""
+    fake = _StubFileHostClient()
+    client = create_file_manager_client("filespace", file_host_client=fake)
+    assert isinstance(client, FilespaceFileManagerClient)
 
 
 def test_factory_api_hosts_unchanged():
