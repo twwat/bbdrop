@@ -1,0 +1,1143 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+        "http://www.w3.org/TR/html4/loose.dtd">
+<HTML>
+<HEAD>
+    <Title>FileSpace - Share your files easily</Title>
+    <meta charset="utf-8">
+
+<link rel="stylesheet" type="text/css" href="/main.css?v=7">
+<link rel="stylesheet" type="text/css" href="/bootstrap-glyphicons.css">
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
+<link rel="stylesheet" type="text/css" href="/bootstrap.min.css">
+
+<!--<link href='http://fonts.googleapis.com/css?family=Open+Sans+Condensed+400' rel='stylesheet' type='text/css'>-->
+
+
+<script language="JavaScript" type="text/javascript" CHARSET="UTF-8" src="/jquery-1.10.2.min.js"></script>
+<script language="Javascript" type="text/javascript" src="/jquery-migrate-1.2.1.min.js"></script>
+<!-- <script src="http://code.jquery.com/jquery-2.0.3.min.js"></script> -->
+<script language="JavaScript" type="text/javascript" CHARSET="UTF-8" src="/xupload.js?"></script>
+<!--script language="JavaScript" type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.1/jquery.min.js"></script-->
+
+    
+    
+    <script language="JavaScript" type="text/javascript" CHARSET="UTF-8" src="/jquery-ui-1.8.2.min.js"></script>
+    
+
+<script language="JavaScript" type="text/javascript" CHARSET="UTF-8" src="/bootstrap.min.js"></script>
+<script language="JavaScript" type="text/javascript" CHARSET="UTF-8" src="/jquery.popunder.min.js"></script>
+
+
+<META http-equiv=Content-Type content="text-html; charset=UTF-8">
+<META NAME="description" CONTENT="FileSpace - Free file upload service">
+<META NAME="keywords"    CONTENT="file upload,share files,free upload">
+
+<script type='text/javascript'>
+if (top !== self) top.location.href = self.location.href;
+</script>
+
+<meta content="1" name="xfsme">
+
+<style>
+		.navbar {
+			background:-webkit-gradient(linear, left top, left bottom, color-stop(0.05, #525252), color-stop(1, #262626));
+			background:linear-gradient(to bottom, #525252 5%, #262626 100%);
+      background-color:#525252;
+		}
+		.navbar ul li a {
+			color: #DDDDDD;
+		}
+		.navbar ul li a:hover {
+			color: #99c83b;
+		}
+		.active li a {
+			background-color: red;
+		}
+		.navbar-nav>.active>a, .navbar-nav>.active>a:hover, .navbar-nav>.active>a:focus {
+			background-color: #000000;
+			color: #99c83b;
+		}
+
+        .dnavbar
+        {
+            position:absolute;
+            right:30px;
+            top  :10px;
+
+        }
+
+        #lang
+        {
+            width:130px;
+        }
+
+        .nav>li>a
+        {
+            padding-left: 10px;
+            padding-right: 15px;
+        }
+
+    .table td { vertical-align: center; }
+    
+    body {
+      height: 1200px;
+    }
+    
+	</style>
+
+
+
+        
+
+    <!--cookie consent CA  -->
+    
+
+</HEAD>
+<BODY>
+<div class="container" style="background-color:#fff;padding:10px;margin-top:60px">
+
+
+
+
+    
+<div class="navbar navbar-fixed-top">
+
+
+  <div class="container">
+    <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <!-- <a class="navbar-brand" href="#">FileSpace</a> -->
+    <a href="/"><img src="/images/logo.png"></a>
+
+            <div class="nav-collapse pull-right dnavbar" >
+      <ul class="nav navbar-nav">
+      		
+
+                <li><a href="/?op=my_account">My Account</a></li>
+      			<li><a href="/">Upload Files</a></li>
+                
+                    
+                
+      			<li><a href="/?op=my_files">My Files</a></li>
+      			
+      				<li><a href="/?op=my_reports">Stats</a></li>
+      			
+      			
+      				<li><a href="/?op=payments">Upgrade to premium</a></li>
+      			
+      			<li><a href="/?op=logout">Logout</a></li>
+      			
+
+      	<li id="lang" style="margin-left: 30px; padding-top:15px">
+      		<ul>
+      			<li class="top"><a href="/?op=change_lang&lang=english"><span class="trf trf-english"></span>English</a></li>
+      			<span class="dropdown">
+      				
+      					<li><a href="/?op=change_lang&lang=german"><span class="trf trf-german"></span>German</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=thai"><span class="trf trf-thai"></span>Thai</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=spanish"><span class="trf trf-spanish"></span>Spanish</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=english"><span class="trf trf-english"></span>English</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=polish"><span class="trf trf-polish"></span>Polish</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=hebrew"><span class="trf trf-hebrew"></span>Hebrew</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=french"><span class="trf trf-french"></span>French</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=arabic"><span class="trf trf-arabic"></span>Arabic</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=turkish"><span class="trf trf-turkish"></span>Turkish</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=dutch"><span class="trf trf-dutch"></span>Dutch</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=japan"><span class="trf trf-japan"></span>Japan</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=russian"><span class="trf trf-russian"></span>Russian</a></li>
+      				
+      					<li><a href="/?op=change_lang&lang=indonesia"><span class="trf trf-indonesia"></span>Indonesia</a></li>
+      				
+      			</span>
+      		</ul>
+      	</li>
+      </ul>
+    </div><!--/.nav-collapse -->
+
+  </div>
+</div>
+
+<div id="ads-right">
+
+  
+
+
+  
+
+</div><!-- /ads-right -->
+
+<div id="ads-top">
+
+  
+
+<!-- Reserved Banner Spot -->
+
+
+  
+
+</div><!-- /ads-top -->
+
+<div id="ads-left">
+
+  
+       <!-- no ads for main page upload form -->
+<!-- Reserved Banner Spot -->
+
+    
+  
+
+</div><!-- /ads-left -->
+
+
+
+
+
+
+
+
+
+
+
+
+<br>
+<div class="col-lg-8 col-lg-offset-3"><img src="images/myfiles.jpg"></div>
+<!-- crem=6   tmpv= -->
+
+
+<div class="col-lg-12">
+    <!-- <div style="margin:5px;">
+      Used space 120.4 MB of 50 GB Mb / 11 files
+      <br>
+      [<a href="?op=my_files_export" target="_blank">Export all</a>]&nbsp;
+      [<a href="?op=my_files_export&amp;fld_id=0" target="_blank">Export folder</a>]
+      [<a href="#" onClick="exportFiles(document.F1);">Export selected</a>]
+    </div> -->
+
+    <Form style="margin:0;" method="POST" action="/" name="F1" id="searchform" class="form-inline">
+        <input type="hidden" name="op" value="my_files">
+        <input type="hidden" name="fld_id" value="0">
+
+        <div class="col-lg-3" style="padding-top:5px"><input type="text" name="key" id="searchkey" value=""
+                                                             class="form-control" size=24></div>
+        <input type="submit" class="btn_blue" value="Search"> <br>
+
+
+</div>
+
+
+<div style="margin:255px;"></div>
+<Table class="tbl1 table-condensed" cellpadding=4 cellspacing=1 id="xfiles" width=100%>
+
+    
+
+    <TR>
+        <TD style="text-align:left" colspan=5>
+            <div class="col-lg-9" style="padding-top:4px">
+                <input type="text" name="create_new_folder" size=18 class="myForm form-control">
+            </div>
+            <input type="submit" value="Create new folder" class="btn_blue"></TD>
+    </TR>
+    
+        
+            
+                <TR>
+                    <!-- chld= -->
+                    <TD style="text-align:center;"><img
+                            src="/images/folder.gif"
+                            alt="Folder"></TD>
+                    <TD style="width:95%;"><a
+                            href="?op=my_files&amp;fld_id=33018"><b>
+                        subfolder test
+                    </b></a>
+                        
+                    </TD>
+                    
+                        <TD style="white-space:nowrap;text-align:right;">
+                            
+                                        0
+                            
+                            files
+                        </TD>
+                        <TD style="text-align:center;min-width:37px;"><a
+                                href="?op=fld_edit&amp;fld_id=33018"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="text-align:center;min-width:37px;"><a
+                                href="?op=my_files&amp;fld_id=0&amp;del_folder=33018"
+                                onClick="return confirm('Delete this folder with all files inside?')"><img
+                                src="/images/del.gif" border=0></a></TD>
+                        
+                </TR>
+            
+        
+        
+            <tr>
+                <td style="text-align:center;"><img src="images/folder.gif" alt="Folder"></td>
+                <td style="width:95%;font-style:italic;">
+                     root folder
+                </td>
+                <!-- fldid= -->
+                <td style="white-space:nowrap;text-align:right;">
+                    11
+                        files
+                </td>
+                <!-- <td style="white-space:nowrap;text-align:right;"> MB</td> -->
+                <td colspan="2"></td>
+            </tr>
+        
+    
+
+</Table>
+<br/>
+
+
+    
+            <div id='containsremoved'
+                 style="background-color:#FAFAFA;width:470px;padding:8px;border:1px solid #DDDDDD;border-radius:6px;font-size:11pt;color:#ff0000;text-align:center;">
+                Your account contains files, removed by administrator!<br>
+                    <a id='lshowremoved' style="color:#ff0000;font-weight:;text-decoration:underline;" href="#">Show removed files</a> &nbsp; <a class="clean" style="color:#ff0000;font-weight:;text-decoration:underline;" href="">
+                        Clean account</a></div>
+    
+
+
+
+<br>
+<div class='paging'> </div>
+    <Table class="tbl1 table table-condensed" cellpadding=3 cellspacing=1 id="xfiles" width=720>
+        <TR class="hdr">
+            <TD><input type="checkbox" id="selall"></TD>
+            <TD>
+                <a href='?op=my_files&amp;fld_id=0&amp;sort_field=file_name&amp;sort_order=down'>Filename / Description</a>
+            </TD>
+            <TD style="width:8%;">
+                <a href='?op=my_files&amp;fld_id=0&amp;sort_field=file_size&amp;sort_order=down'>Filesize</a>
+            </TD>
+            <TD style="width:5%;" title="Number of Downloads">
+                <a href='?op=my_files&amp;fld_id=0&amp;sort_field=file_downloads&amp;sort_order=down'>DL</a>
+            </TD>
+            
+            <TD style="width:5%;" title="Published">
+                <a href='?op=my_files&amp;fld_id=0&amp;sort_field=file_public&amp;sort_order=down'>Pub</a>
+            </TD>
+            
+                <TD title="Premium Only" style="width:10%;">
+                    <a href='?op=my_files&amp;fld_id=0&amp;sort_field=file_premium_only&amp;sort_order=down'>Premium only</a>
+                </TD>
+            
+            <TD style="width:11%;">
+                <a href='?op=my_files&amp;fld_id=0&amp;sort_field=file_created&amp;sort_order=up'>Uploaded<img border=0 src='/images/down.gif'></a>
+            </TD>
+            <TD style="width:11%;">
+                <a href='?op=my_files&amp;fld_id=0&amp;sort_field=file_last_download&amp;sort_order=down'>Last Download</a>
+            </TD>
+            <TD colspan=2>&nbsp;</TD>
+        </TR>
+        
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7265936"></TD>
+                    <TD align=left>
+                        
+                                <a   href="https://filespace.com/3zm41fbivvgp">Test114b.zip</a>
+                                        
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        24.1 MB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7265936"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7265936"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7265936&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7265936"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7265936"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7265936&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2026-03-18
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=3zm41fbivvgp"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=3zm41fbivvgp"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7265934"></TD>
+                    <TD align=left>
+                        
+                                <a   href="https://filespace.com/i7off4ja4vio">Test116d.zip</a>
+                                        
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        24.1 MB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7265934"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7265934"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7265934&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7265934"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7265934"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7265934&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2026-03-18
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=i7off4ja4vio"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=i7off4ja4vio"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7265932"></TD>
+                    <TD align=left>
+                        
+                                <a   href="https://filespace.com/mlfbnncd67r7">Test115c.zip</a>
+                                        
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        24.1 MB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7265932"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7265932"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7265932&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7265932"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7265932"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7265932&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2026-03-18
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=mlfbnncd67r7"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=mlfbnncd67r7"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7265880"></TD>
+                    <TD align=left>
+                        
+                                <a   href="https://filespace.com/sull0s4mg43y">Test111b.zip</a>
+                                        
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        24.1 MB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7265880"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7265880"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7265880&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7265880"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7265880"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7265880&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2026-03-18
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=sull0s4mg43y"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=sull0s4mg43y"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7265878"></TD>
+                    <TD align=left>
+                        
+                                <a   href="https://filespace.com/rr5psukkiiu6">Test113b.zip</a>
+                                        
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        24.1 MB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7265878"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7265878"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7265878&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7265878"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7265878"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7265878&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2026-03-18
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=rr5psukkiiu6"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=rr5psukkiiu6"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7041523"></TD>
+                    <TD align=left>
+                        
+                                <a  class='red'  href="https://filespace.com/kijb24lavhuv">Test70n.zip</a>
+                                        
+                                        <span class='red'> removed</span>
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        585 KB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7041523"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7041523"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7041523&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7041523"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7041523"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7041523&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2025-11-08
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=kijb24lavhuv"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=kijb24lavhuv"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7041521"></TD>
+                    <TD align=left>
+                        
+                                <a  class='red'  href="https://filespace.com/pz4fid9ehzpk">Test70m.zip</a>
+                                        
+                                        <span class='red'> removed</span>
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        601 KB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7041521"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7041521"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7041521&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7041521"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7041521"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7041521&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2025-11-08
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=pz4fid9ehzpk"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=pz4fid9ehzpk"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7041215"></TD>
+                    <TD align=left>
+                        
+                                <a  class='red'  href="https://filespace.com/zw0tuapnusyw">Test70k.zip</a>
+                                        
+                                        <span class='red'> removed</span>
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        983 KB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7041215"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7041215"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7041215&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7041215"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7041215"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7041215&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2025-11-08
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=zw0tuapnusyw"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=zw0tuapnusyw"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7036001"></TD>
+                    <TD align=left>
+                        
+                                <a  class='red'  href="https://filespace.com/bxe77qpfdez5">Test70j.zip</a>
+                                        
+                                        <span class='red'> removed</span>
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        649 KB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7036001"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7036001"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7036001&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7036001"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7036001"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7036001&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2025-11-06
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=bxe77qpfdez5"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=bxe77qpfdez5"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7035993"></TD>
+                    <TD align=left>
+                        
+                                <a  class='red'  href="https://filespace.com/4jecm3k22tmo">Test70i.zip</a>
+                                        
+                                        <span class='red'> removed</span>
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        636 KB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7035993"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7035993"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7035993&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7035993"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7035993"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7035993&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2025-11-06
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=4jecm3k22tmo"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=4jecm3k22tmo"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+                <TR align=center class="hi">
+                    <TD><input type="checkbox" name="file_id" value="7035953"></TD>
+                    <TD align=left>
+                        
+                                <a  class='red'  href="https://filespace.com/3slj7ujoahbc">Test70h.zip</a>
+                                        
+                                        <span class='red'> removed</span>
+                                        
+                                        
+                        
+                        
+
+
+                    </TD>
+                    <TD align=right>
+                        674 KB
+                    </TD>
+                    <TD>
+                        
+                    </TD>
+                    
+                    <TD id="td7035953"
+                     class='pub'
+                    ><input type="checkbox" name="pub" value="1" id="p7035953"
+                     checked
+                    onClick="jah('?op=my_files&amp;file_id=7035953&amp;set_public='+this.checked)"></TD>
+                        
+                            <TD id="tpo7035953"
+                             ><input type="checkbox" name="prem_only" value="1" id="po7035953"
+                            
+                            onClick="jah('?op=my_files&amp;file_id=7035953&amp;set_premium_only='+this.checked)"></TD>
+                        
+                        <TD>
+                            2025-11-06
+                        </TD>
+                        <TD>
+                            
+                        </TD>
+                        <TD style="width:37px"><a
+                                href="?op=file_edit&amp;file_code=3slj7ujoahbc"><img
+                                src="/images/edit.gif" border=0 alt="Edit"></a></TD>
+                        <TD style="width:37px"><a
+                                href="?op=my_files&amp;del_code=3slj7ujoahbc"
+                                onClick="return confirm('Delete this file?')"><img
+                                src="/images/del.gif" border=0 alt="Delete File"></a>
+                        </TD>
+                </TR>
+            
+            
+        <TR>
+            <TD colspan=10 style="text-align:left">
+                <input type="submit" name="del_selected" value="Delete selected" class="btn_blue"
+                       onClick="return confirm('Delete selected files?')">
+                &nbsp;
+                <input type="submit" name="set_public_multi" value="Publish selected" class="btn_blue">
+                &nbsp;
+                <input type="submit" name="set_private" value="Unpublish selected" class="btn_blue">
+                &nbsp;
+                <input type="submit" name="set_premium_only_multi" value="Enable Premium Only"
+                       class="btn_blue">
+                &nbsp;
+                <input type="submit" name="unset_premium_only_multi" value="Disable Premium Only"
+                       class="btn_blue">
+                &nbsp;
+            </TD>
+        </TR>
+        <TR>
+            <TD colspan=10 style="text-align:left">
+
+                <div class="col-lg-8" style="padding-top:4px">
+                    <Select name="to_folder" class="form-control">
+                        <option value="">-
+                            Move files to folder -
+                        </option>
+                        <option value="0"> /</option>
+                        
+                            <option value="33018">
+                                
+                                    subfolder test
+                            </option>
+                        
+                    </Select> &nbsp;
+                </div>
+
+                <input type="submit" name="to_folder_copy" value="Copy files" class="btn_blue"> &nbsp;
+                <input type="submit" name="to_folder_move" value="Move files" class="btn_blue">
+            </TD>
+        </TR>
+    </Table>
+    </Form>
+
+    <div class='paging'> </div>
+
+
+        <div style="margin:5px;">
+            [<a href="?op=my_files_export" target="_blank">
+            Export all
+        </a>]&nbsp;
+            [<a href="?op=my_files_export&amp;fld_id=0" target="_blank">
+            Export folder
+        </a>]
+            [<a href="#" onClick="exportFiles(document.F1);">
+            Export selected
+        </a>]
+            <br/><br/>
+            Used space:
+                120.4 MB
+                    
+                        of
+                            50 GB
+                    
+                    /
+                    11
+                        files<br/>
+                            Files per page:
+                                <a href="?op=my_files&perpage=25">25</a>
+                                
+                                |
+                                 50
+                                    
+                                |
+                                <a href="?op=my_files&perpage=100">100</a>
+                                
+                                |
+                                <a href="?op=my_files&perpage=250">250</a>
+                                
+                                |
+                                <a href="?op=my_files&perpage=500">500</a>
+                                
+        </div>
+
+        <script type="text/javascript" language="JavaScript">
+            $(document).ready(function () {
+                $("#xfiles input[name=file_id]").change(function () {
+                    $(this).parent().parent().toggleClass('hi2');
+                });
+                $("#selall").change(function () {
+                    var sel = this.checked;
+                    $("#xfiles input[name=file_id]:enabled").each(function () {
+                        $(this).attr('checked', sel);
+                        if (sel) {
+                            $(this).parent().parent().addClass('hi2');
+                        }
+                        else {
+                            $(this).parent().parent().removeClass('hi2');
+                        }
+                    });
+                });
+            });
+        </script>
+        <script language="JavaScript" type="text/javascript" CHARSET="UTF-8"
+                src="/export_files.js"></script>
+        <script type="text/javascript">
+            function addOrUpdateUrlParam(name, value) {
+                var href = window.location.href;
+                var regex = new RegExp("[&\\?]" + name + "=");
+                if (regex.test(href)) {
+                    regex = new RegExp("([&\\?])" + name + "=\\d+");
+                    window.location.href = href.replace(regex, "$1" + name + "=" + value);
+                }
+                else {
+                    if (href.indexOf("?") > -1)
+                        window.location.href = href + "&" + name + "=" + value;
+                    else
+                        window.location.href = href + "?" + name + "=" + value;
+                }
+            }
+            $("#lshowall").click(function () {
+                addOrUpdateUrlParam("removedonly", "0");
+                return false;
+            });
+            $("#lshowremoved").click(function () {
+                addOrUpdateUrlParam("removedonly", "1");
+                return false;
+            })
+
+            $("#searchreset").click(function()
+            {
+               //windows.refresh();
+                $("#searchkey").val("");
+                $("#searchform").submit();
+                return false;
+            });
+
+            $("a.clean").click(function () {
+                var msg = "Clean your account from removed files?";
+                var msg_cleaned = "Files cleaned: ";
+                if (confirm(msg)) {
+                    $.get("/?op=ajax_cleanaccount", function (data) {
+                        if (data.indexOf("OK") > -1) {
+                            //var arr=data.split("|");
+                            //var m=msg_cleaned+arr[1];
+                            //alert(m);
+                            addOrUpdateUrlParam("removedonly", "0");
+                            return false;
+                        }
+                        else {
+                            alert("Error cleaning account. Please contact support");
+                        }
+                        return false;
+                    });
+
+                }
+                return false;
+
+            });
+
+        </script>
+
+
+    
+        
+            <br><br><br><br><br><BR><BR><BR>
+        
+    
+
+    
+
+  
+    <div width="100%" align="middle">
+
+
+
+
+
+      <div id="ads-bottomdiv">
+
+<!-- Place this code above the closing body tag of the page -->
+<!--
+<script type='text/javascript'>
+var adParams = {a: '12615927', rt:'generic', serverdomain: 'ads.adsrvmedia.com', closeButton: 'Right', backgroundColor: 'transparent', size: '728x90'  ,context:'c12657275'  };
+</script>
+<script type='text/javascript' src='http://cdn.adsrvmedia.com/adsrvmedia/scripts/catfish/catfish.js'></script>
+-->
+
+
+
+      </div><!-- /ads-bottom -->
+
+      <!-- Light Box -->
+      <!-- Enable for live site -->
+      <!-- begin ZEDO for channel:  (r)spaceforfiles Light Box , publisher: (r)spaceforfiles , Ad Dimension: Intromercial - 1x1 - 1 x 1 -->
+      <script language="JavaScript">
+      //var zflag_nid="1549"; var zflag_cid="1800"; var zflag_sid="1060"; var zflag_width="1"; var zflag_height="1"; var zflag_sz="17"; var zflag_charset="utf-8";
+      </script><!--  <script language="JavaScript" src="http://c2.zedo.com/jsc/c2/fo.js"></script> -->
+
+
+
+
+
+
+
+      <!-- BOTTOM CENTER -->
+      <!--<script type='text/javascript'>
+      var adParams = {a: '12615927', rt:'generic', serverdomain: 'ads.adsrvmedia.com', position: 'bottom:center', scrollanimation: '1', closebutton: 'top', size: '728x90'  ,context:'c12657275'  };
+      </script>
+      <script type='text/javascript' src='http://cdn.adsrvmedia.com/adsrvmedia/scripts/slider/slider.js'></script>-->
+
+
+    </div>
+  
+
+
+
+
+<br/>
+<div style="margin:10px 10px 10px 10px;text-align:center;white-space:nowrap;">
+  <a href="/faq.html">FAQ</a>   &nbsp;
+  <a href="/?op=payments">Premium features</a>   &nbsp;
+  <a href="/affiliate.html">Affiliate program</a>   &nbsp;
+
+    
+  <a href="/tos.html">Terms of service</a>   &nbsp;
+  <a href="/privacy.html">Privacy</a>   &nbsp;
+  <a href="/dmcapolicy.html">DMCA Policy</a>   &nbsp;
+  <div id="report_file_link" style="display:inline;"></div>   &nbsp;
+  <a href="/?op=checkfiles">Link Checker</a> &nbsp;
+  <a href="/contact.html">Contact Us</a> &nbsp;
+  <a href="/pages/refundreturns.html">Refund and Return Policy</a>
+
+</div>
+<div style="color:#444;font-size:12px;margin-left:10px;text-align:center">
+  &copy; 2015 FileSpace, All Rights Reserved
+
+</div>
+<br/>
+
+
+
+</div><!-- div .container -->
+
+
+<!-- this script injects a report-file link at the bottom of the page if it exists -->
+<!-- the original link that it checks for is in download0_alt.html:20 and download1.html:30 -->
+<script>
+$(function() {
+  var link = $('#report_file').attr('href');
+  if (link) {
+    $('#report_file_link').html('<a href="'+link+'">Report abuse</a>');
+  }
+  else
+  {
+    // not logged in so have the link go the contact form
+    $('#report_file_link').html('<a href="/contact.html">Report abuse</a>');
+  }
+
+});
+
+
+
+</script>
+
+
+
+<!-- is=0 -->
+</BODY>
+</HTML>
+
+
