@@ -157,11 +157,10 @@ class FileManagerController(QObject):
         Returns (caps, None) on success, (None, message) on failure. The
         message is suitable for display in the dialog status bar.
         """
-        # Reuse cached capabilities if we've successfully probed this host before
-        if host_id in self._capabilities:
-            return self._capabilities[host_id], None
-
-        # Hosts that must route through the running FileHostWorker's session
+        # Hosts that must route through the running FileHostWorker's session.
+        # Session refs live in a single-slot attribute that is cleared on every
+        # host switch, so they MUST be rebuilt before any early return — even
+        # when capabilities are already cached.
         _SESSION_BASED_HOSTS = {"filedot", "filespace"}
 
         file_host_client = None
@@ -182,6 +181,10 @@ class FileManagerController(QObject):
             # Stash references so US-005 can persist session state after operations
             self._session_client = file_host_client
             self._session_worker = worker
+
+        # Reuse cached capabilities — session refs above are already rebuilt.
+        if host_id in self._capabilities:
+            return self._capabilities[host_id], None
 
         try:
             from src.network.file_manager.factory import create_file_manager_client
