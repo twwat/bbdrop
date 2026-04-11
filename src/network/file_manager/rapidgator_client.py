@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
 from src.network.file_manager.client import (
+    CHROME_UA,
     BatchResult,
     FileInfo,
     FileListResult,
@@ -86,6 +87,7 @@ class RapidgatorFileManagerClient(FileManagerClient):
             curl.setopt(pycurl.CAINFO, certifi.where())
             curl.setopt(pycurl.SSL_VERIFYPEER, 1)
             curl.setopt(pycurl.SSL_VERIFYHOST, 2)
+            curl.setopt(pycurl.USERAGENT, CHROME_UA)
             curl.setopt(pycurl.WRITEDATA, buf)
             curl.setopt(pycurl.TIMEOUT, self.timeout)
             curl.setopt(pycurl.FOLLOWLOCATION, True)

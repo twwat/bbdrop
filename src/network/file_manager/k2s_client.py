@@ -14,6 +14,7 @@ from io import BytesIO
 from typing import Any, Dict, List, Optional
 
 from src.network.file_manager.client import (
+    CHROME_UA,
     BatchResult,
     FileInfo,
     FileListResult,
@@ -91,6 +92,7 @@ class K2SFileManagerClient(FileManagerClient):
             curl.setopt(pycurl.POST, 1)
             curl.setopt(pycurl.POSTFIELDS, json.dumps(payload))
             curl.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
+            curl.setopt(pycurl.USERAGENT, CHROME_UA)
             curl.setopt(pycurl.WRITEDATA, buf)
             curl.setopt(pycurl.TIMEOUT, self.timeout)
             curl.setopt(pycurl.FOLLOWLOCATION, True)
