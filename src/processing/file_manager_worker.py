@@ -245,3 +245,37 @@ class FileManagerWorker(QThread):
     def _do_trash_empty(self, client: FileManagerClient, op_id: str, op: dict):
         result = client.trash_empty(file_ids=op.get("file_ids"))
         self.operation_complete.emit(op_id, result)
+
+    def _do_set_file_public(self, client: FileManagerClient, op_id: str, op: dict):
+        result = client.set_file_public(
+            item_ids=op["item_ids"], value=op["value"],
+        )
+        self.operation_complete.emit(op_id, result)
+
+    def _do_set_file_premium(self, client: FileManagerClient, op_id: str, op: dict):
+        result = client.set_file_premium(
+            item_ids=op["item_ids"], value=op["value"],
+        )
+        self.operation_complete.emit(op_id, result)
+
+    def _do_read_file_properties(
+        self, client: FileManagerClient, op_id: str, op: dict,
+    ):
+        scraped = client.read_file_properties(file_code=op["file_code"])
+        # Stash the file_code so the controller knows which file this is for
+        scraped_with_code = dict(scraped)
+        scraped_with_code["_file_code"] = op["file_code"]
+        self.operation_complete.emit(
+            op_id,
+            OperationResult(success=True, message="read", data=scraped_with_code),
+        )
+
+    def _do_update_file_properties(
+        self, client: FileManagerClient, op_id: str, op: dict,
+    ):
+        result = client.update_file_properties(
+            file_codes=op["file_codes"],
+            fields=op["fields"],
+            round_trip=op.get("round_trip", True),
+        )
+        self.operation_complete.emit(op_id, result)
