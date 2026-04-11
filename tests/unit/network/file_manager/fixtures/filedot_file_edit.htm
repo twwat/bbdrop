@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head><title>Edit file</title></head>
+<body>
+<div class="wrap">
+<h2>Edit file</h2>
+<form method="POST" action="https://filedot.to/file_edit?file_code=7qz9r9pkumql">
+  <input type="hidden" name="op" value="file_edit">
+  <input type="hidden" name="file_code" value="7qz9r9pkumql">
+  <input type="hidden" name="token" value="a8ea1b794ae9b74e79471c0a98e8d2fa">
+  <table>
+    <tr>
+      <td>Name:</td>
+      <td><input type="text" name="file_name" value="Original File.zip"></td>
+    </tr>
+    <tr>
+      <td>Description:</td>
+      <td><textarea name="file_descr">Old description text</textarea></td>
+    </tr>
+    <tr>
+      <td>Password:</td>
+      <td><input type="text" name="file_password" value="oldpw"></td>
+    </tr>
+    <tr>
+      <td>Price:</td>
+      <td><input type="text" name="file_price" value="2.50"></td>
+    </tr>
+    <tr>
+      <td>Public:</td>
+      <td><input type="checkbox" name="file_public" value="1" checked></td>
+    </tr>
+    <tr>
+      <td>Premium only:</td>
+      <td><input type="checkbox" name="file_premium_only" value="1"></td>
+    </tr>
+  </table>
+  <input type="submit" name="save" value="Save">
+</form>
+</div>
+</body>
+</html>

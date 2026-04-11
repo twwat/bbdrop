@@ -67,6 +67,12 @@ class FileManagerCapabilities:
     can_get_download_link: bool = False
     has_batch_operations: bool = False
     list_files_includes_folders: bool = False
+    # Filedot-style editable per-file properties (description, password,
+    # price, filename). Drives the Properties toolbar button.
+    can_edit_properties: bool = False
+    # Filedot-style independent public / premium-only flag toggles.
+    # Drives the Flags toolbar menu.
+    can_set_file_flags: bool = False
     max_items_per_page: int = 100
     sortable_columns: List[str] = field(
         default_factory=lambda: ["name", "created", "size"]
