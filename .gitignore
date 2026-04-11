@@ -149,3 +149,6 @@ gemini-superpowers/
 GEMINI.md
 .coverage
 docs/superpowers
+
+.omc
+.superpowers
