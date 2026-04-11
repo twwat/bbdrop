@@ -99,7 +99,7 @@ class RapidgatorFileManagerClient(FileManagerClient):
 
         raw = buf.getvalue().decode("utf-8")
 
-        if status != 200:
+        if status < 200 or status >= 300:
             raise RuntimeError(f"RG API {endpoint} returned HTTP {status}")
 
         data = json.loads(raw)
@@ -189,18 +189,19 @@ class RapidgatorFileManagerClient(FileManagerClient):
 
         data = self._api_call("folder/content", params)
         resp = data.get("response", {})
+        folder_data = resp.get("folder", {})
 
         files: list[FileInfo] = []
 
         # Parse subfolders
-        for folder in resp.get("folder", {}).get("subfolders", []):
+        for folder in folder_data.get("folders", []):
             files.append(self._parse_folder(folder))
 
         # Parse files
-        for f in resp.get("files", []):
+        for f in folder_data.get("files", []):
             files.append(self._parse_file(f))
 
-        total = int(resp.get("files_count", len(files)))
+        total = int(folder_data.get("nb_files", len(files)))
 
         return FileListResult(files=files, total=total, page=page, per_page=per_page)
 
@@ -214,7 +215,7 @@ class RapidgatorFileManagerClient(FileManagerClient):
         folder_data = resp.get("folder", {})
 
         folders = []
-        for sub in folder_data.get("subfolders", []):
+        for sub in folder_data.get("folders", []):
             folders.append(self._parse_folder(sub))
 
         # Build breadcrumb from parent chain
@@ -417,12 +418,24 @@ class RapidgatorFileManagerClient(FileManagerClient):
 
         results = []
         for job in jobs:
-            status_code = int(job.get("status", 0))
+            state_code = int(job.get("state", 0))
+            file_data = job.get("file", {})
+            file_id = None
+            if isinstance(file_data, dict) and file_data:
+                file_id = str(file_data.get("file_id", "")) or None
+
+            # Compute progress from dl_size/size if available
+            size = int(job.get("size", 0) or 0)
+            dl_size = int(job.get("dl_size", 0) or 0)
+            progress = int((dl_size / size) * 100) if size > 0 else 0
+            if state_code == 1:  # Done
+                progress = 100
+
             results.append(RemoteJobStatus(
                 job_id=str(job.get("job_id", "")),
-                status=_STATUS_MAP.get(status_code, "unknown"),
-                progress=int(job.get("progress", 0)),
-                file_id=str(job.get("file_id", "")) or None,
+                status=_STATUS_MAP.get(state_code, "unknown"),
+                progress=progress,
+                file_id=file_id,
             ))
         return results
 
@@ -446,7 +459,7 @@ class RapidgatorFileManagerClient(FileManagerClient):
             fi.is_available = False  # Trash items are "unavailable"
             files.append(fi)
 
-        total = int(resp.get("files_count", len(files)))
+        total = len(files)
         return FileListResult(files=files, total=total, page=page, per_page=per_page)
 
     def trash_restore(
