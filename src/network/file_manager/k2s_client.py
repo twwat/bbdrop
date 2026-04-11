@@ -104,8 +104,16 @@ class K2SFileManagerClient(FileManagerClient):
 
         raw = buf.getvalue().decode("utf-8")
 
-        if status != 200:
-            raise RuntimeError(f"K2S API {endpoint} returned HTTP {status}")
+        if status not in (200, 201, 202):
+            # Include response body for diagnostics
+            msg = raw[:200]
+            try:
+                err = json.loads(raw)
+                if isinstance(err, dict):
+                    msg = err.get("message") or err.get("errorCode") or raw[:200]
+            except json.JSONDecodeError:
+                pass
+            raise RuntimeError(f"K2S API {endpoint} returned HTTP {status}: {msg}")
 
         data = json.loads(raw)
 
@@ -133,16 +141,22 @@ class K2SFileManagerClient(FileManagerClient):
             except (ValueError, AttributeError):
                 pass
 
+        # K2S getFilesList puts access/content_type inside extended_info;
+        # getFilesInfo has them at the top level.
+        extended = item.get("extended_info") or {}
+        access = item.get("access") or extended.get("access", "public")
+        content_type = item.get("content_type") or extended.get("content_type")
+
         return FileInfo(
             id=item.get("id", ""),
             name=item.get("name", ""),
             is_folder=bool(item.get("is_folder", False)),
             size=int(item.get("size", 0)),
             created=created,
-            access=item.get("access", "public"),
+            access=access,
             is_available=bool(item.get("is_available", True)),
             md5=item.get("md5"),
-            content_type=item.get("content_type"),
+            content_type=content_type,
             parent_id=item.get("parent_id"),
         )
 
@@ -160,19 +174,44 @@ class K2SFileManagerClient(FileManagerClient):
     ) -> FileListResult:
         sort_val = 1 if sort_dir == "asc" else -1
         body: Dict[str, Any] = {
-            "parent": folder_id,
             "limit": per_page,
             "offset": (page - 1) * per_page,
-            "sort": [{sort_by: sort_val}],
+            "sort": {sort_by: sort_val},
             "extended_info": True,
         }
+        if folder_id and folder_id != "/":
+            body["parent"] = folder_id
 
         data = self._api_call("getFilesList", body)
         files_raw = data.get("files", [])
-        files = [self._parse_file_info(f) for f in files_raw]
-        total = int(data.get("total", len(files)))
+        parsed = [self._parse_file_info(f) for f in files_raw]
 
-        return FileListResult(files=files, total=total, page=page, per_page=per_page)
+        # K2S may return folders mixed with files in getFilesList (is_folder=true).
+        # If it doesn't, fall back to getFoldersList — but only when we got no
+        # folders at all in the file listing.
+        has_folders_in_list = any(fi.is_folder for fi in parsed)
+        if page == 1 and not has_folders_in_list:
+            try:
+                folder_body: Dict[str, Any] = {}
+                if folder_id and folder_id != "/":
+                    folder_body["parent_id"] = folder_id
+                folder_data = self._api_call("getFoldersList", folder_body)
+                folder_names = folder_data.get("foldersList", [])
+                folder_ids = folder_data.get("foldersIds", [])
+                # K2S getFoldersList only returns names + ids (no access/date).
+                # The tree view gets full metadata from getFilesList when
+                # folders are listed there.
+                synthetic_folders = [
+                    FileInfo(id=fid, name=(folder_names[i] if i < len(folder_names) else fid), is_folder=True)
+                    for i, fid in enumerate(folder_ids)
+                ]
+                parsed = synthetic_folders + parsed
+            except RuntimeError as exc:
+                log(f"K2S getFoldersList fallback failed: {exc}",
+                    level="warning", category="file_manager")
+
+        total = int(data.get("total", len(parsed)))
+        return FileListResult(files=parsed, total=total, page=page, per_page=per_page)
 
     def list_folders(self, parent_id: str = "/") -> FolderListResult:
         body = {}
