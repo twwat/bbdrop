@@ -566,13 +566,19 @@ class UploadWorker(QThread):
         result = {
             'rows': settings.value("grid_rows", 4, int),
             'cols': settings.value("grid_cols", 4, int),
+            'thumb_width': settings.value("thumb_width", 320, int),
+            'border_spacing': settings.value("border_spacing", 4, int),
             'show_timestamps': settings.value("show_timestamps", True, bool),
             'show_ms': settings.value("show_ms", False, bool),
             'show_frame_number': settings.value("show_frame_number", False, bool),
+            'ts_font_size': settings.value("ts_font_size", 12, int),
+            'header_font_size': settings.value("header_font_size", 14, int),
+            'font_family': settings.value("font_family", "monospace"),
             'font_color': settings.value("font_color", "#ffffff"),
             'bg_color': settings.value("bg_color", "#000000"),
             'output_format': settings.value("output_format", "PNG"),
             'image_overlay_template': settings.value("image_overlay_template", ""),
+            'video_details_template': settings.value("video_details_template", ""),
         }
         settings.endGroup()
         return result
