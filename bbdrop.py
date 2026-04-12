@@ -67,8 +67,7 @@ from src.utils.credentials import (
     CredentialDecryptionError,
     get_encryption_key,
     migrate_credentials_from_ini,
-    migrate_bare_imx_keys,
-    migrate_plaintext_usernames,
+    migrate_imx_credentials,
     setup_secure_password,
 )
 
@@ -97,8 +96,7 @@ from src.utils.windows_integration import create_windows_context_menu, remove_wi
 def main():
     # Migrate credentials from INI to keyring (runs once, safe to call multiple times)
     migrate_credentials_from_ini()
-    migrate_bare_imx_keys()
-    migrate_plaintext_usernames()
+    migrate_imx_credentials()
 
     # Ensure CSPRNG master key exists — triggers one-time re-encryption migration
     # if upgrading from SHA-256-derived key. Must run after INI migration above.

@@ -44,7 +44,7 @@ class ImxToUploader(ImageHostClient):
         encrypted_password = get_credential('password', 'imx')
         encrypted_api_key = get_credential('api_key', 'imx')
 
-        # Decrypt if they exist
+        # Decrypt (migrated and encrypted at startup)
         username = decrypt_password(encrypted_username) if encrypted_username else None
         password = decrypt_password(encrypted_password) if encrypted_password else None
         api_key = decrypt_password(encrypted_api_key) if encrypted_api_key else None

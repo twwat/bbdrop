@@ -197,13 +197,13 @@ def migrate_credentials_from_ini():
             config.write(f)
         log("Migrated credentials from INI to Registry", level="info", category="auth")
 
-def migrate_bare_imx_keys():
-    """One-time migration: copy bare credential keys to imx_-prefixed keys.
+def migrate_imx_credentials():
+    """One-time migration for IMX credentials. Idempotent.
 
-    Old code stored IMX credentials under bare keys (username, password, api_key).
-    New code uses host-specific keys (imx_username, imx_password, imx_api_key).
-    Copies bare values to prefixed keys if prefixed keys don't already exist.
+    1. Copies bare keys (username, password, api_key) to imx_-prefixed keys
+    2. Encrypts any plaintext values (usernames stored before encryption was added)
     """
+    # Step 1: Copy bare → prefixed
     for key in ['username', 'password', 'api_key']:
         bare_value = get_credential(key)
         prefixed_value = get_credential(key, 'imx')
@@ -211,32 +211,17 @@ def migrate_bare_imx_keys():
             set_credential(key, bare_value, 'imx')
             log(f"Migrated bare '{key}' to 'imx_{key}'", level="info", category="auth")
 
-
-def migrate_plaintext_usernames():
-    """One-time migration: encrypt any plaintext usernames still in keyring.
-
-    Tries to decrypt each known username key. If decryption fails, the value
-    is plaintext and gets encrypted. If decryption succeeds, it's already
-    encrypted and is left alone. Idempotent — safe to call multiple times.
-    """
-    username_keys = ['username', 'imx_username', 'turbo_username']
-
-    for key in username_keys:
+    # Step 2: Encrypt any plaintext values
+    for key in ['username', 'imx_username', 'turbo_username']:
         value = get_credential(key)
         if not value:
             continue
-
         try:
             decrypt_password(value)
-            # Decrypted successfully — already encrypted, skip
         except Exception:
-            # Not valid Fernet — plaintext, needs encryption
-            try:
-                encrypted = encrypt_password(value)
-                set_credential(key, encrypted)
-                log(f"Encrypted plaintext username '{key}'", level="info", category="auth")
-            except Exception as e:
-                log(f"Failed to encrypt username '{key}': {e}", level="warning", category="auth")
+            encrypted = encrypt_password(value)
+            set_credential(key, encrypted)
+            log(f"Encrypted plaintext '{key}'", level="info", category="auth")
 
 
 def _migrate_encryption_keys():

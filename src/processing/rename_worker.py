@@ -176,7 +176,7 @@ class RenameWorker(QObject):
         self.web_url = "https://imx.to"
         self.session = None
 
-        # Load credentials — try host-specific key first, fall back to bare key
+        # Load credentials (migrated and encrypted at startup)
         encrypted_username = get_credential('username', 'imx')
         self.username = decrypt_password(encrypted_username) if encrypted_username else None
         encrypted_password = get_credential('password', 'imx')
