@@ -85,16 +85,6 @@ class VideoSettingsTab(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         root_layout.addWidget(scroll_area, 1)
 
-        # Bottom bar with size info and preview button
-        bar = QHBoxLayout()
-        self._size_label = QLabel("")
-        bar.addWidget(self._size_label)
-        bar.addStretch()
-        preview_btn = QPushButton("Preview Sheet")
-        preview_btn.clicked.connect(self._pop_out_preview)
-        bar.addWidget(preview_btn)
-        root_layout.addLayout(bar)
-
         # Floating preview window (created on demand)
         self._preview_window = None
 
@@ -104,6 +94,16 @@ class VideoSettingsTab(QWidget):
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
+
+        # Preview button at the top
+        top_row = QHBoxLayout()
+        preview_btn = QPushButton("Preview Sheet")
+        preview_btn.clicked.connect(self._pop_out_preview)
+        top_row.addWidget(preview_btn)
+        self._size_label = QLabel("")
+        top_row.addWidget(self._size_label)
+        top_row.addStretch()
+        layout.addLayout(top_row)
 
         # -- Screenshot Sheet --
         sheet_group = QGroupBox("Screenshot Sheet")
