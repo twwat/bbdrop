@@ -111,6 +111,13 @@ class VideoSettingsTab(QWidget):
 
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Grid:"))
+        row1.addWidget(InfoButton(
+            "<b>Screenshot Sheet</b><br>"
+            "A grid of evenly-spaced frames extracted from the video. "
+            "The sheet is uploaded to the image host as a single image.<br><br>"
+            "<b>Thumb width</b> sets the width of each frame in the grid (height scales proportionally). "
+            "<b>Spacing</b> controls the gap between frames and around the edges."
+        ))
         self.grid_rows = QSpinBox()
         self.grid_rows.setRange(1, 10)
         self.grid_rows.setValue(5)
@@ -128,13 +135,6 @@ class VideoSettingsTab(QWidget):
         self.output_format.addItems(["PNG", "JPG"])
         self.output_format.currentIndexChanged.connect(self.dirty.emit)
         row1.addWidget(self.output_format)
-        row1.addWidget(InfoButton(
-            "<b>Screenshot Sheet</b><br>"
-            "A grid of evenly-spaced frames extracted from the video. "
-            "The sheet is uploaded to the image host as a single image.<br><br>"
-            "<b>Thumb width</b> sets the width of each frame in the grid (height scales proportionally). "
-            "<b>Spacing</b> controls the gap between frames and around the edges."
-        ))
         sheet_layout.addLayout(row1)
 
         row2 = QHBoxLayout()
@@ -181,17 +181,18 @@ class VideoSettingsTab(QWidget):
         self.show_timestamps.setChecked(True)
         self.show_timestamps.toggled.connect(self.dirty.emit)
         ts_row1.addWidget(self.show_timestamps)
+        ts_row1.addWidget(InfoButton(
+            "<b>Timestamps</b><br>"
+            "Overlay the playback time on each frame in the grid. "
+            "Optionally show milliseconds or frame numbers."
+        ))
         self.show_ms = QCheckBox("Show ms")
         self.show_ms.toggled.connect(self.dirty.emit)
         ts_row1.addWidget(self.show_ms)
         self.show_frame_number = QCheckBox("Show frame#")
         self.show_frame_number.toggled.connect(self.dirty.emit)
         ts_row1.addWidget(self.show_frame_number)
-        ts_row1.addWidget(InfoButton(
-            "<b>Timestamps</b><br>"
-            "Overlay the playback time on each frame in the grid. "
-            "Optionally show milliseconds or frame numbers."
-        ))
+        ts_row1.addStretch()
         ts_layout.addLayout(ts_row1)
 
         ts_row2 = QHBoxLayout()
