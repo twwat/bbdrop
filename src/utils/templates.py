@@ -286,9 +286,9 @@ def save_gallery_artifacts(
     if store_in_central is None:
         store_in_central = defaults.get('store_in_central', True)
 
-    gallery_id = results.get('gallery_id', '')
+    gallery_id = results.get('gallery_id', '') or os.path.splitext(os.path.basename(folder_path))[0]
     gallery_name = results.get('gallery_name') or os.path.basename(folder_path)
-    if not gallery_id or not gallery_name:
+    if not gallery_name:
         return {}
 
     # Ensure .uploaded exists if needed (for video files, use parent directory)

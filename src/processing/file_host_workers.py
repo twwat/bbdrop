@@ -607,10 +607,9 @@ class FileHostWorker(QThread):
                     )
                     continue
 
-                if not folder_path.is_dir():
-                    error_msg = f"Path is not a directory: {gallery_path}"
+                if not folder_path.is_dir() and not folder_path.is_file():
+                    error_msg = f"Path does not exist: {gallery_path}"
                     self._log(f"FAIL FAST: {error_msg}", level="warning")
-                    # CRITICAL: Emit signal FIRST before DB write (fail-fast path)
                     self.upload_failed.emit(db_id, host_name, error_msg)
                     self.queue_store.update_file_host_upload(
                         upload_id,
@@ -710,7 +709,7 @@ class FileHostWorker(QThread):
         )
 
         try:
-            # Step 1: Create or reuse archive (with WSL2 path conversion)
+            # Step 1: Determine upload file(s) — raw file or archive
             from src.utils.system_utils import convert_to_wsl_path
             from src.utils.paths import load_user_defaults
             folder_path = convert_to_wsl_path(gallery_path)
@@ -721,64 +720,91 @@ class FileHostWorker(QThread):
                     error_msg += f" (WSL2 path: {folder_path})"
                 raise FileNotFoundError(error_msg)
 
-            # Load archive settings
-            defaults = load_user_defaults()
-            archive_format = defaults.get('archive_format', 'zip')
-            archive_compression = defaults.get('archive_compression', 'store')
-            split_enabled = defaults.get('archive_split_enabled', False)
-            split_mode = defaults.get('archive_split_mode', 'fixed')
+            is_single_file = folder_path.is_file()
 
-            if not split_enabled:
-                split_size_mb = 0
-            elif split_mode == 'auto_host_limit':
+            if is_single_file:
+                # Single file (e.g. video): upload raw unless it exceeds host limit
+                file_size = folder_path.stat().st_size
                 host_max_mb = get_file_host_setting(self.host_id, 'max_file_size_mb', 'int') or 0
-                if host_max_mb > 0:
-                    estimated_bytes = sum(
-                        f.stat().st_size for f in folder_path.iterdir() if f.is_file()
-                    )
-                    split_size_mb = host_max_mb if estimated_bytes > host_max_mb * 1024 * 1024 else 0
-                else:
+                host_max_bytes = host_max_mb * 1024 * 1024 if host_max_mb > 0 else 0
+
+                if host_max_bytes > 0 and file_size > host_max_bytes:
+                    # File exceeds host limit — need to archive and split
                     self._log(
-                        "Split mode is 'only when exceeding host limit' but no max file size "
-                        "is configured for this host — skipping split",
-                        level="warning"
+                        f"File {folder_path.name} ({file_size // (1024*1024)}MB) exceeds "
+                        f"host limit ({host_max_mb}MB), archiving with split",
+                        level="info"
                     )
-                    split_size_mb = 0
+                    archive_paths = self.archive_manager.create_or_reuse_archive(
+                        db_id=db_id,
+                        folder_path=folder_path,
+                        gallery_name=gallery_name,
+                        archive_format='zip',
+                        compression='store',
+                        split_size_mb=host_max_mb,
+                    )
+                else:
+                    # Upload raw file directly
+                    archive_paths = [folder_path]
+                    self._log(f"Uploading raw file: {folder_path.name}", level="info")
             else:
-                split_size_mb = defaults.get('archive_split_size_mb', 0)
+                # Directory: archive as before
+                defaults = load_user_defaults()
+                archive_format = defaults.get('archive_format', 'zip')
+                archive_compression = defaults.get('archive_compression', 'store')
+                split_enabled = defaults.get('archive_split_enabled', False)
+                split_mode = defaults.get('archive_split_mode', 'fixed')
 
-            # Pre-flight disk space check before archive creation
-            import shutil as _shutil
-            import tempfile as _tempfile
-            try:
-                temp_free = _shutil.disk_usage(_tempfile.gettempdir()).free
-                estimated_size = sum(
-                    f.stat().st_size for f in folder_path.iterdir()
-                    if f.is_file()
-                )
-                critical_mb = 512  # Default; could read from QSettings
-                critical_bytes = critical_mb * 1024 * 1024
-                if temp_free < estimated_size + critical_bytes:
-                    free_mb = temp_free // (1024 * 1024)
-                    need_mb = (estimated_size + critical_bytes) // (1024 * 1024)
-                    raise OSError(
-                        f"Insufficient disk space for archive: "
-                        f"{free_mb}MB free, need ~{need_mb}MB"
+                if not split_enabled:
+                    split_size_mb = 0
+                elif split_mode == 'auto_host_limit':
+                    host_max_mb = get_file_host_setting(self.host_id, 'max_file_size_mb', 'int') or 0
+                    if host_max_mb > 0:
+                        estimated_bytes = sum(
+                            f.stat().st_size for f in folder_path.iterdir() if f.is_file()
+                        )
+                        split_size_mb = host_max_mb if estimated_bytes > host_max_mb * 1024 * 1024 else 0
+                    else:
+                        self._log(
+                            "Split mode is 'only when exceeding host limit' but no max file size "
+                            "is configured for this host — skipping split",
+                            level="warning"
+                        )
+                        split_size_mb = 0
+                else:
+                    split_size_mb = defaults.get('archive_split_size_mb', 0)
+
+                # Pre-flight disk space check before archive creation
+                import shutil as _shutil
+                import tempfile as _tempfile
+                try:
+                    temp_free = _shutil.disk_usage(_tempfile.gettempdir()).free
+                    estimated_size = sum(
+                        f.stat().st_size for f in folder_path.iterdir()
+                        if f.is_file()
                     )
-            except OSError:
-                raise  # Re-raise our own space error
-            except Exception as e:
-                self._log(f"Disk space pre-flight check failed: {e}", level="warning")
-                # Proceed anyway if the check itself fails
+                    critical_mb = 512
+                    critical_bytes = critical_mb * 1024 * 1024
+                    if temp_free < estimated_size + critical_bytes:
+                        free_mb = temp_free // (1024 * 1024)
+                        need_mb = (estimated_size + critical_bytes) // (1024 * 1024)
+                        raise OSError(
+                            f"Insufficient disk space for archive: "
+                            f"{free_mb}MB free, need ~{need_mb}MB"
+                        )
+                except OSError:
+                    raise
+                except Exception as e:
+                    self._log(f"Disk space pre-flight check failed: {e}", level="warning")
 
-            archive_paths = self.archive_manager.create_or_reuse_archive(
-                db_id=db_id,
-                folder_path=folder_path,
-                gallery_name=gallery_name,
-                archive_format=archive_format,
-                compression=archive_compression,
-                split_size_mb=split_size_mb,
-            )
+                archive_paths = self.archive_manager.create_or_reuse_archive(
+                    db_id=db_id,
+                    folder_path=folder_path,
+                    gallery_name=gallery_name,
+                    archive_format=archive_format,
+                    compression=archive_compression,
+                    split_size_mb=split_size_mb,
+                )
 
             # Step 2: Create client (reuses session if available)
             client = self._create_client(host_config)
