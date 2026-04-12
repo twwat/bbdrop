@@ -211,8 +211,8 @@ def migrate_imx_credentials():
             remove_credential(key)
             log(f"Removed stale bare '{key}'", level="debug", category="auth")
 
-    # Step 2: Encrypt any plaintext values
-    for key in ['username', 'imx_username', 'turbo_username']:
+    # Step 2: Encrypt any plaintext values (bare keys already migrated/deleted above)
+    for key in ['imx_username', 'turbo_username']:
         value = get_credential(key)
         if not value:
             continue

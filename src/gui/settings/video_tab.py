@@ -569,6 +569,8 @@ class VideoSettingsTab(QWidget):
             # Reset stale settings from pre-0.9.6 when video settings didn't work
             if settings.value("_settings_version", 0, int) < 2:
                 settings.remove("")  # Clear entire Video group
+                settings.endGroup()
+                settings.beginGroup("Video")
                 settings.setValue("_settings_version", 2)
             self.grid_rows.setValue(settings.value("grid_rows", 5, int))
             self.grid_cols.setValue(settings.value("grid_cols", 4, int))

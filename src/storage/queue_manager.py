@@ -519,11 +519,13 @@ class QueueManager(QObject):
             log(f"Scan Worker: Video scan failed for {video_path}", level="warning", category="scan")
             return
 
-        # Generate screenshot sheet during scan
+        # Generate screenshot sheet during scan — saved to ~/.bbdrop/sheets/
         sheet_path = ""
         try:
             from src.processing.screenshot_sheet import ScreenshotSheetGenerator
+            from src.utils.paths import get_base_path
             from PyQt6.QtCore import QSettings
+            import hashlib
 
             settings = QSettings("BBDropUploader", "BBDropGUI")
             settings.beginGroup("Video")
@@ -549,11 +551,12 @@ class QueueManager(QObject):
             header_template = sheet_settings.get('image_overlay_template', '')
             sheet_img = generator.generate(video_path, meta, sheet_settings, header_template)
             if sheet_img:
-                import tempfile
                 fmt = sheet_settings.get('output_format', 'PNG')
                 suffix = '.png' if fmt == 'PNG' else '.jpg'
-                fd, sheet_path = tempfile.mkstemp(suffix=suffix, prefix='bbdrop_sheet_')
-                os.close(fd)
+                sheets_dir = os.path.join(get_base_path(), 'sheets')
+                os.makedirs(sheets_dir, exist_ok=True)
+                path_hash = hashlib.md5(path.encode()).hexdigest()[:12]
+                sheet_path = os.path.join(sheets_dir, f"{path_hash}{suffix}")
                 save_kwargs = {}
                 if fmt == 'JPG':
                     save_kwargs['quality'] = settings.value("jpg_quality", 85, int)

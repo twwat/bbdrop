@@ -725,6 +725,17 @@ class GalleryTableWidget(QTableWidget):
                     break
 
         sheet_path = getattr(item, 'screenshot_sheet_path', '') or ''
+        # Look up by convention if not in memory (e.g. after restart)
+        if not sheet_path or not os.path.isfile(sheet_path):
+            import hashlib
+            from src.utils.paths import get_base_path
+            sheets_dir = os.path.join(get_base_path(), 'sheets')
+            path_hash = hashlib.md5(item.path.encode()).hexdigest()[:12]
+            for ext in ('.png', '.jpg'):
+                candidate = os.path.join(sheets_dir, f"{path_hash}{ext}")
+                if os.path.isfile(candidate):
+                    sheet_path = candidate
+                    break
         dialog = ScreenshotSheetPreviewDialog(video_path, item.name, sheet_path=sheet_path, parent=self)
         dialog.exec()
 
