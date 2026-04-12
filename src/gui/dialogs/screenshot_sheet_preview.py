@@ -29,7 +29,7 @@ class _GenerateThread(QThread):
                 self.finished.emit(None, None)
                 return
 
-            settings = QSettings()
+            settings = QSettings("BBDropUploader", "BBDropGUI")
             settings.beginGroup("Video")
             sheet_settings = {
                 'rows': settings.value("grid_rows", 4, int),
@@ -53,7 +53,9 @@ class _GenerateThread(QThread):
             header_template = sheet_settings.get('image_overlay_template', '')
             sheet = generator.generate(self.video_path, metadata, sheet_settings, header_template)
             self.finished.emit(sheet, metadata)
-        except Exception:
+        except Exception as e:
+            from src.utils.logger import log
+            log(f"Screenshot sheet generation failed: {e}", level="error", category="video")
             self.finished.emit(None, None)
 
 
