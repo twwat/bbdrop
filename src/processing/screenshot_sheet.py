@@ -115,14 +115,23 @@ class ScreenshotSheetGenerator:
         font_color = settings.get('font_color', '#ffffff')
         bg_color = settings.get('bg_color', '#000000')
         header_text = settings.get('header_text', '')
+        padding = settings.get('border_spacing', 4)
+        header_font_size = settings.get('header_font_size', 14)
+        ts_font_size = settings.get('ts_font_size', 12)
+        thumb_width = settings.get('thumb_width', 0)
 
         if not frames:
             return Image.new('RGB', (640, 480), color=bg_color)
 
-        thumb_w, thumb_h = frames[0][0].size
-        padding = 4
-        header_font_size = 14
-        ts_font_size = 12
+        # Resize frames to target thumbnail width if set
+        source_w, source_h = frames[0][0].size
+        if thumb_width > 0 and thumb_width != source_w:
+            aspect = source_h / source_w
+            thumb_h = int(thumb_width * aspect)
+            frames = [(f.resize((thumb_width, thumb_h), Image.LANCZOS), ts) for f, ts in frames]
+            source_w, source_h = thumb_width, thumb_h
+
+        thumb_w, thumb_h = source_w, source_h
 
         header_font = self._get_font(font_family, header_font_size)
         ts_font = self._get_font(font_family, ts_font_size)

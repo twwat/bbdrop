@@ -93,3 +93,72 @@ class TestSheetCompositing:
         no_header = gen.composite_sheet(frames, {'rows': 1, 'cols': 1, 'header_text': ''})
         with_header = gen.composite_sheet(frames, {'rows': 1, 'cols': 1, 'header_text': 'Line1\nLine2'})
         assert with_header.height > no_header.height
+
+
+def _make_frames(count=4, size=(320, 240)):
+    """Create dummy frames for testing."""
+    return [(Image.new('RGB', size, color='red'), float(i * 10)) for i in range(count)]
+
+
+class TestCompositeSheetSettings:
+    """Verify composite_sheet respects all settings from the dict."""
+
+    def test_thumb_width_resizes_frames(self):
+        gen = ScreenshotSheetGenerator()
+        frames = _make_frames(4, size=(640, 480))
+        settings = {
+            'rows': 2, 'cols': 2,
+            'thumb_width': 200,
+            'show_timestamps': False,
+        }
+        sheet = gen.composite_sheet(frames, settings)
+        assert sheet.width == 2 * 200 + 3 * 4
+
+    def test_border_spacing(self):
+        gen = ScreenshotSheetGenerator()
+        frames = _make_frames(4, size=(100, 100))
+        settings = {
+            'rows': 2, 'cols': 2,
+            'border_spacing': 20,
+            'thumb_width': 100,
+            'show_timestamps': False,
+        }
+        sheet = gen.composite_sheet(frames, settings)
+        assert sheet.width == 260
+
+    def test_default_padding_when_border_spacing_absent(self):
+        gen = ScreenshotSheetGenerator()
+        frames = _make_frames(4, size=(100, 100))
+        settings = {
+            'rows': 2, 'cols': 2,
+            'thumb_width': 100,
+            'show_timestamps': False,
+        }
+        sheet = gen.composite_sheet(frames, settings)
+        assert sheet.width == 212
+
+    def test_font_sizes_from_settings(self):
+        gen = ScreenshotSheetGenerator()
+        frames = _make_frames(1, size=(200, 150))
+        settings = {
+            'rows': 1, 'cols': 1,
+            'thumb_width': 200,
+            'header_font_size': 30,
+            'ts_font_size': 20,
+            'header_text': 'Test Header',
+            'show_timestamps': True,
+        }
+        sheet = gen.composite_sheet(frames, settings)
+        assert sheet is not None
+
+    def test_font_family_from_settings(self):
+        gen = ScreenshotSheetGenerator()
+        frames = _make_frames(1, size=(200, 150))
+        settings = {
+            'rows': 1, 'cols': 1,
+            'thumb_width': 200,
+            'font_family': 'DejaVuSans',
+            'show_timestamps': True,
+        }
+        sheet = gen.composite_sheet(frames, settings)
+        assert sheet is not None
