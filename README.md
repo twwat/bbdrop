@@ -13,94 +13,40 @@ Batch-upload image galleries to multiple image and file hosts, generate BBCode, 
 
 ---
 
-
 ## Install
-
-### Binary _(recommended)_
-
-[![Windows](https://custom-icon-badges.demolab.com/badge/Windows-blue.svg?logo=windows11&logoColor=white)](#)
-[![macOS](https://img.shields.io/badge/macOS-444444.svg?logo=apple&logoColor=F0F0F0)](#)
-[![Linux](https://img.shields.io/badge/Linux-f1c232.svg?logo=linux&logoColor=black)](#)
 
 1. Go to the [latest release](https://github.com/twwat/bbdrop/releases/latest) page
 2. Download the version for your operating system
-3. Extract the archive and run the executable (e.g. `bbdrop.exe`)
+3. Run the installer or extract the portable archive
 
-_**Note**: portable versions need no installation -- unpack and run._
+| Platform | Recommended | Portable |
+|----------|-------------|----------|
+| Windows | `.exe` installer | `.zip` |
+| macOS (Apple Silicon) | `.dmg` (arm64) | -- |
+| macOS (Intel) | `.dmg` (x64) | -- |
+| Linux | `.AppImage` | `.deb`, `.rpm` |
 
-### From source
+> Portable versions need no installation -- unpack and run.
 
-![Python](https://img.shields.io/badge/python-3.12+-lightgreen.svg?logo=python&logoColor=white)
-[![Qt](https://img.shields.io/badge/PyQt-6.9.1-blue.svg?logo=Qt&logoColor=babyblue)](#)
-
-```bash
-git clone https://github.com/twwat/bbdrop.git
-cd bbdrop
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python bbdrop.py --gui
-```
+For running from source or building executables, see [Building from source](docs/dev/building.md).
 
 ---
 
-## Configuration
+## Features
 
-All settings live in the **Settings** dialog. The default data directory is `~/.bbdrop/`; change it under Settings > General.
-
----
-
-## Usage
-
-### GUI
-
-```bash
-python bbdrop.py --gui
-```
-
-Drag folders into the queue, configure hosts, and click Start All. Results appear in the BBCode viewer.
-
-To send a folder to a running instance:
-
-```bash
-python bbdrop.py --gui /path/to/gallery
-```
-
-### CLI
-
-```bash
-python bbdrop.py /path/to/images
-python bbdrop.py /path/to/images --name "Gallery Name" --template "Forum Post"
-```
-
-<details>
-<summary>All CLI flags</summary>
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `folder_paths` | Paths to folders containing images | -- |
-| `-v, --version` | Print version and exit | -- |
-| `--gui` | Launch GUI | off |
-| `--name NAME` | Gallery name | folder name |
-| `--size {1,2,3,4,6}` | Thumbnail size: 1=100, 2=180, 3=250, 4=300, 6=150 | 3 |
-| `--format {1,2,3,4}` | Thumbnail format: 1=fixed width, 2=proportional, 3=square, 4=fixed height | 2 |
-| `--max-retries N` | Retry attempts for failed uploads | 3 |
-| `--parallel N` | Simultaneous upload count | 4 |
-| `--template, -t NAME` | BBCode template name | default |
-| `--setup-secure` | Set up secure password storage (interactive) | -- |
-| `--rename-unnamed` | Rename all unnamed galleries from previous uploads | -- |
-| `--debug` | Print all log messages to console | off |
-| `--install-context-menu` | Install Windows right-click menu entry | -- |
-| `--remove-context-menu` | Remove Windows right-click menu entry | -- |
-
-</details>
-
-### Windows context menu
-
-```bash
-python bbdrop.py --install-context-menu
-```
-
-Right-click any folder and select **Add to BBDrop** to add it to the queue. Remove with `--remove-context-menu`.
+- **Upload engine** -- concurrent workers, drag-and-drop queue, batch processing, resume, duplicate detection, and real-time progress tracking
+- **Multi-host pipeline** -- 3 image hosts and 7 file hosts through a host-agnostic architecture; queue a gallery once, upload everywhere
+- **File manager** -- in-app browser for remote file hosts; browse, rename, move, copy, delete, trash, and submit remote URL uploads across all supported hosts
+- **BBCode templates** -- 18+ placeholders, conditional blocks (`[if]...[else]...[/if]`), multiple templates, hot-swap without restarting
+- **Cover photos** -- automatic detection by filename pattern, dimensions, or file size; multi-cover support with deduplication, max-cover limiting, and per-host cover galleries
+- **Archive management** -- create ZIP/7Z archives with configurable compression and split sizes; extract ZIP, 7Z, RAR, TAR
+- **Disk space monitoring** -- tiered warnings with adaptive polling, pre-flight checks before uploads and archive creation
+- **Proxy & Tor** -- HTTP, HTTPS, SOCKS4, and SOCKS5 proxies with a 3-level resolver; built-in Tor integration with one-click pool creation and circuit rotation
+- **Statistics** -- upload history, bandwidth tracking, per-host metrics
+- **Link scanner** -- check content availability across most image and file hosts with configurable age thresholds, scan type filters, and per-host health tracking
+- **Hook system** -- run external scripts on upload events with positional placeholders and JSON output parsing
+- **Video support** -- metadata extraction, screenshot sheet generation, video-specific BBCode placeholders
+- **GUI** -- PyQt6 with dark/light themes, system tray, single-instance mode, keyboard shortcuts, and audio + toast notifications
 
 ---
 
@@ -112,7 +58,7 @@ Right-click any folder and select **Add to BBDrop** to add it to the queue. Remo
 |------|------|---------------|---------|-------|
 | **IMX.to** | API / Session | Unlimited | Unlimited | Affiliate program |
 | **Pixhost** | None | 10 MB | Unlimited | Integrated zip download |
-| **TurboImageHost** | Session | 35 MB | Unlimited | — |
+| **TurboImageHost** | Session | 35 MB | Unlimited | -- |
 
 ### File Hosts
 
@@ -132,50 +78,6 @@ Every host supports automatic retry, connection pooling, and token caching.
 
 ---
 
-## Features
-
-- 🚀 **Upload engine** — concurrent workers, drag-and-drop queue, batch processing, resume, duplicate detection, and real-time progress tracking
-- 🌐 **Multi-host pipeline** — 3 image hosts and 7 file hosts through a host-agnostic architecture; queue a gallery once, upload everywhere
-- 📁 **File manager** — in-app browser for remote file hosts; browse, rename, move, copy, delete, trash, and submit remote URL uploads across all supported hosts
-- 📝 **BBCode templates** — 18+ placeholders, conditional blocks (`[if]...[else]...[/if]`), multiple templates, hot-swap without restarting
-- 🖼️ **Cover photos** — automatic detection by filename pattern, dimensions, or file size; multi-cover support with deduplication, max-cover limiting, and per-host cover galleries
-- 📦 **Archive management** — create ZIP/7Z archives with configurable compression and split sizes; extract ZIP, 7Z, RAR, TAR
-- 💾 **Disk space monitoring** — tiered warnings with adaptive polling, pre-flight checks before uploads and archive creation
-- 🛡️ **Proxy & Tor** — HTTP, HTTPS, SOCKS4, and SOCKS5 proxies with a 3-level resolver (global → category → per-service); built-in Tor integration with one-click pool creation and circuit rotation
-- 📊 **Statistics** — upload history, bandwidth tracking, per-host metrics
-- 🔍 **Link scanner** — check content availability across most image and file hosts with configurable age thresholds, scan type filters, and per-host health tracking
-- ⚡ **Hook system** — run external scripts on upload events with positional placeholders and JSON output parsing
-- 🖥️ **GUI** — PyQt6 with dark/light themes, system tray, single-instance mode, keyboard shortcuts, and audio + toast notifications
-
----
-
-## BBCode Placeholders
-
-Templates support gallery and video placeholders with `[if placeholder]...[else]...[/if]` conditional blocks.
-
-<details>
-<summary>All placeholders</summary>
-
-| Placeholder | Description |
-|-------------|-------------|
-| `#folderName#` | Gallery or folder name |
-| `#width#` | Average width |
-| `#height#` | Average height |
-| `#longest#` | Longest dimension |
-| `#extension#` | Common format |
-| `#pictureCount#` | Number of images |
-| `#folderSize#` | Total size |
-| `#galleryLink#` | Image host gallery URL |
-| `#allImages#` | BBCode for all images except cover |
-| `#cover#` | BBCode for cover image |
-| `#hostLinks#` | File host download links |
-| `#custom1#` -- `#custom4#` | User-defined fields |
-| `#ext1#` -- `#ext4#` | External link fields (from hooks) |
-
-</details>
-
----
-
 ## Security
 
 | Feature | Implementation |
@@ -190,24 +92,6 @@ Templates support gallery and video placeholders with `[if placeholder]...[else]
 
 ---
 
-## Building
-
-```bash
-pyinstaller bbdrop.spec
-```
-
-<details>
-<summary>System requirements</summary>
-
-- **OS:** Windows 10+, Linux (Ubuntu 20.04+, Fedora 35+), macOS 15+
-- **Python:** 3.12+ (when running from source)
-- **RAM:** 512 MB minimum, 2 GB recommended
-- **Disk:** 100 MB minimum, 500 MB recommended (logs/cache)
-
-</details>
-
----
-
 ## Contributing
 
 Bug reports and feature requests: [GitHub Issues](https://github.com/twwat/bbdrop/issues).
@@ -218,4 +102,4 @@ MIT -- see [LICENSE](LICENSE).
 
 ---
 
-[Docs](docs/) | [Changelog](CHANGELOG.md) | [Issues](https://github.com/twwat/bbdrop/issues)
+[Docs](https://bbdrop.net) | [Changelog](CHANGELOG.md) | [Issues](https://github.com/twwat/bbdrop/issues)

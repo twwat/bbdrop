@@ -97,6 +97,7 @@ nav:
     - Keyboard Shortcuts: reference/keyboard-shortcuts.md
     - Template Placeholders: reference/template-placeholders.md
     - External App Parameters: reference/external-apps-parameters.md
+    - CLI Reference: reference/cli.md
     - Quick Reference: reference/quick-reference.md
   - Troubleshooting:
     - troubleshooting/index.md

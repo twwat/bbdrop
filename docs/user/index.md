@@ -67,6 +67,7 @@ Quick lookup for settings, shortcuts, and parameters.
 - [Keyboard Shortcuts](reference/keyboard-shortcuts.md) — Complete shortcut reference
 - [Template Placeholders](reference/template-placeholders.md) — All placeholders including video
 - [External App Parameters](reference/external-apps-parameters.md) — Hook variable reference
+- [CLI Reference](reference/cli.md) — Command-line flags and usage
 - [Quick Reference](reference/quick-reference.md) — One-page cheat sheet
 
 ---

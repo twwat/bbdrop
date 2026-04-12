@@ -5,6 +5,7 @@ Quick lookup for features, parameters, and specifications.
 ## Reference Documents
 
 - [Features](./FEATURES.md) - Complete feature list (100+ features documented)
+- [CLI Reference](./cli.md) - Command-line flags and usage
 - [Quick Reference](./quick-reference.md) - One-page cheat sheet
 - [Settings Reference](./settings-reference.md) - All settings organized by tab
 - [Keyboard Shortcuts](./keyboard-shortcuts.md) - All keyboard shortcuts
