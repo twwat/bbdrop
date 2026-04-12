@@ -6,7 +6,7 @@ import os
 from PIL import Image
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QSpinBox, QCheckBox, QComboBox, QColorDialog, QLineEdit,
     QFontComboBox, QPlainTextEdit, QLabel,
     QScrollArea, QPushButton, QGraphicsScene,
@@ -154,6 +154,15 @@ class VideoSettingsTab(QWidget):
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
+
+        # Tab description
+        desc = QLabel(
+            "Configure how screenshot sheets are generated from video files — "
+            "grid layout, timestamps, appearance, and overlay text."
+        )
+        desc.setWordWrap(True)
+        desc.setProperty("class", "tab-description")
+        layout.addWidget(desc)
 
         # Inline preview
         preview_group = QGroupBox("Preview")
@@ -393,6 +402,12 @@ class VideoSettingsTab(QWidget):
         defaults_group = QGroupBox("Defaults")
         defaults_layout = QHBoxLayout(defaults_group)
         defaults_layout.addWidget(QLabel("Template:"))
+        defaults_layout.addWidget(InfoButton(
+            "<b>Defaults</b><br>"
+            "<b>Template</b> — the BBCode template used for video uploads.<br>"
+            "<b>Image host</b> — which host to upload the screenshot sheet to. "
+            "\"Use current selection\" uses whatever image host is active in the main window."
+        ))
         self.default_template = QComboBox()
         self.default_template.currentIndexChanged.connect(self.dirty.emit)
         defaults_layout.addWidget(self.default_template, 1)
@@ -400,12 +415,6 @@ class VideoSettingsTab(QWidget):
         self.image_host_override = QComboBox()
         self.image_host_override.currentIndexChanged.connect(self.dirty.emit)
         defaults_layout.addWidget(self.image_host_override, 1)
-        defaults_layout.addWidget(InfoButton(
-            "<b>Defaults</b><br>"
-            "<b>Template</b> — the BBCode template used for video uploads.<br>"
-            "<b>Image host</b> — which host to upload the screenshot sheet to. "
-            "\"Use current selection\" uses whatever image host is active in the main window."
-        ))
         layout.addWidget(defaults_group)
         self._populate_combos()
 
@@ -415,6 +424,13 @@ class VideoSettingsTab(QWidget):
         self.remember_mixed = QCheckBox("Remember mixed folder choice")
         self.remember_mixed.toggled.connect(self.dirty.emit)
         mixed_layout.addWidget(self.remember_mixed)
+        mixed_layout.addWidget(InfoButton(
+            "<b>Mixed Folders</b><br>"
+            "When a folder contains both images and videos, BBDrop asks whether "
+            "to include images or upload videos only.<br><br>"
+            "Enable <b>Remember</b> to skip the prompt and always use the "
+            "selected default."
+        ))
         mixed_layout.addWidget(QLabel("Default:"))
         self.mixed_choice = QComboBox()
         self.mixed_choice.addItems(["Include images", "Videos only"])
