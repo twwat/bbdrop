@@ -85,9 +85,15 @@ class VideoSettingsTab(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         root_layout.addWidget(scroll_area, 1)
 
-        # Inline preview strip at bottom
-        preview_strip = self._build_preview_strip()
-        root_layout.addWidget(preview_strip)
+        # Bottom bar with size info and preview button
+        bar = QHBoxLayout()
+        self._size_label = QLabel("")
+        bar.addWidget(self._size_label)
+        bar.addStretch()
+        preview_btn = QPushButton("Preview Sheet")
+        preview_btn.clicked.connect(self._pop_out_preview)
+        bar.addWidget(preview_btn)
+        root_layout.addLayout(bar)
 
         # Floating preview window (created on demand)
         self._preview_window = None
@@ -365,37 +371,6 @@ class VideoSettingsTab(QWidget):
         self.image_host_override.blockSignals(False)
 
     # ------------------------------------------------------------------ #
-    #  Preview strip (inline thumbnail + pop-out)                         #
-    # ------------------------------------------------------------------ #
-    def _build_preview_strip(self) -> QWidget:
-        strip = QWidget()
-        layout = QHBoxLayout(strip)
-        layout.setContentsMargins(0, 4, 0, 0)
-
-        # Clickable thumbnail
-        self._thumb_label = QLabel()
-        self._thumb_label.setFixedHeight(120)
-        self._thumb_label.setMinimumWidth(200)
-        self._thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._thumb_label.setStyleSheet("border: 1px solid palette(mid); background: #111;")
-        self._thumb_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._thumb_label.setToolTip("Click to open full preview")
-        self._thumb_label.mousePressEvent = lambda e: self._pop_out_preview()
-        layout.addWidget(self._thumb_label, 1)
-
-        # Info + button column
-        info_layout = QVBoxLayout()
-        self._size_label = QLabel("")
-        info_layout.addWidget(self._size_label)
-        info_layout.addStretch()
-        pop_out_btn = QPushButton("Pop Out")
-        pop_out_btn.setFixedWidth(70)
-        pop_out_btn.clicked.connect(self._pop_out_preview)
-        info_layout.addWidget(pop_out_btn)
-        layout.addLayout(info_layout)
-
-        return strip
-
     def _pop_out_preview(self):
         """Open or focus the floating preview window."""
         if self._preview_window is None or not self._preview_window.isVisible():
@@ -523,14 +498,6 @@ class VideoSettingsTab(QWidget):
         self._size_label.setText(f"{sheet.width}\u00d7{sheet.height}  ~{size_str}")
 
         self._current_pixmap = pixmap
-
-        # Update inline thumbnail (scaled to fit the strip)
-        thumb = pixmap.scaled(
-            self._thumb_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._thumb_label.setPixmap(thumb)
 
         # Update floating preview window if open
         if self._preview_window is not None and self._preview_window.isVisible():
