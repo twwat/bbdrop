@@ -7,12 +7,12 @@ from PIL import Image
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout,
-    QSpinBox, QCheckBox, QComboBox, QLineEdit,
+    QSpinBox, QCheckBox, QComboBox, QColorDialog, QLineEdit,
     QFontComboBox, QPlainTextEdit, QLabel,
     QScrollArea, QPushButton, QGraphicsScene,
 )
 from PyQt6.QtCore import pyqtSignal, QSettings, Qt, QTimer
-from PyQt6.QtGui import QFont, QImage, QPixmap
+from PyQt6.QtGui import QColor, QFont, QImage, QPixmap
 from src.gui.widgets.zoom_graphics_view import ZoomGraphicsView
 from src.gui.widgets.info_button import InfoButton
 from src.processing.screenshot_sheet import ScreenshotSheetGenerator
@@ -58,6 +58,66 @@ class _PreviewWindow(QWidget):
         self._scene.addPixmap(pixmap)
         self._scene.setSceneRect(QRectF(pixmap.rect()))
         QTimer.singleShot(0, self._view.zoom_to_fit)
+
+
+class _ColorPicker(QWidget):
+    """Color swatch + hex input that opens QColorDialog on click."""
+
+    colorChanged = pyqtSignal()
+
+    def __init__(self, default="#000000", parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+
+        self._swatch = QPushButton()
+        self._swatch.setFixedSize(28, 22)
+        self._swatch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._swatch.clicked.connect(self._pick)
+        lay.addWidget(self._swatch)
+
+        self._edit = QLineEdit(default)
+        self._edit.setFixedWidth(72)
+        self._edit.setPlaceholderText("#000000")
+        self._edit.textChanged.connect(self._on_text_changed)
+        lay.addWidget(self._edit)
+
+        self._update_swatch(default)
+
+    # -- public API (matches QLineEdit so load/save code works unchanged) --
+
+    def text(self) -> str:
+        return self._edit.text()
+
+    def setText(self, color: str):
+        self._edit.setText(color)
+        self._update_swatch(color)
+
+    def blockSignals(self, b: bool) -> bool:
+        self._edit.blockSignals(b)
+        return super().blockSignals(b)
+
+    # -- internals --
+
+    def _update_swatch(self, color: str):
+        if QColor(color).isValid():
+            self._swatch.setStyleSheet(
+                f"QPushButton {{ background-color: {color}; "
+                f"border: 1px solid palette(mid); border-radius: 3px; }}"
+            )
+
+    def _on_text_changed(self, text: str):
+        self._update_swatch(text)
+        self.colorChanged.emit()
+
+    def _pick(self):
+        cur = QColor(self._edit.text())
+        if not cur.isValid():
+            cur = QColor("#000000")
+        color = QColorDialog.getColor(cur, self, "Choose color")
+        if color.isValid():
+            self._edit.setText(color.name())
 
 
 class VideoSettingsTab(QWidget):
@@ -214,6 +274,14 @@ class VideoSettingsTab(QWidget):
 
         app_row1 = QHBoxLayout()
         app_row1.addWidget(QLabel("Font:"))
+        app_row1.addWidget(InfoButton(
+            "<b>Appearance</b><br>"
+            "Controls the look of the overlay header and timestamps "
+            "rendered onto the screenshot sheet.<br><br>"
+            "<b>Font color</b> sets the header/timestamp text color. "
+            "<b>BG color</b> sets the header background. "
+            "Click the color swatch to open a picker, or type a hex value."
+        ))
         self.font_family = QFontComboBox()
         self.font_family.currentFontChanged.connect(self.dirty.emit)
         app_row1.addWidget(self.font_family, 1)
@@ -228,13 +296,14 @@ class VideoSettingsTab(QWidget):
 
         app_row2 = QHBoxLayout()
         app_row2.addWidget(QLabel("Font color:"))
-        self.font_color = QLineEdit("#ffffff")
-        self.font_color.textChanged.connect(self.dirty.emit)
+        self.font_color = _ColorPicker("#ffffff")
+        self.font_color.colorChanged.connect(self.dirty.emit)
         app_row2.addWidget(self.font_color)
         app_row2.addWidget(QLabel("BG color:"))
-        self.bg_color = QLineEdit("#000000")
-        self.bg_color.textChanged.connect(self.dirty.emit)
+        self.bg_color = _ColorPicker("#000000")
+        self.bg_color.colorChanged.connect(self.dirty.emit)
         app_row2.addWidget(self.bg_color)
+        app_row2.addStretch()
         appearance_layout.addLayout(app_row2)
 
         layout.addWidget(appearance_group)
