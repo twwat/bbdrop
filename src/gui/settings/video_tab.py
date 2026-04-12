@@ -522,6 +522,10 @@ class VideoSettingsTab(QWidget):
             w.blockSignals(True)
         try:
             settings.beginGroup("Video")
+            # Reset stale settings from pre-0.9.6 when video settings didn't work
+            if settings.value("_settings_version", 0, int) < 2:
+                settings.remove("")  # Clear entire Video group
+                settings.setValue("_settings_version", 2)
             self.grid_rows.setValue(settings.value("grid_rows", 5, int))
             self.grid_cols.setValue(settings.value("grid_cols", 4, int))
             self.thumb_width.setValue(settings.value("thumb_width", 320, int))
@@ -581,5 +585,6 @@ class VideoSettingsTab(QWidget):
         settings.setValue("remember_mixed_choice", self.remember_mixed.isChecked())
         settings.setValue("default_template", self.default_template.currentData() or "Video")
         settings.setValue("image_host_override", self.image_host_override.currentData() or "")
+        settings.setValue("_settings_version", 2)
         settings.endGroup()
         return True
