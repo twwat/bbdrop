@@ -91,6 +91,10 @@ class IconManager:
         'more_info':            ['more_info-light.png',         'more_info-dark.png'],
         'main_window':          'bbdrop-main-icon.png',
         'app_icon':             'bbdrop.ico',
+
+        # Media type icons
+        'media_photo':          'photo.png',
+        'media_video':          'video.png',
         # Alternative sizes (optional)
     }
 

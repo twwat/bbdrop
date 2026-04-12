@@ -332,12 +332,11 @@ class TableRowManager(QObject):
         host_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         mw.gallery_table.setItem(row, _Col.IMAGE_HOST, host_item)
 
-        # Media type column (image/video)
-        if not mw.gallery_table.isColumnHidden(_Col.MEDIA_TYPE):
-            media_type_item = QTableWidgetItem(item.media_type or "image")
-            media_type_item.setFlags(media_type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            media_type_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            mw.gallery_table.setItem(row, _Col.MEDIA_TYPE, media_type_item)
+        # Media type column (image/video) — delegate renders icon from UserRole
+        media_type_item = QTableWidgetItem()
+        media_type_item.setFlags(media_type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        media_type_item.setData(Qt.ItemDataRole.UserRole, item.media_type or "image")
+        mw.gallery_table.setItem(row, _Col.MEDIA_TYPE, media_type_item)
 
         # Renamed status: only applies to hosts that support gallery rename (IMX)
         if item.image_host_id == 'imx':
