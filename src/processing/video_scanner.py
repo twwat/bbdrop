@@ -76,16 +76,23 @@ class VideoScanner:
             streams = self.extract_mediainfo(path)
             filesize = os.path.getsize(path)
 
-            return {
+            video_streams = streams['video']
+            meta = {
                 'width': cv2_meta['width'],
                 'height': cv2_meta['height'],
                 'fps': cv2_meta['fps'],
                 'frame_count': cv2_meta['frame_count'],
                 'duration': cv2_meta['duration'],
                 'filesize': filesize,
-                'video_streams': streams['video'],
+                'video_streams': video_streams,
                 'audio_streams': streams['audio'],
             }
+
+            # Primary video stream bitrate for template placeholder
+            if video_streams:
+                meta['bitrate'] = video_streams[0].get('bit_rate', '')
+
+            return meta
         except Exception as e:
             log(f"VideoScanner: scan failed for {path}: {e}")
             return None
