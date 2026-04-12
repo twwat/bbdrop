@@ -452,8 +452,7 @@ class VideoSettingsTab(QWidget):
         self._preview_scene.clear()
         self._preview_scene.addPixmap(pixmap)
         self._preview_scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
-        # Defer zoom_to_fit so the view has a real size first
-        QTimer.singleShot(0, self._preview_view.zoom_to_fit)
+        self._pending_fit = True
 
     @staticmethod
     def _pil_to_pixmap(pil_image: Image.Image) -> QPixmap:
@@ -466,6 +465,17 @@ class VideoSettingsTab(QWidget):
             3 * pil_image.width, QImage.Format.Format_RGB888,
         )
         return QPixmap.fromImage(qimage)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._pending_fit:
+            self._pending_fit = False
+            QTimer.singleShot(0, self._preview_view.zoom_to_fit)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._preview_scene.items():
+            self._preview_view.zoom_to_fit()
 
     # ------------------------------------------------------------------ #
     #  Settings I/O                                                       #
