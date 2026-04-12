@@ -259,14 +259,20 @@ class GalleryQueueController(QObject):
             if msg.exec() != QMessageBox.StandardButton.Yes:
                 return
 
-        template_name = mw.template_combo.currentText()
+        # Use video-specific defaults from Video settings tab
+        video_settings = QSettings("BBDropUploader", "BBDropGUI")
+        video_settings.beginGroup("Video")
+        template_name = video_settings.value("default_template", "") or mw.template_combo.currentText()
+        host_override = video_settings.value("image_host_override", "")
+        video_settings.endGroup()
+
         current_tab = (
             mw.gallery_table.current_tab
             if hasattr(mw.gallery_table, 'current_tab')
             else "Main"
         )
         actual_tab = "Main" if current_tab == "All Tabs" else current_tab
-        selected_host = mw._get_default_host()
+        selected_host = host_override or mw._get_default_host()
 
         result = mw.queue_manager.add_item(
             path, name=video_name, template_name=template_name,
