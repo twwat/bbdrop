@@ -4,6 +4,36 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.6] - 2026-04-11 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.5...v0.9.6))
+
+### Added
+- **File Manager**: In-app file browser for remote file hosts, accessible via Tools → File Manager
+  - Supports K2S/FileBoom/TezFiles (JSON API), RapidGator (JSON API with trash and copy), Katfile (XFS REST), Filespace (XFS + web scraping), and Filedot (web scraping)
+  - Folder tree with lazy loading, sortable file list with pagination, drag-and-drop move
+  - Per-host capabilities: rename, move, copy, delete, trash, remote upload, file properties
+  - Filedot properties dialog with single and multi-file diff view, flag toggles
+  - Quick settings panel button for fast access
+- **Credential encryption**: Usernames now encrypted in OS keyring alongside passwords
+  - Automatic migration of existing plaintext usernames on startup
+  - Inline editable credential fields in image host settings
+  - Descriptive credential labels and security notes across all host settings
+- **Settings UI improvements**: Image host thumbnail sliders replaced with spinboxes, upload settings added, infobuttons on all host config panels, unified retry row for file hosts, connection test results moved to dedicated dialog
+- **File host config defaults**: Auto-retry, max upload time, max file size, and connect timeout now have configurable defaults per host
+- **Video entry points**: Video files can be added via drag-and-drop and queue browse, enriched upload results dict, dedicated Video BBCode template
+
+### Changed
+- Chrome user-agent consolidated to a single constant in `core/constants.py`
+
+### Fixed
+- **File Manager API handling**: Corrected K2S and RapidGator response parsing to match actual API docs
+- **File Manager sessions**: Rebuilt session references before capabilities cache hit; per-host session client routing for Filedot and Filespace
+- **File Manager HTML parsing**: Fixed variable shadowing in page HTML extraction and unescaped HTML entities
+- **Cloudflare bypass**: File manager pycurl clients now send Chrome UA to avoid Cloudflare challenges
+- **Credential display**: Encrypted usernames no longer displayed as ciphertext in image host settings
+- **Auth timing**: Credentials checked at upload time instead of startup — no more noisy logs or false failures when hosts are unconfigured
+- **File host connect_timeout**: Setting can now be saved correctly
+- **GUI fixes**: Infobutton crash, video tab false dirty state, grid group alignment, layout and consistency issues across settings dialogs
+
 ## [0.9.5] - 2026-03-31 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.4...v0.9.5))
 
 ### Added
