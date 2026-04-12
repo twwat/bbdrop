@@ -978,6 +978,7 @@ class FileHostClient:
             self._configure_ssl(curl)
             self._configure_proxy(curl)
             curl.setopt(pycurl.URL, dedupe_url)
+            curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
             curl.setopt(pycurl.POST, 1)
             curl.setopt(pycurl.POSTFIELDS, body.decode('utf-8'))
             curl.setopt(pycurl.HTTPHEADER, ['Content-Type: application/json'])
@@ -1086,6 +1087,7 @@ class FileHostClient:
                 body_json = json.dumps(body)
 
                 curl.setopt(pycurl.URL, init_url)
+                curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
                 curl.setopt(pycurl.POST, 1)
                 curl.setopt(pycurl.POSTFIELDS, body_json)
                 curl.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
@@ -1105,6 +1107,7 @@ class FileHostClient:
                     init_url = init_url.replace(f"{{{key}}}", quote(str(value), safe=''))
 
                 curl.setopt(pycurl.URL, init_url)
+                curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
                 curl.setopt(pycurl.WRITEDATA, response_buffer)
                 curl.setopt(pycurl.TIMEOUT, 30)
                 curl.perform()
