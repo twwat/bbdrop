@@ -147,15 +147,17 @@ class FileHostClient:
     def _configure_upload_performance(self, curl: pycurl.Curl) -> None:
         """Configure pycurl options for maximum upload throughput.
 
-        Applies three key optimisations:
+        Applies key optimisations:
         1. Increase upload buffer from 64KB default to 1MB.
-        2. Disable Nagle's algorithm (TCP_NODELAY) to avoid batching delays.
-        3. Suppress ``Expect: 100-continue`` header — libcurl sends it by
+        2. Suppress ``Expect: 100-continue`` header — libcurl sends it by
            default for large POST bodies, which adds a 1-second stall when
            the server doesn't reply with 100 Continue promptly.
+
+        Note: HTTP/1.1 downgrade is applied only for K2S-family hosts
+        (see ``_upload_multistep``) where HTTP/2 flow control on the
+        ``filestore.app`` CDN throttles uploads to ~0.5 MB/s.
         """
         curl.setopt(pycurl.UPLOAD_BUFFERSIZE, self._UPLOAD_BUFFERSIZE)
-        curl.setopt(pycurl.TCP_NODELAY, 1)
 
     def _login_token_based(self, credentials: str) -> str:
         """Login to get authentication token.
@@ -1191,6 +1193,13 @@ class FileHostClient:
         self._configure_ssl(curl)
         self._configure_proxy(curl)
         self._configure_upload_performance(curl)
+
+        # K2S family (Keep2Share, TezFiles, FileBoom) uploads go to the
+        # filestore.app CDN which throttles HTTP/2 via flow control to
+        # ~0.5 MB/s.  Force HTTP/1.1 to get full throughput.
+        if self.config.init_body_json:
+            curl.setopt(pycurl.HTTP_VERSION, pycurl.CURL_HTTP_VERSION_1_1)
+
         response_buffer = BytesIO()
 
         try:
