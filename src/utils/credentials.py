@@ -197,6 +197,21 @@ def migrate_credentials_from_ini():
             config.write(f)
         log("Migrated credentials from INI to Registry", level="info", category="auth")
 
+def migrate_bare_imx_keys():
+    """One-time migration: copy bare credential keys to imx_-prefixed keys.
+
+    Old code stored IMX credentials under bare keys (username, password, api_key).
+    New code uses host-specific keys (imx_username, imx_password, imx_api_key).
+    Copies bare values to prefixed keys if prefixed keys don't already exist.
+    """
+    for key in ['username', 'password', 'api_key']:
+        bare_value = get_credential(key)
+        prefixed_value = get_credential(key, 'imx')
+        if bare_value and not prefixed_value:
+            set_credential(key, bare_value, 'imx')
+            log(f"Migrated bare '{key}' to 'imx_{key}'", level="info", category="auth")
+
+
 def migrate_plaintext_usernames():
     """One-time migration: encrypt any plaintext usernames still in keyring.
 
