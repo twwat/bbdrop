@@ -119,7 +119,7 @@ class ScreenshotSheetGenerator:
         header_font_size = settings.get('header_font_size', 14)
         ts_font_size = settings.get('ts_font_size', 12)
         thumb_width = settings.get('thumb_width', 0)
-    fps = settings.get('fps', 0)
+        fps = settings.get('fps', 0)
 
         if not frames:
             return Image.new('RGB', (640, 480), color=bg_color)
