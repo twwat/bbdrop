@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRectF
 from PyQt6.QtGui import QPixmap, QImage, QWheelEvent, QMouseEvent
 from PIL import Image
+from src.gui.widgets.zoom_graphics_view import ZoomGraphicsView
 
 
 class _GenerateThread(QThread):
@@ -59,56 +60,6 @@ class _GenerateThread(QThread):
             self.finished.emit(None, None)
 
 
-class _ZoomGraphicsView(QGraphicsView):
-    """Graphics view with scroll-wheel zoom and middle-click/left-click pan."""
-
-    zoom_changed = pyqtSignal(float)
-
-    ZOOM_MIN = 0.05
-    ZOOM_MAX = 10.0
-    ZOOM_FACTOR = 1.15
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.setRenderHints(self.renderHints())
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._current_zoom = 1.0
-
-    def wheelEvent(self, event: QWheelEvent):
-        if event.angleDelta().y() > 0:
-            factor = self.ZOOM_FACTOR
-        else:
-            factor = 1.0 / self.ZOOM_FACTOR
-
-        new_zoom = self._current_zoom * factor
-        if new_zoom < self.ZOOM_MIN or new_zoom > self.ZOOM_MAX:
-            return
-
-        self.scale(factor, factor)
-        self._current_zoom = new_zoom
-        self.zoom_changed.emit(self._current_zoom)
-
-    def zoom_to_fit(self):
-        scene = self.scene()
-        if scene is None or scene.sceneRect().isEmpty():
-            return
-        self.resetTransform()
-        self.fitInView(scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        # Calculate actual zoom from the transform
-        self._current_zoom = self.transform().m11()
-        self.zoom_changed.emit(self._current_zoom)
-
-    def set_zoom(self, zoom: float):
-        zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
-        self.resetTransform()
-        self.scale(zoom, zoom)
-        self._current_zoom = zoom
-        self.zoom_changed.emit(self._current_zoom)
-
-
 class ScreenshotSheetPreviewDialog(QDialog):
     """Shows a preview of the generated screenshot sheet for a video."""
 
@@ -132,7 +83,7 @@ class ScreenshotSheetPreviewDialog(QDialog):
 
         # Graphics view with zoom
         self.scene = QGraphicsScene(self)
-        self.view = _ZoomGraphicsView(self)
+        self.view = ZoomGraphicsView(self)
         self.view.setScene(self.scene)
         self.view.zoom_changed.connect(self._on_zoom_changed)
         layout.addWidget(self.view, 1)
