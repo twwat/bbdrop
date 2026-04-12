@@ -440,6 +440,7 @@ class VideoSettingsTab(QWidget):
             'font_color': self.font_color.text(),
             'bg_color': self.bg_color.text(),
             'header_text': overlay_text,
+            'fps': 23.976,
         }
 
         try:

@@ -119,6 +119,7 @@ class ScreenshotSheetGenerator:
         header_font_size = settings.get('header_font_size', 14)
         ts_font_size = settings.get('ts_font_size', 12)
         thumb_width = settings.get('thumb_width', 0)
+    fps = settings.get('fps', 0)
 
         if not frames:
             return Image.new('RGB', (640, 480), color=bg_color)
@@ -168,7 +169,8 @@ class ScreenshotSheetGenerator:
             sheet.paste(frame, (x, y))
 
             if show_ts:
-                ts_text = self._format_timestamp(ts, show_ms=show_ms, frame_number=idx, show_frame_number=show_frame)
+                video_frame_num = int(ts * fps) if fps > 0 else idx
+                ts_text = self._format_timestamp(ts, show_ms=show_ms, frame_number=video_frame_num, show_frame_number=show_frame)
                 tx = x + 4
                 ty = y + thumb_h - ts_font_size - 8
                 draw.text((tx + 1, ty + 1), ts_text, fill='#000000', font=ts_font)
@@ -205,5 +207,5 @@ class ScreenshotSheetGenerator:
             if isinstance(value, (str, int, float)):
                 header_text = header_text.replace(f'#{key}#', str(value))
 
-        settings_with_header = {**settings, 'header_text': header_text}
+        settings_with_header = {**settings, 'header_text': header_text, 'fps': metadata.get('fps', 0)}
         return self.composite_sheet(frames, settings_with_header)
