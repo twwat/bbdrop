@@ -15,6 +15,7 @@ from PyQt6.QtGui import QFont, QImage, QPixmap
 from PyQt6.QtWidgets import QGraphicsScene
 
 from src.gui.widgets.zoom_graphics_view import ZoomGraphicsView
+from src.gui.widgets.info_button import InfoButton
 from src.processing.screenshot_sheet import ScreenshotSheetGenerator
 
 
@@ -83,6 +84,13 @@ class VideoSettingsTab(QWidget):
         self.output_format.addItems(["PNG", "JPG"])
         self.output_format.currentIndexChanged.connect(self.dirty.emit)
         row1.addWidget(self.output_format)
+        row1.addWidget(InfoButton(
+            "<b>Screenshot Sheet</b><br>"
+            "A grid of evenly-spaced frames extracted from the video. "
+            "The sheet is uploaded to the image host as a single image.<br><br>"
+            "<b>Thumb width</b> sets the width of each frame in the grid (height scales proportionally). "
+            "<b>Spacing</b> controls the gap between frames and around the edges."
+        ))
         sheet_layout.addLayout(row1)
 
         row2 = QHBoxLayout()
@@ -124,6 +132,11 @@ class VideoSettingsTab(QWidget):
         self.show_frame_number.toggled.connect(self.dirty.emit)
         ts_row1.addWidget(self.show_frame_number)
         ts_row1.addStretch()
+        ts_row1.addWidget(InfoButton(
+            "<b>Timestamps</b><br>"
+            "Overlay the playback time on each frame in the grid. "
+            "Optionally show milliseconds or frame numbers."
+        ))
         ts_layout.addLayout(ts_row1)
 
         ts_row2 = QHBoxLayout()
@@ -173,11 +186,27 @@ class VideoSettingsTab(QWidget):
         # -- Image Overlay Template --
         overlay_group = QGroupBox("Image Overlay Template")
         overlay_layout = QVBoxLayout(overlay_group)
+        overlay_title = QHBoxLayout()
         overlay_hint = QLabel(
-            "Text rendered onto the sheet. Placeholders: #filename#, #duration#, #resolution#, etc."
+            "Text rendered onto the sheet above the grid."
         )
-        overlay_hint.setWordWrap(True)
-        overlay_layout.addWidget(overlay_hint)
+        overlay_title.addWidget(overlay_hint)
+        overlay_title.addStretch()
+        overlay_title.addWidget(InfoButton(
+            "<b>Image Overlay Template</b><br>"
+            "This text is rendered directly onto the screenshot sheet image, above the thumbnail grid. "
+            "It becomes part of the uploaded image.<br><br>"
+            "<b>Available placeholders:</b><br>"
+            "<code>#filename#</code> — video filename<br>"
+            "<code>#duration#</code> — playback duration<br>"
+            "<code>#resolution#</code> — video dimensions<br>"
+            "<code>#fps#</code> — frame rate<br>"
+            "<code>#bitrate#</code> — video bitrate<br>"
+            "<code>#videoCodec#</code> / <code>#audioCodec#</code><br>"
+            "<code>#audioTracks#</code> — all audio tracks<br>"
+            "<code>#filesize#</code> — file size"
+        ))
+        overlay_layout.addLayout(overlay_title)
         self.image_overlay_template = QPlainTextEdit()
         self.image_overlay_template.setMaximumHeight(60)
         self.image_overlay_template.setPlaceholderText(
@@ -190,11 +219,19 @@ class VideoSettingsTab(QWidget):
         # -- Video Details Template --
         details_group = QGroupBox("Video Details Template")
         details_layout = QVBoxLayout(details_group)
+        details_title = QHBoxLayout()
         details_hint = QLabel(
-            "BBCode text for #videoDetails# placeholder. Same metadata placeholders."
+            "BBCode text available as #videoDetails# in your main template."
         )
-        details_hint.setWordWrap(True)
-        details_layout.addWidget(details_hint)
+        details_title.addWidget(details_hint)
+        details_title.addStretch()
+        details_title.addWidget(InfoButton(
+            "<b>Video Details Template</b><br>"
+            "This generates BBCode text (not rendered onto the image). "
+            "Use <code>#videoDetails#</code> in your main BBCode template to insert it.<br><br>"
+            "Same placeholders as the image overlay template."
+        ))
+        details_layout.addLayout(details_title)
         self.video_details_template = QPlainTextEdit()
         self.video_details_template.setMaximumHeight(60)
         self.video_details_template.setPlaceholderText(
@@ -215,6 +252,12 @@ class VideoSettingsTab(QWidget):
         self.image_host_override = QComboBox()
         self.image_host_override.currentIndexChanged.connect(self.dirty.emit)
         defaults_layout.addWidget(self.image_host_override, 1)
+        defaults_layout.addWidget(InfoButton(
+            "<b>Defaults</b><br>"
+            "<b>Template</b> — the BBCode template used for video uploads.<br>"
+            "<b>Image host</b> — which host to upload the screenshot sheet to. "
+            "\"Use current selection\" uses whatever image host is active in the main window."
+        ))
         layout.addWidget(defaults_group)
         self._populate_combos()
 
