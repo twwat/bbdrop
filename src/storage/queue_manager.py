@@ -113,6 +113,9 @@ class GalleryQueueItem:
     # Video metadata from VideoScanner (resolution, duration, streams, etc.)
     video_metadata: dict = field(default_factory=dict)
 
+    # Path to pre-generated screenshot sheet image
+    screenshot_sheet_path: str = ""
+
     # Manual download links for video items
     download_links: str = ""
 
@@ -516,6 +519,49 @@ class QueueManager(QObject):
             log(f"Scan Worker: Video scan failed for {video_path}", level="warning", category="scan")
             return
 
+        # Generate screenshot sheet during scan
+        sheet_path = ""
+        try:
+            from src.processing.screenshot_sheet import ScreenshotSheetGenerator
+            from PyQt6.QtCore import QSettings
+
+            settings = QSettings("BBDropUploader", "BBDropGUI")
+            settings.beginGroup("Video")
+            sheet_settings = {
+                'rows': settings.value("grid_rows", 5, int),
+                'cols': settings.value("grid_cols", 4, int),
+                'thumb_width': settings.value("thumb_width", 320, int),
+                'border_spacing': settings.value("border_spacing", 4, int),
+                'show_timestamps': settings.value("show_timestamps", True, bool),
+                'show_ms': settings.value("show_ms", False, bool),
+                'show_frame_number': settings.value("show_frame_number", False, bool),
+                'ts_font_size': settings.value("ts_font_size", 12, int),
+                'header_font_size': settings.value("header_font_size", 14, int),
+                'font_family': settings.value("font_family", "monospace"),
+                'font_color': settings.value("font_color", "#ffffff"),
+                'bg_color': settings.value("bg_color", "#000000"),
+                'output_format': settings.value("output_format", "PNG"),
+                'image_overlay_template': settings.value("image_overlay_template", ""),
+            }
+            settings.endGroup()
+
+            generator = ScreenshotSheetGenerator()
+            header_template = sheet_settings.get('image_overlay_template', '')
+            sheet_img = generator.generate(video_path, meta, sheet_settings, header_template)
+            if sheet_img:
+                import tempfile
+                fmt = sheet_settings.get('output_format', 'PNG')
+                suffix = '.png' if fmt == 'PNG' else '.jpg'
+                fd, sheet_path = tempfile.mkstemp(suffix=suffix, prefix='bbdrop_sheet_')
+                os.close(fd)
+                save_kwargs = {}
+                if fmt == 'JPG':
+                    save_kwargs['quality'] = settings.value("jpg_quality", 85, int)
+                sheet_img.save(sheet_path, **save_kwargs)
+                log(f"Screenshot sheet generated at scan time: {sheet_path}", level="info", category="scan")
+        except Exception as e:
+            log(f"Screenshot sheet generation failed during scan: {e}", level="warning", category="scan")
+
         with QMutexLocker(self.mutex):
             if path not in self.items:
                 return
@@ -529,6 +575,7 @@ class QueueManager(QObject):
             item.min_width = float(meta['width'])
             item.min_height = float(meta['height'])
             item.video_metadata = meta
+            item.screenshot_sheet_path = sheet_path
             item.scan_complete = True
 
             if item.status == QUEUE_STATE_SCANNING:

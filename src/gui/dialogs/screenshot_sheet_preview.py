@@ -1,4 +1,6 @@
 """Screenshot sheet preview dialog for video items."""
+import os
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QPushButton,
     QHBoxLayout, QGraphicsView, QGraphicsScene,
@@ -63,15 +65,19 @@ class _GenerateThread(QThread):
 class ScreenshotSheetPreviewDialog(QDialog):
     """Shows a preview of the generated screenshot sheet for a video."""
 
-    def __init__(self, video_path: str, video_name: str, parent=None):
+    def __init__(self, video_path: str, video_name: str, sheet_path: str = "", parent=None):
         super().__init__(parent)
         self.video_path = video_path
+        self._sheet_path = sheet_path
         self._thread = None
         self.setWindowTitle(f"Screenshot Sheet Preview \u2014 {video_name}")
         self.setMinimumSize(800, 600)
         self.resize(1200, 800)
         self._setup_ui()
-        self._generate_preview()
+        if sheet_path and os.path.isfile(sheet_path):
+            self._load_existing_sheet(sheet_path)
+        else:
+            self._generate_preview()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -115,6 +121,18 @@ class ScreenshotSheetPreviewDialog(QDialog):
         bottom.addWidget(close_btn)
 
         layout.addLayout(bottom)
+
+    def _load_existing_sheet(self, sheet_path: str):
+        """Load a pre-generated screenshot sheet from disk."""
+        pixmap = QPixmap(sheet_path)
+        if pixmap.isNull():
+            self.status_label.setText("Failed to load screenshot sheet.")
+            return
+        self.scene.clear()
+        self.scene.addPixmap(pixmap)
+        self.scene.setSceneRect(QRectF(pixmap.rect()))
+        self.view.zoom_to_fit()
+        self.status_label.setText(f"{pixmap.width()}\u00d7{pixmap.height()} sheet")
 
     def _generate_preview(self):
         if self._thread and self._thread.isRunning():

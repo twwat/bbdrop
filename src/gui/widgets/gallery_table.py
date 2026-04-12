@@ -724,7 +724,8 @@ class GalleryTableWidget(QTableWidget):
                     video_path = os.path.join(video_path, f)
                     break
 
-        dialog = ScreenshotSheetPreviewDialog(video_path, item.name, parent=self)
+        sheet_path = getattr(item, 'screenshot_sheet_path', '') or ''
+        dialog = ScreenshotSheetPreviewDialog(video_path, item.name, sheet_path=sheet_path, parent=self)
         dialog.exec()
 
     def dragEnterEvent(self, event):
