@@ -192,9 +192,19 @@ class VideoSettingsTab(QWidget):
         row1.addStretch()
         row1.addWidget(QLabel("Format:"))
         self.output_format = QComboBox()
-        self.output_format.addItems(["PNG", "JPG"])
+        self.output_format.addItems(["JPG", "PNG"])
         self.output_format.currentIndexChanged.connect(self.dirty.emit)
+        self.output_format.currentTextChanged.connect(self._on_format_changed)
         row1.addWidget(self.output_format)
+        self._jpg_quality_label = QLabel("Quality:")
+        row1.addWidget(self._jpg_quality_label)
+        self.jpg_quality = QSpinBox()
+        self.jpg_quality.setRange(1, 100)
+        self.jpg_quality.setValue(85)
+        self.jpg_quality.setSuffix("%")
+        self.jpg_quality.setToolTip("JPEG compression quality (1-100)")
+        self.jpg_quality.valueChanged.connect(self.dirty.emit)
+        row1.addWidget(self.jpg_quality)
         sheet_layout.addLayout(row1)
 
         row2 = QHBoxLayout()
@@ -217,18 +227,6 @@ class VideoSettingsTab(QWidget):
         self.border_spacing.valueChanged.connect(self.dirty.emit)
         row2.addWidget(self.border_spacing)
         sheet_layout.addLayout(row2)
-
-        row3 = QHBoxLayout()
-        row3.addWidget(QLabel("JPG quality:"))
-        self.jpg_quality = QSpinBox()
-        self.jpg_quality.setRange(1, 100)
-        self.jpg_quality.setValue(85)
-        self.jpg_quality.setSuffix("%")
-        self.jpg_quality.setToolTip("JPEG compression quality (1-100). Only used when format is JPG.")
-        self.jpg_quality.valueChanged.connect(self.dirty.emit)
-        row3.addWidget(self.jpg_quality)
-        row3.addStretch()
-        sheet_layout.addLayout(row3)
 
         layout.addWidget(sheet_group)
 
@@ -440,6 +438,12 @@ class VideoSettingsTab(QWidget):
             self.image_host_override.addItem(get_display_name(host_id), host_id)
         self.image_host_override.blockSignals(False)
 
+    def _on_format_changed(self, fmt: str):
+        """Enable JPG quality controls only when JPG is selected."""
+        is_jpg = fmt == "JPG"
+        self._jpg_quality_label.setEnabled(is_jpg)
+        self.jpg_quality.setEnabled(is_jpg)
+
     # ------------------------------------------------------------------ #
     def _pop_out_preview(self):
         """Open or focus the floating preview window."""
@@ -620,7 +624,7 @@ class VideoSettingsTab(QWidget):
             self.header_font_size.setValue(settings.value("header_font_size", 14, int))
             self.font_color.setText(settings.value("font_color", "#ffffff"))
             self.bg_color.setText(settings.value("bg_color", "#000000"))
-            self.output_format.setCurrentText(settings.value("output_format", "PNG"))
+            self.output_format.setCurrentText(settings.value("output_format", "JPG"))
             self.jpg_quality.setValue(settings.value("jpg_quality", 85, int))
             self.image_overlay_template.setPlainText(settings.value(
                 "image_overlay_template",
@@ -644,6 +648,7 @@ class VideoSettingsTab(QWidget):
             for w in widgets:
                 w.blockSignals(False)
 
+        self._on_format_changed(self.output_format.currentText())
         self._update_preview()
 
     def save_settings(self, settings: QSettings):
