@@ -211,12 +211,12 @@ class VideoSettingsTab(QWidget):
         self.default_template = QComboBox()
         self.default_template.currentIndexChanged.connect(self.dirty.emit)
         defaults_layout.addWidget(self.default_template, 1)
-        defaults_layout.addWidget(QLabel("Host:"))
+        defaults_layout.addWidget(QLabel("Image host:"))
         self.image_host_override = QComboBox()
-        self.image_host_override.addItem("(use current selection)", "")
         self.image_host_override.currentIndexChanged.connect(self.dirty.emit)
         defaults_layout.addWidget(self.image_host_override, 1)
         layout.addWidget(defaults_group)
+        self._populate_combos()
 
         # -- Mixed Folders --
         mixed_group = QGroupBox("Mixed Folders")
@@ -239,6 +239,34 @@ class VideoSettingsTab(QWidget):
         self.dirty.connect(self._schedule_preview_update)
 
         return panel
+
+    # ------------------------------------------------------------------ #
+    #  Combo population                                                   #
+    # ------------------------------------------------------------------ #
+    def _populate_combos(self):
+        """Populate template and image host combo boxes."""
+        from src.utils.templates import load_templates
+        from src.network.image_host_factory import get_available_hosts
+        from src.core.host_registry import get_display_name
+
+        # Templates
+        self.default_template.blockSignals(True)
+        self.default_template.clear()
+        for name in sorted(load_templates().keys()):
+            self.default_template.addItem(name, name)
+        # Default to "Video" template if it exists
+        idx = self.default_template.findData("Video")
+        if idx >= 0:
+            self.default_template.setCurrentIndex(idx)
+        self.default_template.blockSignals(False)
+
+        # Image hosts
+        self.image_host_override.blockSignals(True)
+        self.image_host_override.clear()
+        self.image_host_override.addItem("(use current selection)", "")
+        for host_id in get_available_hosts():
+            self.image_host_override.addItem(get_display_name(host_id), host_id)
+        self.image_host_override.blockSignals(False)
 
     # ------------------------------------------------------------------ #
     #  Right panel                                                        #
@@ -389,6 +417,14 @@ class VideoSettingsTab(QWidget):
             saved_font = settings.value("font_family", "")
             if saved_font:
                 self.font_family.setCurrentFont(QFont(saved_font))
+            saved_template = settings.value("default_template", "Video")
+            idx = self.default_template.findData(saved_template)
+            if idx >= 0:
+                self.default_template.setCurrentIndex(idx)
+            saved_host = settings.value("image_host_override", "")
+            idx = self.image_host_override.findData(saved_host)
+            if idx >= 0:
+                self.image_host_override.setCurrentIndex(idx)
             settings.endGroup()
         finally:
             for w in widgets:
@@ -415,5 +451,7 @@ class VideoSettingsTab(QWidget):
         settings.setValue("image_overlay_template", self.image_overlay_template.toPlainText())
         settings.setValue("video_details_template", self.video_details_template.toPlainText())
         settings.setValue("remember_mixed_choice", self.remember_mixed.isChecked())
+        settings.setValue("default_template", self.default_template.currentData() or "Video")
+        settings.setValue("image_host_override", self.image_host_override.currentData() or "")
         settings.endGroup()
         return True
