@@ -33,7 +33,7 @@ class _GenerateThread(QThread):
             settings = QSettings("BBDropUploader", "BBDropGUI")
             settings.beginGroup("Video")
             sheet_settings = {
-                'rows': settings.value("grid_rows", 4, int),
+                'rows': settings.value("grid_rows", 5, int),
                 'cols': settings.value("grid_cols", 4, int),
                 'thumb_width': settings.value("thumb_width", 320, int),
                 'border_spacing': settings.value("border_spacing", 4, int),

@@ -83,7 +83,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 11  # Bump this when adding new migrations
+_SCHEMA_VERSION = 12  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -381,6 +381,67 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE file_host_uploads ADD COLUMN file_size INTEGER")
             conn.execute("ALTER TABLE file_host_uploads ADD COLUMN deduped INTEGER DEFAULT 0")
             log("Added md5_hash, file_size, deduped columns to file_host_uploads", level="info", category="database")
+
+        # Migration to version 12: rebuild galleries table to update CHECK constraint
+        # SQLite can't ALTER CHECK constraints, so we recreate the table.
+        # The old constraint was missing 'scan_failed' and 'upload_failed', causing
+        # video items to fail upsert and disappear on restart.
+        try:
+            old_check = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='galleries'"
+            ).fetchone()
+            if old_check and 'scan_failed' not in (old_check[0] or ''):
+                conn.executescript("""
+                    ALTER TABLE galleries RENAME TO galleries_old;
+
+                    CREATE TABLE galleries (
+                        id INTEGER PRIMARY KEY,
+                        path TEXT NOT NULL UNIQUE,
+                        name TEXT,
+                        status TEXT NOT NULL CHECK (status IN ('validating','scanning','ready','queued','uploading','paused','incomplete','completed','failed','scan_failed','upload_failed')),
+                        added_ts INTEGER NOT NULL,
+                        finished_ts INTEGER,
+                        template TEXT,
+                        total_images INTEGER DEFAULT 0,
+                        uploaded_images INTEGER DEFAULT 0,
+                        total_size INTEGER DEFAULT 0,
+                        scan_complete INTEGER DEFAULT 0,
+                        uploaded_bytes INTEGER DEFAULT 0,
+                        final_kibps REAL DEFAULT 0.0,
+                        gallery_id TEXT,
+                        gallery_url TEXT,
+                        insertion_order INTEGER DEFAULT 0,
+                        failed_files TEXT,
+                        media_type TEXT DEFAULT 'image',
+                        download_links TEXT DEFAULT '',
+                        tab_id INTEGER,
+                        custom1 TEXT DEFAULT '',
+                        custom2 TEXT DEFAULT '',
+                        custom3 TEXT DEFAULT '',
+                        custom4 TEXT DEFAULT '',
+                        ext1 TEXT DEFAULT '',
+                        ext2 TEXT DEFAULT '',
+                        ext3 TEXT DEFAULT '',
+                        ext4 TEXT DEFAULT '',
+                        imx_status TEXT,
+                        imx_status_checked INTEGER,
+                        image_host_id TEXT DEFAULT 'imx',
+                        cover_source_path TEXT,
+                        cover_host_id TEXT,
+                        cover_status TEXT,
+                        cover_result TEXT
+                    );
+
+                    INSERT INTO galleries SELECT * FROM galleries_old;
+                    DROP TABLE galleries_old;
+
+                    CREATE INDEX IF NOT EXISTS galleries_status_idx ON galleries(status);
+                    CREATE INDEX IF NOT EXISTS galleries_path_idx ON galleries(path);
+                    CREATE INDEX IF NOT EXISTS galleries_tab_status_idx ON galleries(tab_id, status);
+                """)
+                log("Migration 12: rebuilt galleries table with updated CHECK constraint", level="info", category="database")
+        except Exception as e:
+            log(f"Migration 12 (CHECK constraint rebuild) failed: {e}", level="warning", category="database")
 
         # Migration: Add host_scan_results table for multi-host link scanner
         conn.execute("""

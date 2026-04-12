@@ -68,7 +68,7 @@ class VideoSettingsTab(QWidget):
         row1.addWidget(QLabel("Grid:"))
         self.grid_rows = QSpinBox()
         self.grid_rows.setRange(1, 10)
-        self.grid_rows.setValue(4)
+        self.grid_rows.setValue(5)
         self.grid_rows.valueChanged.connect(self.dirty.emit)
         row1.addWidget(self.grid_rows)
         row1.addWidget(QLabel("\u00d7"))  # multiplication sign
@@ -287,13 +287,31 @@ class VideoSettingsTab(QWidget):
         cols = self.grid_cols.value()
         count = rows * cols
 
-        # Synthetic frames with distinct hues
+        # Synthetic frames with distinct hues — simulate real video screenshots
         frames = []
         for i in range(count):
             hue = i / max(count, 1)
-            r, g, b = colorsys.hsv_to_rgb(hue, 0.4, 0.7)
+            r, g, b = colorsys.hsv_to_rgb(hue, 0.3, 0.55)
             img = Image.new('RGB', (320, 240), (int(r * 255), int(g * 255), int(b * 255)))
-            frames.append((img, i * 5.0))
+            # Fake timestamps as if from a ~2hr video
+            frames.append((img, i * (7200.0 / max(count, 1))))
+
+        # Resolve overlay template placeholders with demo values for preview
+        overlay_text = self.image_overlay_template.toPlainText()
+        if overlay_text:
+            demo_values = {
+                '#filename#': 'Sample.Video.1080p.HEVC.mp4',
+                '#duration#': '2:00:00',
+                '#resolution#': '1920x1080',
+                '#fps#': '23.976',
+                '#bitrate#': '4500000',
+                '#videoCodec#': 'HEVC',
+                '#audioCodec#': 'AAC',
+                '#audioTracks#': 'AAC: 2-CH 48000Hz',
+                '#filesize#': '1.24 GB',
+            }
+            for placeholder, value in demo_values.items():
+                overlay_text = overlay_text.replace(placeholder, value)
 
         settings = {
             'rows': rows,
@@ -308,7 +326,7 @@ class VideoSettingsTab(QWidget):
             'header_font_size': self.header_font_size.value(),
             'font_color': self.font_color.text(),
             'bg_color': self.bg_color.text(),
-            'header_text': self.image_overlay_template.toPlainText(),
+            'header_text': overlay_text,
         }
 
         try:
@@ -353,7 +371,7 @@ class VideoSettingsTab(QWidget):
             w.blockSignals(True)
         try:
             settings.beginGroup("Video")
-            self.grid_rows.setValue(settings.value("grid_rows", 4, int))
+            self.grid_rows.setValue(settings.value("grid_rows", 5, int))
             self.grid_cols.setValue(settings.value("grid_cols", 4, int))
             self.thumb_width.setValue(settings.value("thumb_width", 320, int))
             self.border_spacing.setValue(settings.value("border_spacing", 4, int))
