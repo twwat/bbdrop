@@ -202,10 +202,56 @@ class ScreenshotSheetGenerator:
             log(f"ScreenshotSheet: no frames extracted from {video_path}")
             return None
 
+        # Build formatted placeholders from raw metadata
+        import os
+        video_streams = metadata.get('video_streams', [])
+        audio_streams = metadata.get('audio_streams', [])
+        duration_s = max(0, int(metadata.get('duration', 0)))
+        h, m, s = duration_s // 3600, (duration_s % 3600) // 60, duration_s % 60
+        duration_fmt = f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
+
+        filesize_bytes = metadata.get('filesize', 0)
+        if filesize_bytes >= 1024 * 1024 * 1024:
+            filesize_fmt = f"{filesize_bytes / (1024**3):.2f} GB"
+        elif filesize_bytes >= 1024 * 1024:
+            filesize_fmt = f"{filesize_bytes / (1024**2):.1f} MB"
+        else:
+            filesize_fmt = f"{filesize_bytes / 1024:.0f} KB"
+
+        width = metadata.get('width', '')
+        height = metadata.get('height', '')
+        bitrate_raw = metadata.get('bitrate', '')
+
+        placeholders = {
+            'filename': os.path.basename(video_path),
+            'folderName': os.path.splitext(os.path.basename(video_path))[0],
+            'duration': duration_fmt,
+            'resolution': f"{width}x{height}" if width and height else '',
+            'width': str(width),
+            'height': str(height),
+            'fps': str(metadata.get('fps', '')),
+            'bitrate': str(bitrate_raw),
+            'videoCodec': video_streams[0].get('format', '') if video_streams else '',
+            'audioCodec': audio_streams[0].get('format', '') if audio_streams else '',
+            'filesize': filesize_fmt,
+            'pictureCount': str(count),
+        }
+
+        # Numbered audio track placeholders
+        track_lines = []
+        for i, track in enumerate(audio_streams):
+            fmt = track.get('format', 'Unknown')
+            ch = track.get('channels', '?')
+            rate = track.get('sampling_rate', '?')
+            br = track.get('bit_rate', '?')
+            line = f"{fmt}: {ch}-CH {rate}Hz {br} bps"
+            placeholders[f'audioTrack{i+1}'] = line
+            track_lines.append(line)
+        placeholders['audioTracks'] = ', '.join(track_lines)
+
         header_text = header_template
-        for key, value in metadata.items():
-            if isinstance(value, (str, int, float)):
-                header_text = header_text.replace(f'#{key}#', str(value))
+        for key, value in placeholders.items():
+            header_text = header_text.replace(f'#{key}#', str(value))
 
         settings_with_header = {**settings, 'header_text': header_text, 'fps': metadata.get('fps', 0)}
         return self.composite_sheet(frames, settings_with_header)
