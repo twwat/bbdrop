@@ -30,6 +30,7 @@ class VideoSettingsTab(QWidget):
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(200)
         self._preview_timer.timeout.connect(self._update_preview)
+        self._needs_initial_fit = True
         self._setup_ui()
 
     def _setup_ui(self):
@@ -410,7 +411,8 @@ class VideoSettingsTab(QWidget):
         self._preview_scene.clear()
         self._preview_scene.addPixmap(pixmap)
         self._preview_scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
-        self._preview_view.zoom_to_fit()
+        # Defer zoom_to_fit so the view has a real size first
+        QTimer.singleShot(0, self._preview_view.zoom_to_fit)
 
     @staticmethod
     def _pil_to_pixmap(pil_image: Image.Image) -> QPixmap:
