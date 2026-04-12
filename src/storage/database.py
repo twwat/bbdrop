@@ -83,7 +83,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 12  # Bump this when adding new migrations
+_SCHEMA_VERSION = 13  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -414,6 +414,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                         failed_files TEXT,
                         media_type TEXT DEFAULT 'image',
                         download_links TEXT DEFAULT '',
+                        tab_name TEXT DEFAULT 'Main',
                         tab_id INTEGER,
                         custom1 TEXT DEFAULT '',
                         custom2 TEXT DEFAULT '',
