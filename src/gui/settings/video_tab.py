@@ -1,6 +1,7 @@
 """Video settings tab for ComprehensiveSettingsDialog."""
 
 import colorsys
+import os
 
 from PIL import Image
 
@@ -199,13 +200,19 @@ class VideoSettingsTab(QWidget):
             "It becomes part of the uploaded image.<br><br>"
             "<b>Available placeholders:</b><br>"
             "<code>#filename#</code> — video filename<br>"
-            "<code>#duration#</code> — playback duration<br>"
-            "<code>#resolution#</code> — video dimensions<br>"
+            "<code>#folderName#</code> — gallery/folder name<br>"
+            "<code>#duration#</code> — playback duration (H:MM:SS)<br>"
+            "<code>#resolution#</code> — video dimensions (WxH)<br>"
+            "<code>#width#</code> / <code>#height#</code> — individual dimensions<br>"
             "<code>#fps#</code> — frame rate<br>"
-            "<code>#bitrate#</code> — video bitrate<br>"
-            "<code>#videoCodec#</code> / <code>#audioCodec#</code><br>"
-            "<code>#audioTracks#</code> — all audio tracks<br>"
-            "<code>#filesize#</code> — file size"
+            "<code>#bitrate#</code> — video bitrate (bps)<br>"
+            "<code>#videoCodec#</code> — video codec (e.g. HEVC, H264)<br>"
+            "<code>#audioCodec#</code> — primary audio codec<br>"
+            "<code>#audioTracks#</code> — all audio tracks summary<br>"
+            "<code>#audioTrack1#</code>, <code>#audioTrack2#</code>, … — individual tracks<br>"
+            "<code>#filesize#</code> — formatted file size<br>"
+            "<code>#folderSize#</code> — total folder size<br>"
+            "<code>#pictureCount#</code> — number of frames in sheet"
         ))
         overlay_layout.addLayout(overlay_title)
         self.image_overlay_template = QPlainTextEdit()
@@ -353,36 +360,70 @@ class VideoSettingsTab(QWidget):
         """Restart the debounce timer for preview regeneration."""
         self._preview_timer.start()
 
+    _DEMO_PLACEHOLDERS = {
+        '#filename#': 'Fantastic.Fungi.2019.1080p.x265.AAC.mkv',
+        '#folderName#': 'Fantastic.Fungi.2019.1080p.x265.AAC',
+        '#duration#': '1:20:01',
+        '#resolution#': '1920x1080',
+        '#fps#': '23.976',
+        '#bitrate#': '4500000',
+        '#videoCodec#': 'HEVC',
+        '#audioCodec#': 'AAC',
+        '#audioTracks#': 'AAC: 2-CH 48000Hz 128 kbps',
+        '#audioTrack1#': 'AAC: 2-CH 48000Hz 128 kbps',
+        '#filesize#': '1.24 GB',
+        '#width#': '1920',
+        '#height#': '1080',
+        '#pictureCount#': '20',
+        '#folderSize#': '1.24 GB',
+    }
+
+    _preview_frames_cache = None
+
+    @classmethod
+    def _load_preview_frames(cls):
+        """Load preview frame images from assets/preview_frames/."""
+        if cls._preview_frames_cache is not None:
+            return cls._preview_frames_cache
+
+        from src.utils.paths import get_project_root
+        frames_dir = os.path.join(get_project_root(), 'assets', 'preview_frames')
+        frames = []
+        if os.path.isdir(frames_dir):
+            for fname in sorted(os.listdir(frames_dir)):
+                if fname.endswith(('.jpg', '.png')):
+                    try:
+                        img = Image.open(os.path.join(frames_dir, fname)).convert('RGB')
+                        frames.append(img)
+                    except Exception:
+                        pass
+        cls._preview_frames_cache = frames
+        return frames
+
     def _update_preview(self):
-        """Generate and display a synthetic screenshot sheet preview."""
+        """Generate and display a screenshot sheet preview using real frames."""
         rows = self.grid_rows.value()
         cols = self.grid_cols.value()
         count = rows * cols
 
-        # Synthetic frames with distinct hues — simulate real video screenshots
+        # Use real preview frames, cycling if we need more than available
+        source_frames = self._load_preview_frames()
         frames = []
         for i in range(count):
-            hue = i / max(count, 1)
-            r, g, b = colorsys.hsv_to_rgb(hue, 0.3, 0.55)
-            img = Image.new('RGB', (320, 240), (int(r * 255), int(g * 255), int(b * 255)))
-            # Fake timestamps as if from a ~2hr video
-            frames.append((img, i * (7200.0 / max(count, 1))))
+            if source_frames:
+                img = source_frames[i % len(source_frames)]
+            else:
+                # Fallback to colored frames if no preview images exist
+                hue = i / max(count, 1)
+                r, g, b = colorsys.hsv_to_rgb(hue, 0.3, 0.55)
+                img = Image.new('RGB', (320, 180), (int(r * 255), int(g * 255), int(b * 255)))
+            # Fake timestamps as if from a ~80min video
+            frames.append((img, i * (4801.0 / max(count, 1))))
 
-        # Resolve overlay template placeholders with demo values for preview
+        # Resolve overlay template placeholders with demo values
         overlay_text = self.image_overlay_template.toPlainText()
         if overlay_text:
-            demo_values = {
-                '#filename#': 'Sample.Video.1080p.HEVC.mp4',
-                '#duration#': '2:00:00',
-                '#resolution#': '1920x1080',
-                '#fps#': '23.976',
-                '#bitrate#': '4500000',
-                '#videoCodec#': 'HEVC',
-                '#audioCodec#': 'AAC',
-                '#audioTracks#': 'AAC: 2-CH 48000Hz',
-                '#filesize#': '1.24 GB',
-            }
-            for placeholder, value in demo_values.items():
+            for placeholder, value in self._DEMO_PLACEHOLDERS.items():
                 overlay_text = overlay_text.replace(placeholder, value)
 
         settings = {
@@ -456,7 +497,10 @@ class VideoSettingsTab(QWidget):
             self.font_color.setText(settings.value("font_color", "#ffffff"))
             self.bg_color.setText(settings.value("bg_color", "#000000"))
             self.output_format.setCurrentText(settings.value("output_format", "PNG"))
-            self.image_overlay_template.setPlainText(settings.value("image_overlay_template", ""))
+            self.image_overlay_template.setPlainText(settings.value(
+                "image_overlay_template",
+                "#filename#  |  #resolution#  |  #duration#  |  #videoCodec# / #audioCodec#  |  #filesize#"
+            ))
             self.video_details_template.setPlainText(settings.value("video_details_template", ""))
             self.remember_mixed.setChecked(settings.value("remember_mixed_choice", False, bool))
             saved_font = settings.value("font_family", "")
