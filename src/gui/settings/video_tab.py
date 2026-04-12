@@ -116,6 +116,18 @@ class VideoSettingsTab(QWidget):
         row2.addWidget(self.border_spacing)
         sheet_layout.addLayout(row2)
 
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel("JPG quality:"))
+        self.jpg_quality = QSpinBox()
+        self.jpg_quality.setRange(1, 100)
+        self.jpg_quality.setValue(85)
+        self.jpg_quality.setSuffix("%")
+        self.jpg_quality.setToolTip("JPEG compression quality (1-100). Only used when format is JPG.")
+        self.jpg_quality.valueChanged.connect(self.dirty.emit)
+        row3.addWidget(self.jpg_quality)
+        row3.addStretch()
+        sheet_layout.addLayout(row3)
+
         layout.addWidget(sheet_group)
 
         # -- Timestamps --
@@ -133,7 +145,6 @@ class VideoSettingsTab(QWidget):
         self.show_frame_number = QCheckBox("Show frame#")
         self.show_frame_number.toggled.connect(self.dirty.emit)
         ts_row1.addWidget(self.show_frame_number)
-        ts_row1.addStretch()
         ts_row1.addWidget(InfoButton(
             "<b>Timestamps</b><br>"
             "Overlay the playback time on each frame in the grid. "
@@ -193,7 +204,6 @@ class VideoSettingsTab(QWidget):
             "Text rendered onto the sheet above the grid."
         )
         overlay_title.addWidget(overlay_hint)
-        overlay_title.addStretch()
         overlay_title.addWidget(InfoButton(
             "<b>Image Overlay Template</b><br>"
             "This text is rendered directly onto the screenshot sheet image, above the thumbnail grid. "
@@ -232,7 +242,6 @@ class VideoSettingsTab(QWidget):
             "BBCode text available as #videoDetails# in your main template."
         )
         details_title.addWidget(details_hint)
-        details_title.addStretch()
         details_title.addWidget(InfoButton(
             "<b>Video Details Template</b><br>"
             "This generates BBCode text (not rendered onto the image). "
@@ -332,11 +341,13 @@ class VideoSettingsTab(QWidget):
         self._preview_view.setScene(self._preview_scene)
         layout.addWidget(self._preview_view, 1)
 
-        # Zoom control bar
+        # Info and zoom control bar
         bar = QHBoxLayout()
+        self._size_label = QLabel("")
+        bar.addWidget(self._size_label)
+        bar.addStretch()
         self._zoom_label = QLabel("100%")
         bar.addWidget(self._zoom_label)
-        bar.addStretch()
         fit_btn = QPushButton("Fit")
         fit_btn.setFixedWidth(48)
         fit_btn.clicked.connect(self._preview_view.zoom_to_fit)
@@ -450,6 +461,21 @@ class VideoSettingsTab(QWidget):
             pixmap = QPixmap(320, 240)
             pixmap.fill(Qt.GlobalColor.darkGray)
 
+        # Estimate file size
+        import io
+        buf = io.BytesIO()
+        fmt = self.output_format.currentText()
+        save_kwargs = {}
+        if fmt == 'JPG':
+            save_kwargs['quality'] = self.jpg_quality.value()
+        sheet.save(buf, format='JPEG' if fmt == 'JPG' else 'PNG', **save_kwargs)
+        size_bytes = buf.tell()
+        if size_bytes >= 1024 * 1024:
+            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+        else:
+            size_str = f"{size_bytes / 1024:.0f} KB"
+        self._size_label.setText(f"{sheet.width}×{sheet.height}  ~{size_str}")
+
         self._preview_scene.clear()
         self._preview_scene.addPixmap(pixmap)
         self._preview_scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
@@ -485,7 +511,7 @@ class VideoSettingsTab(QWidget):
         """Load current values from QSettings."""
         widgets = [
             self.grid_rows, self.grid_cols, self.thumb_width, self.border_spacing,
-            self.output_format, self.show_timestamps, self.show_ms,
+            self.output_format, self.jpg_quality, self.show_timestamps, self.show_ms,
             self.show_frame_number, self.ts_font_size, self.font_family,
             self.header_font_size, self.font_color, self.bg_color,
             self.image_overlay_template, self.video_details_template,
@@ -508,6 +534,7 @@ class VideoSettingsTab(QWidget):
             self.font_color.setText(settings.value("font_color", "#ffffff"))
             self.bg_color.setText(settings.value("bg_color", "#000000"))
             self.output_format.setCurrentText(settings.value("output_format", "PNG"))
+            self.jpg_quality.setValue(settings.value("jpg_quality", 85, int))
             self.image_overlay_template.setPlainText(settings.value(
                 "image_overlay_template",
                 "#filename#  |  #resolution#  |  #duration#  |  #videoCodec# / #audioCodec#  |  #filesize#"
@@ -548,6 +575,7 @@ class VideoSettingsTab(QWidget):
         settings.setValue("font_color", self.font_color.text())
         settings.setValue("bg_color", self.bg_color.text())
         settings.setValue("output_format", self.output_format.currentText())
+        settings.setValue("jpg_quality", self.jpg_quality.value())
         settings.setValue("image_overlay_template", self.image_overlay_template.toPlainText())
         settings.setValue("video_details_template", self.video_details_template.toPlainText())
         settings.setValue("remember_mixed_choice", self.remember_mixed.isChecked())

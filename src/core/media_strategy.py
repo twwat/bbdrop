@@ -88,7 +88,10 @@ class VideoStrategy(MediaStrategy):
         output_format = settings.get('output_format', 'PNG')
         suffix = '.png' if output_format == 'PNG' else '.jpg'
         temp_path = Path(tempfile.mkdtemp()) / f"{item.name}_sheet{suffix}"
-        sheet.save(str(temp_path))
+        save_kwargs = {}
+        if output_format == 'JPG':
+            save_kwargs['quality'] = settings.get('jpg_quality', 85)
+        sheet.save(str(temp_path), **save_kwargs)
 
         return {
             'status': 'success',
