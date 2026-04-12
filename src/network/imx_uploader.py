@@ -40,9 +40,9 @@ class ImxToUploader(ImageHostClient):
     def _get_credentials(self):
         """Get credentials from stored config (username/password or API key)"""
         # Read from QSettings (Registry) - migration happens at app startup
-        encrypted_username = get_credential('username')
-        encrypted_password = get_credential('password')
-        encrypted_api_key = get_credential('api_key')
+        encrypted_username = get_credential('username', 'imx') or get_credential('username')
+        encrypted_password = get_credential('password', 'imx') or get_credential('password')
+        encrypted_api_key = get_credential('api_key', 'imx') or get_credential('api_key')
 
         # Decrypt if they exist
         username = decrypt_password(encrypted_username) if encrypted_username else None

@@ -364,7 +364,8 @@ class CredentialSetupDialog(QDialog):
         if result == QDialog.DialogCode.Accepted:
             if username:
                 try:
-                    set_credential('username', username)
+                    from src.utils.credentials import encrypt_password
+                    set_credential('username', encrypt_password(username))
                     self.load_current_credentials()
                     QMessageBox.information(self, "Success", "Username saved successfully!")
                 except Exception as e:
