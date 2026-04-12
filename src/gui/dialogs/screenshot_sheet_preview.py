@@ -131,7 +131,7 @@ class ScreenshotSheetPreviewDialog(QDialog):
         self.scene.clear()
         self.scene.addPixmap(pixmap)
         self.scene.setSceneRect(QRectF(pixmap.rect()))
-        self.view.zoom_to_fit()
+        self._needs_fit = True
         self.status_label.setText(f"{pixmap.width()}\u00d7{pixmap.height()} sheet")
 
     def _generate_preview(self):
@@ -166,6 +166,12 @@ class ScreenshotSheetPreviewDialog(QDialog):
             f"{self._format_duration(metadata['duration'])} \u00b7 "
             f"{sheet.width}\u00d7{sheet.height} sheet"
         )
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if getattr(self, '_needs_fit', False):
+            self._needs_fit = False
+            self.view.zoom_to_fit()
 
     def _on_zoom_changed(self, zoom: float):
         self.zoom_label.setText(f"{zoom * 100:.0f}%")
