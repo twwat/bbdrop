@@ -155,15 +155,36 @@ class VideoSettingsTab(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
-        # Preview button at the top
-        top_row = QHBoxLayout()
-        preview_btn = QPushButton("Preview Sheet")
-        preview_btn.clicked.connect(self._pop_out_preview)
-        top_row.addWidget(preview_btn)
+        # Inline preview
+        preview_group = QGroupBox("Preview")
+        preview_lay = QHBoxLayout(preview_group)
+        preview_lay.setContentsMargins(8, 8, 8, 8)
+
+        self._preview_label = QLabel()
+        self._preview_label.setFixedSize(240, 160)
+        self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview_label.setStyleSheet(
+            "QLabel { background: palette(base); "
+            "border: 1px solid palette(mid); border-radius: 3px; }"
+        )
+        self._preview_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._preview_label.setToolTip("Click to open full-size preview")
+        self._preview_label.mousePressEvent = lambda _: self._pop_out_preview()
+        preview_lay.addWidget(self._preview_label)
+
+        preview_right = QVBoxLayout()
+        preview_right.setSpacing(4)
         self._size_label = QLabel("")
-        top_row.addWidget(self._size_label)
-        top_row.addStretch()
-        layout.addLayout(top_row)
+        preview_right.addWidget(self._size_label)
+        pop_out_btn = QPushButton("Pop Out \u2197")
+        pop_out_btn.setFixedWidth(90)
+        pop_out_btn.clicked.connect(self._pop_out_preview)
+        preview_right.addWidget(pop_out_btn)
+        preview_right.addStretch()
+        preview_lay.addLayout(preview_right)
+        preview_lay.addStretch()
+
+        layout.addWidget(preview_group)
 
         # -- Screenshot Sheet --
         sheet_group = QGroupBox("Screenshot Sheet")
@@ -552,26 +573,35 @@ class VideoSettingsTab(QWidget):
         try:
             sheet = ScreenshotSheetGenerator().composite_sheet(frames, settings)
             pixmap = self._pil_to_pixmap(sheet)
+
+            # Estimate file size
+            import io
+            buf = io.BytesIO()
+            fmt = self.output_format.currentText()
+            save_kwargs = {}
+            if fmt == 'JPG':
+                save_kwargs['quality'] = self.jpg_quality.value()
+            sheet.save(buf, format='JPEG' if fmt == 'JPG' else 'PNG', **save_kwargs)
+            size_bytes = buf.tell()
+            if size_bytes >= 1024 * 1024:
+                size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+            else:
+                size_str = f"{size_bytes / 1024:.0f} KB"
+            self._size_label.setText(f"{sheet.width}\u00d7{sheet.height}  ~{size_str}")
         except Exception:
             pixmap = QPixmap(320, 240)
             pixmap.fill(Qt.GlobalColor.darkGray)
-
-        # Estimate file size
-        import io
-        buf = io.BytesIO()
-        fmt = self.output_format.currentText()
-        save_kwargs = {}
-        if fmt == 'JPG':
-            save_kwargs['quality'] = self.jpg_quality.value()
-        sheet.save(buf, format='JPEG' if fmt == 'JPG' else 'PNG', **save_kwargs)
-        size_bytes = buf.tell()
-        if size_bytes >= 1024 * 1024:
-            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
-        else:
-            size_str = f"{size_bytes / 1024:.0f} KB"
-        self._size_label.setText(f"{sheet.width}\u00d7{sheet.height}  ~{size_str}")
+            self._size_label.setText("")
 
         self._current_pixmap = pixmap
+
+        # Update inline preview
+        scaled = pixmap.scaled(
+            self._preview_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._preview_label.setPixmap(scaled)
 
         # Update floating preview window if open
         if self._preview_window is not None and self._preview_window.isVisible():
