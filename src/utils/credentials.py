@@ -115,11 +115,6 @@ def get_credential(key, host_id=None):
         value = keyring.get_password("bbdrop", effective_key)
         if value:
             return value
-        # Fall back to global key for legacy IMX compat (not other hosts)
-        if host_id and host_id == "imx":
-            value = keyring.get_password("bbdrop", key)
-            if value:
-                return value
     except ImportError:
         log("keyring not available — credentials inaccessible", level="error", category="auth")
     except Exception as e:
@@ -209,7 +204,12 @@ def migrate_imx_credentials():
         prefixed_value = get_credential(key, 'imx')
         if bare_value and not prefixed_value:
             set_credential(key, bare_value, 'imx')
+            remove_credential(key)
             log(f"Migrated bare '{key}' to 'imx_{key}'", level="info", category="auth")
+        elif bare_value and prefixed_value:
+            # Prefixed already exists, just delete the bare one
+            remove_credential(key)
+            log(f"Removed stale bare '{key}'", level="debug", category="auth")
 
     # Step 2: Encrypt any plaintext values
     for key in ['username', 'imx_username', 'turbo_username']:
