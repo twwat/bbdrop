@@ -457,6 +457,22 @@ def save_gallery_artifacts(
         if images and results.get('media_type') == 'video':
             screenshot_bbcode = images[0].get('bbcode', '')
 
+        # Build video_details from user template or fallback
+        video_details_tpl = results.get('video_details_template', '')
+        if video_details_tpl:
+            video_details_text = video_details_tpl
+            video_details_text = video_details_text.replace('#resolution#', resolution)
+            video_details_text = video_details_text.replace('#duration#', duration_str)
+            video_details_text = video_details_text.replace('#fps#', str(video_meta.get('fps', '')))
+            video_details_text = video_details_text.replace('#bitrate#', str(video_meta.get('bitrate', '')))
+            video_details_text = video_details_text.replace('#videoCodec#', v_codec)
+            video_details_text = video_details_text.replace('#audioCodec#', a_codec)
+            video_details_text = video_details_text.replace('#audioTracks#', '\n'.join(track_lines))
+            video_details_text = video_details_text.replace('#filesize#', filesize_str)
+            video_details_text = video_details_text.replace('#filename#', os.path.basename(folder_path))
+        else:
+            video_details_text = f"{resolution} | {duration_str} | {v_codec}" + (f" / {a_codec}" if a_codec else '')
+
         template_data.update({
             'filename': os.path.basename(folder_path),
             'duration': duration_str,
@@ -468,7 +484,7 @@ def save_gallery_artifacts(
             'audio_tracks': '\n'.join(track_lines),
             'filesize': filesize_str,
             'screenshot_sheet': screenshot_bbcode,
-            'video_details': f"{resolution} | {duration_str} | {v_codec}" + (f" / {a_codec}" if a_codec else ''),
+            'video_details': video_details_text,
             'download_links': results.get('download_links', ''),
         })
 

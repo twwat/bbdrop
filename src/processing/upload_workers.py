@@ -536,6 +536,7 @@ class UploadWorker(QThread):
             }],
             'screenshot_sheet_path': sheet_path,
             'media_type': 'video',
+            'video_details_template': video_settings.get('video_details_template', ''),
             'video_metadata': meta,
             'upload_time': upload_time,
             'total_size': meta.get('filesize', 0),
