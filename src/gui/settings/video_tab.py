@@ -8,16 +8,56 @@ from PIL import Image
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout,
     QSpinBox, QCheckBox, QComboBox, QLineEdit,
-    QFontComboBox, QPlainTextEdit, QLabel, QSplitter,
-    QScrollArea, QPushButton,
+    QFontComboBox, QPlainTextEdit, QLabel,
+    QScrollArea, QPushButton, QGraphicsScene,
 )
 from PyQt6.QtCore import pyqtSignal, QSettings, Qt, QTimer
 from PyQt6.QtGui import QFont, QImage, QPixmap
-from PyQt6.QtWidgets import QGraphicsScene
-
 from src.gui.widgets.zoom_graphics_view import ZoomGraphicsView
 from src.gui.widgets.info_button import InfoButton
 from src.processing.screenshot_sheet import ScreenshotSheetGenerator
+
+
+class _PreviewWindow(QWidget):
+    """Floating preview window with zoom controls."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.WindowType.Window)
+        self.setWindowTitle("Screenshot Sheet Preview")
+        self.resize(800, 600)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._scene = QGraphicsScene(self)
+        self._view = ZoomGraphicsView(self)
+        self._view.setScene(self._scene)
+        layout.addWidget(self._view, 1)
+
+        bar = QHBoxLayout()
+        self._zoom_label = QLabel("100%")
+        bar.addWidget(self._zoom_label)
+        bar.addStretch()
+        fit_btn = QPushButton("Fit")
+        fit_btn.setFixedWidth(48)
+        fit_btn.clicked.connect(self._view.zoom_to_fit)
+        bar.addWidget(fit_btn)
+        one_btn = QPushButton("1:1")
+        one_btn.setFixedWidth(48)
+        one_btn.clicked.connect(lambda: self._view.set_zoom(1.0))
+        bar.addWidget(one_btn)
+        layout.addLayout(bar)
+
+        self._view.zoom_changed.connect(
+            lambda z: self._zoom_label.setText(f"{z * 100:.0f}%")
+        )
+
+    def set_pixmap(self, pixmap: QPixmap):
+        from PyQt6.QtCore import QRectF
+        self._scene.clear()
+        self._scene.addPixmap(pixmap)
+        self._scene.setSceneRect(QRectF(pixmap.rect()))
+        QTimer.singleShot(0, self._view.zoom_to_fit)
 
 
 class VideoSettingsTab(QWidget):
@@ -31,30 +71,26 @@ class VideoSettingsTab(QWidget):
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(200)
         self._preview_timer.timeout.connect(self._update_preview)
-        self._needs_initial_fit = True
         self._setup_ui()
 
     def _setup_ui(self):
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        root_layout.addWidget(splitter)
-
-        # ── Left side: settings controls in scroll area ──
+        # Settings controls in scroll area (full width)
         left_widget = self._build_left_panel()
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumWidth(350)
         scroll_area.setWidget(left_widget)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        splitter.addWidget(scroll_area)
+        root_layout.addWidget(scroll_area, 1)
 
-        # ── Right side: live preview ──
-        right_widget = self._build_right_panel()
-        splitter.addWidget(right_widget)
+        # Inline preview strip at bottom
+        preview_strip = self._build_preview_strip()
+        root_layout.addWidget(preview_strip)
 
-        splitter.setSizes([380, 520])
+        # Floating preview window (created on demand)
+        self._preview_window = None
 
     # ------------------------------------------------------------------ #
     #  Left panel                                                         #
@@ -329,40 +365,50 @@ class VideoSettingsTab(QWidget):
         self.image_host_override.blockSignals(False)
 
     # ------------------------------------------------------------------ #
-    #  Right panel                                                        #
+    #  Preview strip (inline thumbnail + pop-out)                         #
     # ------------------------------------------------------------------ #
-    def _build_right_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
+    def _build_preview_strip(self) -> QWidget:
+        strip = QWidget()
+        layout = QHBoxLayout(strip)
+        layout.setContentsMargins(0, 4, 0, 0)
 
-        self._preview_scene = QGraphicsScene(self)
-        self._preview_view = ZoomGraphicsView(self)
-        self._preview_view.setScene(self._preview_scene)
-        layout.addWidget(self._preview_view, 1)
+        # Clickable thumbnail
+        self._thumb_label = QLabel()
+        self._thumb_label.setFixedHeight(120)
+        self._thumb_label.setMinimumWidth(200)
+        self._thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._thumb_label.setStyleSheet("border: 1px solid palette(mid); background: #111;")
+        self._thumb_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._thumb_label.setToolTip("Click to open full preview")
+        self._thumb_label.mousePressEvent = lambda e: self._pop_out_preview()
+        layout.addWidget(self._thumb_label, 1)
 
-        # Info and zoom control bar
-        bar = QHBoxLayout()
+        # Info + button column
+        info_layout = QVBoxLayout()
         self._size_label = QLabel("")
-        bar.addWidget(self._size_label)
-        bar.addStretch()
-        self._zoom_label = QLabel("100%")
-        bar.addWidget(self._zoom_label)
-        fit_btn = QPushButton("Fit")
-        fit_btn.setFixedWidth(48)
-        fit_btn.clicked.connect(self._preview_view.zoom_to_fit)
-        bar.addWidget(fit_btn)
-        one_to_one_btn = QPushButton("1:1")
-        one_to_one_btn.setFixedWidth(48)
-        one_to_one_btn.clicked.connect(lambda: self._preview_view.set_zoom(1.0))
-        bar.addWidget(one_to_one_btn)
-        layout.addLayout(bar)
+        info_layout.addWidget(self._size_label)
+        info_layout.addStretch()
+        pop_out_btn = QPushButton("Pop Out")
+        pop_out_btn.setFixedWidth(70)
+        pop_out_btn.clicked.connect(self._pop_out_preview)
+        info_layout.addWidget(pop_out_btn)
+        layout.addLayout(info_layout)
 
-        self._preview_view.zoom_changed.connect(
-            lambda z: self._zoom_label.setText(f"{z * 100:.0f}%")
-        )
+        return strip
 
-        return panel
+    def _pop_out_preview(self):
+        """Open or focus the floating preview window."""
+        if self._preview_window is None or not self._preview_window.isVisible():
+            self._preview_window = _PreviewWindow(self)
+        self._preview_window.show()
+        self._preview_window.raise_()
+        self._preview_window.activateWindow()
+        # Push current pixmap into it
+        if self._current_pixmap is not None:
+            self._preview_window.set_pixmap(self._current_pixmap)
+
+    # Keep a reference to the last generated pixmap for pop-out
+    _current_pixmap = None
 
     # ------------------------------------------------------------------ #
     #  Preview generation                                                 #
@@ -474,12 +520,21 @@ class VideoSettingsTab(QWidget):
             size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
         else:
             size_str = f"{size_bytes / 1024:.0f} KB"
-        self._size_label.setText(f"{sheet.width}×{sheet.height}  ~{size_str}")
+        self._size_label.setText(f"{sheet.width}\u00d7{sheet.height}  ~{size_str}")
 
-        self._preview_scene.clear()
-        self._preview_scene.addPixmap(pixmap)
-        self._preview_scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
-        self._pending_fit = True
+        self._current_pixmap = pixmap
+
+        # Update inline thumbnail (scaled to fit the strip)
+        thumb = pixmap.scaled(
+            self._thumb_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._thumb_label.setPixmap(thumb)
+
+        # Update floating preview window if open
+        if self._preview_window is not None and self._preview_window.isVisible():
+            self._preview_window.set_pixmap(pixmap)
 
     @staticmethod
     def _pil_to_pixmap(pil_image: Image.Image) -> QPixmap:
@@ -492,17 +547,6 @@ class VideoSettingsTab(QWidget):
             3 * pil_image.width, QImage.Format.Format_RGB888,
         )
         return QPixmap.fromImage(qimage)
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        if self._pending_fit:
-            self._pending_fit = False
-            QTimer.singleShot(0, self._preview_view.zoom_to_fit)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self._preview_scene.items():
-            self._preview_view.zoom_to_fit()
 
     # ------------------------------------------------------------------ #
     #  Settings I/O                                                       #
