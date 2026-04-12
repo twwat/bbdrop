@@ -376,7 +376,7 @@ def setup_secure_password():
 
 def _save_credentials(username, password):
     """Save credentials to OS keyring"""
-    set_credential('username', encrypt_password(username))
-    set_credential('password', encrypt_password(password))
+    set_credential('username', encrypt_password(username), 'imx')
+    set_credential('password', encrypt_password(password), 'imx')
     log("Encrypted credentials saved to keyring", level="info", category="auth")
     return True

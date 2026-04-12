@@ -216,8 +216,8 @@ class CredentialSetupDialog(QDialog):
     def load_current_credentials(self):
         """Load and display current credentials"""
         # Load from QSettings (migration happens once at app startup)
-        username = get_credential('username')
-        password = get_credential('password')
+        username = get_credential('username', 'imx')
+        password = get_credential('password', 'imx')
 
         if username:
             self.username_status_label.setText(username)
@@ -255,7 +255,7 @@ class CredentialSetupDialog(QDialog):
             self.password_remove_btn.setEnabled(False)
 
         # Check API key
-        encrypted_api_key = get_credential('api_key')
+        encrypted_api_key = get_credential('api_key', 'imx')
         if encrypted_api_key:
             try:
                 api_key = decrypt_password(encrypted_api_key)
@@ -365,7 +365,7 @@ class CredentialSetupDialog(QDialog):
             if username:
                 try:
                     from src.utils.credentials import encrypt_password
-                    set_credential('username', encrypt_password(username))
+                    set_credential('username', encrypt_password(username), 'imx')
                     self.load_current_credentials()
                     QMessageBox.information(self, "Success", "Username saved successfully!")
                 except Exception as e:
@@ -427,7 +427,7 @@ class CredentialSetupDialog(QDialog):
         if result == QDialog.DialogCode.Accepted:
             if password:
                 try:
-                    set_credential('password', encrypt_password(password))
+                    set_credential('password', encrypt_password(password), 'imx')
                     self.load_current_credentials()
                     QMessageBox.information(self, "Success", "Password saved successfully!")
                 except Exception as e:
@@ -483,7 +483,7 @@ class CredentialSetupDialog(QDialog):
         if result == QDialog.DialogCode.Accepted:
             if api_key:
                 try:
-                    set_credential('api_key', encrypt_password(api_key))
+                    set_credential('api_key', encrypt_password(api_key), 'imx')
                     self.load_current_credentials()
                     QMessageBox.information(self, "Success", "API key saved successfully!")
                 except Exception as e:

@@ -342,9 +342,9 @@ def check_stored_credentials() -> bool:
     try:
         from src.utils.credentials import get_credential
 
-        username = get_credential('username', 'imx') or get_credential('username')
-        password = get_credential('password', 'imx') or get_credential('password')
-        api_key = get_credential('api_key', 'imx') or get_credential('api_key')
+        username = get_credential('username', 'imx')
+        password = get_credential('password', 'imx')
+        api_key = get_credential('api_key', 'imx')
 
         # Have username+password OR api_key
         return bool((username and password) or api_key)
@@ -357,7 +357,7 @@ def api_key_is_set() -> bool:
     """Check if API key is configured in QSettings (Registry)"""
     try:
         from src.utils.credentials import get_credential
-        encrypted_api_key = get_credential('api_key')
+        encrypted_api_key = get_credential('api_key', 'imx')
         return bool(encrypted_api_key)
     except Exception as e:
         log(f"api_key_is_set: Failed to check API key: {e}", level="error", category="auth")
