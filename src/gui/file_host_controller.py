@@ -276,6 +276,9 @@ class FileHostController(QObject):
             return
 
         log(f"Queueing manual upload to {host_name} for {os.path.basename(gallery_path)}", level="info", category="file_hosts")
+        # Manual single-host queue: no family designation needed. If this host is
+        # in a backend family, the worker's pre-upload family-mirror path will
+        # dedup via sibling md5s automatically (see src/processing/file_host_workers.py).
         upload_id = self._main_window.queue_manager.store.add_file_host_upload(
             gallery_path=gallery_path,
             host_name=host_name,

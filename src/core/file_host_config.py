@@ -586,9 +586,28 @@ def select_primary(family: str, enabled_host_ids: set[str]) -> Optional[str]:
 
 
 def is_family_dedup_enabled() -> bool:
-    """Return whether the K2S family dedup feature is enabled.
+    """Return whether the K2S family dedup feature is enabled (default True).
 
-    Reads [FILE_HOSTS] k2s_family_dedup_enabled from the INI, defaulting to True.
-    Task 7 wires this to the actual Advanced settings checkbox.
+    Reads [FILE_HOSTS] k2s_family_dedup_enabled from the INI. If the key is
+    missing or the file does not exist, returns True (opt-out, not opt-in).
     """
-    return True
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    config_file = get_config_path()
+    if not os.path.exists(config_file):
+        return True
+
+    with _ini_file_lock:
+        config = configparser.ConfigParser()
+        try:
+            config.read(config_file, encoding="utf-8")
+        except configparser.Error:
+            return True
+        try:
+            return config.getboolean(
+                "FILE_HOSTS", "k2s_family_dedup_enabled", fallback=True
+            )
+        except (ValueError, configparser.Error):
+            return True
