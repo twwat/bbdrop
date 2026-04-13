@@ -2132,7 +2132,7 @@ class QueueStore:
                 SELECT COUNT(*) as files,
                        COALESCE(SUM(total_bytes - uploaded_bytes), 0) as bytes
                 FROM file_host_uploads
-                WHERE host_name = ? AND status IN ('pending', 'uploading')
+                WHERE host_name = ? AND status IN ('pending', 'uploading', 'blocked')
                 """,
                 (host_name,)
             )

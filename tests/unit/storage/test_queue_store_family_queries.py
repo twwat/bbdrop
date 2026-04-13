@@ -140,3 +140,38 @@ class TestGetPendingReturnsDedupOnly:
         rows = store.get_pending_file_host_uploads(host_name="fileboom")
         assert len(rows) == 1
         assert rows[0]["dedup_only"] == 0
+
+
+class TestGetFileHostPendingStats:
+    """get_file_host_pending_stats must count blocked rows alongside pending/uploading."""
+
+    def test_counts_pending_and_uploading(self, store):
+        path = "/tmp/stats1"
+        store.add_file_host_upload(path, "keep2share", status="pending")
+        uid = store.add_file_host_upload(path, "keep2share", status="pending", part_number=1)
+        store.update_file_host_upload(uid, status="uploading")
+        result = store.get_file_host_pending_stats("keep2share")
+        assert result["files"] == 2
+
+    def test_blocked_rows_included_in_count(self, store):
+        """A blocked secondary should count as queued work, not be invisible."""
+        path = "/tmp/stats2"
+        primary_id = store.add_file_host_upload(path, "keep2share", status="pending")
+        store.add_file_host_upload(
+            path, "fileboom", status="blocked", blocked_by_upload_id=primary_id
+        )
+        k2s = store.get_file_host_pending_stats("keep2share")
+        fboom = store.get_file_host_pending_stats("fileboom")
+        # Primary pending visible to its own host stats
+        assert k2s["files"] == 1
+        # Blocked secondary visible to fileboom's stats
+        assert fboom["files"] == 1
+
+    def test_completed_and_failed_rows_excluded(self, store):
+        path = "/tmp/stats3"
+        cid = store.add_file_host_upload(path, "keep2share", status="pending")
+        fid = store.add_file_host_upload(path, "keep2share", status="pending", part_number=1)
+        store.update_file_host_upload(cid, status="completed")
+        store.update_file_host_upload(fid, status="failed")
+        result = store.get_file_host_pending_stats("keep2share")
+        assert result["files"] == 0
