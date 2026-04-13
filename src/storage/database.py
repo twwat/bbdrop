@@ -83,7 +83,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 13  # Bump this when adding new migrations
+_SCHEMA_VERSION = 14  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -463,6 +463,87 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS scan_results_host_idx ON host_scan_results(host_type, host_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS scan_results_status_idx ON host_scan_results(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS scan_results_checked_idx ON host_scan_results(checked_ts)")
+
+        # Migration to version 14: K2S family dedup support on file_host_uploads.
+        # Adds two nullable/defaulted columns and extends the status CHECK
+        # constraint to accept 'blocked'. Rebuilds the table because SQLite
+        # cannot ALTER a CHECK constraint in place (same pattern as the v12
+        # galleries rebuild above).
+        fh_columns = {col[1] for col in conn.execute("PRAGMA table_info(file_host_uploads)").fetchall()}
+
+        if 'blocked_by_upload_id' not in fh_columns:
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN blocked_by_upload_id INTEGER")
+            fh_columns.add('blocked_by_upload_id')
+            log("Added blocked_by_upload_id column to file_host_uploads",
+                level="info", category="database")
+
+        if 'dedup_only' not in fh_columns:
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN dedup_only INTEGER DEFAULT 0")
+            fh_columns.add('dedup_only')
+            log("Added dedup_only column to file_host_uploads",
+                level="info", category="database")
+
+        # Rebuild the table to widen the status CHECK constraint to include 'blocked'.
+        # One-shot: we detect whether the current table definition already mentions 'blocked'
+        # and skip the rebuild if so.
+        try:
+            fh_sql_row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='file_host_uploads'"
+            ).fetchone()
+            if fh_sql_row and "'blocked'" not in (fh_sql_row[0] or ''):
+                conn.executescript("""
+                    ALTER TABLE file_host_uploads RENAME TO file_host_uploads_old;
+
+                    CREATE TABLE file_host_uploads (
+                        id INTEGER PRIMARY KEY,
+                        gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+                        host_name TEXT NOT NULL,
+                        status TEXT NOT NULL CHECK (status IN ('pending','uploading','completed','failed','cancelled','blocked')),
+                        zip_path TEXT,
+                        started_ts INTEGER,
+                        finished_ts INTEGER,
+                        uploaded_bytes INTEGER DEFAULT 0,
+                        total_bytes INTEGER DEFAULT 0,
+                        download_url TEXT,
+                        file_id TEXT,
+                        file_name TEXT,
+                        error_message TEXT,
+                        raw_response TEXT,
+                        retry_count INTEGER DEFAULT 0,
+                        created_ts INTEGER DEFAULT (strftime('%s', 'now')),
+                        part_number INTEGER DEFAULT 0,
+                        md5_hash TEXT,
+                        file_size INTEGER,
+                        deduped INTEGER DEFAULT 0,
+                        blocked_by_upload_id INTEGER,
+                        dedup_only INTEGER DEFAULT 0,
+                        UNIQUE(gallery_fk, host_name, part_number)
+                    );
+
+                    INSERT INTO file_host_uploads
+                        (id, gallery_fk, host_name, status, zip_path, started_ts, finished_ts,
+                         uploaded_bytes, total_bytes, download_url, file_id, file_name,
+                         error_message, raw_response, retry_count, created_ts, part_number,
+                         md5_hash, file_size, deduped, blocked_by_upload_id, dedup_only)
+                    SELECT
+                        id, gallery_fk, host_name, status, zip_path, started_ts, finished_ts,
+                        uploaded_bytes, total_bytes, download_url, file_id, file_name,
+                        error_message, raw_response, retry_count, created_ts, part_number,
+                        md5_hash, file_size, deduped, blocked_by_upload_id, dedup_only
+                    FROM file_host_uploads_old;
+
+                    DROP TABLE file_host_uploads_old;
+
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_gallery_idx ON file_host_uploads(gallery_fk);
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_status_idx ON file_host_uploads(status);
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_host_idx ON file_host_uploads(host_name);
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_host_status_idx ON file_host_uploads(host_name, status);
+                """)
+                log("Migration 14: rebuilt file_host_uploads with widened status CHECK",
+                    level="info", category="database")
+        except Exception as e:
+            log(f"Migration 14 (file_host_uploads CHECK rebuild) failed: {e}",
+                level="warning", category="database")
 
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
