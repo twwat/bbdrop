@@ -94,3 +94,49 @@ class TestGetFamilyCompletedParts:
         assert len(parts) == 1
         assert parts[0]["host_name"] == "keep2share"
         assert parts[0]["md5_hash"] == "m0_k2s"
+
+
+class TestAddFileHostUploadFamilyParams:
+    def test_add_with_blocked_by_and_dedup_only(self, store):
+        primary_id = store.add_file_host_upload(
+            gallery_path="/tmp/fx",
+            host_name="keep2share",
+            status="pending",
+        )
+        secondary_id = store.add_file_host_upload(
+            gallery_path="/tmp/fx",
+            host_name="fileboom",
+            status="blocked",
+            blocked_by_upload_id=primary_id,
+        )
+        retry_id = store.add_file_host_upload(
+            gallery_path="/tmp/fx",
+            host_name="tezfiles",
+            status="pending",
+            dedup_only=1,
+        )
+        assert all([primary_id, secondary_id, retry_id])
+
+
+class TestGetPendingReturnsDedupOnly:
+    def test_pending_row_includes_dedup_only_field(self, store):
+        store.add_file_host_upload(
+            gallery_path="/tmp/fy",
+            host_name="fileboom",
+            status="pending",
+            dedup_only=1,
+        )
+        rows = store.get_pending_file_host_uploads(host_name="fileboom")
+        assert len(rows) == 1
+        assert rows[0]["dedup_only"] == 1
+        assert rows[0]["blocked_by_upload_id"] is None
+
+    def test_pending_row_defaults_dedup_only_to_zero(self, store):
+        store.add_file_host_upload(
+            gallery_path="/tmp/fz",
+            host_name="fileboom",
+            status="pending",
+        )
+        rows = store.get_pending_file_host_uploads(host_name="fileboom")
+        assert len(rows) == 1
+        assert rows[0]["dedup_only"] == 0

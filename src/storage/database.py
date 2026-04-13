@@ -1670,15 +1670,23 @@ class QueueStore:
         gallery_path: str,
         host_name: str,
         status: str = 'pending',
-        part_number: int = 0
+        part_number: int = 0,
+        blocked_by_upload_id: Optional[int] = None,
+        dedup_only: int = 0,
     ) -> Optional[int]:
         """Add a new file host upload record for a gallery.
 
         Args:
             gallery_path: Path to the gallery folder
             host_name: Name of the file host (e.g., 'rapidgator', 'gofile')
-            status: Initial status ('pending', 'uploading', 'completed', 'failed', 'cancelled')
+            status: Initial status ('pending', 'uploading', 'completed', 'failed',
+                    'cancelled', 'blocked')
             part_number: Archive part number (0 for non-split, 1+ for split parts)
+            blocked_by_upload_id: If this row is 'blocked', the upload_id of the
+                primary row it waits on. None for non-blocked rows.
+            dedup_only: 1 if this row should skip full upload and only attempt
+                try_create_by_hash. Used for retry-after-sibling-success; terminal
+                on failure (no fallback to full upload).
 
         Returns:
             Upload ID if created, None if failed
@@ -1725,10 +1733,12 @@ class QueueStore:
                 cursor = conn.execute(
                     """
                     INSERT OR REPLACE INTO file_host_uploads
-                    (gallery_fk, host_name, status, part_number, created_ts)
-                    VALUES (?, ?, ?, ?, strftime('%s', 'now'))
+                    (gallery_fk, host_name, status, part_number,
+                     blocked_by_upload_id, dedup_only, created_ts)
+                    VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
                     """,
-                    (gallery_id, host_name, status, part_number)
+                    (gallery_id, host_name, status, part_number,
+                     blocked_by_upload_id, dedup_only)
                 )
                 return cursor.lastrowid
             except Exception as e:
@@ -1950,7 +1960,11 @@ class QueueStore:
                         fh.id, fh.gallery_fk, fh.host_name, fh.status,
                         fh.retry_count, fh.created_ts,
                         g.path, g.name, g.status as gallery_status,
-                        COALESCE(fh.part_number, 0)
+                        COALESCE(fh.part_number, 0),
+                        COALESCE(fh.dedup_only, 0),
+                        fh.blocked_by_upload_id,
+                        fh.md5_hash,
+                        fh.zip_path
                     FROM file_host_uploads fh
                     JOIN galleries g ON fh.gallery_fk = g.id
                     WHERE fh.status = 'pending' AND fh.host_name = ?
@@ -1965,7 +1979,11 @@ class QueueStore:
                         fh.id, fh.gallery_fk, fh.host_name, fh.status,
                         fh.retry_count, fh.created_ts,
                         g.path, g.name, g.status as gallery_status,
-                        COALESCE(fh.part_number, 0)
+                        COALESCE(fh.part_number, 0),
+                        COALESCE(fh.dedup_only, 0),
+                        fh.blocked_by_upload_id,
+                        fh.md5_hash,
+                        fh.zip_path
                     FROM file_host_uploads fh
                     JOIN galleries g ON fh.gallery_fk = g.id
                     WHERE fh.status = 'pending'
@@ -1986,6 +2004,10 @@ class QueueStore:
                     'gallery_name': row[7],
                     'gallery_status': row[8],
                     'part_number': row[9],
+                    'dedup_only': row[10],
+                    'blocked_by_upload_id': row[11],
+                    'md5_hash': row[12],
+                    'zip_path': row[13],
                 })
 
             return uploads
