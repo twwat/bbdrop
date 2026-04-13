@@ -75,6 +75,11 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
         elif status == 'pending':
             painter.setOpacity(0.3)
             painter.fillRect(pixmap.rect(), QColor(128, 128, 128, 150))
+        elif status == 'blocked':
+            # Family-blocked secondary: waiting for primary to seed the backend
+            # Reuse the pending overlay for v1
+            painter.setOpacity(0.3)
+            painter.fillRect(pixmap.rect(), QColor(128, 128, 128, 150))
         elif status == 'failed':
             painter.setOpacity(1.0)
             painter.setPen(QPen(QColor(255, 0, 0), 2))
@@ -133,6 +138,8 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
             error_msg = upload_data.get('error_message', '')
             if error_msg:
                 parts.append(f"Error: {error_msg[:80]}")
+        elif status == 'blocked':
+            parts.append("Waiting on K2S family primary to complete")
 
         return ' \u00b7 '.join(parts)
 
@@ -190,7 +197,7 @@ class FileHostsStatusDelegate(QStyledItemDelegate):
             painter.drawPixmap(icon_rect, pixmap)
 
             overlay = self._get_overlay_pixmap(status)
-            if not overlay.isNull() and status in ('uploading', 'pending', 'failed'):
+            if not overlay.isNull() and status in ('uploading', 'pending', 'blocked', 'failed'):
                 painter.drawPixmap(icon_rect, overlay)
 
             # Red X for offline content (from scan results)
