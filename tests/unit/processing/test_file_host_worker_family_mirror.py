@@ -247,3 +247,29 @@ class TestWorkerUploadLoopFamilyBranch:
             r for r in store.get_file_host_uploads(path) if r["host_name"] == "fileboom"
         )
         assert final["status"] == "failed"
+
+    def test_aggregate_signal_emitted_even_if_process_upload_raises(
+        self, worker, store, monkeypatch
+    ):
+        """host_gallery_settled must fire from finally block, even on exception."""
+        path = "/tmp/lp_exc"
+        store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        # Non-family context: disable feature, so we skip the mirror branch
+        # and go straight to the full-upload path (where we'll raise).
+        from src.core import file_host_config as fhc
+        monkeypatch.setattr(fhc, "is_family_dedup_enabled", lambda: False)
+
+        def boom(*a, **kw):
+            raise RuntimeError("simulated upload crash")
+        monkeypatch.setattr(worker, "_process_upload", boom)
+
+        settled = []
+        worker.host_gallery_settled.connect(
+            lambda gid, host, success: settled.append((gid, host, success))
+        )
+        with pytest.raises(RuntimeError):
+            worker._process_single_pending_row(row, client=None, host_config=MagicMock())
+
+        assert settled == [(row["gallery_fk"], "fileboom", False)]

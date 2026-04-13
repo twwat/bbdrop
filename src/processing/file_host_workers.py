@@ -748,23 +748,35 @@ class FileHostWorker(QThread):
             self.host_gallery_settled.emit(db_id, host_name, False)
             return
 
-        self._process_upload(
-            upload_id=upload_id,
-            db_id=db_id,
-            gallery_path=gallery_path,
-            gallery_name=row["gallery_name"],
-            host_name=host_name,
-            host_config=host_config,
-        )
-
-        # Emit settled signal based on aggregate outcome for this (gallery, host).
-        final_rows = self.queue_store.get_file_host_uploads(gallery_path)
-        all_completed = all(
-            r["status"] == "completed"
-            for r in final_rows
-            if r["host_name"] == host_name and r["gallery_fk"] == db_id
-        )
-        self.host_gallery_settled.emit(db_id, host_name, all_completed)
+        # Full upload path: wrap the existing call + aggregate emit in try/finally
+        # so host_gallery_settled always fires, even on exception from the upload
+        # path. Task 11's HostFamilyCoordinator relies on this signal firing at
+        # every terminal point.
+        gallery_fk_for_emit = db_id
+        gallery_path_for_emit = gallery_path
+        try:
+            self._process_upload(
+                upload_id=upload_id,
+                db_id=db_id,
+                gallery_path=gallery_path,
+                gallery_name=row["gallery_name"],
+                host_name=host_name,
+                host_config=host_config,
+            )
+        finally:
+            # Emit settled signal based on aggregate outcome for this (gallery, host).
+            try:
+                final_rows = self.queue_store.get_file_host_uploads(gallery_path_for_emit)
+                all_completed = all(
+                    r["status"] == "completed"
+                    for r in final_rows
+                    if r["host_name"] == host_name and r["gallery_fk"] == gallery_fk_for_emit
+                )
+            except Exception:
+                # If even the DB read fails, default to False so the coordinator
+                # sees a failure signal and can promote another host.
+                all_completed = False
+            self.host_gallery_settled.emit(gallery_fk_for_emit, host_name, all_completed)
 
     def _process_upload(
         self,
