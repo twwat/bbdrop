@@ -1897,7 +1897,8 @@ class QueueStore:
                 'status', 'zip_path', 'started_ts', 'finished_ts',
                 'uploaded_bytes', 'total_bytes', 'download_url',
                 'file_id', 'file_name', 'error_message', 'raw_response', 'retry_count',
-                'md5_hash', 'file_size', 'deduped'
+                'md5_hash', 'file_size', 'deduped',
+                'blocked_by_upload_id', 'dedup_only',
             }
 
             updates = []
@@ -2079,6 +2080,39 @@ class QueueStore:
                 by_part[entry["part_number"]] = entry
 
         return [by_part[k] for k in sorted(by_part)]
+
+    def get_family_head_rows(
+        self,
+        gallery_fk: int,
+        members: list,
+    ) -> List[Dict[str, Any]]:
+        """Return the head (part_number=0) rows for each given host_id for a gallery."""
+        if not members:
+            return []
+        placeholders = ",".join("?" for _ in members)
+        sql = f"""
+            SELECT id, gallery_fk, host_name, status, part_number, blocked_by_upload_id, dedup_only, md5_hash
+            FROM file_host_uploads
+            WHERE gallery_fk = ?
+              AND host_name IN ({placeholders})
+              AND part_number = 0
+        """
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            rows = conn.execute(sql, (gallery_fk, *members)).fetchall()
+        return [
+            {
+                "id": r[0],
+                "gallery_fk": r[1],
+                "host_name": r[2],
+                "status": r[3],
+                "part_number": r[4],
+                "blocked_by_upload_id": r[5],
+                "dedup_only": r[6],
+                "md5_hash": r[7],
+            }
+            for r in rows
+        ]
 
     def get_file_host_pending_stats(self, host_name: str) -> dict:
         """Get queue statistics for a specific file host.
