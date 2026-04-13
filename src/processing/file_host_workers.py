@@ -650,14 +650,7 @@ class FileHostWorker(QThread):
                 # Acquire upload slot and process
                 try:
                     with self.coordinator.acquire_slot(db_id, host_name, timeout=5.0):
-                        self._process_upload(
-                            upload_id=upload_id,
-                            db_id=db_id,
-                            gallery_path=gallery_path,
-                            gallery_name=upload['gallery_name'],
-                            host_name=host_name,
-                            host_config=host_config
-                        )
+                        self._process_single_pending_row(upload, host_config=host_config)
                 except TimeoutError:
                     self._log(
                         f"Could not acquire upload slot for {host_name}, retrying...",
@@ -670,6 +663,108 @@ class FileHostWorker(QThread):
                 time.sleep(1.0)
 
         self._log("Worker stopped", level="info")
+
+    def _get_or_create_archive(self, db_id, folder_path, gallery_name,
+                               archive_format, compression, split_size_mb):
+        """Thin wrapper around ArchiveManager.create_or_reuse_archive.
+
+        Exists so tests can monkeypatch archive creation to verify it was (or
+        was not) called, without patching a third-party object.
+        """
+        return self.archive_manager.create_or_reuse_archive(
+            db_id=db_id,
+            folder_path=folder_path,
+            gallery_name=gallery_name,
+            archive_format=archive_format,
+            compression=compression,
+            split_size_mb=split_size_mb,
+        )
+
+    def _process_single_pending_row(self, row: dict, client=None, host_config=None):
+        """Pre-upload family-mirror branch + delegate to full upload.
+
+        Before any archive creation, attempts a K2S-family hash-dedup mirror
+        when the feature is enabled.  Three outcomes:
+
+        1. Mirror succeeds      → mark row completed, emit host_gallery_settled(True), return.
+        2. dedup_only miss      → mark row failed terminally, emit host_gallery_settled(False), return.
+        3. Normal / mirror miss → fall through to _process_upload (full upload path).
+
+        After _process_upload returns (for path 3), query the DB for the
+        aggregate outcome and emit host_gallery_settled.
+
+        Args:
+            row:         A dict from get_pending_file_host_uploads.
+            client:      Optional pre-built FileHostClient.  Tests inject a mock
+                         here so they can control try_create_by_hash responses.
+                         When None, the method creates a real client if family
+                         dedup is enabled and this host belongs to a family.
+            host_config: Optional HostConfig (looked up when None).
+        """
+        from src.core.file_host_config import get_host_family, is_family_dedup_enabled
+
+        upload_id = row["id"]
+        db_id = row["gallery_fk"]
+        gallery_path = row["gallery_path"]
+        host_name = row["host_name"]
+
+        # Resolve host_config early (needed by both the mirror branch and the
+        # full-upload path).
+        if host_config is None:
+            host_config = self.config_manager.get_host(host_name)
+
+        # --- Family mirror pre-upload branch ---
+        # Use caller-supplied client (tests) or build one now if family dedup
+        # is enabled and this host belongs to a family.
+        family = get_host_family(host_name) if is_family_dedup_enabled() else None
+        mirror_client = client  # may be None
+        if family and mirror_client is None and host_config is not None:
+            try:
+                mirror_client = self._create_client(host_config)
+            except Exception as e:
+                self._log(
+                    f"Could not create client for family mirror check: {e}",
+                    level="debug",
+                )
+
+        mirror_succeeded = False
+        if family and mirror_client is not None:
+            mirror_succeeded = self._try_family_mirror(row, mirror_client, family)
+
+        if mirror_succeeded:
+            self.host_gallery_settled.emit(db_id, host_name, True)
+            return
+
+        if row.get("dedup_only") == 1:
+            # This row exists solely to leverage a sibling's md5.  If the
+            # mirror missed it means the backend doesn't have the file yet
+            # — no fallback to a full upload.
+            self.queue_store.update_file_host_upload(
+                upload_id,
+                status="failed",
+                error_message="family dedup retry could not mirror sibling md5",
+                finished_ts=int(time.time()),
+            )
+            self.host_gallery_settled.emit(db_id, host_name, False)
+            return
+
+        self._process_upload(
+            upload_id=upload_id,
+            db_id=db_id,
+            gallery_path=gallery_path,
+            gallery_name=row["gallery_name"],
+            host_name=host_name,
+            host_config=host_config,
+        )
+
+        # Emit settled signal based on aggregate outcome for this (gallery, host).
+        final_rows = self.queue_store.get_file_host_uploads(gallery_path)
+        all_completed = all(
+            r["status"] == "completed"
+            for r in final_rows
+            if r["host_name"] == host_name and r["gallery_fk"] == db_id
+        )
+        self.host_gallery_settled.emit(db_id, host_name, all_completed)
 
     def _process_upload(
         self,
@@ -741,7 +836,7 @@ class FileHostWorker(QThread):
                         f"host limit ({host_max_mb}MB), archiving with split",
                         level="info"
                     )
-                    archive_paths = self.archive_manager.create_or_reuse_archive(
+                    archive_paths = self._get_or_create_archive(
                         db_id=db_id,
                         folder_path=folder_path,
                         gallery_name=gallery_name,
@@ -803,7 +898,7 @@ class FileHostWorker(QThread):
                 except Exception as e:
                     self._log(f"Disk space pre-flight check failed: {e}", level="warning")
 
-                archive_paths = self.archive_manager.create_or_reuse_archive(
+                archive_paths = self._get_or_create_archive(
                     db_id=db_id,
                     folder_path=folder_path,
                     gallery_name=gallery_name,

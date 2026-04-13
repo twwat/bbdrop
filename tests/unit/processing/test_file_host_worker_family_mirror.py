@@ -176,3 +176,74 @@ class TestTryFamilyMirror:
         # No sibling parts (only self), so mirror returns False
         assert ok is False
         client.try_create_by_hash.assert_not_called()
+
+
+class TestWorkerUploadLoopFamilyBranch:
+    """Test the wiring of _try_family_mirror into the worker's main upload flow.
+
+    We call _process_single_pending_row directly with a mock client so we can
+    control try_create_by_hash responses without running the full QThread loop.
+    """
+
+    def test_pre_upload_branch_short_circuits_on_mirror_success(
+        self, worker, store, client, monkeypatch
+    ):
+        path = "/tmp/lp1"
+        _seed_primary_parts(store, path, "keep2share", [(0, "m0", "g.zip")])
+        store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        archive_mgr_called = []
+        monkeypatch.setattr(
+            worker, "_get_or_create_archive",
+            lambda *a, **kw: archive_mgr_called.append(True),
+            raising=False,
+        )
+
+        settled_events = []
+        worker.host_gallery_settled.connect(
+            lambda gid, host, success: settled_events.append((gid, host, success))
+        )
+        # Call the per-row helper directly with a mock client
+        worker._process_single_pending_row(row, client)
+
+        assert archive_mgr_called == []  # never asked for archive
+        assert settled_events == [(row["gallery_fk"], "fileboom", True)]
+        final = next(
+            r for r in store.get_file_host_uploads(path) if r["host_name"] == "fileboom"
+        )
+        assert final["status"] == "completed"
+        assert final["deduped"] == 1
+
+    def test_dedup_only_row_fails_terminally_on_mirror_miss(
+        self, worker, store, monkeypatch
+    ):
+        path = "/tmp/lp2"
+        # No primary rows exist — mirror will miss
+        store.add_file_host_upload(
+            path, "fileboom", status="pending", part_number=0, dedup_only=1
+        )
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        archive_mgr_called = []
+        monkeypatch.setattr(
+            worker, "_get_or_create_archive",
+            lambda *a, **kw: archive_mgr_called.append(True),
+            raising=False,
+        )
+
+        client = MagicMock()
+        client.try_create_by_hash = MagicMock(return_value=None)  # miss
+
+        settled_events = []
+        worker.host_gallery_settled.connect(
+            lambda gid, host, success: settled_events.append((gid, host, success))
+        )
+        worker._process_single_pending_row(row, client)
+
+        assert archive_mgr_called == []
+        assert settled_events == [(row["gallery_fk"], "fileboom", False)]
+        final = next(
+            r for r in store.get_file_host_uploads(path) if r["host_name"] == "fileboom"
+        )
+        assert final["status"] == "failed"
