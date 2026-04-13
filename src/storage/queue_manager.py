@@ -64,6 +64,16 @@ def queue_file_host_uploads_for_gallery(
 
     result: dict = {}
 
+    def _add_all_plain_pending(host_id_list):
+        for host_id in host_id_list:
+            upload_id = store.add_file_host_upload(
+                gallery_path=gallery_path,
+                host_name=host_id,
+                status="pending",
+            )
+            if upload_id:
+                result[host_id] = upload_id
+
     # Group host_ids by family. Non-family hosts get an empty-string key.
     by_family: dict = {}
     for host_id in host_ids:
@@ -74,28 +84,14 @@ def queue_file_host_uploads_for_gallery(
     for family_key, members in by_family.items():
         if not family_key or len(members) < 2:
             # Non-family host, or only one family member enabled: plain pending.
-            for host_id in members:
-                upload_id = store.add_file_host_upload(
-                    gallery_path=gallery_path,
-                    host_name=host_id,
-                    status="pending",
-                )
-                if upload_id:
-                    result[host_id] = upload_id
+            _add_all_plain_pending(members)
             continue
 
         # 2+ family members: designate primary, block the rest.
         primary = select_primary(family_key, set(members))
         if primary is None:
             # Defensive: fall back to plain pending.
-            for host_id in members:
-                upload_id = store.add_file_host_upload(
-                    gallery_path=gallery_path,
-                    host_name=host_id,
-                    status="pending",
-                )
-                if upload_id:
-                    result[host_id] = upload_id
+            _add_all_plain_pending(members)
             continue
 
         primary_id = store.add_file_host_upload(
@@ -103,8 +99,12 @@ def queue_file_host_uploads_for_gallery(
             host_name=primary,
             status="pending",
         )
-        if primary_id:
-            result[primary] = primary_id
+        if not primary_id:
+            # Primary insertion failed. Fall back to plain pending for all members
+            # rather than leaving secondaries blocked with a None blocked_by pointer.
+            _add_all_plain_pending(members)
+            continue
+        result[primary] = primary_id
 
         for host_id in members:
             if host_id == primary:

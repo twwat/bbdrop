@@ -101,3 +101,33 @@ class TestFamilyBatchEnqueue:
         assert "fileboom" in result
         assert result["keep2share"] > 0
         assert result["fileboom"] > 0
+
+    def test_primary_insertion_failure_falls_back_to_plain_pending(self, store, monkeypatch):
+        """When primary add_file_host_upload returns None, all members get plain pending
+        rather than orphaned blocked rows with None blocked_by_upload_id."""
+        original = store.add_file_host_upload
+        call_count = {"n": 0}
+
+        def fail_first_call(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return None  # Simulate primary insertion failure
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(store, "add_file_host_upload", fail_first_call)
+
+        queue_file_host_uploads_for_gallery(
+            store,
+            gallery_path="/tmp/gx",
+            host_ids=["keep2share", "fileboom", "tezfiles"],
+            family_dedup_enabled=True,
+        )
+
+        rows = store.get_file_host_uploads("/tmp/gx")
+        # Primary insertion failed; keep2share should not be in the results.
+        # Fallback: fileboom + tezfiles created as plain pending.
+        non_primary_rows = [r for r in rows if r["host_name"] in ("fileboom", "tezfiles")]
+        assert len(non_primary_rows) == 2
+        for r in non_primary_rows:
+            assert r["status"] == "pending"
+            assert r["blocked_by_upload_id"] is None
