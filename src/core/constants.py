@@ -199,6 +199,14 @@ SUCCESS_GALLERY_CREATED = "Gallery created successfully"
 SUCCESS_UPLOAD_COMPLETE = "Upload completed successfully"
 SUCCESS_RENAMED = "Gallery renamed successfully"
 
+# Host families with shared backend storage. When 2+ members of a family are enabled
+# for the same gallery, only the highest-priority member performs a full upload; the
+# others fast-path via createFileByHash against the shared backend.
+# See docs/internal/2026-04-13-k2s-family-dedup-design.md
+HOST_FAMILY_PRIORITY: dict[str, list[str]] = {
+    "k2s": ["keep2share", "fileboom", "tezfiles"],
+}
+
 # Worker Thread Settings
 WORKER_THREAD_POOL_SIZE = 4
 WORKER_THREAD_TIMEOUT = 300  # 5 minutes

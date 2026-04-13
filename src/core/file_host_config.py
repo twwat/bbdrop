@@ -16,6 +16,7 @@ from threading import Lock
 
 from src.utils.paths import get_central_store_base_path
 from src.utils.logger import log
+from src.core.constants import HOST_FAMILY_PRIORITY
 
 
 # Module-level locks for thread safety
@@ -552,3 +553,33 @@ def get_config_manager() -> FileHostConfigManager:
                 _config_manager = FileHostConfigManager()
                 _config_manager.load_all_hosts()
     return _config_manager
+
+
+def get_host_family(host_id: str) -> Optional[str]:
+    """Return the backend_family name for a host, or None if host is not in a family.
+
+    Host families share a single backend file store, so a file uploaded through
+    one member is instantly available to the others via createFileByHash.
+    """
+    for family, members in HOST_FAMILY_PRIORITY.items():
+        if host_id in members:
+            return family
+    return None
+
+
+def get_family_members(family: str) -> list[str]:
+    """Return the priority-ordered list of host_ids in a family (copy, safe to mutate)."""
+    return list(HOST_FAMILY_PRIORITY.get(family, []))
+
+
+def select_primary(family: str, enabled_host_ids: set[str]) -> Optional[str]:
+    """Return the highest-priority host in `family` present in `enabled_host_ids`.
+
+    Used by QueueManager at queue-entry time to designate the family's primary
+    uploader (who does the full upload) from among the hosts enabled for a gallery.
+    Returns None if no family member is enabled or the family is unknown.
+    """
+    for host_id in HOST_FAMILY_PRIORITY.get(family, []):
+        if host_id in enabled_host_ids:
+            return host_id
+    return None
