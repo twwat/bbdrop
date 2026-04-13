@@ -53,6 +53,12 @@ class FileHostWorker(QThread):
     credentials_update_requested = pyqtSignal(str)  # credentials (for updating credentials from dialog)
     status_updated = pyqtSignal(str, str)  # host_id, status_text
 
+    # Family-coordination signal: emitted once per gallery after the worker's
+    # multi-part loop fully terminates for that gallery. Avoids per-part race
+    # where a coordinator could observe "all known rows terminal" between
+    # iterations of the worker's upload loop.
+    host_gallery_settled = pyqtSignal(int, str, bool)  # gallery_fk, host_name, success
+
     @staticmethod
     def _compute_md5(file_path) -> str:
         """Compute MD5 hash of a file."""
