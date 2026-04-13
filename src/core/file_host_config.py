@@ -611,3 +611,45 @@ def is_family_dedup_enabled() -> bool:
             )
         except (ValueError, configparser.Error):
             return True
+
+
+def set_family_dedup_enabled(enabled: bool) -> None:
+    """Write [FILE_HOSTS] k2s_family_dedup_enabled to the INI.
+
+    Args:
+        enabled: True to enable family dedup (default behavior), False to disable.
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    config_file = get_config_path()
+
+    with _ini_file_lock:
+        config = configparser.ConfigParser()
+        if os.path.exists(config_file):
+            try:
+                config.read(config_file, encoding="utf-8")
+            except configparser.Error:
+                pass
+
+        if not config.has_section("FILE_HOSTS"):
+            config.add_section("FILE_HOSTS")
+
+        config.set("FILE_HOSTS", "k2s_family_dedup_enabled", str(enabled).lower())
+
+        try:
+            with open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+            log(
+                f"Saved k2s_family_dedup_enabled={enabled} to INI",
+                level="debug",
+                category="file_hosts",
+            )
+        except Exception as e:
+            log(
+                f"Error saving k2s_family_dedup_enabled: {e}",
+                level="error",
+                category="file_hosts",
+            )
+            raise
