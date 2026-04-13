@@ -258,8 +258,8 @@ class TestWorkerUploadLoopFamilyBranch:
 
         # Non-family context: disable feature, so we skip the mirror branch
         # and go straight to the full-upload path (where we'll raise).
-        from src.core import file_host_config as fhc
-        monkeypatch.setattr(fhc, "is_family_dedup_enabled", lambda: False)
+        import src.processing.file_host_workers as fhw
+        monkeypatch.setattr(fhw, "is_family_dedup_enabled", lambda: False)
 
         def boom(*a, **kw):
             raise RuntimeError("simulated upload crash")

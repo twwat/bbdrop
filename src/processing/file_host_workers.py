@@ -16,7 +16,13 @@ from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings
 
 from src.utils.credentials import get_credential, decrypt_password
 from src.core.engine import AtomicCounter
-from src.core.file_host_config import get_config_manager, HostConfig, get_file_host_setting
+from src.core.file_host_config import (
+    get_config_manager,
+    HostConfig,
+    get_file_host_setting,
+    get_host_family,
+    is_family_dedup_enabled,
+)
 from src.network.file_host_client import FileHostClient
 from src.processing.file_host_coordinator import get_coordinator
 from src.proxy.resolver import ProxyResolver
@@ -695,14 +701,14 @@ class FileHostWorker(QThread):
 
         Args:
             row:         A dict from get_pending_file_host_uploads.
-            client:      Optional pre-built FileHostClient.  Tests inject a mock
-                         here so they can control try_create_by_hash responses.
-                         When None, the method creates a real client if family
-                         dedup is enabled and this host belongs to a family.
+            client:      Optional FileHostClient. PRODUCTION CALLERS MUST PASS None —
+                         the method creates a client internally via self._create_client
+                         when the family-mirror branch is triggered. This parameter exists
+                         solely for test injection of a mock client; passing a real client
+                         from production code would bypass proper client lifecycle and
+                         silently skip archive creation if the mirror branch is taken.
             host_config: Optional HostConfig (looked up when None).
         """
-        from src.core.file_host_config import get_host_family, is_family_dedup_enabled
-
         upload_id = row["id"]
         db_id = row["gallery_fk"]
         gallery_path = row["gallery_path"]
