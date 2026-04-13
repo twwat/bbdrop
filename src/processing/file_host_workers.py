@@ -1071,95 +1071,117 @@ class FileHostWorker(QThread):
     def _try_family_mirror(self, row: dict, client, family) -> bool:
         """Attempt to mirror a family primary's completed part set via hash dedup.
 
-        Reads the primary's completed part rows from the DB, calls
-        client.try_create_by_hash for each, and creates mirror part rows for
-        part_number > 0 (with dedup_only=1 to signal the retry-via-hash path).
+        Reads SIBLING primary's completed part rows from the DB (excluding the
+        calling worker's own host), calls client.try_create_by_hash for each,
+        and — only if every part mirrors successfully — creates/updates mirror
+        rows. All DB writes are deferred until the full loop succeeds, so a
+        partial mirror failure leaves the DB untouched and the head row remains
+        `pending` for the caller to retry via full upload.
 
-        Returns True only if every primary part mirrored successfully. Returns
-        False on any miss, empty primary set, or unknown family — caller should
-        fall through to the full-upload flow in the True=False case. The caller
-        is responsible for NOT falling through when `row['dedup_only'] == 1`.
-
-        Side effects:
-          - Updates the passed `row`'s DB entry to completed+deduped on success.
-          - Creates new `file_host_uploads` rows for part_number > 0 with
-            dedup_only=1 and marks them completed+deduped.
-          - Leaves DB state untouched on a mirror miss.
+        Returns True only if every sibling part mirrored successfully. Returns
+        False on any miss, empty sibling set, or exception — caller should fall
+        through to the full-upload flow. The caller is responsible for NOT
+        falling through when `row['dedup_only'] == 1` (treat miss as terminal
+        failure).
 
         Args:
-            row: The pending row currently being processed (from
-                get_pending_file_host_uploads). Must contain 'id', 'gallery_fk',
-                'host_name', and 'gallery_path'.
+            row: The pending row currently being processed. Must contain 'id',
+                'gallery_fk', 'host_name', and 'gallery_path'.
             client: The FileHostClient instance for this worker's host.
             family: The backend_family name, or None if the host has no family.
 
         Returns:
-            True if all parts deduped; False otherwise.
+            True if all sibling parts deduped; False otherwise.
         """
         if not family:
             return False
 
-        primary_parts = self.queue_store.get_family_completed_parts(
+        host_name = row["host_name"]
+        all_parts = self.queue_store.get_family_completed_parts(
             row["gallery_fk"], family
         )
-        if not primary_parts:
+        # Filter out self — we only mirror SIBLING parts, not our own.
+        sibling_parts = [p for p in all_parts if p["host_name"] != host_name]
+        if not sibling_parts:
             return False
 
         gallery_path = row.get("gallery_path")
         head_upload_id = row["id"]
-        host_name = row["host_name"]
 
-        created_secondary_ids: list = []
+        # Phase 1: attempt every dedup call and collect results WITHOUT
+        # touching the DB. Only if every part succeeds do we commit.
+        part_results: list = []  # list of (part_number, md5, file_name, result)
         try:
-            for part in primary_parts:
+            for part in sibling_parts:
                 part_number = part["part_number"]
                 md5 = part["md5_hash"]
                 file_name = part["file_name"] or ""
-
                 result = client.try_create_by_hash(md5, file_name)
                 if not (result and result.get("status") == "success"):
-                    # Any miss aborts the whole mirror. Caller falls through to
-                    # full upload (or marks failed if dedup_only=1).
                     return False
+                part_results.append((part_number, md5, file_name, result))
+        except Exception as e:
+            self._log(
+                f"Family mirror failed with exception for {host_name} "
+                f"gallery_path={gallery_path}: {e}",
+                level="warning",
+            )
+            return False
 
+        # Phase 2: commit. Process secondaries first, then the head row last
+        # so a mid-phase failure leaves the head row pending for retry.
+        try:
+            # Process part_number > 0 first, collect head row update for last
+            head_result = None
+            for part_number, md5, file_name, result in part_results:
                 if part_number == 0:
-                    # Update the existing head row in place
-                    self.queue_store.update_file_host_upload(
-                        head_upload_id,
-                        status="completed",
-                        md5_hash=md5,
-                        file_name=file_name,
-                        download_url=result.get("url", ""),
-                        file_id=result.get("file_id", ""),
-                        deduped=1,
-                        finished_ts=int(time.time()),
+                    head_result = (md5, file_name, result)
+                    continue
+                new_id = self.queue_store.add_file_host_upload(
+                    gallery_path=gallery_path,
+                    host_name=host_name,
+                    status="pending",
+                    part_number=part_number,
+                    dedup_only=1,
+                )
+                if new_id is None:
+                    self._log(
+                        f"Family mirror: failed to create mirror row for "
+                        f"{host_name} part {part_number}",
+                        level="warning",
                     )
-                else:
-                    # Create a new mirror row for this part with dedup_only=1
-                    new_id = self.queue_store.add_file_host_upload(
-                        gallery_path=gallery_path,
-                        host_name=host_name,
-                        status="pending",  # set completed below in update
-                        part_number=part_number,
-                        dedup_only=1,
-                    )
-                    if new_id is None:
-                        # Creation failed — bail out
-                        return False
-                    created_secondary_ids.append(new_id)
-                    self.queue_store.update_file_host_upload(
-                        new_id,
-                        status="completed",
-                        md5_hash=md5,
-                        file_name=file_name,
-                        download_url=result.get("url", ""),
-                        file_id=result.get("file_id", ""),
-                        deduped=1,
-                        finished_ts=int(time.time()),
-                    )
+                    return False
+                self.queue_store.update_file_host_upload(
+                    new_id,
+                    status="completed",
+                    md5_hash=md5,
+                    file_name=file_name,
+                    download_url=result.get("url", ""),
+                    file_id=result.get("file_id", ""),
+                    deduped=1,
+                    finished_ts=int(time.time()),
+                )
+            # Now update the head row (part 0). This is the last write — if
+            # earlier writes failed we already returned False.
+            if head_result is not None:
+                md5, file_name, result = head_result
+                self.queue_store.update_file_host_upload(
+                    head_upload_id,
+                    status="completed",
+                    md5_hash=md5,
+                    file_name=file_name,
+                    download_url=result.get("url", ""),
+                    file_id=result.get("file_id", ""),
+                    deduped=1,
+                    finished_ts=int(time.time()),
+                )
             return True
         except Exception as e:
-            self._log(f"Family mirror failed with exception: {e}", level="warning")
+            self._log(
+                f"Family mirror commit phase failed for {host_name} "
+                f"gallery_path={gallery_path}: {e}",
+                level="warning",
+            )
             return False
 
     def _emit_bandwidth(self):

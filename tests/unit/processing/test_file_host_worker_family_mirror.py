@@ -135,3 +135,44 @@ class TestTryFamilyMirror:
 
         ok = non_family_worker._try_family_mirror(row, client, family=None)
         assert ok is False
+
+    def test_partial_mirror_failure_leaves_head_row_pending(self, worker, store):
+        """When dedup succeeds for part 0 but fails for part 1, the head row
+        must remain `pending` so the caller can fall through to full upload."""
+        path = "/tmp/mg_partial"
+        _seed_primary_parts(
+            store, path, "keep2share",
+            [(0, "m0", "g.part0.zip"), (1, "m1", "g.part1.zip")],
+        )
+        store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        client = MagicMock()
+        client.try_create_by_hash.side_effect = [
+            {"status": "success", "url": "https://x/0"},
+            None,  # part 1 misses
+        ]
+
+        ok = worker._try_family_mirror(row, client, family="k2s")
+        assert ok is False
+
+        # Head row must still be pending — nothing committed yet.
+        fb_rows = [r for r in store.get_file_host_uploads(path) if r["host_name"] == "fileboom"]
+        assert len(fb_rows) == 1, "No secondary rows should have been created"
+        assert fb_rows[0]["status"] == "pending"
+        assert not fb_rows[0]["deduped"]
+
+    def test_mirror_excludes_own_host_from_sibling_parts(self, worker, store, client):
+        """If the worker's own host has a prior completed row, it should NOT
+        be treated as a sibling part for mirroring purposes."""
+        path = "/tmp/mg_self"
+        # Fileboom has a prior completed row (e.g., from a previous run)
+        _seed_primary_parts(store, path, "fileboom", [(0, "m_fb", "g.zip")])
+        # A new pending fileboom row is being processed now
+        store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        ok = worker._try_family_mirror(row, client, family="k2s")
+        # No sibling parts (only self), so mirror returns False
+        assert ok is False
+        client.try_create_by_hash.assert_not_called()
