@@ -36,6 +36,91 @@ def _normalize_path(path: str) -> str:
     return os.path.normpath(path)
 
 
+def queue_file_host_uploads_for_gallery(
+    store,
+    gallery_path: str,
+    host_ids: list,
+    family_dedup_enabled: bool = True,
+) -> dict:
+    """Queue file host uploads for a gallery, applying family primary designation.
+
+    For each host_id in `host_ids`, create a file_host_uploads row. When two or
+    more hosts belong to the same backend family AND `family_dedup_enabled` is
+    True, only the highest-priority enabled family member is created as
+    `pending`; the others are created as `blocked` with `blocked_by_upload_id`
+    pointing at the primary.
+
+    Args:
+        store: QueueStore instance.
+        gallery_path: Gallery folder path.
+        host_ids: List of host_ids to queue for this gallery.
+        family_dedup_enabled: If False, skip family coordination; all rows
+            created as plain pending (current pre-feature behavior).
+
+    Returns:
+        Dict mapping host_id to upload_id for each row created.
+    """
+    from src.core.file_host_config import get_host_family, select_primary
+
+    result: dict = {}
+
+    # Group host_ids by family. Non-family hosts get an empty-string key.
+    by_family: dict = {}
+    for host_id in host_ids:
+        family = get_host_family(host_id) if family_dedup_enabled else None
+        key = family or ""
+        by_family.setdefault(key, []).append(host_id)
+
+    for family_key, members in by_family.items():
+        if not family_key or len(members) < 2:
+            # Non-family host, or only one family member enabled: plain pending.
+            for host_id in members:
+                upload_id = store.add_file_host_upload(
+                    gallery_path=gallery_path,
+                    host_name=host_id,
+                    status="pending",
+                )
+                if upload_id:
+                    result[host_id] = upload_id
+            continue
+
+        # 2+ family members: designate primary, block the rest.
+        primary = select_primary(family_key, set(members))
+        if primary is None:
+            # Defensive: fall back to plain pending.
+            for host_id in members:
+                upload_id = store.add_file_host_upload(
+                    gallery_path=gallery_path,
+                    host_name=host_id,
+                    status="pending",
+                )
+                if upload_id:
+                    result[host_id] = upload_id
+            continue
+
+        primary_id = store.add_file_host_upload(
+            gallery_path=gallery_path,
+            host_name=primary,
+            status="pending",
+        )
+        if primary_id:
+            result[primary] = primary_id
+
+        for host_id in members:
+            if host_id == primary:
+                continue
+            secondary_id = store.add_file_host_upload(
+                gallery_path=gallery_path,
+                host_name=host_id,
+                status="blocked",
+                blocked_by_upload_id=primary_id,
+            )
+            if secondary_id:
+                result[host_id] = secondary_id
+
+    return result
+
+
 @dataclass
 class GalleryQueueItem:
     """Represents a gallery in the upload queue"""
@@ -1426,20 +1511,25 @@ class QueueManager(QObject):
                 log(f"Gallery added trigger: Found {len(triggered_hosts)} enabled hosts with 'On Added' trigger",
                     level="info", category="file_hosts")
 
+                from src.core.file_host_config import is_family_dedup_enabled
+                upload_ids = queue_file_host_uploads_for_gallery(
+                    self.store,
+                    gallery_path=path,
+                    host_ids=list(triggered_hosts.keys()),
+                    family_dedup_enabled=is_family_dedup_enabled(),
+                )
                 for host_id, host_config in triggered_hosts.items():
-                    # Queue upload to this file host (use host_id, not display name)
-                    upload_id = self.store.add_file_host_upload(
-                        gallery_path=path,
-                        host_name=host_id,  # host_id like 'filedot', not display name
-                        status='pending'
-                    )
-
+                    upload_id = upload_ids.get(host_id)
                     if upload_id:
-                        log(f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
-                            level="info", category="file_hosts")
+                        log(
+                            f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
+                            level="info", category="file_hosts",
+                        )
                     else:
-                        log(f"Failed to queue file host upload for {path} to {host_config.name}",
-                            level="error", category="file_hosts")
+                        log(
+                            f"Failed to queue file host upload for {path} to {host_config.name}",
+                            level="error", category="file_hosts",
+                        )
         except Exception as e:
             log(f"Error checking file host triggers on gallery added: {e}", level="error", category="file_hosts")
 

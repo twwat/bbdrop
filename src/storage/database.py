@@ -1766,7 +1766,8 @@ class QueueStore:
                     fh.download_url, fh.file_id, fh.file_name, fh.error_message,
                     fh.raw_response, fh.retry_count, fh.created_ts,
                     COALESCE(fh.part_number, 0),
-                    fh.md5_hash, fh.file_size, COALESCE(fh.deduped, 0)
+                    fh.md5_hash, fh.file_size, COALESCE(fh.deduped, 0),
+                    fh.blocked_by_upload_id, COALESCE(fh.dedup_only, 0)
                 FROM file_host_uploads fh
                 JOIN galleries g ON fh.gallery_fk = g.id
                 WHERE g.path = ?
@@ -1798,6 +1799,8 @@ class QueueStore:
                     'md5_hash': row[17],
                     'file_size': row[18],
                     'deduped': bool(row[19]),
+                    'blocked_by_upload_id': row[20],
+                    'dedup_only': bool(row[21]),
                 })
 
             return uploads

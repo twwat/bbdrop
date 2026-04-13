@@ -583,3 +583,12 @@ def select_primary(family: str, enabled_host_ids: set[str]) -> Optional[str]:
         if host_id in enabled_host_ids:
             return host_id
     return None
+
+
+def is_family_dedup_enabled() -> bool:
+    """Return whether the K2S family dedup feature is enabled.
+
+    Reads [FILE_HOSTS] k2s_family_dedup_enabled from the INI, defaulting to True.
+    Task 7 wires this to the actual Advanced settings checkbox.
+    """
+    return True
