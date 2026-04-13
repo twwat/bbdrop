@@ -946,7 +946,7 @@ class FileHostClient:
         finally:
             curl.close()
 
-    def _try_create_by_hash(self, md5_hash: str, filename: str) -> Optional[Dict[str, Any]]:
+    def try_create_by_hash(self, md5_hash: str, filename: str) -> Optional[Dict[str, Any]]:
         """Try to create a file by MD5 hash (K2S-family deduplication).
 
         Posts to the host's createFileByHash endpoint. If the hash exists
@@ -1063,7 +1063,7 @@ class FileHostClient:
         # Try hash-based deduplication (K2S-family)
         if md5_hash and self.config.dedupe_endpoint:
             clean_name = self._get_clean_filename(file_path.name)
-            dedup_result = self._try_create_by_hash(md5_hash, clean_name)
+            dedup_result = self.try_create_by_hash(md5_hash, clean_name)
             if dedup_result:
                 return dedup_result
 
