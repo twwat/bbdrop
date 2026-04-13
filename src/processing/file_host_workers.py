@@ -1068,6 +1068,100 @@ class FileHostWorker(QThread):
             self.current_db_id = None
             self._should_stop_current = False
 
+    def _try_family_mirror(self, row: dict, client, family) -> bool:
+        """Attempt to mirror a family primary's completed part set via hash dedup.
+
+        Reads the primary's completed part rows from the DB, calls
+        client.try_create_by_hash for each, and creates mirror part rows for
+        part_number > 0 (with dedup_only=1 to signal the retry-via-hash path).
+
+        Returns True only if every primary part mirrored successfully. Returns
+        False on any miss, empty primary set, or unknown family — caller should
+        fall through to the full-upload flow in the True=False case. The caller
+        is responsible for NOT falling through when `row['dedup_only'] == 1`.
+
+        Side effects:
+          - Updates the passed `row`'s DB entry to completed+deduped on success.
+          - Creates new `file_host_uploads` rows for part_number > 0 with
+            dedup_only=1 and marks them completed+deduped.
+          - Leaves DB state untouched on a mirror miss.
+
+        Args:
+            row: The pending row currently being processed (from
+                get_pending_file_host_uploads). Must contain 'id', 'gallery_fk',
+                'host_name', and 'gallery_path'.
+            client: The FileHostClient instance for this worker's host.
+            family: The backend_family name, or None if the host has no family.
+
+        Returns:
+            True if all parts deduped; False otherwise.
+        """
+        if not family:
+            return False
+
+        primary_parts = self.queue_store.get_family_completed_parts(
+            row["gallery_fk"], family
+        )
+        if not primary_parts:
+            return False
+
+        gallery_path = row.get("gallery_path")
+        head_upload_id = row["id"]
+        host_name = row["host_name"]
+
+        created_secondary_ids: list = []
+        try:
+            for part in primary_parts:
+                part_number = part["part_number"]
+                md5 = part["md5_hash"]
+                file_name = part["file_name"] or ""
+
+                result = client.try_create_by_hash(md5, file_name)
+                if not (result and result.get("status") == "success"):
+                    # Any miss aborts the whole mirror. Caller falls through to
+                    # full upload (or marks failed if dedup_only=1).
+                    return False
+
+                if part_number == 0:
+                    # Update the existing head row in place
+                    self.queue_store.update_file_host_upload(
+                        head_upload_id,
+                        status="completed",
+                        md5_hash=md5,
+                        file_name=file_name,
+                        download_url=result.get("url", ""),
+                        file_id=result.get("file_id", ""),
+                        deduped=1,
+                        finished_ts=int(time.time()),
+                    )
+                else:
+                    # Create a new mirror row for this part with dedup_only=1
+                    new_id = self.queue_store.add_file_host_upload(
+                        gallery_path=gallery_path,
+                        host_name=host_name,
+                        status="pending",  # set completed below in update
+                        part_number=part_number,
+                        dedup_only=1,
+                    )
+                    if new_id is None:
+                        # Creation failed — bail out
+                        return False
+                    created_secondary_ids.append(new_id)
+                    self.queue_store.update_file_host_upload(
+                        new_id,
+                        status="completed",
+                        md5_hash=md5,
+                        file_name=file_name,
+                        download_url=result.get("url", ""),
+                        file_id=result.get("file_id", ""),
+                        deduped=1,
+                        finished_ts=int(time.time()),
+                    )
+            return True
+        except Exception as e:
+            self._log(f"Family mirror failed with exception: {e}", level="warning")
+            return False
+
     def _emit_bandwidth(self):
         """Calculate and emit current bandwidth."""
         now = time.time()
