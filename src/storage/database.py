@@ -492,6 +492,8 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             ).fetchone()
             if fh_sql_row and "'blocked'" not in (fh_sql_row[0] or ''):
                 conn.executescript("""
+                    DROP TABLE IF EXISTS file_host_uploads_old;
+
                     ALTER TABLE file_host_uploads RENAME TO file_host_uploads_old;
 
                     CREATE TABLE file_host_uploads (
