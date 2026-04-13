@@ -5,7 +5,7 @@
 PyQt6-stubs
 
 # Optional: Add other dev tools as needed
-pytest==8.0.0  # For running tests when implemented
+pytest==9.0.3  # For running tests when implemented
 mypy==1.8.0    # For static type checking
 black>=26.3.1  # For code formatting (CVE-2026-32274)
 pytest-xdist>=3.8.0  # for Parallel test running
