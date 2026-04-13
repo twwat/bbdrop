@@ -20,6 +20,21 @@ def coord(store):
     return HostFamilyCoordinator(queue_store=store)
 
 
+@pytest.fixture(autouse=True)
+def _force_family_dedup_enabled(monkeypatch):
+    """Guard against the coordinator reading the real user INI.
+
+    HostFamilyCoordinator.on_host_gallery_settled calls is_family_dedup_enabled()
+    which reads ~/.bbdrop/bbdrop.ini. Without this patch, a developer with
+    k2s_family_dedup_enabled=false in their INI would see all coordinator tests
+    vacuous-pass.
+    """
+    monkeypatch.setattr(
+        "src.processing.host_family_coordinator.is_family_dedup_enabled",
+        lambda: True,
+    )
+
+
 def _add_family_rows(store, gallery_path, enabled_hosts):
     from src.storage.queue_manager import queue_file_host_uploads_for_gallery
     return queue_file_host_uploads_for_gallery(
