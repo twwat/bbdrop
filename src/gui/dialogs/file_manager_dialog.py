@@ -40,7 +40,7 @@ class FileManagerDialog(QDialog):
     The dialog is a layout shell — all logic lives in FileManagerController.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, host_id: Optional[str] = None):
         super().__init__(parent)
         self.setWindowTitle("File Manager")
         self.setModal(False)
@@ -68,6 +68,17 @@ class FileManagerDialog(QDialog):
         # Settings persistence
         self._settings = QSettings("BBDropUploader", "BBDropGUI")
         self._restore_state()
+
+        # Pre-select requested host if provided (overrides restored last-host).
+        # Block signals so this doesn't trigger an extra _on_host_changed call —
+        # the QTimer.singleShot below will fire once on the final (preselected)
+        # state.
+        if host_id:
+            idx = self._host_combo.findData(host_id)
+            if idx >= 0:
+                self._host_combo.blockSignals(True)
+                self._host_combo.setCurrentIndex(idx)
+                self._host_combo.blockSignals(False)
 
         # Auto-select first available host
         if self._host_combo.count() > 0:

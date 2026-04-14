@@ -2003,6 +2003,7 @@ class BBDropGUI(QMainWindow):
         self.worker_status_widget.file_host_enabled_changed.connect(self._on_file_host_enabled_changed)
         self.worker_status_widget.primary_host_change_requested.connect(self._set_primary_image_host)
         self.worker_status_widget.cover_host_change_requested.connect(self._set_cover_image_host)
+        self.worker_status_widget.browse_files_requested.connect(self.open_file_manager_dialog)
 
         # Worker monitoring started in showEvent() to avoid blocking startup
         # with database queries from _populate_initial_metrics()
@@ -2488,6 +2489,10 @@ class BBDropGUI(QMainWindow):
             main_widgets={},
             worker_manager=file_host_manager
         )
+        # Defer file-manager open past dialog.exec() return to avoid modal blocking
+        dialog.browse_files_requested.connect(
+            lambda hid: QTimer.singleShot(0, lambda: self.open_file_manager_dialog(host_id=hid))
+        )
         result = dialog.exec()
 
         # Refresh worker status table when dialog closes (accepted or rejected)
@@ -2561,19 +2566,30 @@ class BBDropGUI(QMainWindow):
         # Use non-blocking show() for help dialog
         dialog.show()
 
-    def open_file_manager_dialog(self) -> None:
-        """Open the File Manager dialog (non-modal, reuses existing)."""
+    def open_file_manager_dialog(self, host_id: Optional[str] = None) -> None:
+        """Open the File Manager dialog (non-modal, reuses existing).
+
+        Args:
+            host_id: Optional host identifier to pre-select in the host combo.
+                If the dialog is already open, switches it to that host.
+        """
         from src.gui.dialogs.file_manager_dialog import FileManagerDialog
 
         if hasattr(self, '_file_manager_dialog') and self._file_manager_dialog is not None:
             try:
+                if host_id:
+                    combo = getattr(self._file_manager_dialog, '_host_combo', None)
+                    if combo is not None:
+                        idx = combo.findData(host_id)
+                        if idx >= 0:
+                            combo.setCurrentIndex(idx)
                 self._file_manager_dialog.raise_()
                 self._file_manager_dialog.activateWindow()
                 return
             except RuntimeError:
                 self._file_manager_dialog = None
 
-        dialog = FileManagerDialog(parent=self)
+        dialog = FileManagerDialog(parent=self, host_id=host_id)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.destroyed.connect(lambda: setattr(self, '_file_manager_dialog', None))
         self._file_manager_dialog = dialog

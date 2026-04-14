@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QCheckBox, QFrame, QProgressBar, QScrollArea, QGroupBox,
     QSpinBox, QMessageBox, QFileDialog, QDialog
 )
-from PyQt6.QtCore import pyqtSignal, QSettings, Qt
+from PyQt6.QtCore import pyqtSignal, QSettings, Qt, QTimer
 from PyQt6.QtGui import QFont, QPixmap
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -628,6 +628,16 @@ class FileHostsSettingsWidget(QWidget):
 
         # Create and show config dialog with worker_manager
         dialog = FileHostConfigDialog(self, host_id, host_config, main_widgets, self.worker_manager)
+        # Defer file-manager open past dialog.exec() return to avoid modal blocking
+        main_window = getattr(self.parent_dialog, 'parent_window', None)
+        if main_window is not None and hasattr(main_window, 'open_file_manager_dialog'):
+            dialog.browse_files_requested.connect(
+                lambda hid: QTimer.singleShot(0, lambda: main_window.open_file_manager_dialog(host_id=hid))
+            )
+        else:
+            from src.utils.logger import log
+            log("Browse Files button wired but parent_window.open_file_manager_dialog unavailable",
+                level="warning", category="file_hosts")
         result = dialog.exec()
 
         # Save changes if user clicked Save

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLineEdit, QCheckBox, QProgressBar, QComboBox, QWidget, QListWidget,
     QSplitter, QSpinBox, QSizePolicy, QPlainTextEdit
 )
-from PyQt6.QtCore import QSettings, QTimer, Qt
+from PyQt6.QtCore import QSettings, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QFont
 from datetime import datetime
 from typing import Optional
@@ -38,6 +38,8 @@ class AsteriskPasswordEdit(QLineEdit):
 
 class FileHostConfigDialog(QDialog):
     """Configuration dialog for a single file host"""
+
+    browse_files_requested = pyqtSignal(str)  # host_id — user clicked Browse Files
 
     def __init__(self, parent, host_id: str, host_config, main_widgets: dict, worker_manager=None):
         """
@@ -120,6 +122,15 @@ class FileHostConfigDialog(QDialog):
         self.enable_button.setMinimumWidth(200)
         self.enable_button.clicked.connect(self._on_enable_button_clicked)
         button_row.addWidget(self.enable_button)
+
+        # Browse Files button (file manager entry point for this host)
+        from src.network.file_manager.factory import is_host_supported
+        self.browse_files_btn = QPushButton("Browse Files...")
+        self.browse_files_btn.clicked.connect(self._on_browse_files_clicked)
+        self._browse_files_supported = is_host_supported(self.host_id)
+        if not self._browse_files_supported:
+            self.browse_files_btn.setToolTip("File manager not supported for this host")
+        button_row.addWidget(self.browse_files_btn)
 
         # Error label beside button
         self.enable_error_label = QLabel()
@@ -1073,6 +1084,43 @@ class FileHostConfigDialog(QDialog):
             self.enable_button.setProperty("class", "host-enable-btn")
             self.enable_button.style().unpolish(self.enable_button)
             self.enable_button.style().polish(self.enable_button)
+
+        # Browse Files button is enabled only when host is enabled and supported
+        can_browse = enabled and self._browse_files_supported
+        self.browse_files_btn.setEnabled(can_browse)
+        if self._browse_files_supported and not enabled:
+            self.browse_files_btn.setToolTip("Enable the host to browse its files")
+        elif self._browse_files_supported:
+            self.browse_files_btn.setToolTip("Open the file manager for this host")
+
+    def _on_browse_files_clicked(self):
+        """Emit browse_files_requested and close the dialog.
+
+        The dialog is modal, so it must close before the (non-modal) file
+        manager can be interacted with. Callers connect the signal and open
+        the file manager via QTimer.singleShot to defer past exec() return.
+
+        If there are unsaved edits, require Apply (or Cancel) — we don't offer
+        a silent-discard path here because closing the dialog would drop the
+        user's in-progress form changes.
+        """
+        if self.has_unsaved_changes:
+            from PyQt6.QtWidgets import QMessageBox
+            reply = QMessageBox.warning(
+                self,
+                "Unsaved Changes",
+                "Apply your pending changes before opening the file manager?",
+                QMessageBox.StandardButton.Apply | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Apply,
+            )
+            if reply != QMessageBox.StandardButton.Apply:
+                return
+            self._on_apply_clicked()
+            if self.has_unsaved_changes:  # apply failed — abort
+                return
+        host_id = self.host_id
+        self.browse_files_requested.emit(host_id)
+        self.reject()
 
     def _on_enable_button_clicked(self):
         """Handle enable/disable button click - power button paradigm"""
