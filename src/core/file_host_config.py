@@ -16,6 +16,7 @@ from threading import Lock
 
 from src.utils.paths import get_central_store_base_path
 from src.utils.logger import log
+from src.core.constants import HOST_FAMILY_PRIORITY
 
 
 # Module-level locks for thread safety
@@ -552,3 +553,133 @@ def get_config_manager() -> FileHostConfigManager:
                 _config_manager = FileHostConfigManager()
                 _config_manager.load_all_hosts()
     return _config_manager
+
+
+def get_host_family(host_id: str) -> Optional[str]:
+    """Return the backend_family name for a host, or None if host is not in a family.
+
+    Host families share a single backend file store, so a file uploaded through
+    one member is instantly available to the others via createFileByHash.
+    """
+    for family, members in HOST_FAMILY_PRIORITY.items():
+        if host_id in members:
+            return family
+    return None
+
+
+def get_family_members(family: str) -> list[str]:
+    """Return the priority-ordered list of host_ids in a family (copy, safe to mutate)."""
+    return list(HOST_FAMILY_PRIORITY.get(family, []))
+
+
+def select_primary(family: str, enabled_host_ids: set[str]) -> Optional[str]:
+    """Return the highest-priority host in `family` present in `enabled_host_ids`.
+
+    Used by QueueManager at queue-entry time to designate the family's primary
+    uploader (who does the full upload) from among the hosts enabled for a gallery.
+    Returns None if no family member is enabled or the family is unknown.
+    """
+    for host_id in HOST_FAMILY_PRIORITY.get(family, []):
+        if host_id in enabled_host_ids:
+            return host_id
+    return None
+
+
+def is_family_dedup_enabled() -> bool:
+    """Return whether the K2S family dedup feature is enabled (default True).
+
+    Reads [FILE_HOSTS] k2s_family_dedup_enabled from the INI. If the key is
+    missing or the file does not exist, returns True (opt-out, not opt-in).
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    config_file = get_config_path()
+    if not os.path.exists(config_file):
+        return True
+
+    with _ini_file_lock:
+        config = configparser.ConfigParser()
+        try:
+            config.read(config_file, encoding="utf-8")
+        except configparser.Error:
+            return True
+        try:
+            return config.getboolean(
+                "FILE_HOSTS", "k2s_family_dedup_enabled", fallback=True
+            )
+        except (ValueError, configparser.Error):
+            return True
+
+
+def set_family_dedup_enabled(enabled: bool) -> None:
+    """Write [FILE_HOSTS] k2s_family_dedup_enabled to the INI.
+
+    Args:
+        enabled: True to enable family dedup (default behavior), False to disable.
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    config_file = get_config_path()
+
+    with _ini_file_lock:
+        config = configparser.ConfigParser()
+        if os.path.exists(config_file):
+            try:
+                config.read(config_file, encoding="utf-8")
+            except configparser.Error:
+                pass
+
+        if not config.has_section("FILE_HOSTS"):
+            config.add_section("FILE_HOSTS")
+
+        config.set("FILE_HOSTS", "k2s_family_dedup_enabled", str(enabled).lower())
+
+        try:
+            with open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+            log(
+                f"Saved k2s_family_dedup_enabled={enabled} to INI",
+                level="debug",
+                category="file_hosts",
+            )
+        except Exception as e:
+            log(
+                f"Error saving k2s_family_dedup_enabled: {e}",
+                level="error",
+                category="file_hosts",
+            )
+            raise
+
+
+def get_dedup_retry_settings() -> tuple[int, int]:
+    """Return (retry_attempts, retry_base_delay_sec) for K2S family dedup.
+
+    Reads k2s_dedup/retry_attempts and k2s_dedup/retry_base_delay_sec from
+    the [Advanced] INI section. Falls back to (3, 30) if missing.
+
+    Returns:
+        Tuple of (retry_attempts, retry_base_delay_sec).
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    config_file = get_config_path()
+    if not os.path.exists(config_file):
+        return 3, 30
+
+    with _ini_file_lock:
+        config = configparser.ConfigParser()
+        try:
+            config.read(config_file, encoding="utf-8")
+        except configparser.Error:
+            return 3, 30
+
+        attempts = config.getint("Advanced", "k2s_dedup/retry_attempts", fallback=3)
+        delay = config.getint("Advanced", "k2s_dedup/retry_base_delay_sec", fallback=30)
+
+    return max(0, attempts), max(5, delay)

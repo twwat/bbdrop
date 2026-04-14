@@ -1,6 +1,7 @@
 {
   "name": "FileBoom",
   "icon": "fileboom.png",
+  "backend_family": "k2s",
   "referral_url": "https://fboom.me/pr/53023444",
   "requires_auth": true,
   "auth_type": "api_key",

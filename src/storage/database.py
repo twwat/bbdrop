@@ -21,6 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import json
 
 from src.utils.logger import log
+from src.core.constants import HOST_FAMILY_PRIORITY
 
 
 def _safe_json_loads(raw: str | None, fallback):
@@ -83,7 +84,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 13  # Bump this when adding new migrations
+_SCHEMA_VERSION = 14  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -463,6 +464,89 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS scan_results_host_idx ON host_scan_results(host_type, host_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS scan_results_status_idx ON host_scan_results(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS scan_results_checked_idx ON host_scan_results(checked_ts)")
+
+        # Migration to version 14: K2S family dedup support on file_host_uploads.
+        # Adds two nullable/defaulted columns and extends the status CHECK
+        # constraint to accept 'blocked'. Rebuilds the table because SQLite
+        # cannot ALTER a CHECK constraint in place (same pattern as the v12
+        # galleries rebuild above).
+        fh_columns = {col[1] for col in conn.execute("PRAGMA table_info(file_host_uploads)").fetchall()}
+
+        if 'blocked_by_upload_id' not in fh_columns:
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN blocked_by_upload_id INTEGER")
+            fh_columns.add('blocked_by_upload_id')
+            log("Added blocked_by_upload_id column to file_host_uploads",
+                level="info", category="database")
+
+        if 'dedup_only' not in fh_columns:
+            conn.execute("ALTER TABLE file_host_uploads ADD COLUMN dedup_only INTEGER DEFAULT 0")
+            fh_columns.add('dedup_only')
+            log("Added dedup_only column to file_host_uploads",
+                level="info", category="database")
+
+        # Rebuild the table to widen the status CHECK constraint to include 'blocked'.
+        # One-shot: we detect whether the current table definition already mentions 'blocked'
+        # and skip the rebuild if so.
+        try:
+            fh_sql_row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='file_host_uploads'"
+            ).fetchone()
+            if fh_sql_row and "'blocked'" not in (fh_sql_row[0] or ''):
+                conn.executescript("""
+                    DROP TABLE IF EXISTS file_host_uploads_old;
+
+                    ALTER TABLE file_host_uploads RENAME TO file_host_uploads_old;
+
+                    CREATE TABLE file_host_uploads (
+                        id INTEGER PRIMARY KEY,
+                        gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+                        host_name TEXT NOT NULL,
+                        status TEXT NOT NULL CHECK (status IN ('pending','uploading','completed','failed','cancelled','blocked')),
+                        zip_path TEXT,
+                        started_ts INTEGER,
+                        finished_ts INTEGER,
+                        uploaded_bytes INTEGER DEFAULT 0,
+                        total_bytes INTEGER DEFAULT 0,
+                        download_url TEXT,
+                        file_id TEXT,
+                        file_name TEXT,
+                        error_message TEXT,
+                        raw_response TEXT,
+                        retry_count INTEGER DEFAULT 0,
+                        created_ts INTEGER DEFAULT (strftime('%s', 'now')),
+                        part_number INTEGER DEFAULT 0,
+                        md5_hash TEXT,
+                        file_size INTEGER,
+                        deduped INTEGER DEFAULT 0,
+                        blocked_by_upload_id INTEGER,
+                        dedup_only INTEGER DEFAULT 0,
+                        UNIQUE(gallery_fk, host_name, part_number)
+                    );
+
+                    INSERT INTO file_host_uploads
+                        (id, gallery_fk, host_name, status, zip_path, started_ts, finished_ts,
+                         uploaded_bytes, total_bytes, download_url, file_id, file_name,
+                         error_message, raw_response, retry_count, created_ts, part_number,
+                         md5_hash, file_size, deduped, blocked_by_upload_id, dedup_only)
+                    SELECT
+                        id, gallery_fk, host_name, status, zip_path, started_ts, finished_ts,
+                        uploaded_bytes, total_bytes, download_url, file_id, file_name,
+                        error_message, raw_response, retry_count, created_ts, part_number,
+                        md5_hash, file_size, deduped, blocked_by_upload_id, dedup_only
+                    FROM file_host_uploads_old;
+
+                    DROP TABLE file_host_uploads_old;
+
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_gallery_idx ON file_host_uploads(gallery_fk);
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_status_idx ON file_host_uploads(status);
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_host_idx ON file_host_uploads(host_name);
+                    CREATE INDEX IF NOT EXISTS file_host_uploads_host_status_idx ON file_host_uploads(host_name, status);
+                """)
+                log("Migration 14: rebuilt file_host_uploads with widened status CHECK",
+                    level="info", category="database")
+        except Exception as e:
+            log(f"Migration 14 (file_host_uploads CHECK rebuild) failed: {e}",
+                level="warning", category="database")
 
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
@@ -1586,15 +1670,23 @@ class QueueStore:
         gallery_path: str,
         host_name: str,
         status: str = 'pending',
-        part_number: int = 0
+        part_number: int = 0,
+        blocked_by_upload_id: Optional[int] = None,
+        dedup_only: int = 0,
     ) -> Optional[int]:
         """Add a new file host upload record for a gallery.
 
         Args:
             gallery_path: Path to the gallery folder
             host_name: Name of the file host (e.g., 'rapidgator', 'gofile')
-            status: Initial status ('pending', 'uploading', 'completed', 'failed', 'cancelled')
+            status: Initial status ('pending', 'uploading', 'completed', 'failed',
+                    'cancelled', 'blocked')
             part_number: Archive part number (0 for non-split, 1+ for split parts)
+            blocked_by_upload_id: If this row is 'blocked', the upload_id of the
+                primary row it waits on. None for non-blocked rows.
+            dedup_only: 1 if this row should skip full upload and only attempt
+                try_create_by_hash. Used for retry-after-sibling-success; terminal
+                on failure (no fallback to full upload).
 
         Returns:
             Upload ID if created, None if failed
@@ -1641,10 +1733,12 @@ class QueueStore:
                 cursor = conn.execute(
                     """
                     INSERT OR REPLACE INTO file_host_uploads
-                    (gallery_fk, host_name, status, part_number, created_ts)
-                    VALUES (?, ?, ?, ?, strftime('%s', 'now'))
+                    (gallery_fk, host_name, status, part_number,
+                     blocked_by_upload_id, dedup_only, created_ts)
+                    VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
                     """,
-                    (gallery_id, host_name, status, part_number)
+                    (gallery_id, host_name, status, part_number,
+                     blocked_by_upload_id, dedup_only)
                 )
                 return cursor.lastrowid
             except Exception as e:
@@ -1672,7 +1766,8 @@ class QueueStore:
                     fh.download_url, fh.file_id, fh.file_name, fh.error_message,
                     fh.raw_response, fh.retry_count, fh.created_ts,
                     COALESCE(fh.part_number, 0),
-                    fh.md5_hash, fh.file_size, COALESCE(fh.deduped, 0)
+                    fh.md5_hash, fh.file_size, COALESCE(fh.deduped, 0),
+                    fh.blocked_by_upload_id, COALESCE(fh.dedup_only, 0)
                 FROM file_host_uploads fh
                 JOIN galleries g ON fh.gallery_fk = g.id
                 WHERE g.path = ?
@@ -1704,6 +1799,8 @@ class QueueStore:
                     'md5_hash': row[17],
                     'file_size': row[18],
                     'deduped': bool(row[19]),
+                    'blocked_by_upload_id': row[20],
+                    'dedup_only': bool(row[21]),
                 })
 
             return uploads
@@ -1800,7 +1897,8 @@ class QueueStore:
                 'status', 'zip_path', 'started_ts', 'finished_ts',
                 'uploaded_bytes', 'total_bytes', 'download_url',
                 'file_id', 'file_name', 'error_message', 'raw_response', 'retry_count',
-                'md5_hash', 'file_size', 'deduped'
+                'md5_hash', 'file_size', 'deduped',
+                'blocked_by_upload_id', 'dedup_only',
             }
 
             updates = []
@@ -1866,7 +1964,11 @@ class QueueStore:
                         fh.id, fh.gallery_fk, fh.host_name, fh.status,
                         fh.retry_count, fh.created_ts,
                         g.path, g.name, g.status as gallery_status,
-                        COALESCE(fh.part_number, 0)
+                        COALESCE(fh.part_number, 0),
+                        COALESCE(fh.dedup_only, 0),
+                        fh.blocked_by_upload_id,
+                        fh.md5_hash,
+                        fh.zip_path
                     FROM file_host_uploads fh
                     JOIN galleries g ON fh.gallery_fk = g.id
                     WHERE fh.status = 'pending' AND fh.host_name = ?
@@ -1881,7 +1983,11 @@ class QueueStore:
                         fh.id, fh.gallery_fk, fh.host_name, fh.status,
                         fh.retry_count, fh.created_ts,
                         g.path, g.name, g.status as gallery_status,
-                        COALESCE(fh.part_number, 0)
+                        COALESCE(fh.part_number, 0),
+                        COALESCE(fh.dedup_only, 0),
+                        fh.blocked_by_upload_id,
+                        fh.md5_hash,
+                        fh.zip_path
                     FROM file_host_uploads fh
                     JOIN galleries g ON fh.gallery_fk = g.id
                     WHERE fh.status = 'pending'
@@ -1902,9 +2008,111 @@ class QueueStore:
                     'gallery_name': row[7],
                     'gallery_status': row[8],
                     'part_number': row[9],
+                    'dedup_only': row[10],
+                    'blocked_by_upload_id': row[11],
+                    'md5_hash': row[12],
+                    'zip_path': row[13],
                 })
 
             return uploads
+
+    def get_family_completed_parts(
+        self,
+        gallery_fk: int,
+        family: str,
+    ) -> List[Dict[str, Any]]:
+        """Return completed sibling part rows for a family, one per part_number.
+
+        For use by the K2S family dedup path: reads sibling md5s from the DB so a
+        secondary host can call try_create_by_hash without recomputing the hash
+        from an archive. Only rows with a populated md5_hash are returned — legacy
+        rows from before the hash-dedupe feature are excluded.
+
+        When multiple family members have completed rows for the same part_number,
+        the highest-priority host wins (per HOST_FAMILY_PRIORITY). This is a
+        deterministic tiebreaker and matches primary selection order.
+
+        Args:
+            gallery_fk: Foreign key into galleries table.
+            family: Family name (e.g., "k2s").
+
+        Returns:
+            List of dicts ordered by part_number. Each dict has:
+            id, gallery_fk, host_name, part_number, md5_hash, file_name.
+            Empty list if the family is unknown or no completed sibling exists.
+        """
+        members = HOST_FAMILY_PRIORITY.get(family)
+        if not members:
+            return []
+
+        placeholders = ",".join("?" for _ in members)
+        sql = f"""
+            SELECT id, gallery_fk, host_name, part_number, md5_hash, file_name
+            FROM file_host_uploads
+            WHERE gallery_fk = ?
+              AND host_name IN ({placeholders})
+              AND status = 'completed'
+              AND md5_hash IS NOT NULL
+              AND md5_hash != ''
+            ORDER BY part_number ASC
+        """
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            rows = conn.execute(sql, (gallery_fk, *members)).fetchall()
+
+        # Collapse duplicates: prefer the highest-priority host for each part_number.
+        priority_index = {host: idx for idx, host in enumerate(members)}
+        by_part: Dict[int, Dict[str, Any]] = {}
+        for row in rows:
+            entry = {
+                "id": row[0],
+                "gallery_fk": row[1],
+                "host_name": row[2],
+                "part_number": row[3],
+                "md5_hash": row[4],
+                "file_name": row[5],
+            }
+            existing = by_part.get(entry["part_number"])
+            if existing is None:
+                by_part[entry["part_number"]] = entry
+                continue
+            if priority_index[entry["host_name"]] < priority_index[existing["host_name"]]:
+                by_part[entry["part_number"]] = entry
+
+        return [by_part[k] for k in sorted(by_part)]
+
+    def get_family_head_rows(
+        self,
+        gallery_fk: int,
+        members: list,
+    ) -> List[Dict[str, Any]]:
+        """Return the head (part_number=0) rows for each given host_id for a gallery."""
+        if not members:
+            return []
+        placeholders = ",".join("?" for _ in members)
+        sql = f"""
+            SELECT id, gallery_fk, host_name, status, part_number, blocked_by_upload_id, dedup_only, md5_hash
+            FROM file_host_uploads
+            WHERE gallery_fk = ?
+              AND host_name IN ({placeholders})
+              AND part_number = 0
+        """
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            rows = conn.execute(sql, (gallery_fk, *members)).fetchall()
+        return [
+            {
+                "id": r[0],
+                "gallery_fk": r[1],
+                "host_name": r[2],
+                "status": r[3],
+                "part_number": r[4],
+                "blocked_by_upload_id": r[5],
+                "dedup_only": r[6],
+                "md5_hash": r[7],
+            }
+            for r in rows
+        ]
 
     def get_file_host_pending_stats(self, host_name: str) -> dict:
         """Get queue statistics for a specific file host.
@@ -1924,7 +2132,7 @@ class QueueStore:
                 SELECT COUNT(*) as files,
                        COALESCE(SUM(total_bytes - uploaded_bytes), 0) as bytes
                 FROM file_host_uploads
-                WHERE host_name = ? AND status IN ('pending', 'uploading')
+                WHERE host_name = ? AND status IN ('pending', 'uploading', 'blocked')
                 """,
                 (host_name,)
             )

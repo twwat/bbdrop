@@ -16,7 +16,13 @@ from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings
 
 from src.utils.credentials import get_credential, decrypt_password
 from src.core.engine import AtomicCounter
-from src.core.file_host_config import get_config_manager, HostConfig, get_file_host_setting
+from src.core.file_host_config import (
+    get_config_manager,
+    HostConfig,
+    get_file_host_setting,
+    get_host_family,
+    is_family_dedup_enabled,
+)
 from src.network.file_host_client import FileHostClient
 from src.processing.file_host_coordinator import get_coordinator
 from src.proxy.resolver import ProxyResolver
@@ -52,6 +58,12 @@ class FileHostWorker(QThread):
     spinup_complete = pyqtSignal(str, str)  # host_id, error_message (empty = success)
     credentials_update_requested = pyqtSignal(str)  # credentials (for updating credentials from dialog)
     status_updated = pyqtSignal(str, str)  # host_id, status_text
+
+    # Family-coordination signal: emitted once per gallery after the worker's
+    # multi-part loop fully terminates for that gallery. Avoids per-part race
+    # where a coordinator could observe "all known rows terminal" between
+    # iterations of the worker's upload loop.
+    host_gallery_settled = pyqtSignal(int, str, bool)  # gallery_fk, host_name, success
 
     @staticmethod
     def _compute_md5(file_path) -> str:
@@ -644,14 +656,7 @@ class FileHostWorker(QThread):
                 # Acquire upload slot and process
                 try:
                     with self.coordinator.acquire_slot(db_id, host_name, timeout=5.0):
-                        self._process_upload(
-                            upload_id=upload_id,
-                            db_id=db_id,
-                            gallery_path=gallery_path,
-                            gallery_name=upload['gallery_name'],
-                            host_name=host_name,
-                            host_config=host_config
-                        )
+                        self._process_single_pending_row(upload, host_config=host_config)
                 except TimeoutError:
                     self._log(
                         f"Could not acquire upload slot for {host_name}, retrying...",
@@ -664,6 +669,120 @@ class FileHostWorker(QThread):
                 time.sleep(1.0)
 
         self._log("Worker stopped", level="info")
+
+    def _get_or_create_archive(self, db_id, folder_path, gallery_name,
+                               archive_format, compression, split_size_mb):
+        """Thin wrapper around ArchiveManager.create_or_reuse_archive.
+
+        Exists so tests can monkeypatch archive creation to verify it was (or
+        was not) called, without patching a third-party object.
+        """
+        return self.archive_manager.create_or_reuse_archive(
+            db_id=db_id,
+            folder_path=folder_path,
+            gallery_name=gallery_name,
+            archive_format=archive_format,
+            compression=compression,
+            split_size_mb=split_size_mb,
+        )
+
+    def _process_single_pending_row(self, row: dict, client=None, host_config=None):
+        """Pre-upload family-mirror branch + delegate to full upload.
+
+        Before any archive creation, attempts a K2S-family hash-dedup mirror
+        when the feature is enabled.  Three outcomes:
+
+        1. Mirror succeeds      → mark row completed, emit host_gallery_settled(True), return.
+        2. dedup_only miss      → mark row failed terminally, emit host_gallery_settled(False), return.
+        3. Normal / mirror miss → fall through to _process_upload (full upload path).
+
+        After _process_upload returns (for path 3), query the DB for the
+        aggregate outcome and emit host_gallery_settled.
+
+        Args:
+            row:         A dict from get_pending_file_host_uploads.
+            client:      Optional FileHostClient. PRODUCTION CALLERS MUST PASS None —
+                         the method creates a client internally via self._create_client
+                         when the family-mirror branch is triggered. This parameter exists
+                         solely for test injection of a mock client; passing a real client
+                         from production code would bypass proper client lifecycle and
+                         silently skip archive creation if the mirror branch is taken.
+            host_config: Optional HostConfig (looked up when None).
+        """
+        upload_id = row["id"]
+        db_id = row["gallery_fk"]
+        gallery_path = row["gallery_path"]
+        host_name = row["host_name"]
+
+        # Resolve host_config early (needed by both the mirror branch and the
+        # full-upload path).
+        if host_config is None:
+            host_config = self.config_manager.get_host(host_name)
+
+        # --- Family mirror pre-upload branch ---
+        # Use caller-supplied client (tests) or build one now if family dedup
+        # is enabled and this host belongs to a family.
+        family = get_host_family(host_name) if is_family_dedup_enabled() else None
+        mirror_client = client  # may be None
+        if family and mirror_client is None and host_config is not None:
+            try:
+                mirror_client = self._create_client(host_config)
+            except Exception as e:
+                self._log(
+                    f"Could not create client for family mirror check: {e}",
+                    level="debug",
+                )
+
+        mirror_succeeded = False
+        if family and mirror_client is not None:
+            mirror_succeeded = self._try_family_mirror(row, mirror_client, family)
+
+        if mirror_succeeded:
+            self.host_gallery_settled.emit(db_id, host_name, True)
+            return
+
+        if row.get("dedup_only") == 1:
+            # This row exists solely to leverage a sibling's md5.  If the
+            # mirror missed it means the backend doesn't have the file yet
+            # — no fallback to a full upload.
+            self.queue_store.update_file_host_upload(
+                upload_id,
+                status="failed",
+                error_message="family dedup retry could not mirror sibling md5",
+                finished_ts=int(time.time()),
+            )
+            self.host_gallery_settled.emit(db_id, host_name, False)
+            return
+
+        # Full upload path: wrap the existing call + aggregate emit in try/finally
+        # so host_gallery_settled always fires, even on exception from the upload
+        # path. Task 11's HostFamilyCoordinator relies on this signal firing at
+        # every terminal point.
+        gallery_fk_for_emit = db_id
+        gallery_path_for_emit = gallery_path
+        try:
+            self._process_upload(
+                upload_id=upload_id,
+                db_id=db_id,
+                gallery_path=gallery_path,
+                gallery_name=row["gallery_name"],
+                host_name=host_name,
+                host_config=host_config,
+            )
+        finally:
+            # Emit settled signal based on aggregate outcome for this (gallery, host).
+            try:
+                final_rows = self.queue_store.get_file_host_uploads(gallery_path_for_emit)
+                all_completed = all(
+                    r["status"] == "completed"
+                    for r in final_rows
+                    if r["host_name"] == host_name and r["gallery_fk"] == gallery_fk_for_emit
+                )
+            except Exception:
+                # If even the DB read fails, default to False so the coordinator
+                # sees a failure signal and can promote another host.
+                all_completed = False
+            self.host_gallery_settled.emit(gallery_fk_for_emit, host_name, all_completed)
 
     def _process_upload(
         self,
@@ -735,7 +854,7 @@ class FileHostWorker(QThread):
                         f"host limit ({host_max_mb}MB), archiving with split",
                         level="info"
                     )
-                    archive_paths = self.archive_manager.create_or_reuse_archive(
+                    archive_paths = self._get_or_create_archive(
                         db_id=db_id,
                         folder_path=folder_path,
                         gallery_name=gallery_name,
@@ -797,7 +916,7 @@ class FileHostWorker(QThread):
                 except Exception as e:
                     self._log(f"Disk space pre-flight check failed: {e}", level="warning")
 
-                archive_paths = self.archive_manager.create_or_reuse_archive(
+                archive_paths = self._get_or_create_archive(
                     db_id=db_id,
                     folder_path=folder_path,
                     gallery_name=gallery_name,
@@ -1061,6 +1180,163 @@ class FileHostWorker(QThread):
             self.current_host = None
             self.current_db_id = None
             self._should_stop_current = False
+
+    def _try_family_mirror(self, row: dict, client, family) -> bool:
+        """Attempt to mirror a family primary's completed part set via hash dedup.
+
+        Reads SIBLING primary's completed part rows from the DB (excluding the
+        calling worker's own host), calls client.try_create_by_hash for each,
+        and — only if every part mirrors successfully — creates/updates mirror
+        rows. All DB writes are deferred until the full loop succeeds, so a
+        partial mirror failure leaves the DB untouched and the head row remains
+        `pending` for the caller to retry via full upload.
+
+        Retries with exponential backoff if the initial attempt misses, to allow
+        time for backend propagation across family hosts. Retry count and base
+        delay are configurable in Advanced settings (k2s_dedup/retry_attempts
+        and k2s_dedup/retry_base_delay_sec).
+
+        Returns True only if every sibling part mirrored successfully. Returns
+        False on any miss after all retries, empty sibling set, or exception —
+        caller should fall through to the full-upload flow.
+
+        Args:
+            row: The pending row currently being processed. Must contain 'id',
+                'gallery_fk', 'host_name', and 'gallery_path'.
+            client: The FileHostClient instance for this worker's host.
+            family: The backend_family name, or None if the host has no family.
+
+        Returns:
+            True if all sibling parts deduped; False otherwise.
+        """
+        if not family:
+            return False
+
+        host_name = row["host_name"]
+        all_parts = self.queue_store.get_family_completed_parts(
+            row["gallery_fk"], family
+        )
+        # Filter out self — we only mirror SIBLING parts, not our own.
+        sibling_parts = [p for p in all_parts if p["host_name"] != host_name]
+        if not sibling_parts:
+            return False
+
+        gallery_path = row.get("gallery_path")
+        head_upload_id = row["id"]
+
+        from src.core.file_host_config import get_dedup_retry_settings
+        max_retries, base_delay = get_dedup_retry_settings()
+
+        part_results: list = []  # list of (part_number, md5, file_name, result)
+
+        for attempt in range(max_retries + 1):  # attempt 0 = immediate, then retries
+            if self._should_stop_current or self._stop_event.is_set():
+                return False
+
+            if attempt > 0:
+                delay = base_delay * (2 ** (attempt - 1))
+                self._log(
+                    f"Family dedup miss for {host_name}, retrying in {delay}s "
+                    f"(attempt {attempt}/{max_retries})",
+                    level="info",
+                )
+                # Sleep in 1-second chunks so stop events are honoured promptly
+                for _ in range(delay):
+                    if self._should_stop_current or self._stop_event.is_set():
+                        return False
+                    time.sleep(1)
+
+            # Phase 1: attempt every dedup call and collect results WITHOUT
+            # touching the DB. Only if every part succeeds do we commit.
+            part_results = []
+            all_succeeded = True
+            try:
+                for part in sibling_parts:
+                    part_number = part["part_number"]
+                    md5 = part["md5_hash"]
+                    file_name = part["file_name"] or ""
+                    result = client.try_create_by_hash(md5, file_name)
+                    if not (result and result.get("status") == "success"):
+                        all_succeeded = False
+                        break
+                    part_results.append((part_number, md5, file_name, result))
+            except Exception as e:
+                self._log(
+                    f"Family mirror exception on attempt {attempt} for {host_name} "
+                    f"gallery_path={gallery_path}: {e}",
+                    level="warning",
+                )
+                all_succeeded = False
+
+            if all_succeeded:
+                break  # proceed to phase 2 commit
+        else:
+            # Exhausted all attempts
+            self._log(
+                f"Family dedup exhausted {max_retries} retries for {host_name} "
+                f"gallery_path={gallery_path}, falling through to full upload",
+                level="info",
+            )
+            return False
+
+        if not part_results:
+            return False
+
+        # Phase 2: commit. Process secondaries first, then the head row last
+        # so a mid-phase failure leaves the head row pending for retry.
+        try:
+            # Process part_number > 0 first, collect head row update for last
+            head_result = None
+            for part_number, md5, file_name, result in part_results:
+                if part_number == 0:
+                    head_result = (md5, file_name, result)
+                    continue
+                new_id = self.queue_store.add_file_host_upload(
+                    gallery_path=gallery_path,
+                    host_name=host_name,
+                    status="pending",
+                    part_number=part_number,
+                    dedup_only=1,
+                )
+                if new_id is None:
+                    self._log(
+                        f"Family mirror: failed to create mirror row for "
+                        f"{host_name} part {part_number}",
+                        level="warning",
+                    )
+                    return False
+                self.queue_store.update_file_host_upload(
+                    new_id,
+                    status="completed",
+                    md5_hash=md5,
+                    file_name=file_name,
+                    download_url=result.get("url", ""),
+                    file_id=result.get("file_id", ""),
+                    deduped=1,
+                    finished_ts=int(time.time()),
+                )
+            # Now update the head row (part 0). This is the last write — if
+            # earlier writes failed we already returned False.
+            if head_result is not None:
+                md5, file_name, result = head_result
+                self.queue_store.update_file_host_upload(
+                    head_upload_id,
+                    status="completed",
+                    md5_hash=md5,
+                    file_name=file_name,
+                    download_url=result.get("url", ""),
+                    file_id=result.get("file_id", ""),
+                    deduped=1,
+                    finished_ts=int(time.time()),
+                )
+            return True
+        except Exception as e:
+            self._log(
+                f"Family mirror commit phase failed for {host_name} "
+                f"gallery_path={gallery_path}: {e}",
+                level="warning",
+            )
+            return False
 
     def _emit_bandwidth(self):
         """Calculate and emit current bandwidth."""

@@ -12,6 +12,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.core.file_host_config import get_config_manager
 from src.processing.file_host_workers import FileHostWorker
+from src.processing.host_family_coordinator import HostFamilyCoordinator
 from src.storage.database import QueueStore
 from src.utils.credentials import get_credential
 from src.utils.logger import log
@@ -50,6 +51,7 @@ class FileHostWorkerManager(QObject):
         self.workers: Dict[str, FileHostWorker] = {}  # Enabled workers (spinup succeeded)
         self.pending_workers: Dict[str, FileHostWorker] = {}  # Workers spinning up (testing credentials)
         self._pending_lock = threading.Lock()  # Protects pending_workers dict
+        self.family_coordinator = HostFamilyCoordinator(queue_store=queue_store)
 
     def init_enabled_hosts(self) -> None:
         """Spawn workers for all enabled file hosts at startup.
@@ -301,6 +303,9 @@ class FileHostWorkerManager(QObject):
 
         # Status signal
         worker.status_updated.connect(self.worker_status_updated.emit)
+
+        # Family coordinator signal
+        worker.host_gallery_settled.connect(self.family_coordinator.on_host_gallery_settled)
 
     def pause_all(self):
         """Pause all workers (stop processing new uploads)."""

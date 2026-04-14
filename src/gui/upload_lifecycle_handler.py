@@ -61,21 +61,27 @@ class UploadLifecycleHandler(QObject):
                 log(f"Gallery started trigger: Found {len(triggered_hosts)} enabled hosts with 'On Started' trigger",
                     level="info", category="file_hosts")
 
+                from src.storage.queue_manager import queue_file_host_uploads_for_gallery
+                from src.core.file_host_config import is_family_dedup_enabled
+                upload_ids = queue_file_host_uploads_for_gallery(
+                    mw.queue_manager.store,
+                    gallery_path=path,
+                    host_ids=list(triggered_hosts.keys()),
+                    family_dedup_enabled=is_family_dedup_enabled(),
+                )
                 for host_id, host_config in triggered_hosts.items():
-                    # Queue upload to this file host (use host_id, not display name)
-                    upload_id = mw.queue_manager.store.add_file_host_upload(
-                        gallery_path=path,
-                        host_name=host_id,  # host_id like 'filedot', not display name
-                        status='pending'
-                    )
-
+                    upload_id = upload_ids.get(host_id)
                     if upload_id:
-                        log(f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
-                            level="info", category="file_hosts")
+                        log(
+                            f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
+                            level="info", category="file_hosts",
+                        )
                         mw.worker_signal_handler._update_filehost_queue_for_host(host_id)
                     else:
-                        log(f"Failed to queue file host upload for {path} to {host_config.name}",
-                            level="error", category="file_hosts")
+                        log(
+                            f"Failed to queue file host upload for {path} to {host_config.name}",
+                            level="error", category="file_hosts",
+                        )
         except Exception as e:
             log(f"Error checking file host triggers on gallery start: {e}", level="error", category="file_hosts")
 
@@ -289,19 +295,27 @@ class UploadLifecycleHandler(QObject):
                 log(f"Gallery completed trigger: Found {len(triggered_hosts)} enabled hosts with 'On Completed' trigger",
                     level="info", category="file_hosts")
 
+                from src.storage.queue_manager import queue_file_host_uploads_for_gallery
+                from src.core.file_host_config import is_family_dedup_enabled
+                upload_ids = queue_file_host_uploads_for_gallery(
+                    mw.queue_manager.store,
+                    gallery_path=path,
+                    host_ids=list(triggered_hosts.keys()),
+                    family_dedup_enabled=is_family_dedup_enabled(),
+                )
                 for host_id, host_config in triggered_hosts.items():
-                    # Queue upload to this file host (use host_id, not display name)
-                    upload_id = mw.queue_manager.store.add_file_host_upload(
-                        gallery_path=path,
-                        host_name=host_id,  # host_id like 'filedot', not display name
-                        status='pending'
-                    )
-
+                    upload_id = upload_ids.get(host_id)
                     if upload_id:
-                        log(f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})", level="info", category="file_hosts")
+                        log(
+                            f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
+                            level="info", category="file_hosts",
+                        )
                         mw.worker_signal_handler._update_filehost_queue_for_host(host_id)
                     else:
-                        log(f"Failed to queue file host upload for {path} to {host_config.name}", level="error", category="file_hosts")
+                        log(
+                            f"Failed to queue file host upload for {path} to {host_config.name}",
+                            level="error", category="file_hosts",
+                        )
         except Exception as e:
             log(f"Error checking file host triggers on gallery completion: {e}", level="error", category="file_hosts")
 

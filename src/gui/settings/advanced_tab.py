@@ -92,6 +92,23 @@ ADVANCED_SETTINGS = [
         "min": 20,
         "max": 2000
     },
+    # K2S family dedup retry settings
+    {
+        "key": "k2s_dedup/retry_attempts",
+        "description": "K2S family dedup: retries after initial miss (0 = no retry, fall through to full upload immediately)",
+        "default": 3,
+        "type": "int",
+        "min": 0,
+        "max": 10
+    },
+    {
+        "key": "k2s_dedup/retry_base_delay_sec",
+        "description": "K2S family dedup: seconds before first retry (doubles each attempt: 30 → 60 → 120 ...)",
+        "default": 30,
+        "type": "int",
+        "min": 5,
+        "max": 300
+    },
 ]
 
 
@@ -121,6 +138,23 @@ class AdvancedSettingsWidget(QWidget):
         )
         warning.setWordWrap(True)
         layout.addWidget(warning)
+
+        # --- File Hosts section ---
+        file_hosts_label = QLabel("File Hosts")
+        file_hosts_label.setStyleSheet("font-weight: bold; margin-top: 6px;")
+        layout.addWidget(file_hosts_label)
+
+        self.k2s_family_dedup_checkbox = QCheckBox(
+            "Share uploads across K2S family (Keep2Share / FileBoom / TezFiles)"
+        )
+        self.k2s_family_dedup_checkbox.setToolTip(
+            "When enabled, uploading to one of these hosts automatically creates entries "
+            "on the others via their shared backend — no re-upload required. "
+            "Leave on unless troubleshooting."
+        )
+        self.k2s_family_dedup_checkbox.setChecked(True)  # default: enabled
+        self.k2s_family_dedup_checkbox.toggled.connect(self._on_k2s_dedup_toggled)
+        layout.addWidget(self.k2s_family_dedup_checkbox)
 
         # Filter box
         filter_layout = QHBoxLayout()
@@ -213,6 +247,10 @@ class AdvancedSettingsWidget(QWidget):
     def _on_value_changed(self, key, value):
         """Handle when a setting value changes."""
         self._current_values[key] = value
+        self.settings_changed.emit()
+
+    def _on_k2s_dedup_toggled(self, checked: bool):
+        """Handle K2S family dedup checkbox toggle."""
         self.settings_changed.emit()
 
     def _load_defaults(self):
@@ -330,6 +368,12 @@ class AdvancedSettingsWidget(QWidget):
         if values:
             self.set_values(values)
 
+        # Load K2S family dedup toggle from [FILE_HOSTS] section
+        from src.core.file_host_config import is_family_dedup_enabled
+        self.k2s_family_dedup_checkbox.blockSignals(True)
+        self.k2s_family_dedup_checkbox.setChecked(is_family_dedup_enabled())
+        self.k2s_family_dedup_checkbox.blockSignals(False)
+
     def save_to_config(self, parent_window=None):
         """Save advanced settings to INI file (only non-default values).
 
@@ -382,5 +426,9 @@ class AdvancedSettingsWidget(QWidget):
             handler = parent_window.worker_signal_handler
             if hasattr(handler, 'bandwidth_manager'):
                 handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down, window_size)
+
+        # Save K2S family dedup toggle to [FILE_HOSTS] section
+        from src.core.file_host_config import set_family_dedup_enabled
+        set_family_dedup_enabled(self.k2s_family_dedup_checkbox.isChecked())
 
         return True

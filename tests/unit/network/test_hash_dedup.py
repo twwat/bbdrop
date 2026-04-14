@@ -108,7 +108,7 @@ class TestHashDedupTokenField:
         mock_curl.getinfo.return_value = 200
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            result = client._try_create_by_hash("d41d8cd98f00b204e9800998ecf8427e", "test.zip")
+            result = client.try_create_by_hash("d41d8cd98f00b204e9800998ecf8427e", "test.zip")
 
         # Key assertion: the field must be "access_token", NOT "auth_token"
         assert "access_token" in captured_body, (
@@ -142,26 +142,26 @@ class TestHashDedupTokenField:
         mock_curl.getinfo.return_value = 403
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            result = client._try_create_by_hash("abc123", "file.bin")
+            result = client.try_create_by_hash("abc123", "file.bin")
 
         assert result is None
         assert captured_body["access_token"] == ""
 
 
 class TestHashDedupResponses:
-    """Test _try_create_by_hash response handling."""
+    """Test try_create_by_hash response handling."""
 
     def test_returns_none_when_no_dedupe_endpoint(self, no_dedupe_config, bandwidth_counter):
         """Should return None immediately if config has no dedupe_endpoint."""
         client = _make_client(no_dedupe_config, bandwidth_counter)
-        result = client._try_create_by_hash("abc123", "file.zip")
+        result = client.try_create_by_hash("abc123", "file.zip")
         assert result is None
 
     def test_returns_none_when_no_upload_init_url(self, k2s_config, bandwidth_counter):
         """Should return None if upload_init_url is not set."""
         k2s_config.upload_init_url = None
         client = _make_client(k2s_config, bandwidth_counter)
-        result = client._try_create_by_hash("abc123", "file.zip")
+        result = client.try_create_by_hash("abc123", "file.zip")
         assert result is None
 
     def test_success_returns_dedup_result(self, k2s_config, bandwidth_counter):
@@ -181,7 +181,7 @@ class TestHashDedupResponses:
         mock_curl.getinfo.return_value = 200
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            result = client._try_create_by_hash("aabbccdd", "archive.rar")
+            result = client.try_create_by_hash("aabbccdd", "archive.rar")
 
         assert result is not None
         assert result["status"] == "success"
@@ -206,7 +206,7 @@ class TestHashDedupResponses:
         mock_curl.getinfo.return_value = 200
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            result = client._try_create_by_hash("aabbccdd", "file.zip")
+            result = client.try_create_by_hash("aabbccdd", "file.zip")
 
         assert result is None
 
@@ -229,7 +229,7 @@ class TestHashDedupResponses:
         mock_curl.getinfo.return_value = 403
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            result = client._try_create_by_hash("aabbccdd", "file.zip")
+            result = client.try_create_by_hash("aabbccdd", "file.zip")
 
         assert result is None
         # Should log a warning about the auth error
@@ -254,7 +254,7 @@ class TestHashDedupResponses:
 
         with patch('pycurl.Curl', return_value=mock_curl):
             with pytest.raises(Exception, match="Disk quota exceeded"):
-                client._try_create_by_hash("aabbccdd", "file.zip")
+                client.try_create_by_hash("aabbccdd", "file.zip")
 
     def test_network_error_returns_none(self, k2s_config, bandwidth_counter):
         """pycurl network errors should return None (caller uploads normally)."""
@@ -264,7 +264,7 @@ class TestHashDedupResponses:
         mock_curl.perform.side_effect = pycurl.error(28, "Connection timed out")
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            result = client._try_create_by_hash("aabbccdd", "file.zip")
+            result = client.try_create_by_hash("aabbccdd", "file.zip")
 
         assert result is None
 
@@ -281,7 +281,7 @@ class TestHashDedupResponses:
         mock_curl.getinfo.return_value = 200
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            result = client._try_create_by_hash("aabbccdd", "file.zip")
+            result = client.try_create_by_hash("aabbccdd", "file.zip")
 
         assert result is None
 
@@ -302,7 +302,7 @@ class TestHashDedupResponses:
         mock_curl.getinfo.return_value = 200
 
         with patch('pycurl.Curl', return_value=mock_curl):
-            client._try_create_by_hash("aabbccdd", "file.zip")
+            client.try_create_by_hash("aabbccdd", "file.zip")
 
         assert len(captured_url) == 1
         assert captured_url[0] == "https://api.keep2share.cc/v2/createFileByHash"
