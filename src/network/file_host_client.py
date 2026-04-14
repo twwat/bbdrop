@@ -2,6 +2,7 @@
 File host upload client using pycurl for bandwidth tracking and progress callbacks.
 """
 
+import os
 import pycurl
 import certifi
 import json
@@ -918,9 +919,12 @@ class FileHostClient:
                     curl.perform()
             else:
                 # POST with multipart form data
+                # FORM_FILE must be filesystem-encoded bytes — pycurl's str
+                # path goes through PyUnicode_AsEncodedString(ascii, strict)
+                # and blows up on non-ASCII paths (e.g. unicode parent dirs).
                 form_fields = [
                     (self.config.file_field, (
-                        pycurl.FORM_FILE, str(file_path),
+                        pycurl.FORM_FILE, os.fsencode(str(file_path)),
                         pycurl.FORM_FILENAME, self._get_clean_filename(file_path.name)
                     )),
                     *[(k, v) for k, v in self.config.extra_fields.items()]
@@ -1222,9 +1226,10 @@ class FileHostClient:
             curl.setopt(pycurl.XFERINFOFUNCTION, self._xferinfo_callback)
 
             # Build form fields: file + form_data (ajax, params, signature for K2S)
+            # FORM_FILE must be filesystem-encoded bytes (see note above).
             form_fields: List[Any] = [
                 (file_field, (
-                    pycurl.FORM_FILE, str(file_path),
+                    pycurl.FORM_FILE, os.fsencode(str(file_path)),
                     pycurl.FORM_FILENAME, self._get_clean_filename(file_path.name)
                 ))
             ]
