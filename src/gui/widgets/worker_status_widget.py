@@ -503,6 +503,7 @@ class WorkerStatusWidget(QWidget):
     file_host_enabled_changed = pyqtSignal(str, bool)  # host_id, enabled
     primary_host_change_requested = pyqtSignal(str)  # host_id — set as default image host
     cover_host_change_requested = pyqtSignal(str)    # host_id — set as cover image host
+    browse_files_requested = pyqtSignal(str)         # host_id — open file manager for host
 
     def __init__(self, parent=None):
         """Initialize worker status widget."""
@@ -2267,6 +2268,7 @@ class WorkerStatusWidget(QWidget):
             trigger = get_file_host_setting(host_id, "trigger", "str")
 
         menu = QMenu(self)
+        menu.setToolTipsVisible(True)
 
         # Enable/Disable actions - only show the available option
         if not enabled:
@@ -2319,6 +2321,18 @@ class WorkerStatusWidget(QWidget):
                 action.triggered.connect(lambda checked, v=value: self._set_host_trigger(host_id, v))
 
         menu.addSeparator()
+
+        # Browse Files (file hosts only) — greyed out if host disabled or unsupported
+        if not is_image_host:
+            from src.network.file_manager.factory import is_host_supported
+            browse_action = menu.addAction("Browse Files...")
+            supported = is_host_supported(host_id)
+            browse_action.setEnabled(enabled and supported)
+            if not supported:
+                browse_action.setToolTip("File manager not supported for this host")
+            elif not enabled:
+                browse_action.setToolTip("Enable the host to browse its files")
+            browse_action.triggered.connect(lambda: self.browse_files_requested.emit(host_id))
 
         # Configure host
         configure_action = menu.addAction("Configure Host...")
