@@ -21,7 +21,8 @@ def patch_worker_deps():
     with patch('src.processing.file_host_workers.get_config_manager') as mock_cfg, \
          patch('src.processing.file_host_workers.get_coordinator'), \
          patch('src.processing.file_host_workers.get_archive_manager'), \
-         patch('src.processing.file_host_workers.QSettings'):
+         patch('src.processing.file_host_workers.QSettings'), \
+         patch('src.core.file_host_config.get_dedup_retry_settings', return_value=(0, 30)):
         mock_config = Mock()
         mock_config.name = "FileBoom"
         mock_cfg.return_value.get_host.return_value = mock_config

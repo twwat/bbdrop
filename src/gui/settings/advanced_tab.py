@@ -92,6 +92,23 @@ ADVANCED_SETTINGS = [
         "min": 20,
         "max": 2000
     },
+    # K2S family dedup retry settings
+    {
+        "key": "k2s_dedup/retry_attempts",
+        "description": "K2S family dedup: retries after initial miss (0 = no retry, fall through to full upload immediately)",
+        "default": 3,
+        "type": "int",
+        "min": 0,
+        "max": 10
+    },
+    {
+        "key": "k2s_dedup/retry_base_delay_sec",
+        "description": "K2S family dedup: seconds before first retry (doubles each attempt: 30 → 60 → 120 ...)",
+        "default": 30,
+        "type": "int",
+        "min": 5,
+        "max": 300
+    },
 ]
 
 

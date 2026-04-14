@@ -1191,11 +1191,14 @@ class FileHostWorker(QThread):
         partial mirror failure leaves the DB untouched and the head row remains
         `pending` for the caller to retry via full upload.
 
+        Retries with exponential backoff if the initial attempt misses, to allow
+        time for backend propagation across family hosts. Retry count and base
+        delay are configurable in Advanced settings (k2s_dedup/retry_attempts
+        and k2s_dedup/retry_base_delay_sec).
+
         Returns True only if every sibling part mirrored successfully. Returns
-        False on any miss, empty sibling set, or exception — caller should fall
-        through to the full-upload flow. The caller is responsible for NOT
-        falling through when `row['dedup_only'] == 1` (treat miss as terminal
-        failure).
+        False on any miss after all retries, empty sibling set, or exception —
+        caller should fall through to the full-upload flow.
 
         Args:
             row: The pending row currently being processed. Must contain 'id',
@@ -1221,24 +1224,62 @@ class FileHostWorker(QThread):
         gallery_path = row.get("gallery_path")
         head_upload_id = row["id"]
 
-        # Phase 1: attempt every dedup call and collect results WITHOUT
-        # touching the DB. Only if every part succeeds do we commit.
+        from src.core.file_host_config import get_dedup_retry_settings
+        max_retries, base_delay = get_dedup_retry_settings()
+
         part_results: list = []  # list of (part_number, md5, file_name, result)
-        try:
-            for part in sibling_parts:
-                part_number = part["part_number"]
-                md5 = part["md5_hash"]
-                file_name = part["file_name"] or ""
-                result = client.try_create_by_hash(md5, file_name)
-                if not (result and result.get("status") == "success"):
-                    return False
-                part_results.append((part_number, md5, file_name, result))
-        except Exception as e:
+
+        for attempt in range(max_retries + 1):  # attempt 0 = immediate, then retries
+            if self._should_stop_current or self._stop_event.is_set():
+                return False
+
+            if attempt > 0:
+                delay = base_delay * (2 ** (attempt - 1))
+                self._log(
+                    f"Family dedup miss for {host_name}, retrying in {delay}s "
+                    f"(attempt {attempt}/{max_retries})",
+                    level="info",
+                )
+                # Sleep in 1-second chunks so stop events are honoured promptly
+                for _ in range(delay):
+                    if self._should_stop_current or self._stop_event.is_set():
+                        return False
+                    time.sleep(1)
+
+            # Phase 1: attempt every dedup call and collect results WITHOUT
+            # touching the DB. Only if every part succeeds do we commit.
+            part_results = []
+            all_succeeded = True
+            try:
+                for part in sibling_parts:
+                    part_number = part["part_number"]
+                    md5 = part["md5_hash"]
+                    file_name = part["file_name"] or ""
+                    result = client.try_create_by_hash(md5, file_name)
+                    if not (result and result.get("status") == "success"):
+                        all_succeeded = False
+                        break
+                    part_results.append((part_number, md5, file_name, result))
+            except Exception as e:
+                self._log(
+                    f"Family mirror exception on attempt {attempt} for {host_name} "
+                    f"gallery_path={gallery_path}: {e}",
+                    level="warning",
+                )
+                all_succeeded = False
+
+            if all_succeeded:
+                break  # proceed to phase 2 commit
+        else:
+            # Exhausted all attempts
             self._log(
-                f"Family mirror failed with exception for {host_name} "
-                f"gallery_path={gallery_path}: {e}",
-                level="warning",
+                f"Family dedup exhausted {max_retries} retries for {host_name} "
+                f"gallery_path={gallery_path}, falling through to full upload",
+                level="info",
             )
+            return False
+
+        if not part_results:
             return False
 
         # Phase 2: commit. Process secondaries first, then the head row last
