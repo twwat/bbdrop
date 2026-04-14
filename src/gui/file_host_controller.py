@@ -262,7 +262,7 @@ class FileHostController(QObject):
         """Queue a file host upload for a gallery."""
         from PyQt6.QtWidgets import QMessageBox
 
-        if not os.path.isdir(gallery_path):
+        if not os.path.exists(gallery_path):
             new_path = self._handle_missing_gallery_folder(gallery_path, host_name)
             if new_path:
                 gallery_path = new_path
