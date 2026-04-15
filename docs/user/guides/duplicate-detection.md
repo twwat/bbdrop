@@ -273,4 +273,4 @@ If you want to modify an existing gallery (not create a new one):
 - **[Gallery Management](../guides/archive-management.md)** - How to organize galleries
 - **[GUI Guide](../guides/gui-guide.md)** - Complete interface walkthrough
 - **[Multi-Host Upload](../guides/multi-host-upload.md)** - Upload to multiple hosts
-- **[Features Reference](../reference/FEATURES.md)** - Full feature list
+- **[Features Reference](../reference/features.md)** - Full feature list

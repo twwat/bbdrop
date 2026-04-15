@@ -35,7 +35,7 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 - [Hooks & Automation](user/guides/hooks.md) - External app integration
 
 **Reference:**
-- [Features List](user/reference/FEATURES.md) - Complete feature inventory
+- [Features List](user/reference/features.md) - Complete feature inventory
 - [Keyboard Shortcuts](user/reference/keyboard-shortcuts.md) - All keyboard shortcuts
 - [Quick Reference](user/reference/quick-reference.md) - Quick lookup for common tasks
 - [External Apps Parameters](user/reference/external-apps-parameters.md) - Parameters for external applications
@@ -48,7 +48,7 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 - [Log Filtering Quick Diagnosis](user/troubleshooting/LOG_FILTERING_QUICK_DIAGNOSIS.md) - Filtering logs for issues
 
 **Other:**
-- [Help Content](user/reference/HELP_CONTENT.md) - In-app help dialog content
+- [Help Content](user/reference/help-content.md) - In-app help dialog content
 
 ---
 

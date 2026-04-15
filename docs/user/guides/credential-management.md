@@ -393,5 +393,5 @@ If you change your password on a file host:
 ## See Also
 
 - [File Host Upload Guide](./multi-host-upload.md) — Detailed setup for each file host
-- [Settings Reference](../reference/FEATURES.md) — All configuration options
+- [Settings Reference](../reference/features.md) — All configuration options
 - [Troubleshooting](../troubleshooting/troubleshooting.md) — Common issues and solutions
