@@ -78,91 +78,202 @@ class ProgressTracker(QObject):
         self._update_button_counts()
         self.update_progress_display()
 
-    def _compute_work_bytes(self, items) -> Tuple[int, int]:
-        """Compute byte-weighted total and uploaded work across items.
-
-        Each gallery contributes image host bytes + sum of per-file-host bytes.
-        Video galleries contribute their screenshot sheet size for the image
-        host (often <1% of total work) and the full video file size for each
-        file host upload. Image galleries contribute `item.total_size` for
-        both sides.
-
-        File host row statuses map to:
-            completed/deduped -> uploaded = total
-            uploading/failed  -> uploaded = uploaded_bytes (failed stalls)
-            pending           -> uploaded = 0, total counts toward work
-
-        Returns:
-            Tuple of (total_bytes, uploaded_bytes) aggregated over items.
-        """
-        total_bytes = 0
-        uploaded_bytes = 0
-        store = None
+    def _get_file_host_rows(self, item_path: str) -> list:
         try:
             store = self._main_window.queue_manager.store
         except Exception:
-            store = None
+            return []
+        try:
+            return store.get_file_host_uploads(item_path) or []
+        except Exception:
+            return []
 
-        for item in items:
-            is_video = getattr(item, 'media_type', 'image') == 'video'
-            sheet_path = getattr(item, 'screenshot_sheet_path', '') or ''
-            item_total_size = int(getattr(item, 'total_size', 0) or 0)
+    def _compute_item_work_bytes(
+        self, item, file_host_rows: list | None = None
+    ) -> Tuple[int, int]:
+        """Compute byte-weighted (total, uploaded) for a single item.
 
-            if is_video and sheet_path:
-                try:
-                    image_host_total = os.path.getsize(sheet_path) if os.path.exists(sheet_path) else 0
-                except OSError:
-                    image_host_total = 0
-                if image_host_total <= 0:
-                    image_host_total = max(1, item_total_size // 100)
-            else:
-                image_host_total = item_total_size
+        Image host side:
+            - video galleries contribute the screenshot sheet filesize (or a
+              1% fallback of total_size if the sheet isn't readable)
+            - image galleries contribute item.total_size
+            - uploaded portion = image_host_total if item.status == 'completed',
+              otherwise ratio * image_host_total from uploaded_images/total_images
 
-            status = getattr(item, 'status', '')
-            if status == 'completed':
-                image_host_uploaded = image_host_total
-            elif status == 'uploading':
-                total_images = int(getattr(item, 'total_images', 0) or 0)
-                uploaded_images = int(getattr(item, 'uploaded_images', 0) or 0)
-                if total_images > 0:
-                    ratio = min(1.0, uploaded_images / total_images)
-                    image_host_uploaded = int(image_host_total * ratio)
-                else:
-                    image_host_uploaded = 0
+        File host rows (from file_host_uploads table):
+            - completed / deduped -> uploaded = effective_total
+            - uploading / failed  -> uploaded = row.uploaded_bytes (capped)
+            - anything else       -> uploaded = 0 but counted toward total
+
+        ``effective_total`` for a row is max(row.total_bytes, row.file_size,
+        item.total_size) so small or missing values don't inflate the percent.
+        """
+        is_video = getattr(item, 'media_type', 'image') == 'video'
+        sheet_path = getattr(item, 'screenshot_sheet_path', '') or ''
+        item_total_size = int(getattr(item, 'total_size', 0) or 0)
+
+        if is_video and sheet_path:
+            try:
+                image_host_total = os.path.getsize(sheet_path) if os.path.exists(sheet_path) else 0
+            except OSError:
+                image_host_total = 0
+            if image_host_total <= 0:
+                image_host_total = max(1, item_total_size // 100)
+        else:
+            image_host_total = item_total_size
+
+        status = getattr(item, 'status', '')
+        if status == 'completed':
+            image_host_uploaded = image_host_total
+        elif status == 'uploading':
+            total_images = int(getattr(item, 'total_images', 0) or 0)
+            uploaded_images = int(getattr(item, 'uploaded_images', 0) or 0)
+            if total_images > 0:
+                ratio = min(1.0, uploaded_images / total_images)
+                image_host_uploaded = int(image_host_total * ratio)
             else:
                 image_host_uploaded = 0
+        else:
+            image_host_uploaded = 0
 
-            total_bytes += image_host_total
-            uploaded_bytes += image_host_uploaded
+        total_bytes = image_host_total
+        uploaded_bytes = image_host_uploaded
 
-            if store is None:
+        if file_host_rows is None:
+            file_host_rows = self._get_file_host_rows(getattr(item, 'path', ''))
+
+        fallback_estimate = max(item_total_size, 1)
+
+        for row in file_host_rows:
+            row_status = row.get('status', '')
+            row_total = int(row.get('total_bytes') or 0)
+            row_uploaded = int(row.get('uploaded_bytes') or 0)
+            row_deduped = bool(row.get('deduped'))
+            row_file_size = int(row.get('file_size') or 0)
+
+            # Cancelled/blocked rows are user-abandoned or permanently stuck
+            # without intervention; excluding them from work means the bar
+            # can still reach 100% on the rest of the gallery.
+            if row_status in ('cancelled', 'blocked'):
                 continue
-            try:
-                rows = store.get_file_host_uploads(item.path)
-            except Exception:
-                rows = []
 
-            fallback_estimate = max(item_total_size, 1)
+            effective_total = max(row_total, row_file_size, fallback_estimate)
 
-            for row in rows:
-                row_status = row.get('status', '')
-                row_total = int(row.get('total_bytes') or 0)
-                row_uploaded = int(row.get('uploaded_bytes') or 0)
-                row_deduped = bool(row.get('deduped'))
-                row_file_size = int(row.get('file_size') or 0)
-
-                effective_total = max(row_total, row_file_size, fallback_estimate)
-
-                if row_deduped or row_status == 'completed':
-                    total_bytes += effective_total
-                    uploaded_bytes += effective_total
-                elif row_status in ('uploading', 'failed'):
-                    total_bytes += effective_total
-                    uploaded_bytes += min(row_uploaded, effective_total)
-                else:
-                    total_bytes += effective_total
+            if row_deduped or row_status == 'completed':
+                total_bytes += effective_total
+                uploaded_bytes += effective_total
+            elif row_status in ('uploading', 'failed'):
+                total_bytes += effective_total
+                uploaded_bytes += min(row_uploaded, effective_total)
+            else:
+                total_bytes += effective_total
 
         return total_bytes, uploaded_bytes
+
+    def _compute_work_bytes(self, items) -> Tuple[int, int]:
+        """Sum byte-weighted work across items for the overall progress bar."""
+        total_bytes = 0
+        uploaded_bytes = 0
+        for item in items:
+            item_total, item_uploaded = self._compute_item_work_bytes(item)
+            total_bytes += item_total
+            uploaded_bytes += item_uploaded
+        return total_bytes, uploaded_bytes
+
+    def compute_item_display(self, item) -> Tuple[int, str]:
+        """Return (percent, effective_status) for a per-row display.
+
+        Percent is byte-weighted across image host + file host work, with a
+        1% floor when any progress has been made (so small completed chunks
+        aren't hidden). Effective status overrides item.status to 'uploading'
+        when the image host is done but file host rows are still pending,
+        uploading, or failed -- so the row doesn't prematurely read as
+        "Completed" while large video/archive uploads are still in flight.
+        """
+        file_host_rows = self._get_file_host_rows(getattr(item, 'path', ''))
+        total_bytes, uploaded_bytes = self._compute_item_work_bytes(item, file_host_rows)
+
+        if total_bytes > 0:
+            raw_percent = int((uploaded_bytes / total_bytes) * 100)
+            if uploaded_bytes > 0 and raw_percent < 1:
+                percent = 1
+            else:
+                percent = min(100, max(0, raw_percent))
+            if uploaded_bytes >= total_bytes:
+                percent = 100
+        else:
+            percent = int(getattr(item, 'progress', 0) or 0)
+
+        base_status = getattr(item, 'status', '')
+        effective_status = base_status
+        if base_status == 'completed' and file_host_rows:
+            # Cancelled/blocked rows count as terminal here even though they
+            # aren't 'done' in the success sense -- the gallery shouldn't
+            # stay stuck at "uploading" forever waiting on work that won't
+            # happen.
+            terminal_statuses = {'completed', 'cancelled', 'blocked'}
+            all_done = all(
+                bool(row.get('deduped')) or row.get('status') in terminal_statuses
+                for row in file_host_rows
+            )
+            if not all_done:
+                effective_status = 'uploading'
+                # Keep percent under 100 while work is still in flight so the
+                # bar doesn't look stuck-at-full with a spinner.
+                if percent >= 100:
+                    percent = 99
+
+        return percent, effective_status
+
+    def refresh_row_display(self, path: str):
+        """Refresh the per-row progress bar, status icon/text, and action
+        buttons for one gallery using byte-weighted effective state.
+
+        Safe to call from lifecycle signal handlers on the GUI thread; the
+        method early-exits cleanly if the row or item can't be resolved.
+        """
+        if not path:
+            return
+        mw = self._main_window
+        item = mw.queue_manager.get_item(path)
+        if item is None:
+            return
+        row = mw._get_row_for_path(path)
+        if row is None or row < 0 or row >= mw.gallery_table.rowCount():
+            return
+
+        try:
+            percent, effective_status = self.compute_item_display(item)
+        except Exception as e:
+            log(f"compute_item_display failed for {path}: {e}",
+                level="warning", category="ui")
+            return
+
+        try:
+            progress_widget = mw.gallery_table.cellWidget(row, GalleryTableWidget.COL_PROGRESS)
+            if isinstance(progress_widget, TableProgressWidget):
+                progress_widget.update_progress(percent, effective_status)
+        except Exception as e:
+            log(f"Row progress widget refresh failed for {path}: {e}",
+                level="warning", category="ui")
+
+        try:
+            mw._set_status_cell_icon(row, effective_status)
+            mw._set_status_text_cell(row, effective_status)
+        except Exception as e:
+            log(f"Row status cell refresh failed for {path}: {e}",
+                level="warning", category="ui")
+
+        # Action buttons track the raw item.status (not effective_status) so
+        # "View BBCode" stays available after the image host finishes, even
+        # while file host uploads are still in flight.
+        try:
+            action_widget = mw.gallery_table.cellWidget(row, GalleryTableWidget.COL_ACTION)
+            if isinstance(action_widget, ActionButtonWidget):
+                action_widget.update_buttons(getattr(item, 'status', effective_status))
+        except Exception as e:
+            log(f"Row action button refresh failed for {path}: {e}",
+                level="warning", category="ui")
 
     def _update_button_counts(self):
         """Update button counts and states based on currently visible items."""
