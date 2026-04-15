@@ -153,10 +153,11 @@ class UploadLifecycleHandler(QObject):
             uploaded_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             mw.gallery_table.setItem(matched_row, GalleryTableWidget.COL_UPLOADED, uploaded_item)
 
-            # Progress bar (column 3)
-            progress_widget = mw.gallery_table.cellWidget(matched_row, 3)
-            if isinstance(progress_widget, TableProgressWidget):
-                progress_widget.update_progress(progress_percent, item.status)
+            # Progress bar uses byte-weighted math across image + file host
+            # work; the old image-count math would snap to 100% the moment
+            # the image host finished, even when a multi-GB file host upload
+            # was still in flight.
+            mw.progress_tracker.refresh_row_display(path)
 
             # Transfer speed column (column 10) - show live speed for uploading items
             if item.status == "uploading":
@@ -199,14 +200,10 @@ class UploadLifecycleHandler(QObject):
                     final_status_text = "Failed"
                     row_failed = True
                 item.status = "completed" if not row_failed else "failed"
-                # Final icon and text
-                mw._set_status_cell_icon(matched_row, item.status)
-                mw._set_status_text_cell(matched_row, item.status)
-
-                # Update action buttons for completed status
-                action_widget = mw.gallery_table.cellWidget(matched_row, GalleryTableWidget.COL_ACTION)
-                if isinstance(action_widget, ActionButtonWidget):
-                    action_widget.update_buttons(item.status)
+                # Render via refresh_row_display so image-host 'completed'
+                # is downgraded to 'uploading' while file host rows are
+                # still pending/uploading/failed (byte-weighted display).
+                mw.progress_tracker.refresh_row_display(path)
 
                 # Update finished time column
                 from src.gui.main_window import format_timestamp_for_display
@@ -352,6 +349,16 @@ class UploadLifecycleHandler(QObject):
 
         # Update display with targeted update instead of full rebuild
         mw._update_specific_gallery_display(path)
+        # _update_specific_gallery_display schedules a queued repopulate via
+        # TableUpdateQueue (TABLE_UPDATE_INTERVAL singleshot), which would
+        # clobber refresh_row_display's byte-weighted state with the raw
+        # item.status if we ran it immediately. Defer past the flush so the
+        # byte-weighted downgrade is the *last* write to the row.
+        from src.core.constants import TABLE_UPDATE_INTERVAL
+        QTimer.singleShot(
+            TABLE_UPDATE_INTERVAL + 10,
+            lambda p=path: mw.progress_tracker.refresh_row_display(p),
+        )
 
         # Auto-clear completed gallery if enabled
         from src.utils.paths import load_user_defaults

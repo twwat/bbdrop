@@ -47,6 +47,8 @@ class WorkerSignalHandler(QObject):
 
         # Throttle for progress bar refreshes driven by file host upload progress
         self._progress_refresh_pending = False
+        # Gallery paths that need a per-row refresh on the next throttle flush
+        self._rows_needing_refresh: set[str] = set()
 
     @property
     def _mw(self):
@@ -176,8 +178,14 @@ class WorkerSignalHandler(QObject):
 
             # Progress updates are frequent, so we avoid full refresh
             # The file host widgets will poll status and update themselves
-            # but we DO want the overall byte-weighted bar to move, so
-            # schedule a throttled refresh (150ms coalesced singleshot).
+            # but we DO want the overall byte-weighted bar AND the gallery
+            # row that owns this upload to move, so schedule a throttled
+            # refresh (150ms coalesced singleshot).
+            mw = self._mw
+            if mw is not None:
+                gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
+                if gallery_path:
+                    self._rows_needing_refresh.add(gallery_path)
             self._schedule_progress_refresh()
         except Exception as e:
             log(f"Error handling file host upload progress: {e}", level="error", category="file_hosts")
@@ -194,11 +202,24 @@ class WorkerSignalHandler(QObject):
         self._progress_refresh_pending = False
         mw = self._mw
         if mw is None:
+            self._rows_needing_refresh.clear()
             return
         try:
             mw.progress_tracker.update_progress_display()
         except Exception as e:
             log(f"Error refreshing progress display: {e}", level="warning", category="ui")
+
+        # Flush per-row refreshes queued by file host progress events. Each
+        # row reflects image + file host byte-weighted state, so the bar
+        # moves during large video uploads instead of sitting at 100%.
+        paths_to_refresh = list(self._rows_needing_refresh)
+        self._rows_needing_refresh.clear()
+        for path in paths_to_refresh:
+            try:
+                mw.progress_tracker.refresh_row_display(path)
+            except Exception as e:
+                log(f"Error refreshing row for {path}: {e}",
+                    level="warning", category="ui")
 
     def on_file_host_upload_completed(self, db_id: int, host_name: str, result: dict):
         """Handle file host upload completed - ASYNC to prevent blocking main thread."""
@@ -230,6 +251,14 @@ class WorkerSignalHandler(QObject):
             except Exception as e:
                 log(f"Error re-checking gallery completion after file host: {e}",
                     level="warning", category="ui")
+            # Refresh the specific row so its progress bar and effective
+            # status flip to their final value (100% / Completed if this
+            # was the last file host row).
+            try:
+                mw.progress_tracker.refresh_row_display(gallery_path)
+            except Exception as e:
+                log(f"Error refreshing row after file host completion: {e}",
+                    level="warning", category="ui")
 
         # Refresh the byte-weighted overall progress bar immediately so the
         # last settled row snaps to its final contribution.
@@ -253,8 +282,21 @@ class WorkerSignalHandler(QObject):
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
-        # Fire notification
+        # Refresh the gallery row so its progress bar reflects the
+        # now-stalled file host contribution; effective status keeps
+        # showing "uploading" while retries are pending (matches
+        # gallery_completed notification logic).
         mw = self._mw
+        if mw is not None:
+            gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
+            if gallery_path:
+                try:
+                    mw.progress_tracker.refresh_row_display(gallery_path)
+                except Exception as e:
+                    log(f"Error refreshing row after file host failure: {e}",
+                        level="warning", category="ui")
+
+        # Fire notification
         if hasattr(mw, 'notification_manager'):
             mw.notification_manager.notify('filehost_upload_failed', detail=error_message[:80])
 
