@@ -2041,9 +2041,11 @@ class QueueStore:
     ) -> List[Dict[str, Any]]:
         """Return completed sibling part rows for a family, one per part_number.
 
-        For use by the K2S family dedup path: reads sibling data from the DB so a
-        secondary host can call try_create_by_hash. Includes rows with null
-        md5_hash so the caller can re-fetch the MD5 from the primary host's API.
+        For use by the K2S family dedup path: reads sibling data from the DB so
+        a secondary host can call try_create_by_hash. Rows with a NULL md5_hash
+        are still included — callers should treat a NULL-md5 sibling as "md5
+        not yet propagated" and fall through to a full upload, since the only
+        writer of sibling md5s is HostFamilyCoordinator's background poller.
 
         When multiple family members have completed rows for the same part_number,
         rows WITH md5_hash are preferred. Among those, the highest-priority host
@@ -2115,7 +2117,8 @@ class QueueStore:
             return []
         placeholders = ",".join("?" for _ in members)
         sql = f"""
-            SELECT id, gallery_fk, host_name, status, part_number, blocked_by_upload_id, dedup_only, md5_hash
+            SELECT id, gallery_fk, host_name, status, part_number, blocked_by_upload_id,
+                   dedup_only, md5_hash, download_url
             FROM file_host_uploads
             WHERE gallery_fk = ?
               AND host_name IN ({placeholders})
@@ -2134,6 +2137,7 @@ class QueueStore:
                 "blocked_by_upload_id": r[5],
                 "dedup_only": r[6],
                 "md5_hash": r[7],
+                "download_url": r[8],
             }
             for r in rows
         ]
