@@ -44,8 +44,8 @@ class StatisticsDialog(QDialog):
 
         self.setWindowTitle("Application Statistics")
         self.setModal(True)
-        self.setMinimumSize(700, 420)
-        self.resize(750, 480)
+        self.setMinimumSize(850, 420)
+        self.resize(900, 480)
         self._center_on_parent()
 
         self._setup_ui()
@@ -156,10 +156,11 @@ class StatisticsDialog(QDialog):
 
         # Create table
         self._file_hosts_table = QTableWidget()
-        self._file_hosts_table.setColumnCount(8)
+        self._file_hosts_table.setColumnCount(10)
         self._file_hosts_table.setHorizontalHeaderLabels([
             "Host", "Files", "Failed", "Deduped",
-            "Data Uploaded", "Peak Speed", "Avg Speed", "Success"
+            "Uploaded", "Skipped (Dedup)", "Total",
+            "Peak Speed", "Avg Speed", "Success"
         ])
 
         # Configure table appearance
@@ -171,7 +172,7 @@ class StatisticsDialog(QDialog):
         # Configure column widths
         header = self._file_hosts_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Host stretches
-        for col in range(1, 7):
+        for col in range(1, 10):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
 
         layout.addWidget(self._file_hosts_table)
@@ -418,7 +419,7 @@ class StatisticsDialog(QDialog):
             item = QTableWidgetItem("Unable to load file host statistics")
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._file_hosts_table.setItem(0, 0, item)
-            self._file_hosts_table.setSpan(0, 0, 1, 8)
+            self._file_hosts_table.setSpan(0, 0, 1, 10)
             return
 
         if not host_stats:
@@ -427,7 +428,7 @@ class StatisticsDialog(QDialog):
             item = QTableWidgetItem(f"No file host uploads for {period_name}")
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._file_hosts_table.setItem(0, 0, item)
-            self._file_hosts_table.setSpan(0, 0, 1, 8)
+            self._file_hosts_table.setSpan(0, 0, 1, 10)
             return
 
         # Sort hosts by files_uploaded descending
@@ -459,28 +460,40 @@ class StatisticsDialog(QDialog):
             files_dedup.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._file_hosts_table.setItem(row, 3, files_dedup)
 
-            # Data Uploaded (bytes)
-            data_up = QTableWidgetItem(format_binary_size(metrics.get('bytes_uploaded', 0)))
+            # Data Uploaded (bytes actually transferred)
+            bytes_uploaded = metrics.get('bytes_uploaded', 0)
+            data_up = QTableWidgetItem(format_binary_size(bytes_uploaded))
             data_up.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._file_hosts_table.setItem(row, 4, data_up)
+
+            # Data Saved (bytes avoided through dedup)
+            bytes_saved = metrics.get('bytes_saved', 0)
+            data_saved = QTableWidgetItem(format_binary_size(bytes_saved))
+            data_saved.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._file_hosts_table.setItem(row, 5, data_saved)
+
+            # Total Data (uploaded + saved)
+            total_data = QTableWidgetItem(format_binary_size(bytes_uploaded + bytes_saved))
+            total_data.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._file_hosts_table.setItem(row, 6, total_data)
 
             # Peak Speed: MetricsStore stores B/s, format_binary_rate expects KiB/s
             peak_speed_bps = metrics.get('peak_speed', 0)
             peak_kbps = peak_speed_bps / 1024
             peak_item = QTableWidgetItem(format_binary_rate(peak_kbps))
             peak_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 5, peak_item)
+            self._file_hosts_table.setItem(row, 7, peak_item)
 
             # Avg Speed: MetricsStore stores B/s, format_binary_rate expects KiB/s
             avg_speed_bps = metrics.get('avg_speed', 0)
             avg_kbps = avg_speed_bps / 1024
             avg_item = QTableWidgetItem(format_binary_rate(avg_kbps))
             avg_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 6, avg_item)
+            self._file_hosts_table.setItem(row, 8, avg_item)
 
             # Success Rate
             success_rate = metrics.get('success_rate', 100.0)
             rate_item = QTableWidgetItem(f"{success_rate:.1f}%")
             rate_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 7, rate_item)
+            self._file_hosts_table.setItem(row, 9, rate_item)
 

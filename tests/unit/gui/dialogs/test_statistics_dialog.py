@@ -172,7 +172,7 @@ class TestStatisticsDialogInitialization:
         """Test basic dialog creation."""
         assert dialog.windowTitle() == "Application Statistics"
         assert dialog.isModal()
-        assert dialog.minimumWidth() == 700
+        assert dialog.minimumWidth() == 850
         assert dialog.minimumHeight() == 420
 
     def test_has_tab_widget(self, dialog):
@@ -205,10 +205,11 @@ class TestFileHostStatsLoading:
     def test_load_file_host_stats_columns(self, dialog, mock_metrics_store):
         """Test table has correct column headers."""
         table = dialog._file_hosts_table
-        assert table.columnCount() == 8
-        headers = [table.horizontalHeaderItem(i).text() for i in range(8)]
+        assert table.columnCount() == 10
+        headers = [table.horizontalHeaderItem(i).text() for i in range(10)]
         assert headers == ["Host", "Files", "Failed", "Deduped",
-                          "Data Uploaded", "Peak Speed", "Avg Speed", "Success"]
+                          "Uploaded", "Skipped (Dedup)", "Total",
+                          "Peak Speed", "Avg Speed", "Success"]
 
     def test_load_file_host_stats_files_count(self, dialog, mock_metrics_store):
         """Test files uploaded count is displayed correctly."""
@@ -235,19 +236,19 @@ class TestFileHostStatsLoading:
         """Test peak speed is formatted correctly."""
         table = dialog._file_hosts_table
         # Rapidgator peak: 5 MiB/s (stored as B/s, converted to KiB/s for display)
-        peak_item = table.item(0, 5)
+        peak_item = table.item(0, 7)
         assert "MiB/s" in peak_item.text()
 
     def test_load_file_host_stats_avg_speed(self, dialog, mock_metrics_store):
         """Test average speed is formatted correctly."""
         table = dialog._file_hosts_table
-        avg_item = table.item(0, 6)
+        avg_item = table.item(0, 8)
         assert "MiB/s" in avg_item.text() or "KiB/s" in avg_item.text()
 
     def test_load_file_host_stats_success_rate(self, dialog, mock_metrics_store):
         """Test success rate is formatted as percentage."""
         table = dialog._file_hosts_table
-        rate_item = table.item(0, 7)
+        rate_item = table.item(0, 9)
         assert "%" in rate_item.text()
         assert "95.0" in rate_item.text()
 
