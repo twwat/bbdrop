@@ -275,11 +275,12 @@ class FileHostWorkerManager(QObject):
             if persist:
                 self._persist_enabled_state(host_id, enabled=True)
 
+        # Relay result first so the GUI can mark the worker as failed before
+        # enabled_workers_changed potentially triggers a widget rebuild.
+        self.spinup_complete.emit(host_id, error)
+
         # Emit enabled workers list change (for tab view and dialog sync)
         self.enabled_workers_changed.emit(list(self.workers.keys()))
-
-        # Always relay signal to GUI/dialog (they need to know the result)
-        self.spinup_complete.emit(host_id, error)
 
     def _connect_worker_signals(self, worker: FileHostWorker) -> None:
         """Connect worker signals to manager signals (relay to GUI).

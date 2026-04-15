@@ -520,22 +520,17 @@ class WorkerSignalHandler(QObject):
         mw = self._mw
 
         with QMutexLocker(mw._file_host_startup_mutex):
-            # Progress tracking is internal - final result logged by manager
+            if not mw._file_host_startup_complete:
+                mw._file_host_startup_completed += 1
+                if mw._file_host_startup_completed >= mw._file_host_startup_expected:
+                    mw._file_host_startup_complete = True
+                    log(f"File host startup complete ({mw._file_host_startup_expected} worker{'s' if mw._file_host_startup_expected != 1 else ''})",
+                        level="info", category="startup")
 
-            if mw._file_host_startup_complete:
-                log(f"Already complete, ignoring {host_id}", level="debug", category="startup")
-                return
-
-            mw._file_host_startup_completed += 1
-
-            # Initialize queue display for this host (shows pending uploads from DB)
+            # Always initialize queue display and update status, whether initial
+            # startup or a re-enabled worker coming back up after a failure.
             if not error:
                 self._update_filehost_queue_for_host(host_id)
-
-            if mw._file_host_startup_completed >= mw._file_host_startup_expected:
-                mw._file_host_startup_complete = True
-                log(f"File host startup complete ({mw._file_host_startup_expected} worker{'s' if mw._file_host_startup_expected != 1 else ''})",
-                    level="info", category="startup")
 
         # Update worker status widget (outside mutex)
         if error:
@@ -588,10 +583,15 @@ class WorkerSignalHandler(QObject):
         enabled_worker_ids = {f"filehost_{host_id.lower().replace(' ', '_')}"
                              for host_id in enabled_host_ids}
 
-        # Find file host workers that are no longer enabled and remove them
+        # Find file host workers that are no longer enabled and remove them.
+        # Keep workers in error/failed state — they are still configured enabled,
+        # just failed to connect, and the user needs to see the error.
         workers_to_remove = []
         for worker_id in list(mw.worker_status_widget._workers.keys()):
             if worker_id.startswith('filehost_') and worker_id not in enabled_worker_ids:
+                worker = mw.worker_status_widget._workers.get(worker_id)
+                if worker and worker.status in ('error', 'failed'):
+                    continue
                 workers_to_remove.append(worker_id)
 
         for worker_id in workers_to_remove:

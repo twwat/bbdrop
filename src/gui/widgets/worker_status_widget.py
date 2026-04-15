@@ -766,10 +766,10 @@ class WorkerStatusWidget(QWidget):
 
             # Runtime status overrides INI — if the worker failed or is disabled
             # at runtime, show that regardless of what the config file says
-            if worker.status in ('failed', 'disabled'):
+            if worker.status in ('failed', 'disabled', 'error'):
                 key = 'status-disabled'
-                tip = worker.status.capitalize()
-                if worker.status == 'failed' and worker.error_message:
+                tip = "Failed" if worker.status in ('failed', 'error') else "Disabled"
+                if worker.status in ('failed', 'error') and worker.error_message:
                     tip = f"Failed: {worker.error_message}"
             else:
                 enabled = get_file_host_setting(fh_id, "enabled", "bool")
@@ -1475,7 +1475,10 @@ class WorkerStatusWidget(QWidget):
         elif base_status == 'uploading':
             status_color = QColor("darkgreen")
         elif base_status == 'error':
-            status_color = QColor("red")
+            display_text = "Failed"
+            if detail:
+                tooltip_text = f"Failed: {detail}"
+            status_color = QColor("#FF6B6B")
         elif base_status == 'paused':
             status_color = QColor("#B8860B")  # Dark goldenrod
 
@@ -1815,15 +1818,17 @@ class WorkerStatusWidget(QWidget):
 
                 elif col_config.id == 'status_text':
                     # Status text column (text only with color coding)
-                    status_text_item = QTableWidgetItem(worker.status.capitalize())
+                    display_status = "Failed" if worker.status in ('error', 'failed') else worker.status.capitalize()
+                    status_text_item = QTableWidgetItem(display_status)
                     status_text_item.setTextAlignment(col_config.alignment)
-                    status_text_item.setToolTip(f"Status: {worker.status.capitalize()}")
+                    tooltip = f"Failed: {worker.error_message}" if worker.status in ('error', 'failed') and worker.error_message else f"Status: {display_status}"
+                    status_text_item.setToolTip(tooltip)
 
                     # Color coding
                     if worker.status == 'uploading':
                         status_text_item.setForeground(QColor("darkgreen"))
-                    elif worker.status == 'error':
-                        status_text_item.setForeground(QColor("red"))
+                    elif worker.status in ('error', 'failed'):
+                        status_text_item.setForeground(QColor("#FF6B6B"))
                     elif worker.status == 'paused':
                         status_text_item.setForeground(QColor("#B8860B"))  # Dark goldenrod
                     elif worker.status == 'disabled':
@@ -2254,10 +2259,10 @@ class WorkerStatusWidget(QWidget):
         else:
             return
 
-        # Get settings based on host type — check runtime status first
-        # (a worker that failed spinup is effectively disabled even if INI says enabled)
         worker_obj = self._workers.get(worker_id) if worker_id in self._workers else None
-        if worker_obj and worker_obj.status in ('failed', 'disabled'):
+        is_failed = (not is_image_host and worker_obj and worker_obj.status in ('failed', 'error'))
+
+        if worker_obj and worker_obj.status == 'disabled':
             enabled = False
             trigger = "disabled"
         elif is_image_host:
@@ -2270,8 +2275,13 @@ class WorkerStatusWidget(QWidget):
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
 
-        # Enable/Disable actions - only show the available option
-        if not enabled:
+        if is_failed:
+            # Host is configured enabled but failed to connect — offer retry and disable
+            retry_action = menu.addAction("Retry Connection")
+            retry_action.triggered.connect(lambda: self._set_host_enabled(host_id, True))
+            disable_action = menu.addAction("Disable Host")
+            disable_action.triggered.connect(lambda: self._set_host_enabled(host_id, False))
+        elif not enabled:
             enable_action = menu.addAction("Enable Host")
             if is_image_host:
                 enable_action.triggered.connect(lambda: self._set_image_host_enabled(host_id, True))
