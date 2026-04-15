@@ -1147,3 +1147,80 @@ class TestCoverIndicatorDelegateTooltip:
         with patch.object(QStyledItemDelegate, 'helpEvent', return_value=False):
             result = delegate.helpEvent(mock_event, mock_view, mock_option, mock_index)
             assert result is False
+
+
+# =============================================================================
+# MediaTypeDelegate Tests
+# =============================================================================
+
+from unittest.mock import MagicMock
+from PyQt6.QtGui import QHelpEvent
+from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem
+
+from src.gui.delegates.media_type_delegate import MediaTypeDelegate
+
+
+class TestMediaTypeDelegateHelpEvent:
+    @pytest.fixture
+    def delegate(self):
+        return MediaTypeDelegate()
+
+    @pytest.fixture
+    def view_with_video_row(self, qapp):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+
+        table = QTableWidget(1, GalleryTableWidget.COL_MEDIA_TYPE + 2)
+
+        name_item = QTableWidgetItem("My Video")
+        name_item.setData(Qt.ItemDataRole.UserRole, "/g/video1")
+        table.setItem(0, GalleryTableWidget.COL_NAME, name_item)
+
+        media_item = QTableWidgetItem()
+        media_item.setData(Qt.ItemDataRole.UserRole, "video")
+        table.setItem(0, GalleryTableWidget.COL_MEDIA_TYPE, media_item)
+
+        fake_item = MagicMock()
+        fake_item.media_type = "video"
+        fake_item.path = "/g/video1"
+        fake_item.screenshot_sheet_path = ""
+        table.queue_manager = MagicMock()
+        table.queue_manager.get_item.return_value = fake_item
+        return table
+
+    def _make_help_event(self):
+        return QHelpEvent(QEvent.Type.ToolTip, QPoint(10, 10), QPoint(100, 100))
+
+    def _make_option(self):
+        opt = QStyleOptionViewItem()
+        opt.rect = QRect(0, 0, 30, 22)
+        return opt
+
+    def test_helpevent_falls_through_for_image_rows(self, delegate, view_with_video_row):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        view_with_video_row.item(0, GalleryTableWidget.COL_MEDIA_TYPE).setData(
+            Qt.ItemDataRole.UserRole, "image"
+        )
+        index = view_with_video_row.model().index(0, GalleryTableWidget.COL_MEDIA_TYPE)
+        with patch("src.gui.delegates.media_type_delegate.QToolTip") as MockToolTip:
+            delegate.helpEvent(
+                self._make_help_event(), view_with_video_row, self._make_option(), index
+            )
+        assert MockToolTip.showText.call_count == 0
+
+    def test_helpevent_text_tooltip_when_no_sheet_exists(self, delegate, view_with_video_row, monkeypatch):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        index = view_with_video_row.model().index(0, GalleryTableWidget.COL_MEDIA_TYPE)
+
+        monkeypatch.setattr(
+            "src.gui.delegates.media_type_delegate.resolve_sheet_path",
+            lambda item: ""
+        )
+        with patch("src.gui.delegates.media_type_delegate.QToolTip") as MockToolTip:
+            handled = delegate.helpEvent(
+                self._make_help_event(), view_with_video_row, self._make_option(), index
+            )
+
+        assert handled is True
+        assert MockToolTip.showText.call_count == 1
+        args = MockToolTip.showText.call_args[0]
+        assert "not yet generated" in args[1].lower() or "not generated" in args[1].lower()
