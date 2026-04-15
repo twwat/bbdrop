@@ -6,7 +6,15 @@ from unittest.mock import patch
 
 import pytest
 
-from src.gui.widgets.video_sheet_utils import resolve_sheet_path
+# Ensure Qt uses offscreen platform for headless testing
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt6.QtGui import QImage  # noqa: E402
+
+from src.gui.widgets.video_sheet_utils import (  # noqa: E402
+    get_cached_preview,
+    resolve_sheet_path,
+)
 
 
 class TestResolveSheetPath:
@@ -69,3 +77,68 @@ class TestResolveSheetPath:
         with patch("src.gui.widgets.video_sheet_utils.get_base_path",
                    return_value=str(tmp_path)):
             assert resolve_sheet_path(item) == ""
+
+
+def _write_test_png(path, width=800, height=600, color=0xFF0000):
+    """Write a tiny solid-color PNG to disk for cache tests."""
+    img = QImage(width, height, QImage.Format.Format_RGB32)
+    img.fill(color)
+    img.save(str(path), "PNG")
+
+
+class TestGetCachedPreview:
+    def test_creates_scaled_preview_file(self, tmp_path):
+        sheet = tmp_path / "sheet.png"
+        _write_test_png(sheet, width=1280, height=720)
+        cache_dir = tmp_path / "tooltips"
+
+        result = get_cached_preview(str(sheet), target_width=640,
+                                    cache_dir=str(cache_dir))
+        assert result
+        assert os.path.isfile(result)
+
+        out = QImage(result)
+        assert out.width() == 640
+        assert out.height() == 360
+
+    def test_reuses_cached_file_when_mtime_unchanged(self, tmp_path):
+        sheet = tmp_path / "sheet.png"
+        _write_test_png(sheet)
+        cache_dir = tmp_path / "tooltips"
+
+        first = get_cached_preview(str(sheet), 640, str(cache_dir))
+        first_mtime = os.path.getmtime(first)
+
+        second = get_cached_preview(str(sheet), 640, str(cache_dir))
+        assert second == first
+        assert os.path.getmtime(second) == first_mtime
+
+    def test_regenerates_when_source_mtime_changes(self, tmp_path):
+        sheet = tmp_path / "sheet.png"
+        _write_test_png(sheet, color=0xFF0000)
+        cache_dir = tmp_path / "tooltips"
+
+        first = get_cached_preview(str(sheet), 640, str(cache_dir))
+        first_mtime = os.path.getmtime(first)
+
+        _write_test_png(sheet, color=0x00FF00)
+        os.utime(sheet, (first_mtime + 10, first_mtime + 10))
+
+        second = get_cached_preview(str(sheet), 640, str(cache_dir))
+        assert second == first
+        assert os.path.getmtime(second) > first_mtime
+
+    def test_separate_cache_file_per_width(self, tmp_path):
+        sheet = tmp_path / "sheet.png"
+        _write_test_png(sheet)
+        cache_dir = tmp_path / "tooltips"
+
+        a = get_cached_preview(str(sheet), 480, str(cache_dir))
+        b = get_cached_preview(str(sheet), 640, str(cache_dir))
+        assert a != b
+        assert os.path.isfile(a)
+        assert os.path.isfile(b)
+
+    def test_returns_empty_for_invalid_source(self, tmp_path):
+        cache_dir = tmp_path / "tooltips"
+        assert get_cached_preview("/no/such/file.png", 640, str(cache_dir)) == ""

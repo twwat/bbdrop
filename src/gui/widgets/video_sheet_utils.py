@@ -7,6 +7,9 @@ one source of truth.
 import hashlib
 import os
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QImage
+
 from src.utils.paths import get_base_path
 
 
@@ -33,3 +36,56 @@ def resolve_sheet_path(item) -> str:
         if os.path.isfile(candidate):
             return candidate
     return ""
+
+
+def get_cached_preview(sheet_path: str, target_width: int, cache_dir: str = "") -> str:
+    """Return a path to a scaled preview PNG for tooltip use.
+
+    Creates the cache dir on first use. Caches at
+    ``<cache_dir>/<md5(sheet_path)>_<width>.png``. Regenerates when the
+    source sheet's mtime is newer than the cached file's. Returns ''
+    on failure (missing source, decode error, write error).
+
+    Args:
+        sheet_path: Absolute path to the source screenshot sheet.
+        target_width: Desired width in px; height is scaled
+            proportionally.
+        cache_dir: Directory for cached scaled previews. When empty,
+            defaults to ``<base>/sheets/.tooltips``.
+    """
+    if not sheet_path or not os.path.isfile(sheet_path):
+        return ""
+
+    if not cache_dir:
+        cache_dir = os.path.join(get_base_path(), "sheets", ".tooltips")
+
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+    except OSError:
+        return ""
+
+    key = hashlib.md5(sheet_path.encode()).hexdigest()
+    cache_file = os.path.join(cache_dir, f"{key}_{target_width}.png")
+
+    try:
+        source_mtime = os.path.getmtime(sheet_path)
+    except OSError:
+        return ""
+
+    if os.path.isfile(cache_file):
+        try:
+            if os.path.getmtime(cache_file) >= source_mtime:
+                return cache_file
+        except OSError:
+            pass
+
+    image = QImage(sheet_path)
+    if image.isNull():
+        return ""
+
+    scaled = image.scaledToWidth(
+        target_width, Qt.TransformationMode.SmoothTransformation
+    )
+    if not scaled.save(cache_file, "PNG"):
+        return ""
+    return cache_file
