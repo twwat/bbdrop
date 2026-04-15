@@ -82,12 +82,23 @@ class ComprehensiveSettingsDialog(QDialog):
         self.resize(1010, 670)
         self.setMinimumSize(850, 550)
 
-        # Restore saved geometry or center on parent
+        # One-shot migration: prior versions could persist a width pushed
+        # past the 1010 default by a tab whose content has since shrunk.
+        # On the first open after upgrade we drop that oversized geometry
+        # and re-center; subsequent opens respect the user's chosen size.
+        migrated = self.settings.value(
+            'settings_dialog/geometry_migrated_v1', False, bool
+        )
         saved_geometry = self.settings.value('settings_dialog/geometry')
         if saved_geometry:
             self.restoreGeometry(saved_geometry)
+            if not migrated and self.width() > 1200:
+                self.resize(1010, 670)
+                self._center_on_parent()
         else:
             self._center_on_parent()
+        if not migrated:
+            self.settings.setValue('settings_dialog/geometry_migrated_v1', True)
         
         layout = QVBoxLayout(self)
         
