@@ -1,3 +1,11 @@
+# File Host Upload Signal Flow
+
+Contributor reference for how `FileHostWorker` coordinates database
+updates, Qt signals, and (proposed) metrics integration during a file
+host upload. This is the original ASCII working document preserved as
+a fenced code block.
+
+```
 ═════════════════════════════════════════════════════════════════════════════
     FILE HOST UPLOAD SIGNAL FLOW & DATABASE UPDATE INTEGRATION
 ═════════════════════════════════════════════════════════════════════════════
@@ -220,25 +228,25 @@ CREATE TABLE upload_metrics (
     host_name TEXT NOT NULL,
     gallery_id INTEGER,
     status TEXT,           -- 'success', 'failed', 'retried'
-    
+
     -- Timing
     start_ts INTEGER,      -- When upload started
     end_ts INTEGER,        -- When upload ended
     duration_seconds REAL, -- Total duration
-    
+
     -- Size & Speed
     bytes_uploaded INTEGER,
     total_bytes INTEGER,
     speed_kbps REAL,       -- Average KB/s
-    
+
     -- Error info
     error_message TEXT,
     retry_count INTEGER,
     is_retryable BOOLEAN,
-    
+
     -- Metadata
     recorded_ts INTEGER DEFAULT (strftime('%s', 'now')),
-    
+
     UNIQUE(upload_id)
 );
 
@@ -277,5 +285,5 @@ Safety Mechanisms:
   ├─ isolation_level=None: Autocommit (no transaction holds)
   └─ thread_lock: Used by Coordinator for stats
 
-
 ═════════════════════════════════════════════════════════════════════════════
+```
