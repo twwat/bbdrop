@@ -285,6 +285,7 @@ class FileHostController(QObject):
             status='pending'
         )
         log(f"Queued manual upload (upload_id={upload_id}) for {os.path.basename(gallery_path)} to {host_name}", level="info", category="file_hosts")
+        self._main_window.worker_signal_handler._update_filehost_queue_for_host(host_name)
         self._main_window._update_specific_gallery_display(gallery_path)
         QMessageBox.information(self._main_window, "Upload Queued",
             f"Gallery queued for upload to {display_name}.\nThe upload will begin shortly.")

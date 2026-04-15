@@ -1295,6 +1295,19 @@ class BBDropGUI(QMainWindow):
         batch_size = 10
         total_count = len(paths_to_remove)
 
+        # Collect which file hosts had pending uploads for the removed paths
+        # BEFORE deletion (CASCADE will remove the rows on gallery delete).
+        affected_hosts = set()
+        try:
+            if hasattr(self, 'queue_manager') and self.queue_manager.store:
+                for path in paths_to_remove:
+                    uploads = self.queue_manager.store.get_file_host_uploads(path)
+                    for u in uploads:
+                        if u.get('status') in ('pending', 'uploading', 'blocked'):
+                            affected_hosts.add(u['host_name'])
+        except Exception:
+            pass
+
         def process_batch(index):
             try:
                 # Process one batch
@@ -1309,7 +1322,9 @@ class BBDropGUI(QMainWindow):
                     # Schedule next batch (yields to event loop)
                     QTimer.singleShot(0, lambda: process_batch(batch_end))
                 else:
-                    # All done - call completion callback
+                    # Refresh queue bytes for any hosts that had pending uploads
+                    for host_name in affected_hosts:
+                        self.worker_signal_handler._update_filehost_queue_for_host(host_name)
                     if callback:
                         callback()
             except Exception as e:
