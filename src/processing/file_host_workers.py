@@ -1430,6 +1430,22 @@ class FileHostWorker(QThread):
                     deduped=1,
                     finished_ts=int(time.time()),
                 )
+            # Record dedup stats — bytes_saved (not bytes_uploaded) since
+            # no actual transfer occurred, just a createFileByHash API call
+            from src.utils.metrics_store import get_metrics_store
+            metrics_store = get_metrics_store()
+            if metrics_store:
+                total_bytes = sum(p.get("total_bytes", 0) for p in sibling_parts)
+                metrics_store.record_transfer(
+                    host_name=self.host_id,
+                    bytes_uploaded=0,
+                    transfer_time=0.001,
+                    success=True,
+                    files_count=len(part_results),
+                    deduped=True,
+                    bytes_saved=total_bytes,
+                )
+
             return True
         except Exception as e:
             self._log(

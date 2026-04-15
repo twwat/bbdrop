@@ -374,6 +374,9 @@ class MetricsStore:
                     if 'files_deduped' not in columns:
                         conn.execute("ALTER TABLE host_metrics ADD COLUMN files_deduped INTEGER DEFAULT 0")
                         logger.info("Migrated host_metrics: added files_deduped column")
+                    if 'bytes_saved' not in columns:
+                        conn.execute("ALTER TABLE host_metrics ADD COLUMN bytes_saved INTEGER DEFAULT 0")
+                        logger.info("Migrated host_metrics: added bytes_saved column")
                 except Exception as e:
                     logger.warning(f"Migration check: {e}")
 
@@ -387,7 +390,8 @@ class MetricsStore:
                        transfer_time: float, success: bool,
                        observed_peak_kbps: Optional[float] = None,
                        files_count: int = 1,
-                       deduped: bool = False) -> None:
+                       deduped: bool = False,
+                       bytes_saved: int = 0) -> None:
         """
         Record a completed transfer.
 
@@ -405,6 +409,8 @@ class MetricsStore:
             files_count: Number of files in this transfer (default 1). For image hosts,
                         this should be the number of images uploaded in the gallery.
             deduped: Whether the server deduplicated the file (already had it).
+            bytes_saved: Bytes avoided through dedup (family mirror). Tracked
+                        separately from bytes_uploaded to quantify dedup savings.
         """
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
@@ -430,6 +436,7 @@ class MetricsStore:
             if host_name not in self._session_cache:
                 self._session_cache[host_name] = {
                     'bytes_uploaded': 0,
+                    'bytes_saved': 0,
                     'files_uploaded': 0,
                     'files_failed': 0,
                     'files_deduped': 0,
@@ -441,6 +448,7 @@ class MetricsStore:
 
             cache = self._session_cache[host_name]
             cache['bytes_uploaded'] += bytes_uploaded
+            cache['bytes_saved'] += bytes_saved
             cache['total_transfer_time'] += transfer_time
             if deduped:
                 cache['files_deduped'] += files_count
@@ -476,6 +484,7 @@ class MetricsStore:
                 if db_metrics:
                     self._today_cache[host_name] = {
                         'bytes_uploaded': db_metrics.get('bytes_uploaded', 0),
+                        'bytes_saved': db_metrics.get('bytes_saved', 0),
                         'files_uploaded': db_metrics.get('files_uploaded', 0),
                         'files_failed': db_metrics.get('files_failed', 0),
                         'files_deduped': db_metrics.get('files_deduped', 0),
@@ -488,6 +497,7 @@ class MetricsStore:
                 else:
                     self._today_cache[host_name] = {
                         'bytes_uploaded': 0,
+                        'bytes_saved': 0,
                         'files_uploaded': 0,
                         'files_failed': 0,
                         'files_deduped': 0,
@@ -500,6 +510,7 @@ class MetricsStore:
 
             today_cache = self._today_cache[host_name]
             today_cache['bytes_uploaded'] += bytes_uploaded
+            today_cache['bytes_saved'] += bytes_saved
             today_cache['total_transfer_time'] += transfer_time
             if deduped:
                 today_cache['files_deduped'] += files_count
@@ -526,6 +537,7 @@ class MetricsStore:
                 if db_metrics:
                     self._all_time_cache[host_name] = {
                         'bytes_uploaded': db_metrics.get('bytes_uploaded', 0),
+                        'bytes_saved': db_metrics.get('bytes_saved', 0),
                         'files_uploaded': db_metrics.get('files_uploaded', 0),
                         'files_failed': db_metrics.get('files_failed', 0),
                         'files_deduped': db_metrics.get('files_deduped', 0),
@@ -538,6 +550,7 @@ class MetricsStore:
                 else:
                     self._all_time_cache[host_name] = {
                         'bytes_uploaded': 0,
+                        'bytes_saved': 0,
                         'files_uploaded': 0,
                         'files_failed': 0,
                         'files_deduped': 0,
@@ -550,6 +563,7 @@ class MetricsStore:
 
             all_time_cache = self._all_time_cache[host_name]
             all_time_cache['bytes_uploaded'] += bytes_uploaded
+            all_time_cache['bytes_saved'] += bytes_saved
             all_time_cache['total_transfer_time'] += transfer_time
             if deduped:
                 all_time_cache['files_deduped'] += files_count
@@ -579,6 +593,7 @@ class MetricsStore:
             'type': 'transfer',
             'host_name': host_name,
             'bytes_uploaded': bytes_uploaded,
+            'bytes_saved': bytes_saved,
             'transfer_time': transfer_time,
             'success': success,
             'deduped': deduped,
@@ -606,6 +621,7 @@ class MetricsStore:
 
         return {
             'bytes_uploaded': cache.get('bytes_uploaded', 0),
+            'bytes_saved': cache.get('bytes_saved', 0),
             'files_uploaded': files_uploaded,
             'files_failed': files_failed,
             'files_deduped': cache.get('files_deduped', 0),
@@ -633,6 +649,7 @@ class MetricsStore:
             if host_name not in self._session_cache:
                 return {
                     'bytes_uploaded': 0,
+                    'bytes_saved': 0,
                     'files_uploaded': 0,
                     'files_failed': 0,
                     'files_deduped': 0,
@@ -666,6 +683,7 @@ class MetricsStore:
                     cursor = conn.execute("""
                         SELECT
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
+                            COALESCE(SUM(bytes_saved), 0) as bytes_saved,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(files_deduped), 0) as files_deduped,
@@ -684,6 +702,7 @@ class MetricsStore:
                     cursor = conn.execute("""
                         SELECT
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
+                            COALESCE(SUM(bytes_saved), 0) as bytes_saved,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(files_deduped), 0) as files_deduped,
@@ -702,6 +721,7 @@ class MetricsStore:
                     cursor = conn.execute("""
                         SELECT
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
+                            COALESCE(SUM(bytes_saved), 0) as bytes_saved,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(files_deduped), 0) as files_deduped,
@@ -718,6 +738,7 @@ class MetricsStore:
                     cursor = conn.execute("""
                         SELECT
                             COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
+                            COALESCE(SUM(bytes_saved), 0) as bytes_saved,
                             COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                             COALESCE(SUM(files_failed), 0) as files_failed,
                             COALESCE(SUM(files_deduped), 0) as files_deduped,
@@ -740,6 +761,7 @@ class MetricsStore:
 
                     return {
                         'bytes_uploaded': row['bytes_uploaded'],
+                        'bytes_saved': row['bytes_saved'],
                         'files_uploaded': row['files_uploaded'],
                         'files_failed': row['files_failed'],
                         'files_deduped': row['files_deduped'],
@@ -758,6 +780,7 @@ class MetricsStore:
         # Return empty metrics on error
         return {
             'bytes_uploaded': 0,
+            'bytes_saved': 0,
             'files_uploaded': 0,
             'files_failed': 0,
             'files_deduped': 0,
@@ -840,8 +863,10 @@ class MetricsStore:
                     SELECT
                         host_name,
                         COALESCE(SUM(bytes_uploaded), 0) as bytes_uploaded,
+                        COALESCE(SUM(bytes_saved), 0) as bytes_saved,
                         COALESCE(SUM(files_uploaded), 0) as files_uploaded,
                         COALESCE(SUM(files_failed), 0) as files_failed,
+                        COALESCE(SUM(files_deduped), 0) as files_deduped,
                         COALESCE(SUM(total_transfer_time), 0) as total_transfer_time,
                         COALESCE(MAX(peak_speed), 0) as peak_speed,
                         (SELECT m2.peak_speed_date FROM host_metrics m2
@@ -859,6 +884,7 @@ class MetricsStore:
 
                     result[row['host_name']] = {
                         'bytes_uploaded': row['bytes_uploaded'],
+                        'bytes_saved': row['bytes_saved'],
                         'files_uploaded': row['files_uploaded'],
                         'files_failed': row['files_failed'],
                         'files_deduped': row['files_deduped'],
@@ -952,6 +978,7 @@ class MetricsStore:
 
         host_name = item['host_name']
         bytes_uploaded = item['bytes_uploaded']
+        bytes_saved = item.get('bytes_saved', 0)
         transfer_time = item['transfer_time']
         success = item['success']
         is_deduped = item.get('deduped', False)
@@ -968,11 +995,12 @@ class MetricsStore:
                 # Update daily metrics
                 conn.execute("""
                     INSERT INTO host_metrics
-                        (host_name, bytes_uploaded, files_uploaded, files_failed, files_deduped,
+                        (host_name, bytes_uploaded, bytes_saved, files_uploaded, files_failed, files_deduped,
                          total_transfer_time, peak_speed, peak_speed_date, period_type, period_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'daily', ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'daily', ?)
                     ON CONFLICT(host_name, period_type, period_date) DO UPDATE SET
                         bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
+                        bytes_saved = bytes_saved + excluded.bytes_saved,
                         files_uploaded = files_uploaded + excluded.files_uploaded,
                         files_failed = files_failed + excluded.files_failed,
                         files_deduped = files_deduped + excluded.files_deduped,
@@ -983,6 +1011,7 @@ class MetricsStore:
                 """, (
                     host_name,
                     bytes_uploaded,
+                    bytes_saved,
                     1 if success else 0,
                     0 if success else 1,
                     1 if is_deduped else 0,
@@ -995,11 +1024,12 @@ class MetricsStore:
                 # Update all-time metrics
                 conn.execute("""
                     INSERT INTO host_metrics
-                        (host_name, bytes_uploaded, files_uploaded, files_failed, files_deduped,
+                        (host_name, bytes_uploaded, bytes_saved, files_uploaded, files_failed, files_deduped,
                          total_transfer_time, peak_speed, peak_speed_date, period_type, period_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'all_time', NULL)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'all_time', NULL)
                     ON CONFLICT(host_name, period_type, period_date) DO UPDATE SET
                         bytes_uploaded = bytes_uploaded + excluded.bytes_uploaded,
+                        bytes_saved = bytes_saved + excluded.bytes_saved,
                         files_uploaded = files_uploaded + excluded.files_uploaded,
                         files_failed = files_failed + excluded.files_failed,
                         files_deduped = files_deduped + excluded.files_deduped,
@@ -1010,6 +1040,7 @@ class MetricsStore:
                 """, (
                     host_name,
                     bytes_uploaded,
+                    bytes_saved,
                     1 if success else 0,
                     0 if success else 1,
                     1 if is_deduped else 0,
