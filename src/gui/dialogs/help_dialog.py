@@ -285,8 +285,8 @@ class HelpDialog(QDialog):
         ],
         "Guides": [
             ("Image Hosts", "guides/image-hosts.md"),
-            ("File Hosts", "guides/file-hosts.md"),
-            ("BBCode Templates", "guides/templates.md"),
+            ("File Hosts", "guides/multi-host-upload.md"),
+            ("BBCode Templates", "guides/bbcode-templates.md"),
             ("Queue Management", "guides/queue-management.md"),
             ("Image Scanning", "guides/scanning.md"),
             ("Hooks & Automation", "guides/hooks.md"),
