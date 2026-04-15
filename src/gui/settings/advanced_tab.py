@@ -185,15 +185,26 @@ class AdvancedSettingsWidget(QWidget):
             self.table.setCellWidget(row, 2, widget)
 
     def _create_value_widget(self, setting):
-        """Create the appropriate widget for a setting type."""
+        """Create the appropriate widget for a setting type.
+
+        Bool widgets are wrapped in a centered container because
+        QTableWidget.setCellWidget anchors widgets to the cell's
+        natural top-left position; without the wrapper, checkboxes
+        would sit at the left edge of the value column.
+        """
         setting_type = setting.get("type", "str")
         key = setting["key"]
         default = setting.get("default", "")
 
         if setting_type == "bool":
-            widget = QCheckBox()
-            widget.setChecked(bool(default))
-            widget.toggled.connect(lambda val, k=key: self._on_value_changed(k, val))
+            checkbox = QCheckBox()
+            checkbox.setChecked(bool(default))
+            checkbox.toggled.connect(lambda val, k=key: self._on_value_changed(k, val))
+            widget = QWidget()
+            hbox = QHBoxLayout(widget)
+            hbox.setContentsMargins(0, 0, 0, 0)
+            hbox.addWidget(checkbox, 0, Qt.AlignmentFlag.AlignCenter)
+            widget._checkbox = checkbox  # exposed for set_values / blockSignals
 
         elif setting_type == "int":
             widget = QSpinBox()
@@ -283,25 +294,32 @@ class AdvancedSettingsWidget(QWidget):
 
                 setting_type = setting.get("type", "str")
 
-                # Block signals to avoid triggering settings_changed
-                widget.blockSignals(True)
+                # Bool widgets are wrapped in a centering container; the
+                # actual checkbox is exposed as ._checkbox so we can both
+                # read/write the value and block its signals directly.
+                target = getattr(widget, "_checkbox", widget)
+                target.blockSignals(True)
 
                 try:
                     if setting_type == "bool":
-                        widget.setChecked(bool(value) if not isinstance(value, str) else value.lower() == 'true')
+                        target.setChecked(
+                            bool(value)
+                            if not isinstance(value, str)
+                            else value.lower() == 'true'
+                        )
                     elif setting_type == "int":
-                        widget.setValue(int(value))
+                        target.setValue(int(value))
                     elif setting_type == "float":
-                        widget.setValue(float(value))
+                        target.setValue(float(value))
                     elif setting_type == "choice":
-                        widget.setCurrentText(str(value))
+                        target.setCurrentText(str(value))
                     else:
-                        widget.setText(str(value))
+                        target.setText(str(value))
                 except (ValueError, TypeError):
                     # Invalid value, keep widget at current/default value
                     pass
 
-                widget.blockSignals(False)
+                target.blockSignals(False)
 
     def reset_to_defaults(self):
         """Reset all settings to their default values."""

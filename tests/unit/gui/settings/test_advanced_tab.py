@@ -88,3 +88,57 @@ class TestK2SFamilyDedupInTable:
         if ini_path.exists():
             content = ini_path.read_text()
             assert "file_hosts/k2s_family_dedup" not in content
+
+
+class TestBoolWidgetCentering:
+    """Bool value widgets must be wrapped in a centered container so the
+    checkbox sits in the middle of the value column rather than the
+    QTableWidget's default top-left anchor."""
+
+    def test_bool_value_widget_is_wrapped_container(self, qtbot):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QWidget
+
+        widget = AdvancedSettingsWidget()
+        qtbot.addWidget(widget)
+
+        wrapper = widget._value_widgets["file_hosts/k2s_family_dedup"]
+        # The wrapper is a plain QWidget, not the QCheckBox itself.
+        assert isinstance(wrapper, QWidget)
+        assert not isinstance(wrapper, QCheckBox)
+
+        # The actual checkbox is exposed on the wrapper.
+        assert hasattr(wrapper, "_checkbox")
+        assert isinstance(wrapper._checkbox, QCheckBox)
+
+        # The wrapper's layout centers the checkbox.
+        layout = wrapper.layout()
+        assert isinstance(layout, QHBoxLayout)
+        assert layout.contentsMargins().left() == 0
+        assert layout.contentsMargins().right() == 0
+        # Item alignment includes AlignCenter.
+        item = layout.itemAt(0)
+        assert item is not None
+        assert bool(item.alignment() & Qt.AlignmentFlag.AlignCenter)
+
+    def test_set_values_updates_wrapped_checkbox(self, qtbot):
+        widget = AdvancedSettingsWidget()
+        qtbot.addWidget(widget)
+
+        widget.set_values({"file_hosts/k2s_family_dedup": False})
+
+        wrapper = widget._value_widgets["file_hosts/k2s_family_dedup"]
+        assert wrapper._checkbox.isChecked() is False
+        assert widget._current_values["file_hosts/k2s_family_dedup"] is False
+
+    def test_non_bool_widgets_unchanged(self, qtbot):
+        """Int/float/string widgets must NOT be wrapped — only bool widgets
+        need the centering container."""
+        from PyQt6.QtWidgets import QSpinBox
+
+        widget = AdvancedSettingsWidget()
+        qtbot.addWidget(widget)
+
+        log_font = widget._value_widgets["gui/log_font_size"]
+        assert isinstance(log_font, QSpinBox)
+        assert not hasattr(log_font, "_checkbox")
