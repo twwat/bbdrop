@@ -827,6 +827,7 @@ class FileHostWorker(QThread):
             started_ts=int(time.time())
         )
 
+        archive_created = False  # track whether archive_manager needs releasing
         try:
             # Step 1: Determine upload file(s) — raw file or archive
             from src.utils.system_utils import convert_to_wsl_path
@@ -862,6 +863,7 @@ class FileHostWorker(QThread):
                         compression='store',
                         split_size_mb=host_max_mb,
                     )
+                    archive_created = True
                 else:
                     # Upload raw file directly
                     archive_paths = [folder_path]
@@ -924,6 +926,7 @@ class FileHostWorker(QThread):
                     compression=archive_compression,
                     split_size_mb=split_size_mb,
                 )
+                archive_created = True
 
             # Step 2: Create client (reuses session if available)
             client = self._create_client(host_config)
@@ -1172,8 +1175,9 @@ class FileHostWorker(QThread):
                     )
 
         finally:
-            # Release ZIP reference
-            self.archive_manager.release_archive(db_id)
+            # Release ZIP reference only if an archive was actually created
+            if archive_created:
+                self.archive_manager.release_archive(db_id)
 
             # Clear current upload tracking
             self.current_upload_id = None
