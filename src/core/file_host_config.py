@@ -655,31 +655,3 @@ def set_family_dedup_enabled(enabled: bool) -> None:
             raise
 
 
-def get_dedup_retry_settings() -> tuple[int, int]:
-    """Return (retry_attempts, retry_base_delay_sec) for K2S family dedup.
-
-    Reads k2s_dedup/retry_attempts and k2s_dedup/retry_base_delay_sec from
-    the [Advanced] INI section. Falls back to (3, 30) if missing.
-
-    Returns:
-        Tuple of (retry_attempts, retry_base_delay_sec).
-    """
-    import configparser
-    import os
-    from src.utils.paths import get_config_path
-
-    config_file = get_config_path()
-    if not os.path.exists(config_file):
-        return 3, 30
-
-    with _ini_file_lock:
-        config = configparser.ConfigParser()
-        try:
-            config.read(config_file, encoding="utf-8")
-        except configparser.Error:
-            return 3, 30
-
-        attempts = config.getint("Advanced", "k2s_dedup/retry_attempts", fallback=3)
-        delay = config.getint("Advanced", "k2s_dedup/retry_base_delay_sec", fallback=30)
-
-    return max(0, attempts), max(5, delay)
