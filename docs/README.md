@@ -44,8 +44,8 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 - [Troubleshooting Guide](user/troubleshooting/troubleshooting.md) - Common issues and solutions
 - [Silent Failures Guide](user/troubleshooting/silent-failures.md) - Diagnosing silent failures
 - [WSL2 Drag-Drop Fix](user/troubleshooting/wsl2-drag-drop-fix.md) - WSL2 integration issues
-- [Log Diagnosis Quick Reference](user/troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md) - Using logs for diagnosis
-- [Log Filtering Quick Diagnosis](user/troubleshooting/LOG_FILTERING_QUICK_DIAGNOSIS.md) - Filtering logs for issues
+- [Log Diagnosis Quick Reference](user/troubleshooting/log-diagnosis.md) - Using logs for diagnosis
+- [Log Filtering Quick Diagnosis](user/troubleshooting/log-filtering.md) - Filtering logs for issues
 
 **Other:**
 - [Help Content](user/reference/help-content.md) - In-app help dialog content
@@ -90,7 +90,7 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 ## Need Help?
 
 1. Review the [Troubleshooting Guide](user/troubleshooting/troubleshooting.md)
-2. Check [Log Diagnosis Quick Reference](user/troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md)
+2. Check [Log Diagnosis Quick Reference](user/troubleshooting/log-diagnosis.md)
 3. Open an issue on GitHub
 
 **In the GUI:**

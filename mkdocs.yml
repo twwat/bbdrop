@@ -105,7 +105,7 @@ nav:
     - Common Issues: troubleshooting/common-issues.md
     - Troubleshooting Guide: troubleshooting/troubleshooting.md
     - Silent Failures: troubleshooting/silent-failures.md
-    - Log Diagnosis: troubleshooting/LOG_DIAGNOSIS_QUICK_REF.md
+    - Log Diagnosis: troubleshooting/log-diagnosis.md
     - WSL2 Drag & Drop: troubleshooting/wsl2-drag-drop-fix.md
   - Architecture:
     - architecture/index.md

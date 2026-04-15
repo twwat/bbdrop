@@ -14,8 +14,8 @@ Find solutions to common issues with BBDrop.
 
 ## Log Analysis
 
-- [Log Diagnosis Quick Reference](./LOG_DIAGNOSIS_QUICK_REF.md) - Interpret log files
-- [Log Filtering Quick Diagnosis](./LOG_FILTERING_QUICK_DIAGNOSIS.md) - Filter logs for faster troubleshooting
+- [Log Diagnosis Quick Reference](./log-diagnosis.md) - Interpret log files
+- [Log Filtering Quick Diagnosis](./log-filtering.md) - Filter logs for faster troubleshooting
 
 ---
 
