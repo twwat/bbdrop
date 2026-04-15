@@ -1224,3 +1224,52 @@ class TestMediaTypeDelegateHelpEvent:
         assert MockToolTip.showText.call_count == 1
         args = MockToolTip.showText.call_args[0]
         assert "not yet generated" in args[1].lower() or "not generated" in args[1].lower()
+
+    def test_helpevent_image_tooltip_when_sheet_exists(self, delegate, view_with_video_row, monkeypatch):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        index = view_with_video_row.model().index(0, GalleryTableWidget.COL_MEDIA_TYPE)
+
+        monkeypatch.setattr(
+            "src.gui.delegates.media_type_delegate.resolve_sheet_path",
+            lambda item: "/sheets/abc.png"
+        )
+        monkeypatch.setattr(
+            "src.gui.delegates.media_type_delegate.get_cached_preview",
+            lambda path, width, cache_dir="": "/sheets/.tooltips/scaled.png"
+        )
+
+        with patch("src.gui.delegates.media_type_delegate.QToolTip") as MockToolTip:
+            handled = delegate.helpEvent(
+                self._make_help_event(), view_with_video_row, self._make_option(), index
+            )
+
+        assert handled is True
+        assert MockToolTip.showText.call_count == 1
+        args = MockToolTip.showText.call_args[0]
+        body = args[1]
+        assert "<img" in body
+        assert "file://" in body
+        assert "/sheets/.tooltips/scaled.png" in body
+
+    def test_helpevent_text_fallback_when_cache_fails(self, delegate, view_with_video_row, monkeypatch):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        index = view_with_video_row.model().index(0, GalleryTableWidget.COL_MEDIA_TYPE)
+
+        monkeypatch.setattr(
+            "src.gui.delegates.media_type_delegate.resolve_sheet_path",
+            lambda item: "/sheets/abc.png"
+        )
+        monkeypatch.setattr(
+            "src.gui.delegates.media_type_delegate.get_cached_preview",
+            lambda path, width, cache_dir="": ""
+        )
+
+        with patch("src.gui.delegates.media_type_delegate.QToolTip") as MockToolTip:
+            handled = delegate.helpEvent(
+                self._make_help_event(), view_with_video_row, self._make_option(), index
+            )
+
+        assert handled is True
+        args = MockToolTip.showText.call_args[0]
+        assert "<img" not in args[1]
+        assert "load" in args[1].lower() or "fail" in args[1].lower()

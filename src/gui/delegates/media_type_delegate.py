@@ -1,11 +1,11 @@
 """Media type delegate for rendering photo/video icons in table cells."""
 
-from PyQt6.QtCore import QEvent, Qt, QRect, QSize, QModelIndex
+from PyQt6.QtCore import QEvent, QSettings, Qt, QRect, QSize, QModelIndex, QUrl
 from PyQt6.QtGui import QHelpEvent, QPainter
 from PyQt6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QStyle, QToolTip
 
 from src.gui.icon_manager import get_icon_manager
-from src.gui.widgets.video_sheet_utils import resolve_sheet_path
+from src.gui.widgets.video_sheet_utils import get_cached_preview, resolve_sheet_path
 from src.utils.logger import log
 
 
@@ -70,9 +70,22 @@ class MediaTypeDelegate(QStyledItemDelegate):
                               view, option.rect)
             return True
 
-        QToolTip.showText(event.globalPos(),
-                          "Screenshot sheet preview",
-                          view, option.rect)
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        settings.beginGroup("Video")
+        target_width = settings.value("sheet_preview_width_px", 640, int)
+        settings.endGroup()
+        target_width = max(200, min(int(target_width or 640), 1920))
+
+        preview_path = get_cached_preview(sheet_path, target_width)
+        if not preview_path:
+            QToolTip.showText(event.globalPos(),
+                              "Failed to load screenshot sheet preview",
+                              view, option.rect)
+            return True
+
+        url = QUrl.fromLocalFile(preview_path).toString()
+        html = f'<img src="{url}">'
+        QToolTip.showText(event.globalPos(), html, view, option.rect)
         return True
 
     def _resolve_item(self, view, index: QModelIndex):
