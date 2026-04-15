@@ -119,14 +119,17 @@ class TestGetCachedPreview:
         cache_dir = tmp_path / "tooltips"
 
         first = get_cached_preview(str(sheet), 640, str(cache_dir))
-        first_mtime = os.path.getmtime(first)
+        first_source_mtime = os.path.getmtime(sheet)
 
         _write_test_png(sheet, color=0x00FF00)
-        os.utime(sheet, (first_mtime + 10, first_mtime + 10))
+        os.utime(sheet, (first_source_mtime + 10, first_source_mtime + 10))
 
         second = get_cached_preview(str(sheet), 640, str(cache_dir))
-        assert second == first
-        assert os.path.getmtime(second) > first_mtime
+        # Because mtime is embedded in the cache filename, regeneration
+        # produces a different path — both files exist on disk.
+        assert second != first
+        assert os.path.isfile(first)
+        assert os.path.isfile(second)
 
     def test_separate_cache_file_per_width(self, tmp_path):
         sheet = tmp_path / "sheet.png"

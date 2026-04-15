@@ -42,9 +42,11 @@ def get_cached_preview(sheet_path: str, target_width: int, cache_dir: str = "") 
     """Return a path to a scaled preview PNG for tooltip use.
 
     Creates the cache dir on first use. Caches at
-    ``<cache_dir>/<md5(sheet_path)>_<width>.png``. Regenerates when the
-    source sheet's mtime is newer than the cached file's. Returns ''
-    on failure (missing source, decode error, write error).
+    ``<cache_dir>/<md5(sheet_path)>_<width>_<int(mtime)>.png`` — embedding
+    the source mtime in the filename means any mtime change yields a fresh
+    cache key, sidestepping same-second mtime races on coarse-resolution
+    filesystems. Returns '' on failure (missing source, decode error,
+    write error).
 
     Args:
         sheet_path: Absolute path to the source screenshot sheet.
@@ -64,20 +66,16 @@ def get_cached_preview(sheet_path: str, target_width: int, cache_dir: str = "") 
     except OSError:
         return ""
 
-    key = hashlib.md5(sheet_path.encode()).hexdigest()
-    cache_file = os.path.join(cache_dir, f"{key}_{target_width}.png")
-
     try:
-        source_mtime = os.path.getmtime(sheet_path)
+        source_mtime = int(os.path.getmtime(sheet_path))
     except OSError:
         return ""
 
+    key = hashlib.md5(sheet_path.encode()).hexdigest()
+    cache_file = os.path.join(cache_dir, f"{key}_{target_width}_{source_mtime}.png")
+
     if os.path.isfile(cache_file):
-        try:
-            if os.path.getmtime(cache_file) >= source_mtime:
-                return cache_file
-        except OSError:
-            pass
+        return cache_file
 
     image = QImage(sheet_path)
     if image.isNull():
