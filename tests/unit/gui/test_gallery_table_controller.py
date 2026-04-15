@@ -540,3 +540,59 @@ class TestOnTableItemChanged:
         mock_item.tableWidget.assert_not_called()
         # Flag should be reset
         assert mock_main_window._in_item_changed_handler is False
+
+
+class TestMediaTypeColumnClick:
+    """Tests for clicks on the COL_MEDIA_TYPE cell opening the screenshot sheet preview."""
+
+    @pytest.fixture
+    def controller(self):
+        from src.gui.widgets.gallery_table import GalleryTableWidget  # noqa: F401
+        mw = MagicMock()
+        mw.queue_manager = MagicMock()
+        mw.gallery_table = MagicMock()
+        inner = MagicMock()
+        mw.gallery_table.table = inner
+        return GalleryTableController(mw), mw, inner
+
+    def _stub_path(self, inner, row, path):
+        item = MagicMock()
+        item.data.return_value = path
+
+        def get_item(r, col):
+            from src.gui.widgets.gallery_table import GalleryTableWidget
+            if r == row and col == GalleryTableWidget.COL_NAME:
+                return item
+            return None
+
+        inner.item.side_effect = get_item
+
+    def test_click_on_video_media_type_opens_preview(self, controller):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        ctrl, mw, inner = controller
+        self._stub_path(inner, 0, "/g/video")
+        fake_item = MagicMock()
+        fake_item.media_type = "video"
+        mw.queue_manager.get_item.return_value = fake_item
+
+        ctrl.on_gallery_cell_clicked(0, GalleryTableWidget.COL_MEDIA_TYPE)
+
+        mw.gallery_table.preview_screenshot_sheet.assert_called_once_with("/g/video")
+
+    def test_click_on_image_media_type_is_noop(self, controller):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        ctrl, mw, inner = controller
+        self._stub_path(inner, 0, "/g/image")
+        fake_item = MagicMock()
+        fake_item.media_type = "image"
+        mw.queue_manager.get_item.return_value = fake_item
+
+        ctrl.on_gallery_cell_clicked(0, GalleryTableWidget.COL_MEDIA_TYPE)
+
+        mw.gallery_table.preview_screenshot_sheet.assert_not_called()
+
+    def test_click_on_other_columns_unaffected(self, controller):
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        ctrl, mw, inner = controller
+        ctrl.on_gallery_cell_clicked(0, GalleryTableWidget.COL_NAME)
+        mw.gallery_table.preview_screenshot_sheet.assert_not_called()

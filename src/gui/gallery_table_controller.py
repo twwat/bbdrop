@@ -305,6 +305,19 @@ class GalleryTableController(QObject):
         """Handle clicks on gallery table cells for template editing and custom/ext column editing."""
         mw = self._main_window
 
+        # Media type column: clicking the film-reel icon on a video row
+        # opens the screenshot sheet preview dialog. Image rows are no-ops.
+        if column == GalleryTableWidget.COL_MEDIA_TYPE:
+            table = getattr(mw.gallery_table, 'table', mw.gallery_table)
+            name_item = table.item(row, GalleryTableWidget.COL_NAME) if table else None
+            gallery_path = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+            if not gallery_path:
+                return
+            item = mw.queue_manager.get_item(gallery_path)
+            if item and getattr(item, 'media_type', '') == 'video':
+                mw.gallery_table.preview_screenshot_sheet(gallery_path)
+            return
+
         # Handle custom columns (14-17) and ext columns (18-21) with single-click editing
         if (GalleryTableWidget.COL_CUSTOM1 <= column <= GalleryTableWidget.COL_CUSTOM4) or \
            (GalleryTableWidget.COL_EXT1 <= column <= GalleryTableWidget.COL_EXT4):
