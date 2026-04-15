@@ -40,6 +40,10 @@ class UploadLifecycleHandler(QObject):
     def __init__(self, main_window: 'BBDropGUI'):
         super().__init__()
         self._main_window = main_window
+        # Paths that have already fired the gallery_completed notification
+        # this session; prevents double-fire when multiple file host rows
+        # settle in quick succession.
+        self._fired_completion_notifications: set[str] = set()
 
     def on_gallery_started(self, path: str, total_images: int):
         """Handle gallery start"""
@@ -373,9 +377,12 @@ class UploadLifecycleHandler(QObject):
         # Defer only the heavy stats update to avoid blocking
         QTimer.singleShot(50, lambda: self._update_stats_deferred(results))
 
-        # Fire notification
-        if hasattr(mw, 'notification_manager'):
-            mw.notification_manager.notify('gallery_completed')
+        # Gate notification on all-work-done (image host + every file host row).
+        # If any file host rows are still pending/uploading/failed, notification
+        # is held; it will fire from on_file_host_upload_completed once the
+        # last row settles. File host triggers queued by on_gallery_completed
+        # above run before this call, so the row set is already visible here.
+        self.maybe_notify_gallery_done(path)
 
     def _update_stats_deferred(self, results: dict):
         """Update cumulative stats in background"""
@@ -411,11 +418,52 @@ class UploadLifecycleHandler(QObject):
         except Exception as e:
             log(f"Failed to update cumulative stats in _update_stats_deferred: {e}", level="error", category="ui")
 
+    def maybe_notify_gallery_done(self, path: str):
+        """Fire gallery_completed notification only when all work is done.
+
+        Work = image host upload + every file host row for the gallery.
+        A file host row counts as done when `status == 'completed'` or
+        `deduped == True`. Pending/uploading/failed rows delay the
+        notification indefinitely (user will get it when they eventually
+        settle, via the re-check from on_file_host_upload_completed).
+
+        Guarded by `_fired_completion_notifications` so a gallery only
+        notifies once per session.
+        """
+        if not path:
+            return
+        mw = self._main_window
+        if path in self._fired_completion_notifications:
+            return
+
+        item = mw.queue_manager.get_item(path)
+        if item is None or item.status != "completed":
+            return
+
+        try:
+            rows = mw.queue_manager.store.get_file_host_uploads(path)
+        except Exception as e:
+            log(f"Failed to query file host rows for completion check: {e}",
+                level="warning", category="ui")
+            rows = []
+
+        if rows:
+            all_done = all(
+                bool(row.get('deduped')) or row.get('status') == 'completed'
+                for row in rows
+            )
+            if not all_done:
+                return
+
+        self._fired_completion_notifications.add(path)
+        if hasattr(mw, 'notification_manager'):
+            mw.notification_manager.notify('gallery_completed')
+
     def on_ext_fields_updated(self, path: str, ext_fields: dict):
         """Handle ext fields update from external hooks"""
         mw = self._main_window
         try:
-            log(f"on_ext_fields_updated called: path={path}, ext_fields={ext_fields}", level="info", category="hooks")
+            log(f"on_ext_fields_updated called: path={path}, ext_fields={ext_fields}", level="debug", category="hooks")
 
             # Read item data under mutex, then release before GUI updates
             item_name = None

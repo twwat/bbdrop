@@ -45,6 +45,9 @@ class WorkerSignalHandler(QObject):
         self._filehost_base_bytes: Dict[str, int] = {}
         self._filehost_base_files: Dict[str, int] = {}
 
+        # Throttle for progress bar refreshes driven by file host upload progress
+        self._progress_refresh_pending = False
+
     @property
     def _mw(self):
         """Get main window reference, or None if C++ object was deleted."""
@@ -175,8 +178,29 @@ class WorkerSignalHandler(QObject):
 
             # Progress updates are frequent, so we avoid full refresh
             # The file host widgets will poll status and update themselves
+            # but we DO want the overall byte-weighted bar to move, so
+            # schedule a throttled refresh (150ms coalesced singleshot).
+            self._schedule_progress_refresh()
         except Exception as e:
             log(f"Error handling file host upload progress: {e}", level="error", category="file_hosts")
+
+    def _schedule_progress_refresh(self):
+        """Throttled trigger for overall progress bar refresh from file host progress."""
+        if self._progress_refresh_pending:
+            return
+        self._progress_refresh_pending = True
+        QTimer.singleShot(150, self._do_progress_refresh)
+
+    def _do_progress_refresh(self):
+        """Execute the deferred progress refresh after the throttle window."""
+        self._progress_refresh_pending = False
+        mw = self._mw
+        if mw is None:
+            return
+        try:
+            mw.progress_tracker.update_progress_display()
+        except Exception as e:
+            log(f"Error refreshing progress display: {e}", level="warning", category="ui")
 
     def on_file_host_upload_completed(self, db_id: int, host_name: str, result: dict):
         """Handle file host upload completed - ASYNC to prevent blocking main thread."""
@@ -198,6 +222,24 @@ class WorkerSignalHandler(QObject):
             display_host = get_display_name(host_name)
             msg = f"Deduped on {display_host}: {gallery_name}" if gallery_name else f"Deduped on {display_host}"
             mw.show_status_message(msg, 5000)
+
+        # Re-check gallery completion: if this was the last outstanding
+        # file host row, fire the delayed gallery_completed notification.
+        gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
+        if gallery_path:
+            try:
+                mw.upload_lifecycle_handler.maybe_notify_gallery_done(gallery_path)
+            except Exception as e:
+                log(f"Error re-checking gallery completion after file host: {e}",
+                    level="warning", category="ui")
+
+        # Refresh the byte-weighted overall progress bar immediately so the
+        # last settled row snaps to its final contribution.
+        try:
+            mw.progress_tracker.update_progress_display()
+        except Exception as e:
+            log(f"Error refreshing progress after file host completion: {e}",
+                level="warning", category="ui")
 
         # Fire notification
         mw = self._mw

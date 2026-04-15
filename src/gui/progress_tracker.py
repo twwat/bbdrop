@@ -4,9 +4,10 @@ This module handles all progress-related operations extracted from main_window.p
 to improve maintainability and separation of concerns.
 """
 
+import os
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Tuple
 
 from PyQt6.QtCore import QObject, QTimer, QSettings, Qt, QMutexLocker
 from PyQt6.QtWidgets import QTableWidgetItem
@@ -77,6 +78,92 @@ class ProgressTracker(QObject):
         self._update_button_counts()
         self.update_progress_display()
 
+    def _compute_work_bytes(self, items) -> Tuple[int, int]:
+        """Compute byte-weighted total and uploaded work across items.
+
+        Each gallery contributes image host bytes + sum of per-file-host bytes.
+        Video galleries contribute their screenshot sheet size for the image
+        host (often <1% of total work) and the full video file size for each
+        file host upload. Image galleries contribute `item.total_size` for
+        both sides.
+
+        File host row statuses map to:
+            completed/deduped -> uploaded = total
+            uploading/failed  -> uploaded = uploaded_bytes (failed stalls)
+            pending           -> uploaded = 0, total counts toward work
+
+        Returns:
+            Tuple of (total_bytes, uploaded_bytes) aggregated over items.
+        """
+        total_bytes = 0
+        uploaded_bytes = 0
+        store = None
+        try:
+            store = self._main_window.queue_manager.store
+        except Exception:
+            store = None
+
+        for item in items:
+            is_video = getattr(item, 'media_type', 'image') == 'video'
+            sheet_path = getattr(item, 'screenshot_sheet_path', '') or ''
+            item_total_size = int(getattr(item, 'total_size', 0) or 0)
+
+            if is_video and sheet_path:
+                try:
+                    image_host_total = os.path.getsize(sheet_path) if os.path.exists(sheet_path) else 0
+                except OSError:
+                    image_host_total = 0
+                if image_host_total <= 0:
+                    image_host_total = max(1, item_total_size // 100)
+            else:
+                image_host_total = item_total_size
+
+            status = getattr(item, 'status', '')
+            if status == 'completed':
+                image_host_uploaded = image_host_total
+            elif status == 'uploading':
+                total_images = int(getattr(item, 'total_images', 0) or 0)
+                uploaded_images = int(getattr(item, 'uploaded_images', 0) or 0)
+                if total_images > 0:
+                    ratio = min(1.0, uploaded_images / total_images)
+                    image_host_uploaded = int(image_host_total * ratio)
+                else:
+                    image_host_uploaded = 0
+            else:
+                image_host_uploaded = 0
+
+            total_bytes += image_host_total
+            uploaded_bytes += image_host_uploaded
+
+            if store is None:
+                continue
+            try:
+                rows = store.get_file_host_uploads(item.path)
+            except Exception:
+                rows = []
+
+            fallback_estimate = max(item_total_size, 1)
+
+            for row in rows:
+                row_status = row.get('status', '')
+                row_total = int(row.get('total_bytes') or 0)
+                row_uploaded = int(row.get('uploaded_bytes') or 0)
+                row_deduped = bool(row.get('deduped'))
+                row_file_size = int(row.get('file_size') or 0)
+
+                effective_total = max(row_total, row_file_size, fallback_estimate)
+
+                if row_deduped or row_status == 'completed':
+                    total_bytes += effective_total
+                    uploaded_bytes += effective_total
+                elif row_status in ('uploading', 'failed'):
+                    total_bytes += effective_total
+                    uploaded_bytes += min(row_uploaded, effective_total)
+                else:
+                    total_bytes += effective_total
+
+        return total_bytes, uploaded_bytes
+
     def _update_button_counts(self):
         """Update button counts and states based on currently visible items."""
         try:
@@ -122,19 +209,20 @@ class ProgressTracker(QObject):
             self._main_window.stats_label.setText(f"No galleries in {current_tab_name}")
             return
 
-        total_images = sum(item.total_images for item in items if item.total_images > 0)
-        uploaded_images = 0
-        for item in items:
-            if item.total_images > 0:
-                base_uploaded = item.uploaded_images
-                if hasattr(item, 'uploaded_files') and item.uploaded_files:
-                    base_uploaded = max(base_uploaded, len(item.uploaded_files))
-                uploaded_images += base_uploaded
+        total_bytes, uploaded_bytes = self._compute_work_bytes(items)
 
-        if total_images > 0:
-            overall_percent = int((uploaded_images / total_images) * 100)
+        if total_bytes > 0:
+            raw_percent = int((uploaded_bytes / total_bytes) * 100)
+            if uploaded_bytes > 0 and raw_percent < 1:
+                overall_percent = 1
+            else:
+                overall_percent = min(100, max(0, raw_percent))
+            if uploaded_bytes >= total_bytes:
+                overall_percent = 100
+            uploaded_str = self._main_window._format_size_consistent(uploaded_bytes)
+            total_str = self._main_window._format_size_consistent(total_bytes)
             self._main_window.overall_progress.setValue(overall_percent)
-            self._main_window.overall_progress.setText(f"{overall_percent}% ({uploaded_images}/{total_images})")
+            self._main_window.overall_progress.setText(f"{overall_percent}% ({uploaded_str} / {total_str})")
             if overall_percent >= 100:
                 self._main_window.overall_progress.setProgressProperty("status", "completed")
             else:
