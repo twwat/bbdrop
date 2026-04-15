@@ -48,9 +48,20 @@ class ScreenshotSheetGenerator:
         return (frame, seek_time) if ret else None
 
     def extract_frames(
-        self, video_path: str, timestamps: List[float], duration: float = 0
+        self,
+        video_path: str,
+        timestamps: List[float],
+        duration: float = 0,
+        thumb_size: Optional[Tuple[int, int]] = None,
     ) -> List[Tuple[Image.Image, float]]:
-        """Extract frames at given timestamps, skipping black frames."""
+        """Extract frames at given timestamps, skipping black frames.
+
+        When ``thumb_size`` is provided, each decoded frame is downscaled
+        in numpy via cv2.resize *before* being held in the result list,
+        so peak memory is bounded by ``len(timestamps) * thumb_size``
+        instead of source resolution. For HD/4K sources this is a 30x+
+        reduction.
+        """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             log(f"ScreenshotSheet: cannot open {video_path}")
@@ -62,6 +73,10 @@ class ScreenshotSheetGenerator:
                 result = self._try_extract_frame(cap, ts, duration=duration)
                 if result is not None:
                     bgr_frame, actual_ts = result
+                    if thumb_size is not None:
+                        bgr_frame = cv2.resize(
+                            bgr_frame, thumb_size, interpolation=cv2.INTER_AREA
+                        )
                     rgb_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
                     pil_image = Image.fromarray(rgb_frame)
                     frames.append((pil_image, actual_ts))
@@ -196,7 +211,26 @@ class ScreenshotSheetGenerator:
             return None
 
         timestamps = self.calculate_timestamps(duration, count)
-        frames = self.extract_frames(video_path, timestamps, duration=duration)
+
+        # Compute thumb_size up front so extract_frames can downscale each
+        # frame before buffering. Without this, all N source-resolution
+        # frames sit in memory until composite_sheet runs (~120 MB peak
+        # for 1080p × 20 frames, ~480 MB for 4K).
+        thumb_width = settings.get('thumb_width', 0)
+        meta_w = metadata.get('width', 0) or 0
+        meta_h = metadata.get('height', 0) or 0
+        thumb_size: Optional[Tuple[int, int]] = None
+        if thumb_width and meta_w and meta_h:
+            try:
+                aspect = int(meta_h) / int(meta_w)
+                thumb_h = max(1, int(int(thumb_width) * aspect))
+                thumb_size = (int(thumb_width), thumb_h)
+            except (TypeError, ValueError, ZeroDivisionError):
+                thumb_size = None
+
+        frames = self.extract_frames(
+            video_path, timestamps, duration=duration, thumb_size=thumb_size
+        )
 
         if not frames:
             log(f"ScreenshotSheet: no frames extracted from {video_path}")

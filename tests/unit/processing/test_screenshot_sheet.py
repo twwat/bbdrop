@@ -6,6 +6,15 @@ from PIL import Image
 from src.processing.screenshot_sheet import ScreenshotSheetGenerator
 
 
+def _make_varied_frame(height: int, width: int) -> np.ndarray:
+    """Build a deterministic high-variance BGR frame so is_empty_frame()
+    doesn't reject it as uniform."""
+    frame = np.full((height, width, 3), 128, dtype=np.uint8)
+    frame[: height // 4, :, :] = 255
+    frame[height // 4 : height // 2, :, :] = 0
+    return frame
+
+
 class TestBlackFrameDetection:
     def test_black_frame_detected(self):
         gen = ScreenshotSheetGenerator()
@@ -162,3 +171,38 @@ class TestCompositeSheetSettings:
         }
         sheet = gen.composite_sheet(frames, settings)
         assert sheet is not None
+
+
+class TestExtractFramesResize:
+    """extract_frames downscales decoded frames before holding them in
+    memory, so peak memory is bounded by thumb_size, not source resolution."""
+
+    @patch("src.processing.screenshot_sheet.cv2.VideoCapture")
+    def test_resizes_when_thumb_size_set(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = True
+        cap.read.return_value = (True, _make_varied_frame(1080, 1920))
+        cap.get.return_value = 5000.0  # 5s in ms
+        mock_vc.return_value = cap
+
+        gen = ScreenshotSheetGenerator()
+        frames = gen.extract_frames(
+            "/fake.mp4", [5.0], duration=10.0, thumb_size=(320, 180)
+        )
+
+        assert len(frames) == 1
+        assert frames[0][0].size == (320, 180)
+
+    @patch("src.processing.screenshot_sheet.cv2.VideoCapture")
+    def test_keeps_source_size_when_no_thumb_size(self, mock_vc):
+        cap = MagicMock()
+        cap.isOpened.return_value = True
+        cap.read.return_value = (True, _make_varied_frame(480, 640))
+        cap.get.return_value = 5000.0
+        mock_vc.return_value = cap
+
+        gen = ScreenshotSheetGenerator()
+        frames = gen.extract_frames("/fake.mp4", [5.0], duration=10.0)
+
+        assert len(frames) == 1
+        assert frames[0][0].size == (640, 480)
