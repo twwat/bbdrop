@@ -449,25 +449,38 @@ class UploadWorker(QThread):
         strategy = create_media_strategy("video")
         video_settings = self._get_video_settings()
 
-        # Emit 0% progress while generating the screenshot sheet
-        self.progress_updated.emit(item.path, 0, 1, 0, "Generating screenshot sheet...")
+        # Reuse scan-time screenshot sheet if available (avoid regenerating)
+        scan_sheet = getattr(item, 'screenshot_sheet_path', '')
+        if scan_sheet and os.path.isfile(scan_sheet):
+            sheet_path = scan_sheet
+            log(f"Reusing scan-time screenshot sheet for {item.name}: {sheet_path}",
+                level="info", category="uploads")
+            # Ensure video metadata is populated (set during scan)
+            if not item.video_metadata:
+                from src.processing.video_scanner import VideoScanner
+                meta = VideoScanner().scan(item.path)
+                if meta:
+                    item.video_metadata = meta
+        else:
+            # No scan-time sheet — generate one now
+            self.progress_updated.emit(item.path, 0, 1, 0, "Generating screenshot sheet...")
 
-        sheet_result = strategy.generate_primary_content(item, video_settings)
-        if sheet_result['status'] == 'error':
-            error_msg = sheet_result.get('error', 'Screenshot sheet generation failed')
-            log(f"Video processing failed for {item.name}: {error_msg}",
-                level="error", category="uploads")
-            self.queue_manager.mark_upload_failed(item.path, error_msg)
-            self.gallery_failed.emit(item.path, error_msg)
-            return {}
+            sheet_result = strategy.generate_primary_content(item, video_settings)
+            if sheet_result['status'] == 'error':
+                error_msg = sheet_result.get('error', 'Screenshot sheet generation failed')
+                log(f"Video processing failed for {item.name}: {error_msg}",
+                    level="error", category="uploads")
+                self.queue_manager.mark_upload_failed(item.path, error_msg)
+                self.gallery_failed.emit(item.path, error_msg)
+                return {}
 
-        # Store video metadata on the item
-        if sheet_result.get('metadata'):
-            item.video_metadata = sheet_result['metadata']
+            # Store video metadata on the item
+            if sheet_result.get('metadata'):
+                item.video_metadata = sheet_result['metadata']
 
-        sheet_path = sheet_result['screenshot_sheet_path']
-        log(f"Screenshot sheet generated for {item.name}: {sheet_path}",
-            level="info", category="uploads")
+            sheet_path = sheet_result['screenshot_sheet_path']
+            log(f"Screenshot sheet generated for {item.name}: {sheet_path}",
+                level="info", category="uploads")
 
         # Upload the screenshot sheet to the image host
         self.progress_updated.emit(item.path, 0, 1, 0, "Uploading screenshot sheet...")
