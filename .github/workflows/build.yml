@@ -143,7 +143,6 @@ jobs:
 
           echo Copying assets to dist...
           xcopy /E /I /Y assets dist\assets
-          xcopy /E /I /Y docs dist\docs
           copy LICENSE dist\
           copy README.md dist\
 
@@ -157,7 +156,6 @@ jobs:
 
           echo "Copying assets to dist..."
           cp -r assets dist/
-          cp -r docs dist/
           cp LICENSE README.md dist/
 
       # Verify pycurl (Windows) - informational only, don't fail
