@@ -55,9 +55,9 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 ## Developer Documentation
 
 - [CLAUDE.md](../CLAUDE.md) - Project context and architecture overview
-- [Testing Quick Start](dev/testing/TESTING_QUICKSTART.md) - Getting started with testing
-- [Testing Status](dev/testing/TESTING_STATUS.md) - Current testing status and coverage
-- [Manual Testing State Isolation](dev/testing/MANUAL_TESTING_STATE_ISOLATION.md) - Test isolation guide
+- [Testing Quick Start](dev/testing/testing-quickstart.md) - Getting started with testing
+- [Testing Status](dev/testing/testing-status.md) - Current testing status and coverage
+- [Manual Testing State Isolation](dev/testing/manual-testing-state-isolation.md) - Test isolation guide
 - [Coverage Quickstart](dev/testing/coverage-quickstart.md) - Coverage measurement guide
 
 ---
@@ -82,7 +82,7 @@ Complete guides for using the GUI, uploading galleries, managing archives, and c
 ### By Role
 
 **End Users:** [User Documentation Index](user/index.md)
-**Testers:** [Testing Quick Start](dev/testing/TESTING_QUICKSTART.md)
+**Testers:** [Testing Quick Start](dev/testing/testing-quickstart.md)
 **Contributors:** [CLAUDE.md Architecture](../CLAUDE.md)
 
 ---
