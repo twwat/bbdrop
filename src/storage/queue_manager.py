@@ -654,7 +654,7 @@ class QueueManager(QObject):
             if path not in self.items:
                 return
             item = self.items[path]
-            item.total_size = os.path.getsize(sheet_path) if sheet_path and os.path.isfile(sheet_path) else meta['filesize']
+            item.total_size = meta['filesize']
             item.total_images = len(video_files) if is_dir else 1
             item.avg_width = float(meta['width'])
             item.avg_height = float(meta['height'])

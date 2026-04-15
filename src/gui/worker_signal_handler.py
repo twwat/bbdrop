@@ -11,6 +11,7 @@ Handles:
     - Worker status widget updates
 """
 
+import os
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, Any
 
@@ -559,7 +560,12 @@ class WorkerSignalHandler(QObject):
                     if files_remaining > 0:
                         host_files[host_id] += files_remaining
 
-                    bytes_remaining = item.total_size - item.uploaded_bytes
+                    if getattr(item, 'media_type', 'image') == 'video':
+                        sheet_path = getattr(item, 'screenshot_sheet_path', '')
+                        upload_size = os.path.getsize(sheet_path) if sheet_path and os.path.isfile(sheet_path) else 0
+                    else:
+                        upload_size = item.total_size
+                    bytes_remaining = upload_size - item.uploaded_bytes
                     if bytes_remaining > 0:
                         host_bytes[host_id] += bytes_remaining
 
