@@ -33,93 +33,43 @@ class FileHostController(QObject):
         try:
             from src.gui.widgets.gallery_table import GalleryTableWidget
 
-            # 1. Entry point logging
-            log(f"_refresh_file_host_widgets_for_db_id called with db_id={db_id}",
-                level="debug", category="file_hosts")
-
-            # OPTIMIZATION 1: Use cached db_id -> path mapping if available
-            # This avoids iterating through all queue items
             gallery_path = self._db_id_to_path.get(db_id)
 
-            # 2. Log cache lookup result
-            log(f"db_id {db_id} in _db_id_to_path: {db_id in self._db_id_to_path}, "
-                f"mapped path: {gallery_path}", level="debug", category="file_hosts")
-
-            # If not cached, fall back to search (only on first miss)
             if not gallery_path:
-                log(f"Cache miss for db_id {db_id}, searching queue items",
-                    level="debug", category="file_hosts")
                 for item in self._main_window.queue_manager.get_all_items():
                     if item.db_id and item.db_id == db_id:
                         gallery_path = item.path
-                        # Cache for future lookups
                         self._db_id_to_path[db_id] = gallery_path
-                        log(f"Found and cached: db_id {db_id} -> path {gallery_path}",
-                            level="debug", category="file_hosts")
                         break
 
             if not gallery_path:
-                log(f"No path found for db_id {db_id}, exiting",
-                    level="debug", category="file_hosts")
                 return
 
-            # OPTIMIZATION 2: O(1) row lookup via path_to_row dict
             row = self._main_window.path_to_row.get(gallery_path)
-
-            # 3. Log row lookup result
-            log(f"path '{gallery_path}' in path_to_row: {gallery_path in self._main_window.path_to_row}, "
-                f"mapped row: {row}", level="debug", category="file_hosts")
-
             if row is None:
-                log(f"No row found for path '{gallery_path}', exiting",
-                    level="debug", category="file_hosts")
                 return
 
-            # Get table item for delegate-based rendering
             hosts_item = self._main_window.gallery_table.table.item(row, GalleryTableWidget.COL_HOSTS_STATUS)
-
-            # 4. Log item lookup result
-            log(f"table.item(row={row}, COL_HOSTS_STATUS) returned: {hosts_item}",
-                level="debug", category="file_hosts")
-
             if hosts_item is None:
-                log(f"File host status item not found at row {row} for db_id {db_id}", level="debug", category="file_hosts")
-                return  # Item not present, skip DB query
+                return
 
-            # Fetch file host uploads from database
             host_uploads = {}
             try:
                 uploads_list = self._main_window.queue_manager.store.get_file_host_uploads(gallery_path)
-                # Convert list to dict format for delegate
                 host_uploads = {upload['host_name']: upload for upload in uploads_list}
-
-                # 5. Log uploads fetched from database
-                log(f"Fetched {len(uploads_list)} file host uploads from database for path '{gallery_path}': "
-                    f"hosts={list(host_uploads.keys())}", level="debug", category="file_hosts")
-
             except Exception as e:
                 log(f"Failed to load file host uploads: {e}", level="warning", category="file_hosts")
                 return
 
-            # Update table item data for delegate rendering
             hosts_item.setData(Qt.ItemDataRole.UserRole + 1, host_uploads)
 
-            # Force repaint of the cell
             table = self._main_window.gallery_table.table
             table.viewport().update(table.visualItemRect(hosts_item))
 
-            # Update cache with dict format for consistency
             if hasattr(self._main_window, '_file_host_uploads_cache') and gallery_path:
                 self._main_window._file_host_uploads_cache[gallery_path] = uploads_list
 
-            # 6. Confirm update completed
-            log(f"Updated table item data at row {row} with {len(host_uploads)} hosts",
-                level="debug", category="file_hosts")
-
         except Exception as e:
-            # 7. Log any exceptions
-            log(f"Exception in _refresh_file_host_widgets_for_db_id(db_id={db_id}): {e}",
-                level="debug", category="file_hosts")
             log(f"Error refreshing file host widgets: {e}", level="error", category="file_hosts")
             traceback.print_exc()
 

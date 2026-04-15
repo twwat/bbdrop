@@ -161,7 +161,7 @@ class FileHostWorkerManager(QObject):
         worker = self.workers.pop(host_id, None)
         if not worker:
             log(
-                f"Worker not found: No worker found for {host_id}",
+                f"{host_id} Worker: not found, skipping stop",
                 level="debug",
                 category="file_hosts"
             )

@@ -1508,8 +1508,8 @@ class QueueManager(QObject):
             triggered_hosts = config_manager.get_hosts_by_trigger('added')
 
             if triggered_hosts:
-                log(f"Gallery added trigger: Found {len(triggered_hosts)} enabled hosts with 'On Added' trigger",
-                    level="info", category="file_hosts")
+                log(f"Added trigger: queuing {list(triggered_hosts.keys())}",
+                    level="debug", category="file_hosts")
 
                 from src.core.file_host_config import is_family_dedup_enabled
                 upload_ids = queue_file_host_uploads_for_gallery(
@@ -1520,15 +1520,10 @@ class QueueManager(QObject):
                 )
                 for host_id, host_config in triggered_hosts.items():
                     upload_id = upload_ids.get(host_id)
-                    if upload_id:
-                        log(
-                            f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
-                            level="info", category="file_hosts",
-                        )
-                    else:
+                    if not upload_id:
                         log(
                             f"Failed to queue file host upload for {path} to {host_config.name}",
-                            level="error", category="file_hosts",
+                            level="warning", category="file_hosts",
                         )
         except Exception as e:
             log(f"Error checking file host triggers on gallery added: {e}", level="error", category="file_hosts")

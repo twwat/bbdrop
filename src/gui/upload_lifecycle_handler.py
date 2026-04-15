@@ -62,8 +62,8 @@ class UploadLifecycleHandler(QObject):
             triggered_hosts = config_manager.get_hosts_by_trigger('started')
 
             if triggered_hosts:
-                log(f"Gallery started trigger: Found {len(triggered_hosts)} enabled hosts with 'On Started' trigger",
-                    level="info", category="file_hosts")
+                log(f"Started trigger: queuing {list(triggered_hosts.keys())}",
+                    level="debug", category="file_hosts")
 
                 from src.storage.queue_manager import queue_file_host_uploads_for_gallery
                 from src.core.file_host_config import is_family_dedup_enabled
@@ -76,15 +76,11 @@ class UploadLifecycleHandler(QObject):
                 for host_id, host_config in triggered_hosts.items():
                     upload_id = upload_ids.get(host_id)
                     if upload_id:
-                        log(
-                            f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
-                            level="info", category="file_hosts",
-                        )
                         mw.worker_signal_handler._update_filehost_queue_for_host(host_id)
                     else:
                         log(
                             f"Failed to queue file host upload for {path} to {host_config.name}",
-                            level="error", category="file_hosts",
+                            level="warning", category="file_hosts",
                         )
         except Exception as e:
             log(f"Error checking file host triggers on gallery start: {e}", level="error", category="file_hosts")
@@ -296,8 +292,8 @@ class UploadLifecycleHandler(QObject):
             triggered_hosts = config_manager.get_hosts_by_trigger('completed')
 
             if triggered_hosts:
-                log(f"Gallery completed trigger: Found {len(triggered_hosts)} enabled hosts with 'On Completed' trigger",
-                    level="info", category="file_hosts")
+                log(f"Completed trigger: queuing {list(triggered_hosts.keys())}",
+                    level="debug", category="file_hosts")
 
                 from src.storage.queue_manager import queue_file_host_uploads_for_gallery
                 from src.core.file_host_config import is_family_dedup_enabled
@@ -310,15 +306,11 @@ class UploadLifecycleHandler(QObject):
                 for host_id, host_config in triggered_hosts.items():
                     upload_id = upload_ids.get(host_id)
                     if upload_id:
-                        log(
-                            f"Queued file host upload for {path} to {host_config.name} (upload_id={upload_id})",
-                            level="info", category="file_hosts",
-                        )
                         mw.worker_signal_handler._update_filehost_queue_for_host(host_id)
                     else:
                         log(
                             f"Failed to queue file host upload for {path} to {host_config.name}",
-                            level="error", category="file_hosts",
+                            level="warning", category="file_hosts",
                         )
         except Exception as e:
             log(f"Error checking file host triggers on gallery completion: {e}", level="error", category="file_hosts")
@@ -510,7 +502,7 @@ class UploadLifecycleHandler(QObject):
                 finally:
                     actual_table.blockSignals(signals_blocked)
 
-                log(f"Updated ext fields in GUI for {item_name}: {ext_fields}", level="info", category="hooks")
+                log(f"Updated ext fields in GUI for {item_name}: {ext_fields}", level="debug", category="hooks")
                 # Trigger artifact regeneration for ext field changes if enabled
                 def _maybe_regen(p=path):
                     if mw.artifact_handler.should_auto_regenerate_bbcode(p):

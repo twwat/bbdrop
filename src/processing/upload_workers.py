@@ -185,7 +185,7 @@ class UploadWorker(QThread):
         else:
             self.rename_worker = None
 
-        log(f"Uploader initialized for host '{host_id}'", level="debug", category="auth")
+        log(f"UploadWorker: initialized for host '{host_id}'", level="debug", category="auth")
 
 
     def upload_gallery(self, item: GalleryQueueItem):

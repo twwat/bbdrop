@@ -81,7 +81,7 @@ def load_session_cookies_from_keyring():
                     clear_session_cookies_from_keyring()
                     return {}
 
-                log(f"IMX rename: loaded {len(valid_cookies)} session cookies from keyring", level="debug", category="auth")
+                log(f"RenameWorker: loaded {len(valid_cookies)} session cookies from keyring", level="debug", category="auth")
                 return valid_cookies
             except json.JSONDecodeError as e:
                 log(f"Corrupted keyring cookie data (JSON error: {e}), clearing", level="debug", category="auth")

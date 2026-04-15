@@ -127,12 +127,6 @@ class FileHostCoordinator:
             with self.stats_lock:
                 self.total_uploads_started += 1
 
-            log(
-                f"Acquired upload slots for {host_name} (gallery {gallery_id})",
-                level="debug",
-                category="file_hosts"
-            )
-
             yield True
 
         finally:

@@ -815,7 +815,7 @@ class FileHostWorker(QThread):
 
         self._log(
             f"Starting upload to {host_name} for gallery {db_id} ({gallery_name})",
-            level="info"
+            level="debug"
         )
 
         # CRITICAL: Emit started signal FIRST before database write
@@ -869,7 +869,6 @@ class FileHostWorker(QThread):
                 else:
                     # Upload raw file directly
                     archive_paths = [folder_path]
-                    self._log(f"Uploading raw file: {folder_path.name}", level="info")
             else:
                 # Directory: archive as before
                 defaults = load_user_defaults()

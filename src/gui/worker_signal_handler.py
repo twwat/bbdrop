@@ -151,8 +151,6 @@ class WorkerSignalHandler(QObject):
 
     def on_file_host_upload_started(self, db_id: int, host_name: str):
         """Handle file host upload started - ASYNC to prevent blocking main thread."""
-        log(f"File host upload started: {host_name} for gallery {db_id}",
-            level="debug", category="file_hosts")
         # Defer UI refresh to avoid blocking signal emission
         QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id))
         # Update queue display for this host so bytes column populates immediately

@@ -45,11 +45,9 @@ class GalleryTableController(QObject):
         # Update mappings
         mw.path_to_row[item.path] = row
         mw.row_to_path[row] = item.path
-        log(f"Added {item.path} to path_to_row at row {row}, scan_complete={item.scan_complete}, status={item.status}", level="debug", category="queue")
 
         # Initialize scan state tracking
         mw._last_scan_states[item.path] = item.scan_complete
-        log(f"Initialized _last_scan_states[{item.path}] = {item.scan_complete}", level="debug", category="queue")
 
         # Populate the new row
         mw._populate_table_row(row, item)
@@ -66,12 +64,10 @@ class GalleryTableController(QObject):
         # Invalidate TabManager's cache for this tab so it reloads from database
         if hasattr(mw.gallery_table, 'tab_manager') and item.tab_name:
             mw.gallery_table.tab_manager.invalidate_tab_cache(item.tab_name)
-            log(f"Invalidated TabManager cache for tab {item.tab_name}", level="debug", category="queue")
 
         # CRITICAL FIX: Invalidate table update queue visibility cache so new visible rows get updates
         if hasattr(mw, '_table_update_queue') and mw._table_update_queue:
             mw._table_update_queue.invalidate_visibility_cache()
-            log(f"Invalidated table update queue visibility cache after adding row {row}", level="debug", category="queue")
 
     def _remove_gallery_from_table(self, path: str):
         """Remove a gallery from the table and update mappings"""
