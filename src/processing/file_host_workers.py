@@ -738,6 +738,8 @@ class FileHostWorker(QThread):
             mirror_succeeded = self._try_family_mirror(row, mirror_client, family)
 
         if mirror_succeeded:
+            # Emit upload_completed so GUI refreshes queue display and artifacts
+            self.upload_completed.emit(db_id, host_name, {'status': 'success', 'deduplication': True})
             self.host_gallery_settled.emit(db_id, host_name, True)
             return
 

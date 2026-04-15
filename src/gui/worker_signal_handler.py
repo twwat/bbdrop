@@ -191,6 +191,14 @@ class WorkerSignalHandler(QObject):
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
+        # Show status bar message for dedup completions (otherwise they vanish silently)
+        if result.get('deduplication'):
+            from src.core.host_registry import get_display_name
+            gallery_name = self._resolve_gallery_name(db_id)
+            display_host = get_display_name(host_name)
+            msg = f"Deduped on {display_host}: {gallery_name}" if gallery_name else f"Deduped on {display_host}"
+            mw.show_status_message(msg, 5000)
+
         # Fire notification
         mw = self._mw
         if hasattr(mw, 'notification_manager'):
@@ -209,6 +217,21 @@ class WorkerSignalHandler(QObject):
         mw = self._mw
         if hasattr(mw, 'notification_manager'):
             mw.notification_manager.notify('filehost_upload_failed', detail=error_message[:80])
+
+    def _resolve_gallery_name(self, db_id: int) -> str:
+        """Resolve gallery display name from db_id via the file host controller's cache."""
+        mw = self._mw
+        gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
+        if not gallery_path:
+            for item in mw.queue_manager.get_all_items():
+                if item.db_id and item.db_id == db_id:
+                    return item.name or os.path.basename(item.path)
+        if gallery_path:
+            item = mw.queue_manager.get_item(gallery_path)
+            if item:
+                return item.name or os.path.basename(gallery_path)
+            return os.path.basename(gallery_path)
+        return ""
 
     def _update_filehost_queue_for_host(self, host_name: str):
         """Update queue columns for a specific file host after upload state change.
