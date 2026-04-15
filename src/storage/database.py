@@ -1673,6 +1673,7 @@ class QueueStore:
         part_number: int = 0,
         blocked_by_upload_id: Optional[int] = None,
         dedup_only: int = 0,
+        source_bytes: int = 0,
     ) -> Optional[int]:
         """Add a new file host upload record for a gallery.
 
@@ -1691,9 +1692,26 @@ class QueueStore:
         Returns:
             Upload ID if created, None if failed
         """
+        # Compute source size from the path if not provided by the caller.
+        # This is the size of what will actually be uploaded (file or folder),
+        # used for the queue bytes display before the upload starts.
+        if source_bytes == 0:
+            try:
+                p = os.path.normpath(gallery_path)
+                if os.path.isfile(p):
+                    source_bytes = os.path.getsize(p)
+                elif os.path.isdir(p):
+                    source_bytes = sum(
+                        os.path.getsize(os.path.join(p, f))
+                        for f in os.listdir(p)
+                        if os.path.isfile(os.path.join(p, f))
+                    )
+            except OSError:
+                pass
+
         with _ConnectionContext(self.db_path) as conn:
             _ensure_schema(conn)
-            
+
             # Normalize path to prevent duplicate records
             gallery_path = os.path.normpath(gallery_path)
             
@@ -1734,11 +1752,11 @@ class QueueStore:
                     """
                     INSERT OR REPLACE INTO file_host_uploads
                     (gallery_fk, host_name, status, part_number,
-                     blocked_by_upload_id, dedup_only, created_ts)
-                    VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+                     blocked_by_upload_id, dedup_only, total_bytes, created_ts)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
                     """,
                     (gallery_id, host_name, status, part_number,
-                     blocked_by_upload_id, dedup_only)
+                     blocked_by_upload_id, dedup_only, source_bytes)
                 )
                 return cursor.lastrowid
             except Exception as e:
