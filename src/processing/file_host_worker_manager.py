@@ -216,6 +216,10 @@ class FileHostWorkerManager(QObject):
 
         Called at application shutdown.
         """
+        # Always cancel any in-flight md5 pollers first, even if there are no
+        # workers left — the coordinator's Timers outlive individual workers.
+        self.family_coordinator.shutdown()
+
         if not self.workers:
             return
 
