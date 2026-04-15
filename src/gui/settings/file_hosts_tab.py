@@ -199,7 +199,7 @@ class FileHostsSettingsWidget(QWidget):
         storage_bar = None
         if host_config.user_info_url and (host_config.storage_left_path or host_config.storage_regex):
             storage_bar = QProgressBar()
-            storage_bar.setMinimumWidth(280)
+            storage_bar.setMinimumWidth(180)
             storage_bar.setMaximumHeight(20)
             storage_bar.setMaximum(100)
             storage_bar.setValue(0)
