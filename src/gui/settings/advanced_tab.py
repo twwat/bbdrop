@@ -9,9 +9,24 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 
-# Schema for advanced settings
-# Each setting has: key, description, default, type, and optional constraints
+# Schema for advanced settings.
+#
+# Each setting has: key, description, default, type, and optional constraints.
+# An optional ``backend`` field routes load/save away from the default
+# ``[Advanced]`` INI section. Recognised values:
+#   - "file_hosts_section" -> stored in ``[FILE_HOSTS]`` via
+#     src.core.file_host_config.{is,set}_family_dedup_enabled
 ADVANCED_SETTINGS = [
+    {
+        "key": "file_hosts/k2s_family_dedup",
+        "description": (
+            "Share K2S family uploads via shared backend "
+            "(Keep2Share / FileBoom / TezFiles)"
+        ),
+        "default": True,
+        "type": "bool",
+        "backend": "file_hosts_section",
+    },
     {
         "key": "gui/log_font_size",
         "description": "Font size for the GUI log display",
@@ -122,23 +137,6 @@ class AdvancedSettingsWidget(QWidget):
         warning.setWordWrap(True)
         layout.addWidget(warning)
 
-        # --- File Hosts section ---
-        file_hosts_label = QLabel("File Hosts")
-        file_hosts_label.setStyleSheet("font-weight: bold; margin-top: 6px;")
-        layout.addWidget(file_hosts_label)
-
-        self.k2s_family_dedup_checkbox = QCheckBox(
-            "Share uploads across K2S family (Keep2Share / FileBoom / TezFiles)"
-        )
-        self.k2s_family_dedup_checkbox.setToolTip(
-            "When enabled, uploading to one of these hosts automatically creates entries "
-            "on the others via their shared backend — no re-upload required. "
-            "Leave on unless troubleshooting."
-        )
-        self.k2s_family_dedup_checkbox.setChecked(True)  # default: enabled
-        self.k2s_family_dedup_checkbox.toggled.connect(self._on_k2s_dedup_toggled)
-        layout.addWidget(self.k2s_family_dedup_checkbox)
-
         # Filter box
         filter_layout = QHBoxLayout()
         filter_label = QLabel("Filter:")
@@ -232,10 +230,6 @@ class AdvancedSettingsWidget(QWidget):
         self._current_values[key] = value
         self.settings_changed.emit()
 
-    def _on_k2s_dedup_toggled(self, checked: bool):
-        """Handle K2S family dedup checkbox toggle."""
-        self.settings_changed.emit()
-
     def _load_defaults(self):
         """Load default values into current_values."""
         for setting in ADVANCED_SETTINGS:
@@ -267,6 +261,13 @@ class AdvancedSettingsWidget(QWidget):
             if current != default:
                 result[key] = current
         return result
+
+    def _is_external_backend_key(self, key: str) -> bool:
+        """True if a key is stored outside the [Advanced] INI section."""
+        for setting in ADVANCED_SETTINGS:
+            if setting["key"] == key:
+                return setting.get("backend") is not None
+        return False
 
     def set_values(self, values: dict):
         """Set values from a dictionary (e.g., loaded from INI)."""
@@ -351,11 +352,10 @@ class AdvancedSettingsWidget(QWidget):
         if values:
             self.set_values(values)
 
-        # Load K2S family dedup toggle from [FILE_HOSTS] section
+        # Route external-backend keys to their dedicated config helpers
+        # (these live outside the [Advanced] INI section).
         from src.core.file_host_config import is_family_dedup_enabled
-        self.k2s_family_dedup_checkbox.blockSignals(True)
-        self.k2s_family_dedup_checkbox.setChecked(is_family_dedup_enabled())
-        self.k2s_family_dedup_checkbox.blockSignals(False)
+        self.set_values({"file_hosts/k2s_family_dedup": is_family_dedup_enabled()})
 
     def save_to_config(self, parent_window=None):
         """Save advanced settings to INI file (only non-default values).
@@ -383,12 +383,15 @@ class AdvancedSettingsWidget(QWidget):
         all_values = self.get_values()
         non_defaults = self.get_non_default_values()
 
-        # Save non-defaults to INI (excluding bandwidth settings which use QSettings)
-        non_bandwidth_settings = {k: v for k, v in non_defaults.items()
-                                  if not k.startswith('bandwidth/')}
-        if non_bandwidth_settings:
+        # Save non-defaults to INI [Advanced] (bandwidth/* go to QSettings,
+        # external-backend keys go to their own config sections).
+        ini_settings = {
+            k: v for k, v in non_defaults.items()
+            if not k.startswith('bandwidth/') and not self._is_external_backend_key(k)
+        }
+        if ini_settings:
             config.add_section('Advanced')
-            for key, value in non_bandwidth_settings.items():
+            for key, value in ini_settings.items():
                 config.set('Advanced', key, str(value))
 
         with open(config_file, 'w', encoding='utf-8') as f:
@@ -410,8 +413,10 @@ class AdvancedSettingsWidget(QWidget):
             if hasattr(handler, 'bandwidth_manager'):
                 handler.bandwidth_manager.update_smoothing(alpha_up, alpha_down, window_size)
 
-        # Save K2S family dedup toggle to [FILE_HOSTS] section
+        # Route external-backend keys to their dedicated config helpers.
         from src.core.file_host_config import set_family_dedup_enabled
-        set_family_dedup_enabled(self.k2s_family_dedup_checkbox.isChecked())
+        set_family_dedup_enabled(
+            bool(all_values.get("file_hosts/k2s_family_dedup", True))
+        )
 
         return True
