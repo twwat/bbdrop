@@ -4,6 +4,40 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.7] - 2026-04-15 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.6...v0.9.7))
+
+### Added
+- **K2S family dedup**: Keep2Share, FileBoom, and TezFiles share the same storage backend, so uploading the same file to multiple of these hosts now deduplicates server-side instead of re-uploading
+  - `HostFamilyCoordinator` mirrors a successful upload to its sibling hosts via the shared backend's hash API
+  - Server MD5 fetched on the primary upload to enable sibling matching
+  - Retry with exponential backoff if the dedup hash isn't yet visible to siblings
+  - Bytes saved tracked in a `bytes_saved` metric and rolled into file host stats
+  - Toggle in **Settings → Advanced → K2S family dedup**
+  - Status bar notification on dedup completion
+  - File host upload rows render a "blocked" state with a tooltip explaining which sibling the gallery is waiting on
+- **Video sheet hover preview**: Hover the film-reel icon in the queue table's Type column to see a scaled tooltip preview of the screenshot sheet; click to open the full preview dialog
+  - **Hover preview width** setting in **Settings → Video → Sheet** controls the tooltip image size (200–1920 px, default 640 px)
+- **Byte-weighted per-row progress bars**: Each queue row's progress bar now reflects total upload work (image host + file host bytes) instead of image-count progress, so a multi-GB file host upload no longer snaps the row to 100% the moment the image host finishes
+  - Cancelled and blocked file host rows are excluded from the work calculation, so abandoned uploads don't strand a gallery at "uploading" forever
+- **Browse Files context menu and button**: Open the File Manager directly from a file host's right-click context menu and from the file host config dialog
+- **File host upload stats**: Uploaded, skipped, and total bytes per host (with dedup savings reflected in skipped)
+
+### Changed
+- **Byte-weighted overall progress bar**: The main queue progress bar uses byte-weighted math across all queued galleries, with delayed completion notification so the bar settles before "queue finished" fires
+- **Video gallery size accounting**: Queue size column shows the screenshot sheet size (the file actually uploaded to image hosts) while the underlying video file size drives file host transfer accounting
+- **Screenshot sheet reuse**: Video uploads now reuse the screenshot sheet generated at scan time instead of regenerating it
+- **Tooltip cache hardening**: Hover preview cache files embed the source mtime in the filename so a regenerated screenshot sheet always produces a fresh preview
+- Reduced log verbosity across the upload pipeline
+
+### Fixed
+- **Non-ASCII upload filenames**: pycurl `FORM_FILE` paths are now encoded as bytes, so uploads of files with accented or non-Latin characters no longer fail
+- **Single-file video manual upload**: Manual "Upload to file host" now works for single-file video galleries
+- **Video BBCode and artifacts**: BBCode and artifact generation for video galleries no longer require a gallery ID
+- **Failed file host workers**: Failed workers now show a retry action so you can recover without restarting the host
+- **File host queue display**: Manually adding or removing items from a file host queue now refreshes the display immediately
+- **Blocked status cleanup**: Blocked file host uploads can now be cancelled or disabled cleanly (previously only `pending` rows were handled)
+- **File host byte persistence**: Source byte counts persist correctly on insert, fixing stale numbers in the upload stats
+
 ## [0.9.6] - 2026-04-12 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.5...v0.9.6))
 
 ### Added
