@@ -258,6 +258,23 @@ class VideoSettingsTab(QWidget):
         row2.addWidget(self.border_spacing)
         sheet_layout.addLayout(row2)
 
+        # Hover preview width row (for the in-table tooltip preview)
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel("Hover preview width:"))
+        self.sheet_hover_preview_width = QSpinBox()
+        self.sheet_hover_preview_width.setRange(200, 1920)
+        self.sheet_hover_preview_width.setValue(640)
+        self.sheet_hover_preview_width.setSuffix(" px")
+        self.sheet_hover_preview_width.setSingleStep(20)
+        self.sheet_hover_preview_width.setToolTip(
+            "Width of the screenshot sheet preview shown when hovering "
+            "the film-reel icon in the Type column."
+        )
+        self.sheet_hover_preview_width.valueChanged.connect(self.dirty.emit)
+        row3.addWidget(self.sheet_hover_preview_width)
+        row3.addStretch()
+        sheet_layout.addLayout(row3)
+
         layout.addWidget(sheet_group)
 
         # -- Timestamps --
@@ -642,6 +659,7 @@ class VideoSettingsTab(QWidget):
         """Load current values from QSettings."""
         widgets = [
             self.grid_rows, self.grid_cols, self.thumb_width, self.border_spacing,
+            self.sheet_hover_preview_width,
             self.output_format, self.jpg_quality, self.show_timestamps, self.show_ms,
             self.show_frame_number, self.ts_font_size, self.font_family,
             self.header_font_size, self.font_color, self.bg_color,
@@ -663,6 +681,9 @@ class VideoSettingsTab(QWidget):
             self.grid_cols.setValue(settings.value("grid_cols", 4, int))
             self.thumb_width.setValue(settings.value("thumb_width", 320, int))
             self.border_spacing.setValue(settings.value("border_spacing", 4, int))
+            self.sheet_hover_preview_width.setValue(
+                settings.value("sheet_preview_width_px", 640, int)
+            )
             self.show_timestamps.setChecked(settings.value("show_timestamps", True, bool))
             self.show_ms.setChecked(settings.value("show_ms", False, bool))
             self.show_frame_number.setChecked(settings.value("show_frame_number", False, bool))
@@ -704,6 +725,7 @@ class VideoSettingsTab(QWidget):
         settings.setValue("grid_cols", self.grid_cols.value())
         settings.setValue("thumb_width", self.thumb_width.value())
         settings.setValue("border_spacing", self.border_spacing.value())
+        settings.setValue("sheet_preview_width_px", self.sheet_hover_preview_width.value())
         settings.setValue("show_timestamps", self.show_timestamps.isChecked())
         settings.setValue("show_ms", self.show_ms.isChecked())
         settings.setValue("show_frame_number", self.show_frame_number.isChecked())
