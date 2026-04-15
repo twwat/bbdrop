@@ -439,96 +439,6 @@ class FileHostClient:
                 md5_hash.update(chunk)
         return md5_hash.hexdigest()
 
-    def _fetch_server_md5(self, file_id: str) -> Optional[str]:
-        """Fetch the server-stored MD5 for a K2S-family file via getFilesInfo.
-
-        K2S-family hosts (Keep2Share/FileBoom/TezFiles) modify uploaded files
-        server-side (MP4 metadata atoms etc.), so the local pre-upload MD5 will
-        not match what the backend indexes in its createFileByHash hash table.
-        After a successful upload, query getFilesInfo for the authoritative
-        server-side MD5 — that's the one siblings can dedup against.
-        """
-        if not self.config.upload_init_url or not self.config.dedupe_endpoint:
-            return None
-        api_base = self.config.upload_init_url.rsplit('/', 1)[0]
-        info_url = f"{api_base}/getFilesInfo"
-
-        body = json.dumps({
-            "access_token": self.auth_token or "",
-            "ids": [file_id],
-            "extended_info": True,
-        })
-
-        curl = pycurl.Curl()
-        buf = BytesIO()
-        try:
-            self._configure_ssl(curl)
-            self._configure_proxy(curl)
-            curl.setopt(pycurl.URL, info_url)
-            curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
-            curl.setopt(pycurl.POST, 1)
-            curl.setopt(pycurl.POSTFIELDS, body)
-            curl.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
-            curl.setopt(pycurl.WRITEDATA, buf)
-            curl.setopt(pycurl.TIMEOUT, 15)
-            curl.perform()
-            data = json.loads(buf.getvalue().decode('utf-8', errors='replace'))
-        except (pycurl.error, json.JSONDecodeError) as e:
-            if self._log_callback:
-                self._log_callback(f"getFilesInfo failed for {file_id}: {e}", "warning")
-            return None
-        finally:
-            curl.close()
-
-        if self._log_callback:
-            self._log_callback(f"getFilesInfo response for {file_id}: {json.dumps(data)[:500]}", "debug")
-
-        files = data.get("files") or []
-        if not files:
-            if self._log_callback:
-                self._log_callback(f"getFilesInfo: no files returned for {file_id}", "warning")
-            return None
-        md5 = files[0].get("md5") or ""
-        if not md5:
-            # K2S computes md5 asynchronously after upload. Do one quick retry
-            # — if not ready, return None. Sibling workers will re-fetch with
-            # their own exponential backoff via _try_family_mirror.
-            if self._log_callback:
-                self._log_callback(
-                    f"getFilesInfo: md5 not yet available for {file_id}, "
-                    f"quick retry in 5s", "info")
-            time.sleep(5)
-            buf_r = BytesIO()
-            curl_r = pycurl.Curl()
-            try:
-                self._configure_ssl(curl_r)
-                self._configure_proxy(curl_r)
-                curl_r.setopt(pycurl.URL, info_url)
-                curl_r.setopt(pycurl.USERAGENT, self._USER_AGENT)
-                curl_r.setopt(pycurl.POST, 1)
-                curl_r.setopt(pycurl.POSTFIELDS, body)
-                curl_r.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
-                curl_r.setopt(pycurl.WRITEDATA, buf_r)
-                curl_r.setopt(pycurl.TIMEOUT, 15)
-                curl_r.perform()
-                data_r = json.loads(buf_r.getvalue().decode('utf-8', errors='replace'))
-                files_r = data_r.get("files") or []
-                if files_r:
-                    md5 = files_r[0].get("md5") or ""
-                    if md5 and self._log_callback:
-                        self._log_callback(
-                            f"getFilesInfo quick retry got md5: {md5}", "info")
-            except (pycurl.error, json.JSONDecodeError) as e:
-                if self._log_callback:
-                    self._log_callback(f"getFilesInfo quick retry failed: {e}", "warning")
-            finally:
-                curl_r.close()
-            if not md5 and self._log_callback:
-                self._log_callback(
-                    f"getFilesInfo: md5 not available for {file_id} — "
-                    f"siblings will re-fetch with backoff", "info")
-        return md5 or None
-
     @staticmethod
     def fetch_md5_for_host(host_id: str, file_id: str, log_callback=None) -> Optional[str]:
         """Fetch server MD5 for a file on a specific K2S-family host.
@@ -1241,9 +1151,9 @@ class FileHostClient:
         # Step 1: Ensure we have a file hash for hosts that embed it in the init
         # request (e.g. RapidGator). K2S-family hosts rewrite the file server-side,
         # so any local hash we compute here is never what the backend indexes —
-        # for those, the caller passes a sibling's server-side md5 (fetched via
-        # _fetch_server_md5 after a sibling primary upload), and we use it to
-        # probe createFileByHash before doing any real upload work.
+        # for those, the caller passes a sibling's server-side md5 (populated by
+        # HostFamilyCoordinator's post-upload poller), and we use it to probe
+        # createFileByHash before doing any real upload work.
         file_hash = md5_hash
         if not file_hash and self.config.require_file_hash:
             file_hash = self._calculate_file_hash(file_path)
@@ -1544,37 +1454,16 @@ class FileHostClient:
         # Extract file_id from upload response using configured path
         file_id = self._extract_from_json(upload_data, self.config.file_id_path) or upload_id
 
-        # K2S-family hosts modify uploaded files server-side (MP4 metadata atoms),
-        # so the local pre-upload MD5 won't match what the backend dedup table
-        # indexes. Fetch the authoritative server MD5 so siblings can dedup.
-        # Note: getFilesInfo expects the CANONICAL file id (the segment right
-        # after "/file/" in the download URL). K2S URLs have the format:
-        #   https://k2s.cc/file/{id}/{filename}
-        # so we must extract the {id} segment, NOT the trailing filename.
-        canonical_id: Optional[str] = None
-        if url:
-            try:
-                parts = url.rstrip('/').split('/')
-                for i, segment in enumerate(parts):
-                    if segment == 'file' and i + 1 < len(parts):
-                        canonical_id = parts[i + 1]
-                        break
-            except Exception:
-                pass
-        lookup_id = canonical_id or file_id
-        server_md5 = self._fetch_server_md5(lookup_id) if lookup_id else None
-        if self._log_callback:
-            self._log_callback(
-                f"Server MD5 lookup: canonical_id={canonical_id} user_file_id={file_id} → md5={server_md5}",
-                "info",
-            )
-
+        # K2S-family hosts rewrite uploaded files server-side (MP4 metadata atoms),
+        # so the md5 their `createFileByHash` endpoint indexes is only available
+        # after backend propagation — typically ~12s. The worker does NOT poll for
+        # it here; HostFamilyCoordinator spawns a background poller when the row
+        # settles and writes the md5 to the DB before unblocking siblings.
         return {
             "status": "success",
             "url": url,
             "upload_id": upload_id,
             "file_id": file_id,
-            "server_md5": server_md5,
             "raw_response": upload_data
         }
 

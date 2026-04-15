@@ -976,10 +976,11 @@ class FileHostWorker(QThread):
 
             # For K2S-family siblings: look up the primary's server-side md5 from
             # the DB once, keyed by part_number. We pass it to upload_file so the
-            # client can probe createFileByHash before doing any real upload. The
-            # primary stores its server md5 via _fetch_server_md5 after its own
-            # upload completes, so by the time we get here (coordinator unblocked
-            # us on primary settle) it's already written.
+            # client can probe createFileByHash before doing any real upload.
+            # HostFamilyCoordinator's post-upload poller writes the primary's md5
+            # to the DB before unblocking this row, so by the time we're here the
+            # value is present (or the coordinator gave up and we'll get an empty
+            # lookup — harmless, we just upload normally).
             sibling_md5_by_part: Dict[int, str] = {}
             family = get_host_family(host_name) if is_family_dedup_enabled() else None
             if family:
@@ -1090,14 +1091,17 @@ class FileHostWorker(QThread):
                 if result.get('status') == 'success':
                     download_url = result.get('url', '')
                     file_id = result.get('upload_id') or result.get('file_id', '')
-                    # For K2S-family hosts, the client fetched the authoritative
-                    # server-side MD5 after upload. Overwrite the pre-upload local
-                    # md5 with it so sibling dedup probes hit the backend hash table.
-                    server_md5 = result.get('server_md5')
+                    # md5_hash is NOT populated here for K2S-family primaries —
+                    # the server-side md5 is written later by HostFamilyCoordinator's
+                    # background poller (see host_family_coordinator._md5_fetch_worker).
+                    # Hosts with require_file_hash=True already wrote their local md5
+                    # in the pre-upload update above, so leaving md5_hash untouched
+                    # here preserves that value.
 
                     # Update database with success for this part
                     if current_upload_id:
-                        update_kwargs = dict(
+                        self.queue_store.update_file_host_upload(
+                            current_upload_id,
                             status='completed',
                             finished_ts=int(time.time()),
                             download_url=download_url,
@@ -1105,12 +1109,6 @@ class FileHostWorker(QThread):
                             file_name=archive_path.name,
                             raw_response=str(result.get('raw_response', {}))[:10000],
                             uploaded_bytes=part_size,
-                        )
-                        if server_md5:
-                            update_kwargs['md5_hash'] = server_md5
-                        self.queue_store.update_file_host_upload(
-                            current_upload_id,
-                            **update_kwargs,
                         )
 
                     # Mark deduplication status
@@ -1253,14 +1251,25 @@ class FileHostWorker(QThread):
         partial mirror failure leaves the DB untouched and the head row remains
         `pending` for the caller to retry via full upload.
 
-        Retries with exponential backoff if the initial attempt misses, to allow
-        time for backend propagation across family hosts. Retry count and base
-        delay are configurable in Advanced settings (k2s_dedup/retry_attempts
-        and k2s_dedup/retry_base_delay_sec).
+        ### Ordering contract
+
+        HostFamilyCoordinator guarantees the primary row has a populated
+        `md5_hash` before flipping any sibling row from `blocked` to `pending`
+        (see `host_family_coordinator._md5_fetch_worker`). Under normal flow,
+        by the time this function runs, every sibling part it reads has an
+        md5. The NULL-md5 guard below exists only for the cases where that
+        contract can't be met:
+
+          - Primary's download URL was missing or unparseable, so the
+            coordinator unblocked siblings without scheduling a poll.
+          - The poller exhausted its backoff and gave up.
+          - Cross-session retrofit (enabling a sibling after a primary
+            completed in a prior session with md5 persistence broken).
+
+        In those cases we abort and let the caller fall through to full upload.
 
         Returns True only if every sibling part mirrored successfully. Returns
-        False on any miss after all retries, empty sibling set, or exception —
-        caller should fall through to the full-upload flow.
+        False on any miss, empty sibling set, NULL sibling md5, or exception.
 
         Args:
             row: The pending row currently being processed. Must contain 'id',
@@ -1283,101 +1292,40 @@ class FileHostWorker(QThread):
         if not sibling_parts:
             return False
 
+        # Every part must have an md5 before we can probe. If any is missing,
+        # the coordinator's poller gave up; fall through to full upload.
+        if any(not p["md5_hash"] for p in sibling_parts):
+            self._log(
+                f"Family mirror: sibling md5 missing for {host_name} "
+                f"gallery_fk={row['gallery_fk']}, falling through to full upload",
+                level="info",
+            )
+            return False
+
         gallery_path = row.get("gallery_path")
         head_upload_id = row["id"]
 
-        from src.core.file_host_config import get_dedup_retry_settings
-        max_retries, base_delay = get_dedup_retry_settings()
+        if self._should_stop_current or self._stop_event.is_set():
+            return False
 
+        # Probe every sibling part. Any miss aborts immediately — we only
+        # commit if the whole set lands.
         part_results: list = []  # list of (part_number, md5, file_name, result)
-
-        for attempt in range(max_retries + 1):  # attempt 0 = immediate, then retries
-            if self._should_stop_current or self._stop_event.is_set():
-                return False
-
-            if attempt > 0:
-                delay = base_delay * (2 ** (attempt - 1))
-                self._log(
-                    f"Family dedup: waiting for sibling MD5, retry in {delay}s "
-                    f"(attempt {attempt}/{max_retries})",
-                    level="info",
-                )
-                # Sleep in 1-second chunks so stop events are honoured promptly
-                # and emit countdown for the worker status display
-                for remaining in range(delay, 0, -1):
-                    if self._should_stop_current or self._stop_event.is_set():
-                        return False
-                    self.status_updated.emit(
-                        self.host_id,
-                        f"Waiting for sibling MD5... {remaining}s"
-                    )
-                    time.sleep(1)
-
-            # Phase 1: attempt every dedup call and collect results WITHOUT
-            # touching the DB. Only if every part succeeds do we commit.
-            part_results = []
-            all_succeeded = True
-            try:
-                for part in sibling_parts:
-                    part_number = part["part_number"]
-                    md5 = part["md5_hash"]
-                    file_name = part["file_name"] or ""
-                    sibling_host = part["host_name"]
-                    sibling_file_id = part.get("file_id") or ""
-
-                    # Re-fetch MD5 from the primary host's API if not yet available
-                    if not md5 and sibling_file_id:
-                        self._log(
-                            f"MD5 not yet available for {sibling_host} file {sibling_file_id}, "
-                            f"re-fetching from API",
-                            level="info",
-                        )
-                        md5 = FileHostClient.fetch_md5_for_host(
-                            sibling_host, sibling_file_id, self._log
-                        )
-                        if md5:
-                            # Store it in the DB so future attempts don't need to re-fetch
-                            self.queue_store.update_file_host_upload(
-                                part["id"], md5_hash=md5
-                            )
-                            self._log(
-                                f"Got MD5 from {sibling_host}: {md5}",
-                                level="info",
-                            )
-                        else:
-                            self._log(
-                                f"MD5 still not available from {sibling_host} for "
-                                f"file {sibling_file_id}",
-                                level="info",
-                            )
-                            all_succeeded = False
-                            break
-
-                    if not md5:
-                        all_succeeded = False
-                        break
-
-                    result = client.try_create_by_hash(md5, file_name)
-                    if not (result and result.get("status") == "success"):
-                        all_succeeded = False
-                        break
-                    part_results.append((part_number, md5, file_name, result))
-            except Exception as e:
-                self._log(
-                    f"Family mirror exception on attempt {attempt} for {host_name} "
-                    f"gallery_path={gallery_path}: {e}",
-                    level="warning",
-                )
-                all_succeeded = False
-
-            if all_succeeded:
-                break  # proceed to phase 2 commit
-        else:
-            # Exhausted all attempts
+        try:
+            for part in sibling_parts:
+                if self._should_stop_current or self._stop_event.is_set():
+                    return False
+                md5 = part["md5_hash"]
+                file_name = part["file_name"] or ""
+                result = client.try_create_by_hash(md5, file_name)
+                if not (result and result.get("status") == "success"):
+                    return False
+                part_results.append((part["part_number"], md5, file_name, result))
+        except Exception as e:
             self._log(
-                f"Family dedup exhausted {max_retries} retries for {host_name} "
-                f"gallery_path={gallery_path}, falling through to full upload",
-                level="info",
+                f"Family mirror exception for {host_name} "
+                f"gallery_path={gallery_path}: {e}",
+                level="warning",
             )
             return False
 

@@ -21,8 +21,7 @@ def patch_worker_deps():
     with patch('src.processing.file_host_workers.get_config_manager') as mock_cfg, \
          patch('src.processing.file_host_workers.get_coordinator'), \
          patch('src.processing.file_host_workers.get_archive_manager'), \
-         patch('src.processing.file_host_workers.QSettings'), \
-         patch('src.core.file_host_config.get_dedup_retry_settings', return_value=(0, 30)):
+         patch('src.processing.file_host_workers.QSettings'):
         mock_config = Mock()
         mock_config.name = "FileBoom"
         mock_cfg.return_value.get_host.return_value = mock_config
@@ -175,6 +174,23 @@ class TestTryFamilyMirror:
 
         ok = worker._try_family_mirror(row, client, family="k2s")
         # No sibling parts (only self), so mirror returns False
+        assert ok is False
+        client.try_create_by_hash.assert_not_called()
+
+    def test_mirror_aborts_when_sibling_md5_missing(self, worker, store, client):
+        """If the coordinator's poller gave up, sibling parts will have NULL
+        md5. The mirror must abort without calling try_create_by_hash so the
+        worker falls through to a full upload."""
+        path = "/tmp/mg_no_md5"
+        # Seed a completed K2S row but with NO md5 (poller never populated it)
+        uid = store.add_file_host_upload(
+            path, "keep2share", status="completed", part_number=0
+        )
+        store.update_file_host_upload(uid, file_name="g.zip")  # md5_hash stays NULL
+        store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        ok = worker._try_family_mirror(row, client, family="k2s")
         assert ok is False
         client.try_create_by_hash.assert_not_called()
 
