@@ -3669,9 +3669,12 @@ class BBDropGUI(QMainWindow):
         # Try central location first with standardized naming, fallback to legacy
         from src.storage.gallery_management import build_gallery_filenames
         item = self.queue_manager.get_item(path)
-        if item and item.gallery_id and (item.name or folder_name):
-            log(f"BBcode copy: item.name='{item.name}', folder_name='{folder_name}', gallery_id='{item.gallery_id}'", level="debug", category="fileio")
-            _, _, bbcode_filename = build_gallery_filenames(item.name or folder_name, item.gallery_id)
+        # Use same gallery_id fallback as save_gallery_artifacts
+        gallery_id = (item.gallery_id if item else '') or os.path.splitext(os.path.basename(path))[0]
+        gallery_name = (item.name if item else '') or folder_name
+        if gallery_id and gallery_name:
+            log(f"BBcode copy: gallery_name='{gallery_name}', gallery_id='{gallery_id}'", level="debug", category="fileio")
+            _, _, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
             central_bbcode = os.path.join(central_path, bbcode_filename)
             log(f"BBcode copy: central_bbcode path='{central_bbcode}' Exists={os.path.exists(central_bbcode)}", level="debug", category="fileio")
         else:
@@ -3689,7 +3692,7 @@ class BBDropGUI(QMainWindow):
             if item and item.gallery_id:
                 import glob
                 log(f"BBcode copy: exact filename not found, trying pattern-based lookup for gallery_id '{item.gallery_id}'", level="debug", category="fileio")
-                pattern = os.path.join(central_path, f"*_{item.gallery_id}_bbcode.txt")
+                pattern = os.path.join(central_path, f"*_{glob.escape(item.gallery_id)}_bbcode.txt")
                 matches = glob.glob(pattern)
                 log(f"BBcode copy, found {len(matches)} matches for '{pattern}': {matches}", level="debug", category="fileio")
                 if matches:
@@ -3702,12 +3705,13 @@ class BBDropGUI(QMainWindow):
 
         if not content:
             import glob # Try folder location (existing format)
+            base_dir = path if os.path.isdir(path) else os.path.dirname(path)
             # Prefer standardized .uploaded location, fallback to legacy
-            if item and item.gallery_id and (item.name or folder_name):
-                _, _, bbcode_filename = build_gallery_filenames(item.name or folder_name, item.gallery_id)
-                folder_bbcode_files = glob.glob(os.path.join(path, ".uploaded", bbcode_filename))
+            if gallery_id and gallery_name:
+                _, _, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
+                folder_bbcode_files = glob.glob(os.path.join(base_dir, ".uploaded", glob.escape(bbcode_filename)))
             else:
-                folder_bbcode_files = glob.glob(os.path.join(path, "gallery_*_bbcode.txt"))
+                folder_bbcode_files = glob.glob(os.path.join(base_dir, "gallery_*_bbcode.txt"))
             
             if folder_bbcode_files and os.path.exists(folder_bbcode_files[0]):
                 with open(folder_bbcode_files[0], 'r', encoding='utf-8') as f:

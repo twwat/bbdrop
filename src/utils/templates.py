@@ -500,13 +500,16 @@ def save_gallery_artifacts(
             'started_at': results.get('started_at') or None,
             'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'uploader_version': __version__,
+            'media_type': results.get('media_type', 'image'),
         },
         'settings': {
             'thumbnail_size': results.get('thumbnail_size'),
             'thumbnail_format': results.get('thumbnail_format'),
             'template_name': template_name,
             'parallel_batch_size': results.get('parallel_batch_size'),
+            'video_details_template': results.get('video_details_template', ''),
         },
+        'video_metadata': results.get('video_metadata') or {},
         'stats': {
             'total_images': results.get('total_images') or (successful_images + results.get('failed_count', 0)),
             'successful_count': successful_images,

@@ -77,12 +77,19 @@ class BBCodeViewerDialog(QDialog):
         while widget:
             if hasattr(widget, 'queue_manager'):
                 item = widget.queue_manager.get_item(self.folder_path)
-                if item and item.gallery_id:
+                if item:
                     gallery_id = item.gallery_id
                     gallery_name = item.name
                 break
             widget = widget.parent()
-        
+
+        # Use same gallery_id fallback as save_gallery_artifacts:
+        # when gallery_id is empty, derive from filename without extension
+        if not gallery_id:
+            gallery_id = os.path.splitext(self.folder_name)[0]
+        if not gallery_name:
+            gallery_name = os.path.basename(self.folder_path)
+
         # Central location files in standardized naming (fallback to legacy if not found)
         from src.storage.gallery_management import build_gallery_filenames
         if gallery_id and gallery_name:
@@ -96,10 +103,11 @@ class BBCodeViewerDialog(QDialog):
 
         # Folder location files: standardized names under .uploaded (fallback to legacy glob)
         import glob
-        uploaded_dir = os.path.join(self.folder_path, ".uploaded")
+        base_dir = self.folder_path if os.path.isdir(self.folder_path) else os.path.dirname(self.folder_path)
+        uploaded_dir = os.path.join(base_dir, ".uploaded")
         if gallery_id and gallery_name:
             _, json_filename, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
-            folder_bbcode_files = glob.glob(os.path.join(uploaded_dir, bbcode_filename))
+            folder_bbcode_files = glob.glob(os.path.join(uploaded_dir, glob.escape(bbcode_filename)))
             folder_url_files = []
         else:
             folder_bbcode_files = glob.glob(os.path.join(uploaded_dir, f"{self.folder_name}_bbcode.txt"))

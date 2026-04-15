@@ -108,14 +108,14 @@ class CompletionWorker(QThread):
             gallery_id = results.get('gallery_id', '')
             gallery_name = results.get('gallery_name', os.path.basename(path))
 
-            if not gallery_id or not gallery_name:
+            if not gallery_name:
                 return
 
-            # Only track for renaming if gallery is actually unnamed
+            # Only track for renaming if gallery is actually unnamed (skip for video items without gallery_id)
             try:
                 from src.storage.gallery_management import save_unnamed_gallery, get_unnamed_galleries, check_gallery_renamed
                 # Check if gallery is already renamed
-                is_renamed = check_gallery_renamed(gallery_id)
+                is_renamed = check_gallery_renamed(gallery_id) if gallery_id else True
                 if not is_renamed:
                     # Check if already in unnamed tracking
                     existing_unnamed = get_unnamed_galleries()  # Returns Dict[str, str]
@@ -333,11 +333,14 @@ class ArtifactHandler(QObject):
 
         gallery_id = getattr(item, 'gallery_id', None)
         if not gallery_id:
-            raise Exception("Gallery ID not found in database")
+            # Video items (and hosts that don't return gallery_id) use filename as fallback,
+            # matching the same logic in save_gallery_artifacts
+            gallery_id = os.path.splitext(os.path.basename(gallery_path))[0]
 
         json_path = find_gallery_json_by_id(gallery_id, gallery_path)
         if not json_path:
-            raise Exception(f"No JSON artifact file found for gallery ID {gallery_id}")
+            log(f"No JSON artifact file found for gallery ID {gallery_id}", level="warning", category="artifact")
+            return
 
         # Load JSON data
         with open(json_path, 'r', encoding='utf-8') as f:
@@ -368,7 +371,11 @@ class ArtifactHandler(QObject):
             'max_width': stats.get('max_width', 0),
             'max_height': stats.get('max_height', 0),
             'min_width': stats.get('min_width', 0),
-            'min_height': stats.get('min_height', 0)
+            'min_height': stats.get('min_height', 0),
+            # Preserve video fields so Video template renders correctly on regeneration
+            'media_type': json_data['meta'].get('media_type', 'image'),
+            'video_metadata': json_data.get('video_metadata') or {},
+            'video_details_template': json_data.get('settings', {}).get('video_details_template', ''),
         }
 
         # Prepare custom fields dict from the item
@@ -420,5 +427,13 @@ class ArtifactHandler(QObject):
             db_id: Database ID of the gallery
         """
         path = self._db_id_to_path.get(db_id)
+        if not path:
+            # Fallback: resolve path from QueueManager (the shared dict is
+            # never populated elsewhere, so we must look it up on demand)
+            for item in self._queue_manager.get_all_items():
+                if item.db_id == db_id:
+                    path = item.path
+                    self._db_id_to_path[db_id] = path
+                    break
         if path and self.should_auto_regenerate_bbcode(path):
             self.regenerate_bbcode_for_gallery(path, force=False)

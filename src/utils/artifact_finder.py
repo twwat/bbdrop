@@ -25,7 +25,8 @@ def find_gallery_json_by_id(gallery_id: str, gallery_path: Optional[str] = None)
 
     # Check .uploaded subfolder first if gallery_path provided
     if gallery_path:
-        uploaded_dir = os.path.join(gallery_path, ".uploaded")
+        base_dir = gallery_path if os.path.isdir(gallery_path) else os.path.dirname(gallery_path)
+        uploaded_dir = os.path.join(base_dir, ".uploaded")
         if os.path.exists(uploaded_dir):
             search_locations.append(uploaded_dir)
 
@@ -43,8 +44,11 @@ def find_gallery_json_by_id(gallery_id: str, gallery_path: Optional[str] = None)
             search_locations.append(fallback_central)
 
     # Search for files matching the pattern
+    # Escape gallery_id for glob — names with brackets like [1080p.HEVC]
+    # would otherwise be interpreted as character classes
+    escaped_id = glob.escape(gallery_id)
     for location in search_locations:
-        pattern = os.path.join(location, f"*_{gallery_id}.json")
+        pattern = os.path.join(location, f"*_{escaped_id}.json")
         matches = glob.glob(pattern)
         if matches:
             # Return the first match (most recent if multiple exist)
