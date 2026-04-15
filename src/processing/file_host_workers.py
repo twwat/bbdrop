@@ -973,6 +973,42 @@ class FileHostWorker(QThread):
                 """Check if upload should be cancelled."""
                 return self._should_stop_current or self._stop_event.is_set()
 
+            # For K2S-family siblings: look up the primary's server-side md5 from
+            # the DB once, keyed by part_number. We pass it to upload_file so the
+            # client can probe createFileByHash before doing any real upload. The
+            # primary stores its server md5 via _fetch_server_md5 after its own
+            # upload completes, so by the time we get here (coordinator unblocked
+            # us on primary settle) it's already written.
+            sibling_md5_by_part: Dict[int, str] = {}
+            family = get_host_family(host_name) if is_family_dedup_enabled() else None
+            if family:
+                try:
+                    all_parts = self.queue_store.get_family_completed_parts(db_id, family)
+                    for p in all_parts:
+                        if p["host_name"] == host_name:
+                            continue
+                        pn = p["part_number"]
+                        md5 = p["md5_hash"]
+                        if md5 and pn not in sibling_md5_by_part:
+                            sibling_md5_by_part[pn] = md5
+                    if sibling_md5_by_part:
+                        self._log(
+                            f"Family sibling md5s available for {host_name}: "
+                            f"{len(sibling_md5_by_part)} part(s)",
+                            level="info",
+                        )
+                    else:
+                        self._log(
+                            f"No sibling md5s in DB for {host_name} gallery_fk={db_id} "
+                            f"family={family} — will upload normally",
+                            level="debug",
+                        )
+                except Exception as e:
+                    self._log(
+                        f"Failed to look up sibling md5s for {host_name}: {e}",
+                        level="warning",
+                    )
+
             # Upload each archive part
             for part_idx, archive_path in enumerate(archive_paths):
                 if should_stop():
@@ -1013,15 +1049,27 @@ class FileHostWorker(QThread):
                         f"({part_size / (1024*1024):.1f} MB): {archive_path.name}",
                         level="info")
 
-                # Compute MD5 hash and persist before upload
-                md5_hash = self._compute_md5(archive_path)
+                # Persist file size before upload. MD5 handling:
+                #   - Hosts that embed the md5 in their init request (e.g.
+                #     RapidGator, require_file_hash=True) compute it locally.
+                #   - K2S-family siblings pass the primary's server-side md5
+                #     (fetched from the DB above) — the client uses it to probe
+                #     createFileByHash before uploading.
                 file_size = archive_path.stat().st_size
-                self.queue_store.update_file_host_upload(
-                    current_upload_id,
-                    md5_hash=md5_hash,
-                    file_size=file_size
-                )
-                self._log(f"MD5: {md5_hash} ({file_size / (1024*1024):.1f} MB)", level="debug")
+                md5_hash: Optional[str] = None
+                if host_config.require_file_hash:
+                    md5_hash = self._compute_md5(archive_path)
+                    self.queue_store.update_file_host_upload(
+                        current_upload_id,
+                        md5_hash=md5_hash,
+                        file_size=file_size,
+                    )
+                else:
+                    md5_hash = sibling_md5_by_part.get(part_idx)
+                    self.queue_store.update_file_host_upload(
+                        current_upload_id,
+                        file_size=file_size,
+                    )
 
                 # Reset upload timing just before actual transfer
                 upload_start_time = time.time()
@@ -1041,18 +1089,27 @@ class FileHostWorker(QThread):
                 if result.get('status') == 'success':
                     download_url = result.get('url', '')
                     file_id = result.get('upload_id') or result.get('file_id', '')
+                    # For K2S-family hosts, the client fetched the authoritative
+                    # server-side MD5 after upload. Overwrite the pre-upload local
+                    # md5 with it so sibling dedup probes hit the backend hash table.
+                    server_md5 = result.get('server_md5')
 
                     # Update database with success for this part
                     if current_upload_id:
-                        self.queue_store.update_file_host_upload(
-                            current_upload_id,
+                        update_kwargs = dict(
                             status='completed',
                             finished_ts=int(time.time()),
                             download_url=download_url,
                             file_id=file_id,
                             file_name=archive_path.name,
                             raw_response=str(result.get('raw_response', {}))[:10000],
-                            uploaded_bytes=part_size
+                            uploaded_bytes=part_size,
+                        )
+                        if server_md5:
+                            update_kwargs['md5_hash'] = server_md5
+                        self.queue_store.update_file_host_upload(
+                            current_upload_id,
+                            **update_kwargs,
                         )
 
                     # Mark deduplication status
@@ -1240,14 +1297,19 @@ class FileHostWorker(QThread):
             if attempt > 0:
                 delay = base_delay * (2 ** (attempt - 1))
                 self._log(
-                    f"Family dedup miss for {host_name}, retrying in {delay}s "
+                    f"Family dedup: waiting for sibling MD5, retry in {delay}s "
                     f"(attempt {attempt}/{max_retries})",
                     level="info",
                 )
                 # Sleep in 1-second chunks so stop events are honoured promptly
-                for _ in range(delay):
+                # and emit countdown for the worker status display
+                for remaining in range(delay, 0, -1):
                     if self._should_stop_current or self._stop_event.is_set():
                         return False
+                    self.status_updated.emit(
+                        self.host_id,
+                        f"Waiting for sibling MD5... {remaining}s"
+                    )
                     time.sleep(1)
 
             # Phase 1: attempt every dedup call and collect results WITHOUT
@@ -1259,6 +1321,41 @@ class FileHostWorker(QThread):
                     part_number = part["part_number"]
                     md5 = part["md5_hash"]
                     file_name = part["file_name"] or ""
+                    sibling_host = part["host_name"]
+                    sibling_file_id = part.get("file_id") or ""
+
+                    # Re-fetch MD5 from the primary host's API if not yet available
+                    if not md5 and sibling_file_id:
+                        self._log(
+                            f"MD5 not yet available for {sibling_host} file {sibling_file_id}, "
+                            f"re-fetching from API",
+                            level="info",
+                        )
+                        md5 = FileHostClient.fetch_md5_for_host(
+                            sibling_host, sibling_file_id, self._log
+                        )
+                        if md5:
+                            # Store it in the DB so future attempts don't need to re-fetch
+                            self.queue_store.update_file_host_upload(
+                                part["id"], md5_hash=md5
+                            )
+                            self._log(
+                                f"Got MD5 from {sibling_host}: {md5}",
+                                level="info",
+                            )
+                        else:
+                            self._log(
+                                f"MD5 still not available from {sibling_host} for "
+                                f"file {sibling_file_id}",
+                                level="info",
+                            )
+                            all_succeeded = False
+                            break
+
+                    if not md5:
+                        all_succeeded = False
+                        break
+
                     result = client.try_create_by_hash(md5, file_name)
                     if not (result and result.get("status") == "success"):
                         all_succeeded = False

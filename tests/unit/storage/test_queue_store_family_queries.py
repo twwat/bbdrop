@@ -64,14 +64,30 @@ class TestGetFamilyCompletedParts:
         assert len(parts) == 1
         assert parts[0]["host_name"] == "keep2share"
 
-    def test_requires_md5_hash_populated(self, store):
+    def test_returns_row_without_md5_for_refetch(self, store):
+        """Rows without md5 are included so siblings can re-fetch from the API."""
         path = "/tmp/g4"
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
-        # Deliberately do NOT set md5_hash — legacy pre-dedupe row
+        # Deliberately do NOT set md5_hash — sibling should still see this row
 
         gallery_fk = store.get_file_host_uploads(path)[0]["gallery_fk"]
         parts = store.get_family_completed_parts(gallery_fk, "k2s")
-        assert parts == []
+        assert len(parts) == 1
+        assert parts[0]["md5_hash"] is None
+
+    def test_prefers_row_with_md5_over_without(self, store):
+        """When both rows exist for same part, prefer the one with md5."""
+        path = "/tmp/g4b"
+        a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
+        b0 = store.add_file_host_upload(path, "fileboom", status="completed", part_number=0)
+        # Only fileboom has md5
+        _set_md5_and_complete(store, b0, "fb_md5", "part0.zip")
+
+        gallery_fk = store.get_file_host_uploads(path)[0]["gallery_fk"]
+        parts = store.get_family_completed_parts(gallery_fk, "k2s")
+        assert len(parts) == 1
+        assert parts[0]["host_name"] == "fileboom"
+        assert parts[0]["md5_hash"] == "fb_md5"
 
     def test_unknown_family_returns_empty(self, store):
         path = "/tmp/g5"

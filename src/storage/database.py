@@ -2041,14 +2041,13 @@ class QueueStore:
     ) -> List[Dict[str, Any]]:
         """Return completed sibling part rows for a family, one per part_number.
 
-        For use by the K2S family dedup path: reads sibling md5s from the DB so a
-        secondary host can call try_create_by_hash without recomputing the hash
-        from an archive. Only rows with a populated md5_hash are returned — legacy
-        rows from before the hash-dedupe feature are excluded.
+        For use by the K2S family dedup path: reads sibling data from the DB so a
+        secondary host can call try_create_by_hash. Includes rows with null
+        md5_hash so the caller can re-fetch the MD5 from the primary host's API.
 
         When multiple family members have completed rows for the same part_number,
-        the highest-priority host wins (per HOST_FAMILY_PRIORITY). This is a
-        deterministic tiebreaker and matches primary selection order.
+        rows WITH md5_hash are preferred. Among those, the highest-priority host
+        wins (per HOST_FAMILY_PRIORITY).
 
         Args:
             gallery_fk: Foreign key into galleries table.
@@ -2056,7 +2055,8 @@ class QueueStore:
 
         Returns:
             List of dicts ordered by part_number. Each dict has:
-            id, gallery_fk, host_name, part_number, md5_hash, file_name.
+            id, gallery_fk, host_name, part_number, md5_hash, file_name, file_id,
+            total_bytes.
             Empty list if the family is unknown or no completed sibling exists.
         """
         members = HOST_FAMILY_PRIORITY.get(family)
@@ -2065,20 +2065,18 @@ class QueueStore:
 
         placeholders = ",".join("?" for _ in members)
         sql = f"""
-            SELECT id, gallery_fk, host_name, part_number, md5_hash, file_name
+            SELECT id, gallery_fk, host_name, part_number, md5_hash, file_name, file_id, total_bytes
             FROM file_host_uploads
             WHERE gallery_fk = ?
               AND host_name IN ({placeholders})
               AND status = 'completed'
-              AND md5_hash IS NOT NULL
-              AND md5_hash != ''
             ORDER BY part_number ASC
         """
         with _ConnectionContext(self.db_path) as conn:
             _ensure_schema(conn)
             rows = conn.execute(sql, (gallery_fk, *members)).fetchall()
 
-        # Collapse duplicates: prefer the highest-priority host for each part_number.
+        # Collapse duplicates: prefer rows WITH md5 first, then highest-priority host.
         priority_index = {host: idx for idx, host in enumerate(members)}
         by_part: Dict[int, Dict[str, Any]] = {}
         for row in rows:
@@ -2089,13 +2087,21 @@ class QueueStore:
                 "part_number": row[3],
                 "md5_hash": row[4],
                 "file_name": row[5],
+                "file_id": row[6],
+                "total_bytes": row[7] or 0,
             }
             existing = by_part.get(entry["part_number"])
             if existing is None:
                 by_part[entry["part_number"]] = entry
                 continue
-            if priority_index[entry["host_name"]] < priority_index[existing["host_name"]]:
+            # Prefer row with md5 over row without
+            existing_has_md5 = bool(existing["md5_hash"])
+            new_has_md5 = bool(entry["md5_hash"])
+            if new_has_md5 and not existing_has_md5:
                 by_part[entry["part_number"]] = entry
+            elif new_has_md5 == existing_has_md5:
+                if priority_index.get(entry["host_name"], 99) < priority_index.get(existing["host_name"], 99):
+                    by_part[entry["part_number"]] = entry
 
         return [by_part[k] for k in sorted(by_part)]
 
