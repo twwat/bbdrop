@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Video gallery size accounting**: Queue size column shows the screenshot sheet size (the file actually uploaded to image hosts) while the underlying video file size drives file host transfer accounting
 - **Screenshot sheet reuse**: Video uploads now reuse the screenshot sheet generated at scan time instead of regenerating it
 - **Tooltip cache hardening**: Hover preview cache files embed the source mtime in the filename so a regenerated screenshot sheet always produces a fresh preview
+- **Video screenshot memory use**: Frames are downscaled before buffering, cutting peak RAM during screenshot sheet generation for long source videos
+- **Release installer slimmed**: Dev-only documentation (architecture notes, signal flow diagrams, API references) is no longer bundled; the in-app Help dialog still reads user-facing docs shipped in `docs/user/`
 - Reduced log verbosity across the upload pipeline
 
 ### Fixed
@@ -37,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **File host queue display**: Manually adding or removing items from a file host queue now refreshes the display immediately
 - **Blocked status cleanup**: Blocked file host uploads can now be cancelled or disabled cleanly (previously only `pending` rows were handled)
 - **File host byte persistence**: Source byte counts persist correctly on insert, fixing stale numbers in the upload stats
+- **Help dialog broken entries**: "File Hosts" and "BBCode Templates" entries in the Help dialog no longer fail with "file not found" — they now point at the actual guides
+- **Settings dialog geometry**: The Settings window resets to a valid size if a previously saved geometry was oversized or off-screen
+- **File host storage bar width**: The storage usage bar in the File Hosts tab no longer forces its column wider than needed
+- **Advanced settings checkbox alignment**: Boolean toggles in the Advanced settings table are now centred consistently in their column
 
 ## [0.9.6] - 2026-04-12 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.5...v0.9.6))
 
