@@ -1156,6 +1156,19 @@ class FileHostWorker(QThread):
             # All parts uploaded successfully
             # CRITICAL: Emit signal FIRST before any blocking operations
             self.upload_completed.emit(db_id, host_name, result)
+
+            # Increment shared K2S family storage counter
+            from src.core.file_host_config import get_host_family
+            if get_host_family(self.host_id) == 'k2s' and file_size and file_size > 0:
+                from src.core.file_host_config import (
+                    get_k2s_family_storage, save_k2s_family_storage, get_family_members
+                )
+                used, total = get_k2s_family_storage()
+                save_k2s_family_storage(used + file_size)
+                left = total - (used + file_size)
+                for member in get_family_members('k2s'):
+                    self.storage_updated.emit(member, total, left)
+
             self._cleanup_upload_throttle_state(db_id, host_name)
             self.coordinator.record_completion(success=True)
 

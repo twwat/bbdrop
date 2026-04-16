@@ -655,3 +655,38 @@ def set_family_dedup_enabled(enabled: bool) -> None:
             raise
 
 
+def get_k2s_family_storage() -> tuple[int, int]:
+    """Return (used_bytes, total_bytes) for the shared K2S family storage.
+
+    Reads from QSettings. Total defaults to 10TB if no user override.
+    """
+    from PyQt6.QtCore import QSettings
+    settings = QSettings("BBDropUploader", "BBDropGUI")
+    used = int(settings.value("K2SFamily/storage_used", 0))
+
+    total_override = settings.value("K2SFamily/storage_total", None)
+    if total_override is not None:
+        total = int(total_override)
+    else:
+        total = 10000 * 1024 * 1024 * 1024  # 10TB default
+    return used, total
+
+
+def save_k2s_family_storage(used_bytes: int):
+    """Save the used bytes for K2S family storage to QSettings."""
+    from PyQt6.QtCore import QSettings
+    import time
+    settings = QSettings("BBDropUploader", "BBDropGUI")
+    settings.setValue("K2SFamily/storage_used", str(used_bytes))
+    settings.setValue("K2SFamily/storage_ts", str(int(time.time())))
+    settings.sync()
+
+
+def save_k2s_family_quota(total_bytes: int):
+    """Save user-configured total quota for K2S family storage."""
+    from PyQt6.QtCore import QSettings
+    settings = QSettings("BBDropUploader", "BBDropGUI")
+    settings.setValue("K2SFamily/storage_total", str(total_bytes))
+    settings.sync()
+
+

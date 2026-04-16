@@ -420,12 +420,21 @@ class FileHostConfigDialog(QDialog):
             content_layout.addWidget(creds_group)
         # Storage section
         self.storage_bar = None
-        has_storage_support = self.host_config.user_info_url and (
-            self.host_config.storage_left_path or self.host_config.storage_regex
+        from src.core.file_host_config import get_host_family
+        is_k2s_family = get_host_family(self.host_id) == 'k2s'
+
+        has_storage_support = is_k2s_family or (
+            self.host_config.user_info_url and (
+                self.host_config.storage_left_path or self.host_config.storage_regex
+            )
         )
 
         has_cached_data = False
-        if has_storage_support:
+        if is_k2s_family:
+            from src.core.file_host_config import get_k2s_family_storage
+            used, total = get_k2s_family_storage()
+            has_cached_data = total > 0
+        elif has_storage_support:
             total_str = self.settings.value(f"FileHosts/{self.host_id}/storage_total", "0")
             has_cached_data = bool(total_str) and total_str != "0"
 
@@ -1235,29 +1244,37 @@ class FileHostConfigDialog(QDialog):
         if not self.storage_bar:
             return
 
-        # Read from QSettings cache directly (same as File Hosts tab)
-        # Bug fix: Use QSettings instead of worker cache to avoid dependency on worker existence
-        total_str = self.settings.value(f"FileHosts/{self.host_id}/storage_total", "0")
-        left_str = self.settings.value(f"FileHosts/{self.host_id}/storage_left", "0")
+        from src.core.file_host_config import get_host_family
+        if get_host_family(self.host_id) == 'k2s':
+            from src.core.file_host_config import get_k2s_family_storage
+            used, total = get_k2s_family_storage()
+            if total <= 0:
+                return
+            left = total - used
+        else:
+            # Read from QSettings cache directly (same as File Hosts tab)
+            # Bug fix: Use QSettings instead of worker cache to avoid dependency on worker existence
+            total_str = self.settings.value(f"FileHosts/{self.host_id}/storage_total", "0")
+            left_str = self.settings.value(f"FileHosts/{self.host_id}/storage_left", "0")
 
-        try:
-            total = int(total_str) if total_str else 0
-            left = int(left_str) if left_str else 0
-        except (ValueError, TypeError) as e:
-            from src.utils.logger import log
-            log(f"Failed to parse cached storage for {self.host_id}: {e}", level="debug", category="file_hosts")
-            return
+            try:
+                total = int(total_str) if total_str else 0
+                left = int(left_str) if left_str else 0
+            except (ValueError, TypeError) as e:
+                from src.utils.logger import log
+                log(f"Failed to parse cached storage for {self.host_id}: {e}", level="debug", category="file_hosts")
+                return
 
-        # Only update if we have valid cached data
-        if total == 0 and left == 0:
-            from src.utils.logger import log
-            log(f"No cached storage data for {self.host_id}", level="debug", category="file_hosts")
-            return
+            # Only update if we have valid cached data
+            if total == 0 and left == 0:
+                from src.utils.logger import log
+                log(f"No cached storage data for {self.host_id}", level="debug", category="file_hosts")
+                return
 
-        if total <= 0 or left < 0 or left > total:
-            from src.utils.logger import log
-            log(f"Invalid cached storage for {self.host_id}: total={total}, left={left}", level="warning", category="file_hosts")
-            return
+            if total <= 0 or left < 0 or left > total:
+                from src.utils.logger import log
+                log(f"Invalid cached storage for {self.host_id}: total={total}, left={left}", level="warning", category="file_hosts")
+                return
 
         # Calculate percentages
         used = total - left
@@ -1488,8 +1505,15 @@ class FileHostConfigDialog(QDialog):
 
     def _on_worker_storage_updated(self, host_id: str, total, left):
         """Handle storage update from worker"""
-        if host_id != self.host_id or not self.storage_bar:
-            return  # Not for us
+        from src.core.file_host_config import get_host_family
+        is_family_match = (
+            get_host_family(self.host_id) == 'k2s' and
+            get_host_family(host_id) == 'k2s'
+        )
+        if host_id != self.host_id and not is_family_match:
+            return
+        if not self.storage_bar:
+            return
 
         # Update storage bar
         used = total - left
