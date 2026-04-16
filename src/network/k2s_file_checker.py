@@ -22,6 +22,168 @@ class K2SFileChecker:
         self.batch_size = batch_size
         self.timeout = timeout
 
+    def _api_post(self, endpoint: str, body: dict) -> dict:
+        """POST to a K2S API endpoint with access_token injected automatically.
+
+        Args:
+            endpoint: API endpoint name (e.g. 'getFoldersList', 'getFilesList').
+            body: Request body dict. 'access_token' is added automatically.
+
+        Returns:
+            Parsed JSON response dict.
+
+        Raises:
+            Exception: On HTTP errors or connection failures.
+        """
+        url = f"{self.api_base}/{endpoint}"
+        payload = dict(body)
+        payload['access_token'] = self.auth_token
+        encoded = json.dumps(payload)
+
+        curl = pycurl.Curl()
+        response_buffer = BytesIO()
+
+        try:
+            curl.setopt(pycurl.URL, url)
+            curl.setopt(pycurl.CAINFO, certifi.where())
+            curl.setopt(pycurl.SSL_VERIFYPEER, 1)
+            curl.setopt(pycurl.SSL_VERIFYHOST, 2)
+            curl.setopt(pycurl.POST, 1)
+            curl.setopt(pycurl.POSTFIELDS, encoded)
+            curl.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
+            curl.setopt(pycurl.WRITEDATA, response_buffer)
+            curl.setopt(pycurl.TIMEOUT, self.timeout)
+            curl.setopt(pycurl.FOLLOWLOCATION, True)
+
+            curl.perform()
+            status_code = curl.getinfo(pycurl.RESPONSE_CODE)
+
+            if status_code != 200:
+                raise Exception(f"API returned HTTP {status_code}")
+
+            return json.loads(response_buffer.getvalue().decode('utf-8'))
+        finally:
+            curl.close()
+
+    def get_all_files(self) -> list[dict]:
+        """Walk all folders recursively and return a flat list of all file dicts.
+
+        Uses getFoldersList to enumerate folders and getFilesList to enumerate
+        files within each folder. Starts from the root ('/') and recurses into
+        every subfolder.
+
+        Returns:
+            Flat list of file dicts as returned by getFilesList, each containing
+            at minimum: id, name, size, is_available, extended_info.
+        """
+        all_files: list[dict] = []
+        self._walk_folder('/', all_files)
+        return all_files
+
+    def _walk_folder(self, folder_id: str, all_files: list[dict]) -> None:
+        """Recursively collect files from folder_id and all its subfolders.
+
+        Args:
+            folder_id: Folder ID to walk ('/') for root.
+            all_files: Accumulator list to append file dicts into.
+        """
+        # Enumerate subfolders
+        try:
+            resp = self._api_post('getFoldersList', {'parent': folder_id})
+            subfolder_ids: list[str] = resp.get('foldersIds', [])
+        except Exception as e:
+            log(f"K2S getFoldersList failed for folder '{folder_id}': {e}", level="error", category="scanner")
+            subfolder_ids = []
+
+        # Enumerate files in this folder (skip root — root has no files directly)
+        if folder_id != '/':
+            try:
+                fresp = self._api_post('getFilesList', {'parent': folder_id})
+                files = fresp.get('files', [])
+                all_files.extend(files)
+            except Exception as e:
+                log(f"K2S getFilesList failed for folder '{folder_id}': {e}", level="error", category="scanner")
+
+        # Recurse into subfolders
+        for subfolder_id in subfolder_ids:
+            self._walk_folder(subfolder_id, all_files)
+
+    def calc_storage_used(self, files: list[dict]) -> int:
+        """Sum sizes of files where extended_info.storage_object == 'available'.
+
+        Args:
+            files: List of file dicts as returned by get_all_files().
+
+        Returns:
+            Total bytes used by available files.
+        """
+        total = 0
+        for f in files:
+            ext = f.get('extended_info', {}) or {}
+            if ext.get('storage_object') == 'available':
+                total += f.get('size', 0)
+        return total
+
+    def check_gallery_from_inventory(
+        self,
+        file_id_to_url: dict[str, str],
+        inventory: dict[str, dict],
+    ) -> dict[str, Any]:
+        """Check gallery availability from a pre-fetched inventory dict.
+
+        Avoids making any API calls — uses the inventory built by get_all_files().
+
+        Args:
+            file_id_to_url: Dict mapping file_id to its download URL.
+            inventory: Dict mapping file_id to file dict (keyed by 'id').
+                       Build from get_all_files() via {f['id']: f for f in files}.
+
+        Returns:
+            Same shape as check_gallery():
+            {status, online, offline, errors, total, offline_urls}.
+            status is one of: 'online', 'offline', 'partial', 'unknown'.
+        """
+        if not file_id_to_url:
+            return {'status': 'unknown', 'online': 0, 'offline': 0, 'errors': 0, 'total': 0, 'offline_urls': []}
+
+        online = offline = errors = 0
+        offline_urls: list[str] = []
+
+        for fid, url in file_id_to_url.items():
+            file_info = inventory.get(fid)
+            if file_info is None:
+                errors += 1
+                continue
+            ext = file_info.get('extended_info', {}) or {}
+            if ext.get('storage_object') == 'available':
+                online += 1
+            else:
+                offline += 1
+                offline_urls.append(url)
+
+        total = len(file_id_to_url)
+        if total == 0:
+            status = 'unknown'
+        elif offline == 0 and errors == 0:
+            status = 'online'
+        elif online == 0 and errors == 0:
+            status = 'offline'
+        else:
+            status = 'partial'
+
+        return {
+            'status': status,
+            'online': online,
+            'offline': offline,
+            'errors': errors,
+            'total': total,
+            'offline_urls': offline_urls,
+        }
+
+    # ---------------------------------------------------------------------------
+    # DEPRECATED — kept for rollback only. Do not use in new code.
+    # ---------------------------------------------------------------------------
+
     def _api_call(self, file_ids: List[str]) -> Dict[str, Any]:
         """Call getFilesInfo API endpoint with a batch of file IDs.
 
@@ -68,6 +230,10 @@ class K2SFileChecker:
         Splits into batches of batch_size and calls the API for each batch.
         Files that fail to check (API error, missing from response) get None.
 
+        .. deprecated::
+            Use get_all_files() + check_gallery_from_inventory() instead.
+            Kept for rollback compatibility.
+
         Args:
             file_ids: List of K2S file IDs to check.
 
@@ -95,6 +261,10 @@ class K2SFileChecker:
 
     def check_gallery(self, file_id_to_url: Dict[str, str]) -> Dict[str, Any]:
         """Check availability of all files in a gallery.
+
+        .. deprecated::
+            Use get_all_files() + check_gallery_from_inventory() instead.
+            Kept for rollback compatibility.
 
         Args:
             file_id_to_url: Dict mapping file_id to its download URL.
