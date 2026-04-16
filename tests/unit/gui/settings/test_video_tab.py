@@ -52,3 +52,29 @@ class TestSheetHoverPreviewWidth:
         tab2.load_settings(settings)
         assert tab2.sheet_hover_preview_width.value() == 800
         settings.clear()
+
+
+class TestContactSheetsLayout:
+    def test_uses_grid_layout(self, qtbot):
+        from PyQt6.QtWidgets import QGridLayout
+        from src.gui.settings.video_tab import VideoSettingsTab
+
+        tab = VideoSettingsTab()
+        qtbot.addWidget(tab)
+
+        grid_layout = tab.findChild(QGridLayout)
+        assert grid_layout is not None
+
+    def test_has_all_group_boxes(self, qtbot):
+        from PyQt6.QtWidgets import QGroupBox
+        from src.gui.settings.video_tab import VideoSettingsTab
+
+        tab = VideoSettingsTab()
+        qtbot.addWidget(tab)
+
+        groups = tab.findChildren(QGroupBox)
+        group_titles = [g.title() for g in groups]
+        for expected in ["Screenshot Sheet", "Preview", "Timestamps", "Appearance",
+                         "Image Overlay Template", "Video Details Template",
+                         "Defaults", "Mixed Folders"]:
+            assert expected in group_titles, f"Missing group: {expected}"

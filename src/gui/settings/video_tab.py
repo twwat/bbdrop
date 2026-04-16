@@ -6,7 +6,7 @@ import os
 from PIL import Image
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QSpinBox, QCheckBox, QComboBox, QColorDialog, QLineEdit,
     QFontComboBox, QPlainTextEdit, QLabel,
     QScrollArea, QPushButton, QGraphicsScene,
@@ -153,49 +153,20 @@ class VideoSettingsTab(QWidget):
     # ------------------------------------------------------------------ #
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()
-        layout = QVBoxLayout(panel)
+        layout = QGridLayout(panel)
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
 
-        # Tab description
+        # Tab description (spans both columns)
         desc = QLabel(
             "Configure how contact sheets are generated from video files — "
             "grid layout, timestamps, appearance, and overlay text."
         )
         desc.setWordWrap(True)
         desc.setProperty("class", "tab-description")
-        layout.addWidget(desc)
+        layout.addWidget(desc, 0, 0, 1, 2)
 
-        # Inline preview
-        preview_group = QGroupBox("Preview")
-        preview_lay = QHBoxLayout(preview_group)
-        preview_lay.setContentsMargins(8, 8, 8, 8)
-
-        self._preview_label = QLabel()
-        self._preview_label.setFixedSize(240, 160)
-        self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_label.setStyleSheet(
-            "QLabel { background: palette(base); "
-            "border: 1px solid palette(mid); border-radius: 3px; }"
-        )
-        self._preview_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._preview_label.setToolTip("Click to open full-size preview")
-        self._preview_label.mousePressEvent = lambda _: self._pop_out_preview()
-        preview_lay.addWidget(self._preview_label)
-
-        preview_right = QVBoxLayout()
-        preview_right.setSpacing(4)
-        self._size_label = QLabel("")
-        preview_right.addWidget(self._size_label)
-        pop_out_btn = QPushButton("Pop Out \u2197")
-        pop_out_btn.setFixedWidth(90)
-        pop_out_btn.clicked.connect(self._pop_out_preview)
-        preview_right.addWidget(pop_out_btn)
-        preview_right.addStretch()
-        preview_lay.addLayout(preview_right)
-        preview_lay.addStretch()
-
-        layout.addWidget(preview_group)
-
-        # -- Screenshot Sheet --
+        # ===== Row 1, Left: Screenshot Sheet =====
         sheet_group = QGroupBox("Screenshot Sheet")
         sheet_layout = QVBoxLayout(sheet_group)
 
@@ -213,7 +184,7 @@ class VideoSettingsTab(QWidget):
         self.grid_rows.setValue(5)
         self.grid_rows.valueChanged.connect(self.dirty.emit)
         row1.addWidget(self.grid_rows)
-        row1.addWidget(QLabel("\u00d7"))  # multiplication sign
+        row1.addWidget(QLabel("\u00d7"))
         self.grid_cols = QSpinBox()
         self.grid_cols.setRange(1, 10)
         self.grid_cols.setValue(4)
@@ -258,7 +229,6 @@ class VideoSettingsTab(QWidget):
         row2.addWidget(self.border_spacing)
         sheet_layout.addLayout(row2)
 
-        # Hover preview width row (for the in-table tooltip preview)
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("Hover preview width:"))
         self.sheet_hover_preview_width = QSpinBox()
@@ -275,9 +245,38 @@ class VideoSettingsTab(QWidget):
         row3.addStretch()
         sheet_layout.addLayout(row3)
 
-        layout.addWidget(sheet_group)
+        layout.addWidget(sheet_group, 1, 0)
 
-        # -- Timestamps --
+        # ===== Row 1, Right: Preview =====
+        preview_group = QGroupBox("Preview")
+        preview_lay = QVBoxLayout(preview_group)
+        preview_lay.setContentsMargins(8, 8, 8, 8)
+
+        self._preview_label = QLabel()
+        self._preview_label.setFixedSize(240, 160)
+        self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview_label.setStyleSheet(
+            "QLabel { background: palette(base); "
+            "border: 1px solid palette(mid); border-radius: 3px; }"
+        )
+        self._preview_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._preview_label.setToolTip("Click to open full-size preview")
+        self._preview_label.mousePressEvent = lambda _: self._pop_out_preview()
+        preview_lay.addWidget(self._preview_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        preview_bottom = QHBoxLayout()
+        self._size_label = QLabel("")
+        preview_bottom.addWidget(self._size_label)
+        preview_bottom.addStretch()
+        pop_out_btn = QPushButton("Pop Out \u2197")
+        pop_out_btn.setFixedWidth(90)
+        pop_out_btn.clicked.connect(self._pop_out_preview)
+        preview_bottom.addWidget(pop_out_btn)
+        preview_lay.addLayout(preview_bottom)
+
+        layout.addWidget(preview_group, 1, 1)
+
+        # ===== Row 2, Left: Timestamps =====
         ts_group = QGroupBox("Timestamps")
         ts_layout = QVBoxLayout(ts_group)
 
@@ -311,9 +310,9 @@ class VideoSettingsTab(QWidget):
         ts_row2.addStretch()
         ts_layout.addLayout(ts_row2)
 
-        layout.addWidget(ts_group)
+        layout.addWidget(ts_group, 2, 0)
 
-        # -- Appearance --
+        # ===== Row 2, Right: Appearance =====
         appearance_group = QGroupBox("Appearance")
         appearance_layout = QVBoxLayout(appearance_group)
 
@@ -351,35 +350,19 @@ class VideoSettingsTab(QWidget):
         app_row2.addStretch()
         appearance_layout.addLayout(app_row2)
 
-        layout.addWidget(appearance_group)
+        layout.addWidget(appearance_group, 2, 1)
 
-        # -- Image Overlay Template --
+        # ===== Row 3, Left: Image Overlay Template =====
         overlay_group = QGroupBox("Image Overlay Template")
         overlay_layout = QVBoxLayout(overlay_group)
         overlay_title = QHBoxLayout()
-        overlay_hint = QLabel(
-            "Text rendered onto the sheet above the grid."
-        )
+        overlay_hint = QLabel("Text rendered onto the sheet above the grid.")
         overlay_title.addWidget(overlay_hint)
         overlay_title.addWidget(InfoButton(
             "<b>Image Overlay Template</b><br>"
             "This text is rendered directly onto the screenshot sheet image, above the thumbnail grid. "
             "It becomes part of the uploaded image.<br><br>"
-            "<b>Available placeholders:</b><br>"
-            "<code>#filename#</code> — video filename<br>"
-            "<code>#folderName#</code> — gallery/folder name<br>"
-            "<code>#duration#</code> — playback duration (H:MM:SS)<br>"
-            "<code>#resolution#</code> — video dimensions (WxH)<br>"
-            "<code>#width#</code> / <code>#height#</code> — individual dimensions<br>"
-            "<code>#fps#</code> — frame rate<br>"
-            "<code>#bitrate#</code> — video bitrate (bps)<br>"
-            "<code>#videoCodec#</code> — video codec (e.g. HEVC, H264)<br>"
-            "<code>#audioCodec#</code> — primary audio codec<br>"
-            "<code>#audioTracks#</code> — all audio tracks summary<br>"
-            "<code>#audioTrack1#</code>, <code>#audioTrack2#</code>, … — individual tracks<br>"
-            "<code>#filesize#</code> — formatted file size<br>"
-            "<code>#folderSize#</code> — total folder size<br>"
-            "<code>#pictureCount#</code> — number of frames in sheet"
+            "Click the field to open the full editor with all available placeholders."
         ))
         overlay_layout.addLayout(overlay_title)
         self.image_overlay_template = QPlainTextEdit()
@@ -387,23 +370,23 @@ class VideoSettingsTab(QWidget):
         self.image_overlay_template.setPlaceholderText(
             "e.g. #filename# | #resolution# | #duration# | #videoCodec# / #audioCodec#"
         )
+        self.image_overlay_template.setToolTip("Click to open the full editor.")
         self.image_overlay_template.textChanged.connect(self.dirty.emit)
+        self.image_overlay_template.installEventFilter(self)
         overlay_layout.addWidget(self.image_overlay_template)
-        layout.addWidget(overlay_group)
+        layout.addWidget(overlay_group, 3, 0)
 
-        # -- Video Details Template --
+        # ===== Row 3, Right: Video Details Template =====
         details_group = QGroupBox("Video Details Template")
         details_layout = QVBoxLayout(details_group)
         details_title = QHBoxLayout()
-        details_hint = QLabel(
-            "BBCode text available as #videoDetails# in your main template."
-        )
+        details_hint = QLabel("BBCode text available as #videoDetails# in your main template.")
         details_title.addWidget(details_hint)
         details_title.addWidget(InfoButton(
             "<b>Video Details Template</b><br>"
             "This generates BBCode text (not rendered onto the image). "
             "Use <code>#videoDetails#</code> in your main BBCode template to insert it.<br><br>"
-            "Same placeholders as the image overlay template."
+            "Click the field to open the full editor with all available placeholders."
         ))
         details_layout.addLayout(details_title)
         self.video_details_template = QPlainTextEdit()
@@ -411,11 +394,13 @@ class VideoSettingsTab(QWidget):
         self.video_details_template.setPlaceholderText(
             "e.g. [b]#filename#[/b]\\n#resolution# | #duration# | #filesize#"
         )
+        self.video_details_template.setToolTip("Click to open the full editor.")
         self.video_details_template.textChanged.connect(self.dirty.emit)
+        self.video_details_template.installEventFilter(self)
         details_layout.addWidget(self.video_details_template)
-        layout.addWidget(details_group)
+        layout.addWidget(details_group, 3, 1)
 
-        # -- Defaults --
+        # ===== Row 4, Left: Defaults =====
         defaults_group = QGroupBox("Defaults")
         defaults_layout = QHBoxLayout(defaults_group)
         defaults_layout.addWidget(QLabel("Template:"))
@@ -432,10 +417,10 @@ class VideoSettingsTab(QWidget):
         self.image_host_override = QComboBox()
         self.image_host_override.currentIndexChanged.connect(self.dirty.emit)
         defaults_layout.addWidget(self.image_host_override, 1)
-        layout.addWidget(defaults_group)
+        layout.addWidget(defaults_group, 4, 0)
         self._populate_combos()
 
-        # -- Mixed Folders --
+        # ===== Row 4, Right: Mixed Folders =====
         mixed_group = QGroupBox("Mixed Folders")
         mixed_layout = QHBoxLayout(mixed_group)
         self.remember_mixed = QCheckBox("Remember mixed folder choice")
@@ -455,9 +440,7 @@ class VideoSettingsTab(QWidget):
         self.mixed_choice.currentIndexChanged.connect(self.dirty.emit)
         self.remember_mixed.toggled.connect(self.mixed_choice.setEnabled)
         mixed_layout.addWidget(self.mixed_choice)
-        layout.addWidget(mixed_group)
-
-        layout.addStretch()
+        layout.addWidget(mixed_group, 4, 1)
 
         # Connect dirty to schedule preview
         self.dirty.connect(self._schedule_preview_update)
@@ -497,6 +480,36 @@ class VideoSettingsTab(QWidget):
         is_jpg = fmt == "JPG"
         self._jpg_quality_label.setEnabled(is_jpg)
         self.jpg_quality.setEnabled(is_jpg)
+
+    def eventFilter(self, obj, event):
+        """Open template editor when overlay or details field gains focus."""
+        if event.type() == event.Type.FocusIn:
+            if obj is self.image_overlay_template:
+                QTimer.singleShot(0, lambda: self._open_template_editor(
+                    "Image Overlay Template", self.image_overlay_template
+                ))
+                return True
+            elif obj is self.video_details_template:
+                QTimer.singleShot(0, lambda: self._open_template_editor(
+                    "Video Details Template", self.video_details_template
+                ))
+                return True
+        return super().eventFilter(obj, event)
+
+    def _open_template_editor(self, title: str, field: QPlainTextEdit):
+        """Open the placeholder editor dialog for a template field."""
+        from src.gui.dialogs.bbcode_link_format_dialog import PlaceholderEditorDialog, VIDEO_PLACEHOLDERS
+        dialog = PlaceholderEditorDialog(
+            title=title,
+            placeholders=VIDEO_PLACEHOLDERS,
+            initial_text=field.toPlainText(),
+            parent=self
+        )
+        if dialog.exec() == dialog.DialogCode.Accepted:
+            new_text = dialog.get_text()
+            if new_text != field.toPlainText():
+                field.setPlainText(new_text)
+                self.dirty.emit()
 
     # ------------------------------------------------------------------ #
     def _pop_out_preview(self):
