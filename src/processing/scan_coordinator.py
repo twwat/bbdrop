@@ -209,6 +209,7 @@ class ScanCoordinator:
                     'total_hosts': len(all_jobs),
                     'total_galleries': len(all_results),
                     'elapsed': elapsed,
+                    'k2s_storage_used': getattr(self, '_k2s_storage_used', None),
                 })
 
         except Exception as e:
@@ -291,10 +292,28 @@ class ScanCoordinator:
         api_base = K2S_API_BASES.get(job.host_id, '')
         token = self._credentials.get(job.host_id, '')
         if not api_base or not token:
-            log(f"Missing API config or credentials for {job.host_id}", level="warning", category="scanner")
+            log(f"Missing API config or credentials for {job.host_id}",
+                level="warning", category="scanner")
             return []
 
         checker = K2SFileChecker(api_base=api_base, auth_token=token)
+
+        # Use cached inventory if another K2S family host already walked this account
+        if not hasattr(self, '_k2s_inventory'):
+            self._k2s_inventory = {}
+        if not hasattr(self, '_k2s_storage_used'):
+            self._k2s_storage_used = None
+
+        if not self._k2s_inventory:
+            log(f"Walking K2S account folders via {job.host_id}",
+                level="info", category="scanner")
+            all_files = checker.get_all_files()
+            self._k2s_inventory = {f['id']: f for f in all_files}
+            self._k2s_storage_used = checker.calc_storage_used(all_files)
+            log(f"K2S folder walk complete: {len(all_files)} files, "
+                f"{self._k2s_storage_used} bytes used",
+                level="info", category="scanner")
+
         results = []
         now = int(time.time())
         gallery_count = len(job.galleries)
@@ -308,14 +327,15 @@ class ScanCoordinator:
             file_ids = gallery.get('file_ids', {})
             db_id = gallery['db_id']
 
-            check_result = checker.check_gallery(file_ids)
+            check_result = checker.check_gallery_from_inventory(
+                file_ids, self._k2s_inventory)
 
-            # Report per-gallery progress
             cumulative_online += check_result.get('online', 0)
             cumulative_items += check_result.get('total', 0)
             if self._progress_callback:
-                self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count,
-                                        cumulative_online, cumulative_items)
+                self._progress_callback(job.host_type, job.host_id, i + 1,
+                                        gallery_count, cumulative_online,
+                                        cumulative_items)
 
             detail = None
             if check_result.get('offline_urls'):

@@ -96,9 +96,13 @@ class TestScanCoordinatorExecution:
 
     @patch('src.processing.scan_coordinator.K2SFileChecker')
     def test_k2s_file_scan_calls_checker(self, MockChecker):
-        """K2S file host job should create K2SFileChecker and call check_gallery."""
+        """K2S file host job should walk folders via get_all_files and check via inventory."""
         mock_instance = Mock()
-        mock_instance.check_gallery.return_value = {
+        mock_instance.get_all_files.return_value = [
+            {'id': 'f1', 'name': 'file1.zip', 'size': 1024, 'status': 1},
+        ]
+        mock_instance.calc_storage_used.return_value = 1024
+        mock_instance.check_gallery_from_inventory.return_value = {
             'status': 'online', 'online': 1, 'offline': 0, 'errors': 0, 'total': 1, 'offline_urls': []
         }
         MockChecker.return_value = mock_instance
@@ -118,6 +122,9 @@ class TestScanCoordinatorExecution:
         )
         results = coord._run_k2s_job(job)
         assert len(results) == 1
+        assert results[0][3] == 'online'  # status field in result tuple
+        mock_instance.get_all_files.assert_called_once()
+        mock_instance.check_gallery_from_inventory.assert_called_once()
 
 
 class TestScanCoordinatorCancellation:
