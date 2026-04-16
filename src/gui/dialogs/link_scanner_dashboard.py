@@ -249,6 +249,27 @@ class LinkScannerDashboard(QDialog):
         self._overall_bar.hide()
         self._controls.set_scanning(False)
 
+        # Save K2S storage if the scan discovered it, then notify all open bars
+        k2s_used = summary.get('k2s_storage_used')
+        if k2s_used is not None:
+            try:
+                from src.core.file_host_config import (
+                    save_k2s_family_storage,
+                    get_k2s_family_storage,
+                    get_family_members,
+                )
+                save_k2s_family_storage(k2s_used)
+                used, total_quota = get_k2s_family_storage()
+                left = total_quota - used
+                main_win = self.parent()
+                if main_win is not None:
+                    mgr = getattr(main_win, 'file_host_manager', None)
+                    if mgr is not None:
+                        for host_id in get_family_members('k2s'):
+                            mgr.storage_updated.emit(host_id, total_quota, left)
+            except Exception as e:
+                log(f"Failed to save K2S storage from scan: {e}", level="error", category="scanner")
+
         # Revert host bars to health and refresh data
         QTimer.singleShot(100, self._refresh_after_scan)
 
