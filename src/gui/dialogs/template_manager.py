@@ -8,9 +8,8 @@ import re
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QListWidget,
     QPushButton, QLabel, QPlainTextEdit, QMessageBox, QInputDialog,
-    QWidget, QGridLayout, QComboBox, QRadioButton, QButtonGroup, QLineEdit, QApplication
+    QWidget, QGridLayout, QComboBox, QRadioButton, QButtonGroup, QLineEdit
 )
-from PyQt6.QtGui import QTextCharFormat, QColor, QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QListWidgetItem
 from src.gui.widgets.placeholder_highlighter import PlaceholderHighlighter

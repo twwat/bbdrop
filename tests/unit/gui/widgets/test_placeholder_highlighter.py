@@ -40,8 +40,38 @@ class TestPlaceholderHighlighter:
         assert "[else]" in highlighter.conditional_tags
         assert "[/if]" in highlighter.conditional_tags
 
-    def test_highlight_block_runs_without_error(self, qtbot):
+    def test_placeholder_list_complete(self, qtbot):
+        """All expected template placeholders are defined."""
         doc = QTextDocument()
         highlighter = PlaceholderHighlighter(doc)
+
+        expected = [
+            "#folderName#", "#width#", "#height#", "#longest#",
+            "#extension#", "#pictureCount#", "#folderSize#",
+            "#galleryLink#", "#allImages#", "#hostLinks#",
+            "#custom1#", "#custom2#", "#custom3#", "#custom4#",
+            "#ext1#", "#ext2#", "#ext3#", "#ext4#"
+        ]
+        for placeholder in expected:
+            assert placeholder in highlighter.placeholders
+
+    def test_highlight_block_with_placeholder(self, qtbot):
+        """Highlighting placeholders doesn't alter text content."""
+        doc = QTextDocument()
+        PlaceholderHighlighter(doc)
+        doc.setPlainText("Template with #folderName# placeholder")
+        assert doc.toPlainText() == "Template with #folderName# placeholder"
+
+    def test_highlight_block_with_conditional(self, qtbot):
+        """Highlighting conditional tags doesn't alter text content."""
+        doc = QTextDocument()
+        PlaceholderHighlighter(doc)
+        doc.setPlainText("[if folderName]Content[/if]")
+        assert doc.toPlainText() == "[if folderName]Content[/if]"
+
+    def test_highlight_block_with_link_format(self, qtbot):
+        """Highlighting link-format placeholders doesn't alter text content."""
+        doc = QTextDocument()
+        PlaceholderHighlighter(doc)
         doc.setPlainText("[url=#link#]#hostName# - #partLabel# (#fileSize#)[/url]")
-        # Highlighter runs automatically on setPlainText; no crash = pass
+        assert doc.toPlainText() == "[url=#link#]#hostName# - #partLabel# (#fileSize#)[/url]"

@@ -136,7 +136,7 @@ from src.processing.tasks import (
 from src.processing.upload_workers import UploadWorker
 
 # Import dialog classes
-from src.gui.dialogs.template_manager import TemplateManagerDialog, PlaceholderHighlighter
+from src.gui.dialogs.template_manager import TemplateManagerDialog
 from src.gui.dialogs.log_viewer import LogViewerDialog
 from src.gui.dialogs.bbcode_viewer import BBCodeViewerDialog
 from src.gui.dialogs.help_dialog import HelpDialog
