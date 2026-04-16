@@ -88,6 +88,7 @@ class BBCodeLinkFormatDialog(QDialog):
         layout.addWidget(preview_header)
 
         self.preview_label = QLabel()
+        self.preview_label.setTextFormat(Qt.TextFormat.PlainText)
         self.preview_label.setWordWrap(True)
         self.preview_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.preview_label.setStyleSheet(
