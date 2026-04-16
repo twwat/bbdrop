@@ -19,6 +19,7 @@ from src.gui.widgets.custom_widgets import CopyableLogListWidget
 from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
 from src.gui.widgets.info_button import InfoButton
 from src.gui.dialogs.connection_test_dialog import ConnectionTestDialog
+from src.gui.dialogs.bbcode_link_format_dialog import BBCodeLinkFormatDialog
 
 
 class AsteriskPasswordEdit(QLineEdit):
@@ -649,11 +650,11 @@ class FileHostConfigDialog(QDialog):
         bbcode_format = get_file_host_setting(self.host_id, "bbcode_format", "str")
 
         bbcode_label_row = QHBoxLayout()
-        bbcode_label_row.addWidget(QLabel("BBCode format"))
+        bbcode_label_row.addWidget(QLabel("BBCode link format"))
         bbcode_label_row.addWidget(InfoButton(
-            "Template for the download link BBCode. Use #link# for the download "
-            "URL and #hostName# for the host display name. This is inserted into "
-            "your gallery template's #hostLinks# placeholder."
+            "Template for the download link BBCode. Click the field to open "
+            "the full editor with all available placeholders. This is inserted "
+            "into your gallery template's #hostLinks# placeholder."
         ))
         bbcode_label_widget = QWidget()
         bbcode_label_widget.setLayout(bbcode_label_row)
@@ -662,8 +663,8 @@ class FileHostConfigDialog(QDialog):
         self.bbcode_format_edit.setPlainText(bbcode_format if bbcode_format else "")
         self.bbcode_format_edit.setPlaceholderText("[url=#link#]#hostName#[/url]")
         self.bbcode_format_edit.setToolTip(
-            "Format for download links in BBCode. Use #link# for URL and #hostName# for host name. "
-            "Leave empty for raw URL. Supports multiple lines."
+            "Format for download links in BBCode. Click to open the full editor. "
+            "Leave empty for raw URL."
         )
         # Auto-expand height based on content (1-3 lines)
         self.bbcode_format_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -677,6 +678,7 @@ class FileHostConfigDialog(QDialog):
         self.bbcode_format_edit.textChanged.connect(self._adjust_bbcode_height)
         self._adjust_bbcode_height()  # Initial adjustment
         settings_layout.addRow(bbcode_label_widget, self.bbcode_format_edit)
+        self.bbcode_format_edit.installEventFilter(self)
 
         # 8. Proxy - SimpleProxyDropdown widget with test button
         proxy_label_row = QHBoxLayout()
@@ -1834,6 +1836,26 @@ class FileHostConfigDialog(QDialog):
         visible_lines = max(1, min(3, line_count))
         new_height = line_height * visible_lines + 12  # 12px for padding/margins
         self.bbcode_format_edit.setFixedHeight(new_height)
+
+    def eventFilter(self, obj, event):
+        """Open BBCode link format editor when the bbcode field gains focus."""
+        if obj is self.bbcode_format_edit and event.type() == event.Type.FocusIn:
+            # Defer to avoid processing the focus event further
+            QTimer.singleShot(0, self._open_bbcode_link_format_editor)
+            return True  # Consume the focus event
+        return super().eventFilter(obj, event)
+
+    def _open_bbcode_link_format_editor(self):
+        """Open the BBCode link format editor dialog."""
+        dialog = BBCodeLinkFormatDialog(
+            initial_text=self.bbcode_format_edit.toPlainText(),
+            parent=self
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_text = dialog.get_text()
+            if new_text != self.bbcode_format_edit.toPlainText():
+                self.bbcode_format_edit.setPlainText(new_text)
+                self._mark_dirty()
 
     def _check_unsaved_changes(self, action_name: str) -> bool:
         """Check for unsaved changes and warn user.

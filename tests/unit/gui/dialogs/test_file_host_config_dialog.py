@@ -1259,6 +1259,29 @@ class TestCloseEventHandling:
 
 
 # ============================================================================
+# TEST CLASS: BBCode Link Format Integration
+# ============================================================================
+
+class TestBBCodeLinkFormatIntegration:
+    """Test BBCode link format dialog integration."""
+
+    def test_bbcode_label_says_link_format(self, qtbot, mock_host_config, mock_worker_manager,
+                                            mock_main_widgets, dialog_patches):
+        """Label should say 'BBCode link format' not 'BBCode format'."""
+        dialog = FileHostConfigDialog(
+            None, "testhost", mock_host_config,
+            mock_main_widgets, mock_worker_manager
+        )
+        qtbot.addWidget(dialog)
+
+        # Find the label text in the bbcode label widget
+        from PyQt6.QtWidgets import QLabel
+        labels = dialog.findChildren(QLabel)
+        bbcode_labels = [l for l in labels if "BBCode" in l.text()]
+        assert any("link format" in l.text().lower() for l in bbcode_labels)
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
