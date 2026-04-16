@@ -72,7 +72,7 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
                     file_size = u.get('file_size')
                     formatted = formatted.replace(
                         '#fileSize#',
-                        format_binary_size(file_size) if file_size else ''
+                        format_binary_size(file_size) if file_size is not None else ''
                     )
 
                     # Multi-part placeholders
