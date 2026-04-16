@@ -152,14 +152,16 @@ class K2SFileChecker:
         for fid, url in file_id_to_url.items():
             file_info = inventory.get(fid)
             if file_info is None:
-                errors += 1
-                continue
-            ext = file_info.get('extended_info', {}) or {}
-            if ext.get('storage_object') == 'available':
-                online += 1
-            else:
+                # File not found in account — treat as offline
                 offline += 1
                 offline_urls.append(url)
+            else:
+                ext = file_info.get('extended_info', {}) or {}
+                if ext.get('storage_object') == 'available':
+                    online += 1
+                else:
+                    offline += 1
+                    offline_urls.append(url)
 
         total = len(file_id_to_url)
         if total == 0:
