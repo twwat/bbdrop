@@ -1559,6 +1559,15 @@ class FileHostConfigDialog(QDialog):
             new_total = new_gb * 1024 * 1024 * 1024
             save_k2s_family_quota(new_total)
             self._load_storage_from_cache()
+            # Propagate to sibling K2S dialogs via storage_updated signal
+            from src.core.file_host_config import get_family_members
+            left = new_total - used
+            main_win = self.parent()
+            if main_win is not None:
+                mgr = getattr(main_win, 'file_host_manager', None)
+                if mgr is not None:
+                    for host_id in get_family_members('k2s'):
+                        mgr.storage_updated.emit(host_id, new_total, left)
 
     def _update_metrics_display(self):
         """Update metrics grid labels from MetricsStore."""
