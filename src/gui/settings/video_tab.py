@@ -1,4 +1,4 @@
-"""Video settings tab for ComprehensiveSettingsDialog."""
+"""Contact Sheets settings tab for ComprehensiveSettingsDialog."""
 
 import colorsys
 import os
@@ -157,7 +157,7 @@ class VideoSettingsTab(QWidget):
 
         # Tab description
         desc = QLabel(
-            "Configure how screenshot sheets are generated from video files — "
+            "Configure how contact sheets are generated from video files — "
             "grid layout, timestamps, appearance, and overlay text."
         )
         desc.setWordWrap(True)

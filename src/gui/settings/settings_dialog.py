@@ -335,7 +335,7 @@ class ComprehensiveSettingsDialog(QDialog):
         from src.gui.settings.video_tab import VideoSettingsTab
         self.video_tab = VideoSettingsTab(self)
         self.video_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.VIDEO))
-        self._add_settings_page(self.video_tab, "Video")
+        self._add_settings_page(self.video_tab, "Contact Sheets")
 
     def setup_icons_tab(self):
         """Setup the Icons management tab (delegated to IconsTab widget)."""
