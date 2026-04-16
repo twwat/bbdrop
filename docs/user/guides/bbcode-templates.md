@@ -94,12 +94,13 @@ Conditionals can be nested and work across multiple lines. The template editor i
 
 ## File Host Link Placeholders
 
-The `#hostLinks#` placeholder expands using each file host's own BBCode format (configured in the file host settings). That format supports its own placeholders:
+The `#hostLinks#` placeholder expands using each file host's own BBCode link format (configured in the file host settings). Click the format field to open the full editor with insert buttons for all placeholders:
 
 | Placeholder | Description |
 |---|---|
 | `#link#` | Download URL |
 | `#hostName#` | Host display name (e.g., "Rapidgator") |
+| `#fileSize#` | Archive part file size (e.g., "250.0 MiB") |
 | `#partLabel#` | Part label for split archives (e.g., "Part 1") |
 | `#partNumber#` | Part number (1, 2, 3...) |
 | `#partCount#` | Total number of parts |

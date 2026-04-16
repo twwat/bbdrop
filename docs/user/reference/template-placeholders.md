@@ -46,12 +46,13 @@ Available when a queue item is a video gallery (folder of video files). These ar
 
 ## File Host Link Placeholders
 
-Used in each file host's **BBCode Format** setting (`Settings > File Hosts > Configure Host`). These placeholders work inside the `#hostLinks#` expansion.
+Used in each file host's **BBCode Link Format** setting (`Settings > File Hosts > Configure Host`). These placeholders work inside the `#hostLinks#` expansion. Click the field to open the full editor with insert buttons for all placeholders.
 
 | Placeholder | Description | Example Value |
 |---|---|---|
 | `#link#` | Download URL | "https://rapidgator.net/file/abc" |
 | `#hostName#` | Host display name | "Rapidgator" |
+| `#fileSize#` | Archive part file size | "250.0 MiB" |
 | `#partLabel#` | Part label (split archives) | "Part 1" |
 | `#partNumber#` | Part number | "1" |
 | `#partCount#` | Total number of parts | "3" |
