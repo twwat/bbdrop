@@ -19,9 +19,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 from src.gui.dialogs.template_manager import (
     TemplateManagerDialog,
     ConditionalInsertDialog,
-    PlaceholderHighlighter,
     BUILTIN_TEMPLATES
 )
+from src.gui.widgets.placeholder_highlighter import PlaceholderHighlighter
 
 
 # ============================================================================

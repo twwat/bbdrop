@@ -10,91 +10,13 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QPlainTextEdit, QMessageBox, QInputDialog,
     QWidget, QGridLayout, QComboBox, QRadioButton, QButtonGroup, QLineEdit, QApplication
 )
-from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
+from PyQt6.QtGui import QTextCharFormat, QColor, QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QListWidgetItem
+from src.gui.widgets.placeholder_highlighter import PlaceholderHighlighter
 
 # Built-in templates that are read-only and cannot be deleted
 BUILTIN_TEMPLATES = frozenset({"default", "Extended Example"})
-
-
-class PlaceholderHighlighter(QSyntaxHighlighter):
-    """Syntax highlighter for BBCode template placeholders and conditional tags"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        # Detect dark mode
-        palette = QApplication.palette()
-        is_dark = palette.window().color().lightness() < 128
-
-        # Placeholder format
-        self.placeholder_format = QTextCharFormat()
-        if is_dark:
-            # Dark mode: darker background, brighter text
-            self.placeholder_format.setBackground(QColor("#5c4a1f"))  # Dark gold
-            self.placeholder_format.setForeground(QColor("#ffd966"))  # Bright gold
-        else:
-            # Light mode: light background, dark text
-            self.placeholder_format.setBackground(QColor("#fff3cd"))  # Light yellow
-            self.placeholder_format.setForeground(QColor("#856404"))  # Dark yellow
-        self.placeholder_format.setFontWeight(QFont.Weight.Bold)
-
-        # Conditional tag format
-        self.conditional_format = QTextCharFormat()
-        if is_dark:
-            # Dark mode: darker background, brighter text
-            self.conditional_format.setBackground(QColor("#1a3d4d"))  # Dark blue
-            self.conditional_format.setForeground(QColor("#66ccff"))  # Bright blue
-        else:
-            # Light mode: light background, dark text
-            self.conditional_format.setBackground(QColor("#d1ecf1"))  # Light blue
-            self.conditional_format.setForeground(QColor("#0c5460"))  # Dark blue
-        self.conditional_format.setFontWeight(QFont.Weight.Bold)
-
-        # Define all placeholders
-        self.placeholders = [
-            "#folderName#", "#width#", "#height#", "#longest#",
-            "#extension#", "#pictureCount#", "#folderSize#",
-            "#galleryLink#", "#allImages#", "#hostLinks#", "#cover#",
-            "#custom1#", "#custom2#", "#custom3#", "#custom4#",
-            "#ext1#", "#ext2#", "#ext3#", "#ext4#"
-        ]
-
-        # Conditional tags
-        self.conditional_tags = ["[if", "[else]", "[/if]"]
-
-    def highlightBlock(self, text):
-        """Highlight placeholders and conditional tags in the text block"""
-        # Highlight placeholders
-        for placeholder in self.placeholders:
-            index = 0
-            while True:
-                index = text.find(placeholder, index)
-                if index == -1:
-                    break
-                self.setFormat(index, len(placeholder), self.placeholder_format)
-                index += len(placeholder)
-
-        # Highlight conditional tags
-        for tag in self.conditional_tags:
-            index = 0
-            while True:
-                index = text.find(tag, index)
-                if index == -1:
-                    break
-                # For [if tag, find the closing bracket to highlight the full tag including conditions
-                if tag == "[if":
-                    end_index = text.find("]", index)
-                    if end_index != -1:
-                        self.setFormat(index, end_index - index + 1, self.conditional_format)
-                        index = end_index + 1
-                    else:
-                        self.setFormat(index, len(tag), self.conditional_format)
-                        index += len(tag)
-                else:
-                    self.setFormat(index, len(tag), self.conditional_format)
-                    index += len(tag)
 
 
 class ConditionalInsertDialog(QDialog):
