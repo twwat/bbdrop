@@ -75,3 +75,12 @@ class TestPlaceholderHighlighter:
         PlaceholderHighlighter(doc)
         doc.setPlainText("[url=#link#]#hostName# - #partLabel# (#fileSize#)[/url]")
         assert doc.toPlainText() == "[url=#link#]#hostName# - #partLabel# (#fileSize#)[/url]"
+
+    def test_video_placeholders_present(self, qtbot):
+        """Video template placeholders are recognized by the highlighter."""
+        doc = QTextDocument()
+        highlighter = PlaceholderHighlighter(doc)
+
+        for p in ["#filename#", "#duration#", "#resolution#", "#videoCodec#",
+                   "#audioCodec#", "#fps#", "#bitrate#", "#audioTracks#"]:
+            assert p in highlighter.placeholders, f"Missing: {p}"
