@@ -655,6 +655,11 @@ def set_family_dedup_enabled(enabled: bool) -> None:
             raise
 
 
+_k2s_storage_lock = Lock()  # Protects read-modify-write on shared K2S storage counter
+
+_K2S_DEFAULT_TOTAL = 10000 * 1024 * 1024 * 1024  # 10TB
+
+
 def get_k2s_family_storage() -> tuple[int, int]:
     """Return (used_bytes, total_bytes) for the shared K2S family storage.
 
@@ -662,13 +667,19 @@ def get_k2s_family_storage() -> tuple[int, int]:
     """
     from PyQt6.QtCore import QSettings
     settings = QSettings("BBDropUploader", "BBDropGUI")
-    used = int(settings.value("K2SFamily/storage_used", 0))
+    try:
+        used = int(settings.value("K2SFamily/storage_used", 0))
+    except (ValueError, TypeError):
+        used = 0
 
     total_override = settings.value("K2SFamily/storage_total", None)
     if total_override is not None:
-        total = int(total_override)
+        try:
+            total = int(total_override)
+        except (ValueError, TypeError):
+            total = _K2S_DEFAULT_TOTAL
     else:
-        total = 10000 * 1024 * 1024 * 1024  # 10TB default
+        total = _K2S_DEFAULT_TOTAL
     return used, total
 
 
@@ -680,6 +691,21 @@ def save_k2s_family_storage(used_bytes: int):
     settings.setValue("K2SFamily/storage_used", str(used_bytes))
     settings.setValue("K2SFamily/storage_ts", str(int(time.time())))
     settings.sync()
+
+
+def increment_k2s_family_storage(delta_bytes: int) -> tuple[int, int]:
+    """Atomically increment the shared K2S storage counter.
+
+    Thread-safe: acquires lock for read-modify-write.
+
+    Returns:
+        (total_bytes, left_bytes) after increment.
+    """
+    with _k2s_storage_lock:
+        used, total = get_k2s_family_storage()
+        used += delta_bytes
+        save_k2s_family_storage(used)
+    return total, total - used
 
 
 def save_k2s_family_quota(total_bytes: int):
