@@ -132,6 +132,10 @@ class ScanCoordinator:
         self._completion_callback = completion_callback
         self._cancelled = threading.Event()
         self._scan_thread: Optional[threading.Thread] = None
+        # K2S family shared inventory cache (populated by first _run_k2s_job)
+        self._k2s_inventory: Dict[str, dict] = {}
+        self._k2s_storage_used: Optional[int] = None
+        self._k2s_lock = threading.Lock()
 
     @property
     def is_cancelled(self) -> bool:
@@ -209,7 +213,7 @@ class ScanCoordinator:
                     'total_hosts': len(all_jobs),
                     'total_galleries': len(all_results),
                     'elapsed': elapsed,
-                    'k2s_storage_used': getattr(self, '_k2s_storage_used', None),
+                    'k2s_storage_used': self._k2s_storage_used,
                 })
 
         except Exception as e:
@@ -298,21 +302,17 @@ class ScanCoordinator:
 
         checker = K2SFileChecker(api_base=api_base, auth_token=token)
 
-        # Use cached inventory if another K2S family host already walked this account
-        if not hasattr(self, '_k2s_inventory'):
-            self._k2s_inventory = {}
-        if not hasattr(self, '_k2s_storage_used'):
-            self._k2s_storage_used = None
-
-        if not self._k2s_inventory:
-            log(f"Walking K2S account folders via {job.host_id}",
-                level="info", category="scanner")
-            all_files = checker.get_all_files()
-            self._k2s_inventory = {f['id']: f for f in all_files}
-            self._k2s_storage_used = checker.calc_storage_used(all_files)
-            log(f"K2S folder walk complete: {len(all_files)} files, "
-                f"{self._k2s_storage_used} bytes used",
-                level="info", category="scanner")
+        # K2S family hosts share one account — walk once, reuse across hosts
+        with self._k2s_lock:
+            if not self._k2s_inventory:
+                log(f"Walking K2S account folders via {job.host_id}",
+                    level="info", category="scanner")
+                all_files = checker.get_all_files()
+                self._k2s_inventory = {f['id']: f for f in all_files}
+                self._k2s_storage_used = checker.calc_storage_used(all_files)
+                log(f"K2S folder walk complete: {len(all_files)} files, "
+                    f"{self._k2s_storage_used} bytes used",
+                    level="info", category="scanner")
 
         results = []
         now = int(time.time())
