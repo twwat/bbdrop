@@ -98,7 +98,11 @@ class K2SFileChecker:
         # Enumerate files in this folder (skip root — root has no files directly)
         if folder_id != '/':
             try:
-                fresp = self._api_post('getFilesList', {'parent': folder_id})
+                fresp = self._api_post('getFilesList', {
+                    'parent': folder_id,
+                    'limit': 10000,
+                    'extended_info': True,
+                })
                 files = fresp.get('files', [])
                 all_files.extend(files)
             except Exception as e:
@@ -146,7 +150,8 @@ class K2SFileChecker:
         if not file_id_to_url:
             return {'status': 'unknown', 'online': 0, 'offline': 0, 'errors': 0, 'total': 0, 'offline_urls': []}
 
-        online = offline = errors = 0
+        online = offline = 0
+        errors = 0  # kept for shape compat with check_gallery(); always 0 here
         offline_urls: list[str] = []
 
         for fid, url in file_id_to_url.items():

@@ -187,3 +187,61 @@ class TestCalcStorageUsed:
     def test_empty_list(self):
         checker = K2SFileChecker(api_base="https://k2s.cc/api/v2", auth_token="fake")
         assert checker.calc_storage_used([]) == 0
+
+
+class TestCheckGalleryFromInventory:
+    """Test check_gallery_from_inventory with pre-built inventory."""
+
+    def _make_checker(self):
+        return K2SFileChecker(api_base="https://k2s.cc/api/v2", auth_token="fake")
+
+    def test_empty_input(self):
+        checker = self._make_checker()
+        result = checker.check_gallery_from_inventory({}, {})
+        assert result['status'] == 'unknown'
+        assert result['total'] == 0
+
+    def test_all_online(self):
+        checker = self._make_checker()
+        inventory = {
+            'f1': {'id': 'f1', 'is_available': True,
+                   'extended_info': {'storage_object': 'available'}},
+            'f2': {'id': 'f2', 'is_available': True,
+                   'extended_info': {'storage_object': 'available'}},
+        }
+        result = checker.check_gallery_from_inventory(
+            {'f1': 'http://k2s.cc/f1', 'f2': 'http://k2s.cc/f2'}, inventory)
+        assert result['status'] == 'online'
+        assert result['online'] == 2
+        assert result['offline'] == 0
+
+    def test_all_missing_from_inventory(self):
+        checker = self._make_checker()
+        result = checker.check_gallery_from_inventory(
+            {'f1': 'http://k2s.cc/f1', 'f2': 'http://k2s.cc/f2'}, {})
+        assert result['status'] == 'offline'
+        assert result['offline'] == 2
+        assert result['online'] == 0
+        assert 'http://k2s.cc/f1' in result['offline_urls']
+        assert 'http://k2s.cc/f2' in result['offline_urls']
+
+    def test_mixed_available_and_removed(self):
+        checker = self._make_checker()
+        inventory = {
+            'f1': {'id': 'f1', 'extended_info': {'storage_object': 'available'}},
+            'f2': {'id': 'f2', 'extended_info': {'storage_object': 'removed'}},
+        }
+        result = checker.check_gallery_from_inventory(
+            {'f1': 'http://k2s.cc/f1', 'f2': 'http://k2s.cc/f2'}, inventory)
+        assert result['status'] == 'partial'
+        assert result['online'] == 1
+        assert result['offline'] == 1
+        assert result['offline_urls'] == ['http://k2s.cc/f2']
+
+    def test_file_in_inventory_but_missing_extended_info(self):
+        checker = self._make_checker()
+        inventory = {'f1': {'id': 'f1'}}
+        result = checker.check_gallery_from_inventory(
+            {'f1': 'http://k2s.cc/f1'}, inventory)
+        assert result['status'] == 'offline'
+        assert result['offline'] == 1
