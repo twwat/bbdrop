@@ -19,7 +19,7 @@ from src.gui.widgets.custom_widgets import CopyableLogListWidget
 from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
 from src.gui.widgets.info_button import InfoButton
 from src.gui.dialogs.connection_test_dialog import ConnectionTestDialog
-from src.gui.dialogs.bbcode_link_format_dialog import BBCodeLinkFormatDialog
+from src.gui.dialogs.bbcode_link_format_dialog import PlaceholderEditorDialog, LINK_PLACEHOLDERS
 
 
 class AsteriskPasswordEdit(QLineEdit):
@@ -1847,7 +1847,9 @@ class FileHostConfigDialog(QDialog):
 
     def _open_bbcode_link_format_editor(self):
         """Open the BBCode link format editor dialog."""
-        dialog = BBCodeLinkFormatDialog(
+        dialog = PlaceholderEditorDialog(
+            title="BBCode Link Format",
+            placeholders=LINK_PLACEHOLDERS,
             initial_text=self.bbcode_format_edit.toPlainText(),
             parent=self
         )

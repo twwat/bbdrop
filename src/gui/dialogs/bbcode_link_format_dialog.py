@@ -1,4 +1,8 @@
-"""BBCode Link Format editor dialog with syntax highlighting and placeholder buttons."""
+"""Placeholder editor dialog with syntax highlighting and insert buttons.
+
+Reusable editor for any template format that uses #placeholder# patterns.
+Used by file host BBCode link format and video contact sheet templates.
+"""
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QPushButton,
@@ -20,24 +24,43 @@ LINK_PLACEHOLDERS = [
     ("#partCount#", "Part Count", "Total number of parts", "2"),
 ]
 
+VIDEO_PLACEHOLDERS = [
+    ("#filename#", "Filename", "Video filename", "Big_Buck_Bunny.mp4"),
+    ("#folderName#", "Folder Name", "Gallery/folder name", "My Videos"),
+    ("#duration#", "Duration", "Playback duration (H:MM:SS)", "0:10:34"),
+    ("#resolution#", "Resolution", "Video dimensions (WxH)", "1920x1080"),
+    ("#width#", "Width", "Video width", "1920"),
+    ("#height#", "Height", "Video height", "1080"),
+    ("#fps#", "FPS", "Frame rate", "23.976"),
+    ("#bitrate#", "Bitrate", "Video bitrate", "8500 kbps"),
+    ("#videoCodec#", "Video Codec", "Video codec name", "HEVC"),
+    ("#audioCodec#", "Audio Codec", "Primary audio codec", "AAC"),
+    ("#audioTracks#", "Audio Tracks", "All audio tracks summary", "AAC 2.0, AC3 5.1"),
+    ("#filesize#", "File Size", "Video file size", "1.4 GiB"),
+    ("#folderSize#", "Folder Size", "Total folder size", "4.2 GiB"),
+    ("#pictureCount#", "Frame Count", "Number of frames in sheet", "20"),
+]
 
-class BBCodeLinkFormatDialog(QDialog):
-    """Editor dialog for file host BBCode link formats.
 
-    Provides a text editor with syntax highlighting for #placeholder# patterns,
-    buttons to insert available placeholders, and a live preview showing
-    example output.
+class PlaceholderEditorDialog(QDialog):
+    """Editor dialog for template formats using #placeholder# patterns.
+
+    Provides a text editor with syntax highlighting, buttons to insert
+    available placeholders, and a live preview with example values.
 
     Args:
+        title: Dialog window title.
+        placeholders: List of (placeholder, button_label, tooltip, preview_value) tuples.
         initial_text: Pre-populate the editor with this text.
         parent: Parent widget.
     """
 
-    def __init__(self, initial_text: str = "", parent=None):
+    def __init__(self, title: str, placeholders: list, initial_text: str = "", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("BBCode Link Format")
+        self.setWindowTitle(title)
         self.setMinimumSize(500, 350)
         self.resize(550, 380)
+        self._placeholders = placeholders
 
         layout = QVBoxLayout(self)
 
@@ -47,7 +70,6 @@ class BBCodeLinkFormatDialog(QDialog):
         # Editor with syntax highlighting
         self.editor = QPlainTextEdit()
         self.editor.setPlainText(initial_text)
-        self.editor.setPlaceholderText("[url=#link#]#hostName#[/url]")
         self.highlighter = PlaceholderHighlighter(self.editor.document())
         self.editor.textChanged.connect(self._update_preview)
         editor_area.addWidget(self.editor, stretch=1)
@@ -63,7 +85,7 @@ class BBCodeLinkFormatDialog(QDialog):
         button_layout.addWidget(button_label)
 
         self._placeholder_buttons = []
-        for placeholder, label, tooltip, _ in LINK_PLACEHOLDERS:
+        for placeholder, label, tooltip, _ in placeholders:
             btn = QPushButton(label)
             btn.setToolTip(f"{tooltip}\nInserts: {placeholder}")
             btn.clicked.connect(lambda _, p=placeholder: self._insert_placeholder(p))
@@ -122,10 +144,10 @@ class BBCodeLinkFormatDialog(QDialog):
         """Update the live preview with example placeholder values."""
         text = self.editor.toPlainText()
         if not text:
-            self.preview_label.setText("(empty — raw URLs will be used)")
+            self.preview_label.setText("(empty)")
             return
 
-        for placeholder, _, _, example_value in LINK_PLACEHOLDERS:
+        for placeholder, _, _, example_value in self._placeholders:
             text = text.replace(placeholder, example_value)
 
         self.preview_label.setText(text)
