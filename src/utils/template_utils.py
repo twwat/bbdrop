@@ -3,7 +3,9 @@
 import sqlite3
 from collections import defaultdict
 from src.storage.database import QueueStore
+from src.utils.format_utils import format_binary_size
 from src.utils.logger import log
+from src.core.file_host_config import get_file_host_setting, get_config_manager
 
 
 def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str) -> str:
@@ -31,8 +33,6 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
         [url=https://tezfiles.com/file/ghi]TezFiles - Part 1[/url]
         [url=https://tezfiles.com/file/jkl]TezFiles - Part 2[/url]
     """
-    from src.core.file_host_config import get_file_host_setting, get_config_manager
-
     try:
         uploads = queue_store.get_file_host_uploads(gallery_path)
 
@@ -67,6 +67,13 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
                 if bbcode_format:
                     formatted = bbcode_format.replace('#link#', download_url)
                     formatted = formatted.replace('#hostName#', host_name)
+
+                    # File size placeholder
+                    file_size = u.get('file_size')
+                    formatted = formatted.replace(
+                        '#fileSize#',
+                        format_binary_size(file_size) if file_size else ''
+                    )
 
                     # Multi-part placeholders
                     if has_multi_part and len(host_uploads) > 1:
