@@ -188,7 +188,7 @@ def migrate_credentials_from_ini():
         config.remove_section('CREDENTIALS')
         if cookies_val:
             config['CREDENTIALS'] = {'cookies_enabled': cookies_val}
-        with open(config_file, 'w') as f:
+        with open(config_file, 'w', encoding='utf-8') as f:
             config.write(f)
         log("Migrated credentials from INI to Registry", level="info", category="auth")
 

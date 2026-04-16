@@ -187,7 +187,7 @@ class AppLogger:
         path = self._get_config_path()
         if os.path.exists(path):
             try:
-                cfg.read(path)
+                cfg.read(path, encoding='utf-8')
             except Exception:
                 pass
         if "LOGGING" not in cfg:
@@ -207,7 +207,7 @@ class AppLogger:
         path = self._get_config_path()
         if os.path.exists(path):
             try:
-                cfg.read(path)
+                cfg.read(path, encoding='utf-8')
             except Exception:
                 pass
         if "LOGGING" not in cfg:

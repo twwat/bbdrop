@@ -33,7 +33,7 @@ def save_unnamed_gallery(gallery_id, intended_name):
 
         config['UNNAMED_GALLERIES'][gallery_id] = intended_name
 
-        with open(config_file, 'w') as f:
+        with open(config_file, 'w', encoding='utf-8') as f:
             config.write(f)
 
         log(f"Saved unnamed gallery {gallery_id} for later renaming to '{intended_name}'", level="info", category="renaming")
@@ -192,5 +192,5 @@ def remove_unnamed_gallery(gallery_id):
             if 'UNNAMED_GALLERIES' in config and gallery_id in config['UNNAMED_GALLERIES']:
                 del config['UNNAMED_GALLERIES'][gallery_id]
 
-                with open(config_file, 'w') as f:
+                with open(config_file, 'w', encoding='utf-8') as f:
                     config.write(f)
