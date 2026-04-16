@@ -449,6 +449,11 @@ class FileHostConfigDialog(QDialog):
             self.storage_bar.setMaximumHeight(20)
             self.storage_bar.setProperty("class", "storage-bar")
 
+            if is_k2s_family:
+                self.storage_bar.setCursor(Qt.CursorShape.PointingHandCursor)
+                self.storage_bar.setToolTip("Click to edit storage quota")
+                self.storage_bar.mousePressEvent = self._on_storage_bar_clicked
+
             storage_layout.addWidget(self.storage_bar)
             content_layout.addWidget(storage_group)
 
@@ -1532,6 +1537,28 @@ class FileHostConfigDialog(QDialog):
             self.storage_bar.setProperty("storage_status", "medium")
         else:
             self.storage_bar.setProperty("storage_status", "plenty")
+
+    def _on_storage_bar_clicked(self, event):
+        """Open dialog to edit K2S family storage quota."""
+        from PyQt6.QtWidgets import QInputDialog
+        from src.core.file_host_config import get_k2s_family_storage, save_k2s_family_quota
+
+        used, total = get_k2s_family_storage()
+        current_gb = total / (1024 * 1024 * 1024)
+
+        new_gb, ok = QInputDialog.getInt(
+            self, "K2S Family Storage Quota",
+            "Total storage quota (GB):\n\n"
+            "This quota is shared across Keep2Share, TezFiles, and FileBoom.",
+            value=int(current_gb),
+            min=1,
+            max=1000000,
+        )
+
+        if ok and new_gb > 0:
+            new_total = new_gb * 1024 * 1024 * 1024
+            save_k2s_family_quota(new_total)
+            self._load_storage_from_cache()
 
     def _update_metrics_display(self):
         """Update metrics grid labels from MetricsStore."""
