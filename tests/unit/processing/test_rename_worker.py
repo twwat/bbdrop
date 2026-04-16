@@ -19,7 +19,7 @@ class TestRenameWorkerInit:
     @patch('src.processing.rename_worker.get_credential')
     def test_init_with_credentials(self, mock_get_cred, mock_session_class, mock_thread_class):
         """Test initialization with stored credentials"""
-        mock_get_cred.side_effect = lambda key: {
+        mock_get_cred.side_effect = lambda key, host_id=None: {
             'username': 'testuser',
             'password': 'encrypted_pass'
         }.get(key)
@@ -106,7 +106,7 @@ class TestRenameWorkerLogin:
     @patch('src.processing.rename_worker.get_credential')
     def test_login_with_credentials_success(self, mock_get_cred, mock_thread_class):
         """Test successful login using credentials"""
-        mock_get_cred.side_effect = lambda key: {
+        mock_get_cred.side_effect = lambda key, host_id=None: {
             'username': 'testuser',
             'password': 'encrypted_pass'
         }.get(key)
@@ -144,7 +144,7 @@ class TestRenameWorkerLogin:
     @patch('src.processing.rename_worker.get_credential')
     def test_login_ddos_guard_detected(self, mock_get_cred, mock_thread_class):
         """Test login failure when DDoS-Guard detected"""
-        mock_get_cred.side_effect = lambda key: {
+        mock_get_cred.side_effect = lambda key, host_id=None: {
             'username': 'testuser',
             'password': 'encrypted'
         }.get(key)

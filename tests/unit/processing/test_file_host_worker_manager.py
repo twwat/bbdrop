@@ -671,7 +671,7 @@ class TestInitEnabledHosts:
         with patch.object(manager, 'enable_host') as mock_enable, \
              patch('os.path.exists', return_value=True), \
              patch('configparser.ConfigParser') as mock_config_parser, \
-             patch('src.processing.file_host_worker_manager.get_credential', return_value='encrypted_creds'):
+             patch('src.utils.credentials.get_credential', return_value='encrypted_creds'):
 
             mock_parser_instance = Mock()
             mock_config_parser.return_value = mock_parser_instance
@@ -752,7 +752,7 @@ class TestInitEnabledHosts:
         with patch.object(manager, 'enable_host') as mock_enable, \
              patch('os.path.exists', return_value=True), \
              patch('configparser.ConfigParser') as mock_config_parser, \
-             patch('src.processing.file_host_worker_manager.get_credential', return_value='encrypted_creds'):
+             patch('src.utils.credentials.get_credential', return_value='encrypted_creds'):
 
             mock_parser_instance = Mock()
             mock_config_parser.return_value = mock_parser_instance

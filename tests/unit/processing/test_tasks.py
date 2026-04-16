@@ -342,7 +342,7 @@ class TestCredentialFunctions:
     @patch('src.utils.credentials.get_credential')
     def test_check_stored_credentials_with_username_password(self, mock_get_credential):
         """Test credential check with username and password"""
-        mock_get_credential.side_effect = lambda key: {
+        mock_get_credential.side_effect = lambda key, host_id=None: {
             'username': 'testuser',
             'password': 'encrypted_pass',
             'api_key': None
@@ -354,7 +354,7 @@ class TestCredentialFunctions:
     @patch('src.utils.credentials.get_credential')
     def test_check_stored_credentials_with_api_key(self, mock_get_credential):
         """Test credential check with API key only"""
-        mock_get_credential.side_effect = lambda key: {
+        mock_get_credential.side_effect = lambda key, host_id=None: {
             'username': None,
             'password': None,
             'api_key': 'encrypted_api_key'

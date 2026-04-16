@@ -42,14 +42,14 @@ def mock_credentials(monkeypatch):
     """
     storage = {}
 
-    def mock_get_credential(key):
+    def mock_get_credential(key, host_id=None):
         return storage.get(key)
 
-    def mock_set_credential(key, value):
+    def mock_set_credential(key, value, host_id=None):
         storage[key] = value
         return True
 
-    def mock_remove_credential(key):
+    def mock_remove_credential(key, host_id=None):
         storage.pop(key, None)
         return True
 
@@ -66,6 +66,11 @@ def mock_credentials(monkeypatch):
     monkeypatch.setattr('src.gui.dialogs.credential_setup.remove_credential', mock_remove_credential)
     monkeypatch.setattr('src.gui.dialogs.credential_setup.encrypt_password', mock_encrypt_password)
     monkeypatch.setattr('src.gui.dialogs.credential_setup.decrypt_password', mock_decrypt_password)
+    # Also patch at source module — some methods re-import locally
+    monkeypatch.setattr('src.utils.credentials.encrypt_password', mock_encrypt_password)
+    monkeypatch.setattr('src.utils.credentials.decrypt_password', mock_decrypt_password)
+    monkeypatch.setattr('src.utils.credentials.set_credential', mock_set_credential)
+    monkeypatch.setattr('src.utils.credentials.get_credential', mock_get_credential)
 
     return storage
 
@@ -387,7 +392,7 @@ class TestChangeUsername:
         with patch.object(QMessageBox, 'information') as mock_info:
             dialog._handle_username_dialog_result(QDialog.DialogCode.Accepted, 'newuser')
 
-        assert mock_credentials.get('username') == 'newuser'
+        assert mock_credentials.get('username') == 'encrypted_newuser'
         mock_info.assert_called_once()
 
     def test_handle_username_dialog_reject(self, dialog_with_mocks, mock_credentials):
@@ -918,7 +923,7 @@ class TestReloadCredentials:
         with patch.object(QMessageBox, 'information'):
             dialog._handle_username_dialog_result(QDialog.DialogCode.Accepted, 'newuser')
 
-        assert dialog.username_status_label.text() == 'newuser'
+        assert dialog.username_status_label.text() == 'encrypted_newuser'
 
     def test_reload_after_password_change(self, dialog_with_mocks, mock_credentials):
         """Test UI reloads after password saved"""

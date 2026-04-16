@@ -347,8 +347,8 @@ class TestQueueFileHostUpload:
     def controller(self, mock_main_window):
         return FileHostController(mock_main_window)
 
-    @patch('os.path.isdir', return_value=True)
-    def test_calls_store_add_file_host_upload(self, mock_isdir, controller, mock_main_window):
+    @patch('os.path.exists', return_value=True)
+    def test_calls_store_add_file_host_upload(self, mock_exists, controller, mock_main_window):
         """Verify _queue_file_host_upload calls store.add_file_host_upload."""
         mock_config = Mock()
         mock_config.get_host.return_value = Mock()
@@ -365,8 +365,8 @@ class TestQueueFileHostUpload:
         )
         mock_main_window._update_specific_gallery_display.assert_called_once_with("/test/gallery")
 
-    @patch('os.path.isdir', return_value=True)
-    def test_skips_when_host_config_not_found(self, mock_isdir, controller, mock_main_window):
+    @patch('os.path.exists', return_value=True)
+    def test_skips_when_host_config_not_found(self, mock_exists, controller, mock_main_window):
         """Verify _queue_file_host_upload shows warning when host config not found."""
         mock_config = Mock()
         mock_config.get_host.return_value = None

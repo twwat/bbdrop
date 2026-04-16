@@ -1,76 +1,133 @@
 """Tests for username encryption migration."""
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 
-class TestMigratePlaintextUsernames:
-    """Test one-time migration of plaintext usernames to encrypted."""
+class TestMigrateImxCredentials:
+    """Test one-time migration of IMX credentials (bare → prefixed, plaintext → encrypted)."""
 
+    @patch('src.utils.credentials.remove_credential')
     @patch('src.utils.credentials.set_credential')
     @patch('src.utils.credentials.encrypt_password')
     @patch('src.utils.credentials.decrypt_password')
     @patch('src.utils.credentials.get_credential')
-    def test_encrypts_plaintext_username(self, mock_get, mock_decrypt, mock_encrypt, mock_set):
-        """Plaintext username should be encrypted and re-stored."""
-        from src.utils.credentials import migrate_plaintext_usernames
+    def test_migrates_bare_key_to_prefixed(self, mock_get, mock_decrypt, mock_encrypt, mock_set, mock_remove):
+        """Bare credential copied to imx-prefixed key when prefixed doesn't exist."""
+        from src.utils.credentials import migrate_imx_credentials
 
-        mock_get.return_value = "myuser"
+        def get_side_effect(key, host_id=None):
+            effective_key = f"{host_id}_{key}" if host_id else key
+            return {
+                'username': 'encrypted_user',
+                'password': 'encrypted_pass',
+                'api_key': 'encrypted_key',
+                # Prefixed keys don't exist yet
+            }.get(effective_key, '')
+
+        mock_get.side_effect = get_side_effect
+        mock_decrypt.return_value = 'decrypted_value'  # Already encrypted — no re-encrypt in step 2
+
+        migrate_imx_credentials()
+
+        # Step 1: bare values should be copied to prefixed keys
+        mock_set.assert_any_call('username', 'encrypted_user', 'imx')
+        mock_set.assert_any_call('password', 'encrypted_pass', 'imx')
+        mock_set.assert_any_call('api_key', 'encrypted_key', 'imx')
+        # Bare keys removed after migration
+        mock_remove.assert_any_call('username')
+        mock_remove.assert_any_call('password')
+        mock_remove.assert_any_call('api_key')
+
+    @patch('src.utils.credentials.remove_credential')
+    @patch('src.utils.credentials.set_credential')
+    @patch('src.utils.credentials.encrypt_password')
+    @patch('src.utils.credentials.decrypt_password')
+    @patch('src.utils.credentials.get_credential')
+    def test_skips_when_prefixed_already_exists(self, mock_get, mock_decrypt, mock_encrypt, mock_set, mock_remove):
+        """When prefixed key already exists, bare key is removed without copying."""
+        from src.utils.credentials import migrate_imx_credentials
+
+        def get_side_effect(key, host_id=None):
+            effective_key = f"{host_id}_{key}" if host_id else key
+            return {
+                'username': 'bare_user',
+                'imx_username': 'prefixed_user',  # Already migrated
+            }.get(effective_key, '')
+
+        mock_get.side_effect = get_side_effect
+        mock_decrypt.return_value = 'decrypted'  # Already encrypted
+
+        migrate_imx_credentials()
+
+        # Should NOT copy bare to prefixed (prefixed already exists)
+        set_calls_with_imx = [c for c in mock_set.call_args_list
+                              if len(c.args) >= 3 and c.args[2] == 'imx' and c.args[0] == 'username']
+        assert len(set_calls_with_imx) == 0
+        # But bare key should still be removed
+        mock_remove.assert_any_call('username')
+
+    @patch('src.utils.credentials.remove_credential')
+    @patch('src.utils.credentials.set_credential')
+    @patch('src.utils.credentials.encrypt_password')
+    @patch('src.utils.credentials.decrypt_password')
+    @patch('src.utils.credentials.get_credential')
+    def test_encrypts_plaintext_username(self, mock_get, mock_decrypt, mock_encrypt, mock_set, mock_remove):
+        """Plaintext username in step 2 should be encrypted and re-stored."""
+        from src.utils.credentials import migrate_imx_credentials
+
+        def get_side_effect(key, host_id=None):
+            effective_key = f"{host_id}_{key}" if host_id else key
+            return {
+                'imx_username': 'plaintext_user',  # Plaintext (decrypt will fail)
+            }.get(effective_key, '')
+
+        mock_get.side_effect = get_side_effect
         mock_decrypt.side_effect = Exception("Not valid Fernet")
-        mock_encrypt.return_value = "encrypted_myuser"
+        mock_encrypt.return_value = "encrypted_plaintext_user"
 
-        migrate_plaintext_usernames()
+        migrate_imx_credentials()
 
-        mock_encrypt.assert_any_call("myuser")
-        mock_set.assert_any_call("username", "encrypted_myuser")
+        # Step 2: plaintext imx_username should be encrypted
+        mock_encrypt.assert_any_call("plaintext_user")
+        mock_set.assert_any_call("imx_username", "encrypted_plaintext_user")
 
+    @patch('src.utils.credentials.remove_credential')
     @patch('src.utils.credentials.set_credential')
     @patch('src.utils.credentials.encrypt_password')
     @patch('src.utils.credentials.decrypt_password')
     @patch('src.utils.credentials.get_credential')
-    def test_skips_already_encrypted_username(self, mock_get, mock_decrypt, mock_encrypt, mock_set):
+    def test_skips_already_encrypted_username(self, mock_get, mock_decrypt, mock_encrypt, mock_set, mock_remove):
         """Already-encrypted username should not be re-encrypted."""
-        from src.utils.credentials import migrate_plaintext_usernames
+        from src.utils.credentials import migrate_imx_credentials
 
-        mock_get.return_value = "gAAAAABexample..."
+        def get_side_effect(key, host_id=None):
+            effective_key = f"{host_id}_{key}" if host_id else key
+            return {
+                'imx_username': 'gAAAAABexample...',
+            }.get(effective_key, '')
+
+        mock_get.side_effect = get_side_effect
         mock_decrypt.return_value = "myuser"  # Decrypts successfully = already encrypted
 
-        migrate_plaintext_usernames()
+        migrate_imx_credentials()
 
         mock_encrypt.assert_not_called()
-        mock_set.assert_not_called()
 
+    @patch('src.utils.credentials.remove_credential')
     @patch('src.utils.credentials.set_credential')
     @patch('src.utils.credentials.encrypt_password')
     @patch('src.utils.credentials.decrypt_password')
     @patch('src.utils.credentials.get_credential')
-    def test_skips_empty_username(self, mock_get, mock_decrypt, mock_encrypt, mock_set):
-        """Empty/missing usernames should be skipped."""
-        from src.utils.credentials import migrate_plaintext_usernames
+    def test_skips_empty_username(self, mock_get, mock_decrypt, mock_encrypt, mock_set, mock_remove):
+        """Empty/missing usernames should be skipped in step 2."""
+        from src.utils.credentials import migrate_imx_credentials
 
         mock_get.return_value = ""
 
-        migrate_plaintext_usernames()
+        migrate_imx_credentials()
 
         mock_decrypt.assert_not_called()
         mock_encrypt.assert_not_called()
-
-    @patch('src.utils.credentials.set_credential')
-    @patch('src.utils.credentials.encrypt_password')
-    @patch('src.utils.credentials.decrypt_password')
-    @patch('src.utils.credentials.get_credential')
-    def test_migrates_all_known_username_keys(self, mock_get, mock_decrypt, mock_encrypt, mock_set):
-        """Should check all known username keys: global, imx, turbo."""
-        from src.utils.credentials import migrate_plaintext_usernames
-
-        mock_get.return_value = ""
-
-        migrate_plaintext_usernames()
-
-        # Should check at least these keys
-        called_keys = [call.args[0] for call in mock_get.call_args_list]
-        assert "username" in called_keys
-        assert "imx_username" in called_keys
-        assert "turbo_username" in called_keys
 
 
 class TestSaveCredentialsEncryptsUsername:
@@ -86,10 +143,10 @@ class TestSaveCredentialsEncryptsUsername:
 
         _save_credentials("myuser", "mypass")
 
-        # Username should be encrypted
-        mock_set.assert_any_call('username', 'encrypted_myuser')
-        # Password should also be encrypted
-        mock_set.assert_any_call('password', 'encrypted_mypass')
+        # Username should be encrypted and stored under imx host
+        mock_set.assert_any_call('username', 'encrypted_myuser', 'imx')
+        # Password should also be encrypted and stored under imx host
+        mock_set.assert_any_call('password', 'encrypted_mypass', 'imx')
 
 
 class TestUsernameDecryptionInConsumers:

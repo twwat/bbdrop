@@ -182,7 +182,7 @@ class TestColumnSorting:
                 assert speed_item.text() != "---", f"Speed should not be '---' for {worker_id}"
 
             # Verify status matches this worker
-            expected_status = matching_worker.status.capitalize()
+            expected_status = "Failed" if matching_worker.status in ('error', 'failed') else matching_worker.status.capitalize()
             assert status_item.text() == expected_status, \
                 f"Status mismatch for {worker_id}: expected {expected_status}, got {status_item.text()}"
 

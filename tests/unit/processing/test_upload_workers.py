@@ -1002,6 +1002,7 @@ class TestUploadVideoGallery:
         mock_item.name = "Test Video"
         mock_item.uploaded_bytes = 0
         mock_item.video_metadata = {}
+        mock_item.screenshot_sheet_path = ''
 
         mock_strategy = Mock()
         mock_strategy.generate_primary_content.return_value = {
@@ -1040,6 +1041,7 @@ class TestUploadVideoGallery:
         mock_item.path = "/path/to/corrupt.mkv"
         mock_item.name = "Corrupt Video"
         mock_item.uploaded_bytes = 0
+        mock_item.screenshot_sheet_path = ''
 
         mock_strategy = Mock()
         mock_strategy.generate_primary_content.return_value = {
@@ -1080,6 +1082,7 @@ class TestUploadVideoGallery:
         mock_item.name = "Test Video"
         mock_item.uploaded_bytes = 0
         mock_item.video_metadata = {}
+        mock_item.screenshot_sheet_path = ''
 
         mock_strategy = Mock()
         mock_strategy.generate_primary_content.return_value = {
@@ -1115,6 +1118,7 @@ class TestUploadVideoGallery:
         mock_item.name = "Test Video"
         mock_item.uploaded_bytes = 0
         mock_item.video_metadata = {}
+        mock_item.screenshot_sheet_path = ''
 
         mock_strategy = Mock()
         mock_strategy.generate_primary_content.return_value = {
@@ -1159,6 +1163,7 @@ class TestUploadVideoGallery:
         mock_item.name = "Test Video"
         mock_item.uploaded_bytes = 0
         mock_item.video_metadata = {}
+        mock_item.screenshot_sheet_path = ''
 
         expected_metadata = {
             'duration': 7200,
@@ -1215,6 +1220,7 @@ class TestUploadVideoGallery:
         mock_item.name = "Test Video"
         mock_item.uploaded_bytes = 0
         mock_item.video_metadata = {}
+        mock_item.screenshot_sheet_path = ''
 
         mock_strategy = Mock()
         mock_strategy.generate_primary_content.return_value = {
@@ -1250,15 +1256,21 @@ class TestGetVideoSettings:
 
             result = worker._get_video_settings()
 
-        assert result['rows'] == 4
+        assert result['rows'] == 5
         assert result['cols'] == 4
+        assert result['thumb_width'] == 320
+        assert result['border_spacing'] == 4
         assert result['show_timestamps'] is True
         assert result['show_ms'] is False
         assert result['show_frame_number'] is False
+        assert result['ts_font_size'] == 12
+        assert result['header_font_size'] == 14
+        assert result['font_family'] == 'monospace'
         assert result['font_color'] == '#ffffff'
         assert result['bg_color'] == '#000000'
         assert result['output_format'] == 'PNG'
         assert result['image_overlay_template'] == ''
+        assert result['video_details_template'] == ''
         mock_settings.beginGroup.assert_called_once_with("Video")
         mock_settings.endGroup.assert_called_once()
 
