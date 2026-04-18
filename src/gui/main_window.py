@@ -2561,7 +2561,7 @@ class BBDropGUI(QMainWindow):
     def _handle_settings_dialog_result(self, result):
         """Handle settings dialog result without blocking GUI"""
         if result == QDialog.DialogCode.Accepted:
-            log("Comprehensive settings saved successfully", level="info", category="ui")
+            log("Comprehensive settings saved successfully", level="debug", category="ui")
             # Reload settings into quick settings UI
             from src.utils.paths import load_user_defaults
             defaults = load_user_defaults()

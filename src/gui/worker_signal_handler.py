@@ -565,7 +565,7 @@ class WorkerSignalHandler(QObject):
                 if mw._file_host_startup_completed >= mw._file_host_startup_expected:
                     mw._file_host_startup_complete = True
                     log(f"File host startup complete ({mw._file_host_startup_expected} worker{'s' if mw._file_host_startup_expected != 1 else ''})",
-                        level="info", category="startup")
+                        level="debug", category="startup")
 
             # Always initialize queue display and update status, whether initial
             # startup or a re-enabled worker coming back up after a failure.
