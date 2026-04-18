@@ -71,7 +71,10 @@ def create_file_manager_client(
 
     if host_id == "rapidgator":
         from src.network.file_manager.rapidgator_client import RapidgatorFileManagerClient
-        return RapidgatorFileManagerClient(token=auth_token)
+        return RapidgatorFileManagerClient(
+            token=auth_token,
+            refresh_token=_refresh_rapidgator_token,
+        )
 
     if host_id == "katfile":
         from src.network.file_manager.xfs_client import XFSFileManagerClient
@@ -150,6 +153,21 @@ def _load_rapidgator_token() -> Optional[str]:
             level="warning", category="file_manager")
 
     return None
+
+
+def _refresh_rapidgator_token() -> Optional[str]:
+    """Clear the cached RG token and re-login via stored credentials.
+
+    Passed to RapidgatorFileManagerClient as the refresh callback: the
+    client invokes it when a request fails with "Session doesn't exist"
+    / HTTP 401, then retries the request with the returned token.
+    """
+    try:
+        from src.network.token_cache import get_token_cache
+        get_token_cache().clear_token("rapidgator")
+    except Exception:
+        pass
+    return _load_rapidgator_token()
 
 
 def get_supported_hosts() -> list[str]:

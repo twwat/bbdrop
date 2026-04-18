@@ -12,7 +12,7 @@ import pycurl
 import certifi
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlencode
 
 from src.network.file_manager.client import (
@@ -50,12 +50,52 @@ _ACCESS_MAP = {"public": 0, "premium": 1, "private": 2, "hotlink": 3}
 _ACCESS_REVERSE = {v: k for k, v in _ACCESS_MAP.items()}
 
 
+class _RGAuthError(Exception):
+    """Internal marker for auth failures — caught by the retry path in
+    `_api_call`, re-raised as a plain `RuntimeError` when refresh is
+    exhausted. Deliberately NOT a RuntimeError so the in-module
+    "wrong item type" fall-through blocks (`except RuntimeError:`) don't
+    catch it and kick off a second doomed API call with the same token.
+    """
+
+
+# Phrases RG has returned when a token is no longer valid. The server
+# sometimes embeds one of these in a 200 OK body with `status: 401` or,
+# for older endpoints, with a different numeric status entirely.
+_AUTH_ERROR_PHRASES = (
+    "session doesn't exist",
+    "session does not exist",
+    "session expired",
+    "invalid token",
+    "token expired",
+    "not authorized",
+    "unauthorized",
+)
+
+
 class RapidgatorFileManagerClient(FileManagerClient):
     """File manager for RapidGator via API v2."""
 
-    def __init__(self, token: str, timeout: int = 30):
+    def __init__(
+        self,
+        token: str,
+        timeout: int = 30,
+        refresh_token: Optional[Callable[[], Optional[str]]] = None,
+    ):
+        """Create the client.
+
+        Args:
+            token: Initial RG API v2 token.
+            timeout: Per-request timeout in seconds.
+            refresh_token: Optional callable returning a fresh token. Invoked
+                once per request on auth failure ("Session doesn't exist" /
+                HTTP 401). When it returns a new token, the failed call is
+                retried once. The factory wires this up to clear the token
+                cache and re-login via FileHostClient.
+        """
         self.token = token
         self.timeout = timeout
+        self._refresh_token = refresh_token
 
     # ------------------------------------------------------------------
     # Low-level API call
@@ -64,15 +104,34 @@ class RapidgatorFileManagerClient(FileManagerClient):
     def _api_call(self, endpoint: str, params: Optional[dict] = None) -> Dict[str, Any]:
         """GET request to RapidGator API v2.
 
-        Args:
-            endpoint: Path after /api/v2/ (e.g. 'folder/content').
-            params: Query params (token is added automatically).
+        Retries once with a refreshed token on auth failure when a
+        refresh callback is configured.
+        """
+        try:
+            return self._api_call_once(endpoint, params)
+        except _RGAuthError as e:
+            if self._refresh_token is None:
+                raise RuntimeError(str(e)) from e
+            log(f"RG auth failure on {endpoint}, refreshing token: {e}",
+                level="info", category="file_manager")
+            new_token = self._refresh_token()
+            if not new_token or new_token == self.token:
+                log(f"RG token refresh returned no new token; giving up on {endpoint}",
+                    level="warning", category="file_manager")
+                raise RuntimeError(str(e)) from e
+            self.token = new_token
+            try:
+                return self._api_call_once(endpoint, params)
+            except _RGAuthError as retry_err:
+                raise RuntimeError(str(retry_err)) from retry_err
 
-        Returns:
-            Parsed JSON response.
+    def _api_call_once(self, endpoint: str, params: Optional[dict] = None) -> Dict[str, Any]:
+        """Perform one GET against the RG API without retry.
 
         Raises:
-            RuntimeError: On HTTP or API-level errors.
+            _RGAuthError: On 401 / "Session doesn't exist" — caller may
+                refresh and retry.
+            RuntimeError: On any other HTTP or API-level error.
         """
         query = dict(params or {})
         query["token"] = self.token
@@ -99,6 +158,8 @@ class RapidgatorFileManagerClient(FileManagerClient):
 
         raw = buf.getvalue().decode("utf-8")
 
+        if status == 401:
+            raise _RGAuthError(f"RG API {endpoint} HTTP 401")
         if status < 200 or status >= 300:
             raise RuntimeError(f"RG API {endpoint} returned HTTP {status}")
 
@@ -106,7 +167,13 @@ class RapidgatorFileManagerClient(FileManagerClient):
 
         resp_status = data.get("status")
         if resp_status and int(resp_status) != 200:
-            msg = data.get("response", {}).get("error", raw) if isinstance(data.get("response"), dict) else raw
+            resp = data.get("response")
+            msg = resp.get("error", raw) if isinstance(resp, dict) else raw
+            msg_lower = str(msg).lower()
+            if int(resp_status) == 401 or any(
+                phrase in msg_lower for phrase in _AUTH_ERROR_PHRASES
+            ):
+                raise _RGAuthError(f"RG API {endpoint} error {resp_status}: {msg}")
             raise RuntimeError(f"RG API {endpoint} error {resp_status}: {msg}")
 
         return data
