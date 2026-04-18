@@ -8,7 +8,9 @@ See docs/superpowers/specs/2026-04-17-customizable-layout-design.md for design.
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QObject
+from PyQt6.QtCore import QByteArray, QObject
+
+from src.utils.logger import log
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI
@@ -46,8 +48,26 @@ class LayoutManager(QObject):
         Raises:
             KeyError: If name is not a known preset.
         """
-        raise NotImplementedError  # Implemented in Task 2
+        from src.gui.layout_presets import PRESETS
+
+        payload_b64 = PRESETS[name]  # raises KeyError on unknown name
+        if not payload_b64:
+            log(
+                f"Preset '{name}' has no captured payload; skipping apply",
+                level="warning",
+                category="ui",
+            )
+            return
+
+        state = QByteArray.fromBase64(payload_b64)
+        if not self._mw.restoreState(state):
+            log(
+                f"Preset '{name}' could not be applied (restoreState returned False); "
+                "current layout unchanged",
+                level="warning",
+                category="ui",
+            )
 
     def reset_layout(self) -> None:
         """Restore the Classic default layout."""
-        raise NotImplementedError  # Implemented in Task 2
+        self.apply_preset("classic")
