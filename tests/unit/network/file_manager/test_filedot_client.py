@@ -633,3 +633,44 @@ def test_filedot_delete_uses_cached_token():
     _method, delete_url = delete_calls[0]
     assert "del_code=clsl0fz7pfhl" in delete_url
     assert "token=a8ea1b794ae9b74e79471c0a98e8d2fa" in delete_url
+
+
+def test_scraped_file_carries_metadata_from_regex_match():
+    """After _scrape_page, FileInfo objects should carry the raw scraped
+    fields in metadata so persistence + future columns get them for free."""
+    import types
+    from src.network.file_manager.filedot_client import FiledotFileManagerClient
+    from unittest.mock import patch
+
+    c = FiledotFileManagerClient.__new__(FiledotFileManagerClient)
+    c.USES_CSRF_TOKEN = True
+    c._action_token = None
+    c._file_code_to_numeric = None
+    c._last_folder_id = None
+    c._known_folder_ids = set()
+    c._last_list_fld_id = "0"
+
+    # Minimal HTML matching the existing regexes (a file row + a folder row).
+    html = (
+        '<tr class="folderrow">'
+        '<td><a href="https://filedot.to/files?fld_id=42">pics</a></td>'
+        '</tr>'
+        '<tr class="filerow">'
+        '<td><input type="checkbox" name="file_id" value="1001"></td>'
+        '<td class="filename"><a href="https://filedot.to/abc123">photo.jpg</a></td>'
+        '<td class="tdinfo">1.2 MB</td>'
+        '</tr>'
+    )
+
+    with patch.object(c, "_web_get", return_value=html):
+        folders, files = c._scrape_page("0", 1)
+
+    assert len(folders) == 1
+    assert len(files) == 1
+    # Folder metadata should carry the fields we matched.
+    assert folders[0].metadata.get("fld_id") == "42"
+    assert folders[0].metadata.get("name")  # raw scraped name present
+    # File metadata should carry numeric_id, file_code, raw name, size_str.
+    assert files[0].metadata.get("file_code") == "abc123"
+    assert files[0].metadata.get("numeric_id") == "1001"
+    assert "size_str" in files[0].metadata

@@ -221,6 +221,11 @@ class XFSWebFileManagerBase(FileManagerClient):
                 name=name or fld_id,
                 is_folder=True,
                 parent_id=folder_id if folder_id not in ("/", "") else None,
+                metadata={
+                    "fld_id": fld_id,
+                    "name": name,
+                    "raw_name": raw_name,
+                },
             ))
 
         files = []
@@ -238,6 +243,13 @@ class XFSWebFileManagerBase(FileManagerClient):
                 size=_parse_size(size_str),
                 is_available=True,
                 parent_id=folder_id if folder_id not in ("/", "") else None,
+                metadata={
+                    "file_code": file_code,
+                    "numeric_id": numeric_id,
+                    "name": name,
+                    "raw_name": raw_name,
+                    "size_str": size_str,
+                },
             ))
 
         log(f"{self.BASE_URL} scraped folder_id={folder_id!r} page={page}: "
