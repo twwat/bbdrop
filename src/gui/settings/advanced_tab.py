@@ -107,6 +107,14 @@ ADVANCED_SETTINGS = [
         "min": 20,
         "max": 2000
     },
+    {
+        "key": "video/sheet_hover_preview_width_px",
+        "description": "Width (px) of the contact-sheet hover preview shown in the Type column",
+        "default": 640,
+        "type": "int",
+        "min": 200,
+        "max": 1920
+    },
 ]
 
 

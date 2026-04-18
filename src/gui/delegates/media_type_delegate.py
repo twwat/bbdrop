@@ -9,6 +9,36 @@ from src.gui.widgets.video_sheet_utils import get_cached_preview, resolve_sheet_
 from src.utils.logger import log
 
 
+def _read_sheet_preview_width() -> int:
+    """Load the hover-preview width from Advanced Settings, with legacy fallback.
+
+    Preference order:
+      1. [Advanced] INI — ``video/sheet_hover_preview_width_px``
+      2. QSettings [Video]/sheet_preview_width_px (legacy Contact Sheets tab)
+      3. 640 (default)
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    cfg = configparser.ConfigParser()
+    config_file = get_config_path()
+    if os.path.exists(config_file):
+        try:
+            cfg.read(config_file, encoding='utf-8')
+            raw = cfg.get('Advanced', 'video/sheet_hover_preview_width_px', fallback=None)
+            if raw is not None:
+                return int(raw)
+        except (ValueError, configparser.Error):
+            pass
+
+    settings = QSettings("BBDropUploader", "BBDropGUI")
+    settings.beginGroup("Video")
+    legacy = settings.value("sheet_preview_width_px", 640, int)
+    settings.endGroup()
+    return int(legacy or 640)
+
+
 class MediaTypeDelegate(QStyledItemDelegate):
     """Renders a photo or video icon based on the cell's media type value.
 
@@ -70,10 +100,7 @@ class MediaTypeDelegate(QStyledItemDelegate):
                               view, option.rect)
             return True
 
-        settings = QSettings("BBDropUploader", "BBDropGUI")
-        settings.beginGroup("Video")
-        target_width = settings.value("sheet_preview_width_px", 640, int)
-        settings.endGroup()
+        target_width = _read_sheet_preview_width()
         target_width = max(200, min(int(target_width or 640), 1920))
 
         preview_path = get_cached_preview(sheet_path, target_width)

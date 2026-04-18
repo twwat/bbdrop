@@ -23,35 +23,55 @@ class TestVideoSettingsTab:
 
 
 class TestSheetHoverPreviewWidth:
-    def test_default_value_is_640(self, qtbot):
+    """The hover preview width setting moved from the Contact Sheets tab
+    to Advanced Settings. These tests cover the delegate's reader, which
+    prefers the [Advanced] INI value and falls back to the legacy
+    QSettings location for users upgrading from the old Contact Sheets tab.
+    """
+
+    def test_default_value_is_640(self, tmp_path, monkeypatch):
+        from src.gui.delegates import media_type_delegate
+
+        monkeypatch.setattr(
+            'src.utils.paths.get_config_path',
+            lambda: str(tmp_path / 'missing.ini'),
+        )
+        # No INI, no legacy QSettings → default 640
+        assert media_type_delegate._read_sheet_preview_width() == 640
+
+    def test_reads_from_advanced_ini(self, tmp_path, monkeypatch):
+        from src.gui.delegates import media_type_delegate
+
+        ini = tmp_path / 'bbdrop.ini'
+        ini.write_text(
+            "[Advanced]\n"
+            "video/sheet_hover_preview_width_px = 820\n",
+            encoding='utf-8',
+        )
+        monkeypatch.setattr(
+            'src.utils.paths.get_config_path', lambda: str(ini),
+        )
+        assert media_type_delegate._read_sheet_preview_width() == 820
+
+    def test_legacy_qsettings_fallback(self, tmp_path, monkeypatch, qtbot):
         from PyQt6.QtCore import QSettings
-        from src.gui.settings.video_tab import VideoSettingsTab
+        from src.gui.delegates import media_type_delegate
 
-        tab = VideoSettingsTab()
-        qtbot.addWidget(tab)
-
-        settings = QSettings("BBDropUploader-Test", "VideoSheetWidthDefault")
-        settings.clear()
-        tab.load_settings(settings)
-        assert tab.sheet_hover_preview_width.value() == 640
-
-    def test_round_trip_through_qsettings(self, qtbot):
-        from PyQt6.QtCore import QSettings
-        from src.gui.settings.video_tab import VideoSettingsTab
-
-        tab = VideoSettingsTab()
-        qtbot.addWidget(tab)
-
-        settings = QSettings("BBDropUploader-Test", "VideoSheetWidthRoundTrip")
-        settings.clear()
-        tab.sheet_hover_preview_width.setValue(800)
-        tab.save_settings(settings)
-
-        tab2 = VideoSettingsTab()
-        qtbot.addWidget(tab2)
-        tab2.load_settings(settings)
-        assert tab2.sheet_hover_preview_width.value() == 800
-        settings.clear()
+        monkeypatch.setattr(
+            'src.utils.paths.get_config_path',
+            lambda: str(tmp_path / 'missing.ini'),
+        )
+        # Legacy setting in QSettings should still be honoured.
+        legacy = QSettings("BBDropUploader", "BBDropGUI")
+        legacy.beginGroup("Video")
+        legacy.setValue("sheet_preview_width_px", 770)
+        legacy.endGroup()
+        try:
+            assert media_type_delegate._read_sheet_preview_width() == 770
+        finally:
+            legacy.beginGroup("Video")
+            legacy.remove("sheet_preview_width_px")
+            legacy.endGroup()
 
 
 class TestContactSheetsLayout:
@@ -74,7 +94,9 @@ class TestContactSheetsLayout:
 
         groups = tab.findChildren(QGroupBox)
         group_titles = [g.title() for g in groups]
-        for expected in ["Screenshot Sheet", "Preview", "Timestamps", "Appearance",
-                         "Image Overlay Template", "Video Details Template",
+        # Appearance controls were merged into "Text Overlay Template", so
+        # the standalone Appearance group is intentionally gone.
+        for expected in ["Screenshot Sheet", "Preview", "Timestamps",
+                         "Text Overlay Template", "Video Details Template",
                          "Defaults", "Mixed Folders"]:
             assert expected in group_titles, f"Missing group: {expected}"

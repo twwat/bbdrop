@@ -6,7 +6,7 @@ import os
 from PIL import Image
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QGroupBox,
     QSpinBox, QCheckBox, QComboBox, QColorDialog, QLineEdit,
     QFontComboBox, QPlainTextEdit, QLabel,
     QScrollArea, QPushButton, QGraphicsScene,
@@ -168,48 +168,46 @@ class VideoSettingsTab(QWidget):
 
         # ===== Row 1, Left: Screenshot Sheet =====
         sheet_group = QGroupBox("Screenshot Sheet")
-        sheet_layout = QVBoxLayout(sheet_group)
+        sheet_form = QFormLayout(sheet_group)
+        sheet_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Grid:"))
-        row1.addWidget(InfoButton(
-            "<b>Screenshot Sheet</b><br>"
-            "A grid of evenly-spaced frames extracted from the video. "
-            "The sheet is uploaded to the image host as a single image.<br><br>"
-            "<b>Thumb width</b> sets the width of each frame in the grid (height scales proportionally). "
-            "<b>Spacing</b> controls the gap between frames and around the edges."
-        ))
+        def _form_label(text: str, info_html: str) -> QWidget:
+            """Build a 'Label: (i)' row-label widget for QFormLayout."""
+            w = QWidget()
+            lay = QHBoxLayout(w)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setSpacing(4)
+            lay.addWidget(QLabel(text))
+            lay.addWidget(InfoButton(info_html))
+            lay.addStretch()
+            return w
+
+        # Grid: rows × cols
         self.grid_rows = QSpinBox()
         self.grid_rows.setRange(1, 10)
         self.grid_rows.setValue(5)
         self.grid_rows.valueChanged.connect(self.dirty.emit)
-        row1.addWidget(self.grid_rows)
-        row1.addWidget(QLabel("\u00d7"))
         self.grid_cols = QSpinBox()
         self.grid_cols.setRange(1, 10)
         self.grid_cols.setValue(4)
         self.grid_cols.valueChanged.connect(self.dirty.emit)
-        row1.addWidget(self.grid_cols)
-        row1.addStretch()
-        row1.addWidget(QLabel("Format:"))
-        self.output_format = QComboBox()
-        self.output_format.addItems(["JPG", "PNG"])
-        self.output_format.currentIndexChanged.connect(self.dirty.emit)
-        self.output_format.currentTextChanged.connect(self._on_format_changed)
-        row1.addWidget(self.output_format)
-        self._jpg_quality_label = QLabel("Quality:")
-        row1.addWidget(self._jpg_quality_label)
-        self.jpg_quality = QSpinBox()
-        self.jpg_quality.setRange(1, 100)
-        self.jpg_quality.setValue(85)
-        self.jpg_quality.setSuffix("%")
-        self.jpg_quality.setToolTip("JPEG compression quality (1-100)")
-        self.jpg_quality.valueChanged.connect(self.dirty.emit)
-        row1.addWidget(self.jpg_quality)
-        sheet_layout.addLayout(row1)
+        grid_row = QHBoxLayout()
+        grid_row.setSpacing(4)
+        grid_row.addWidget(self.grid_rows)
+        grid_row.addWidget(QLabel("\u00d7"))
+        grid_row.addWidget(self.grid_cols)
+        grid_row.addStretch()
+        sheet_form.addRow(
+            _form_label(
+                "Grid:",
+                "<b>Grid</b><br>"
+                "Number of rows × columns of frames extracted from the video "
+                "and arranged into the screenshot sheet."
+            ),
+            grid_row,
+        )
 
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Thumb width:"))
+        # Thumbnail width (own row)
         self.thumb_width = QSpinBox()
         self.thumb_width.setRange(100, 1920)
         self.thumb_width.setValue(320)
@@ -217,40 +215,78 @@ class VideoSettingsTab(QWidget):
         self.thumb_width.setSingleStep(10)
         self.thumb_width.setToolTip("Target width for each thumbnail in the grid. Height scales proportionally.")
         self.thumb_width.valueChanged.connect(self.dirty.emit)
-        row2.addWidget(self.thumb_width)
-        row2.addStretch()
-        row2.addWidget(QLabel("Spacing:"))
+        sheet_form.addRow(
+            _form_label(
+                "Thumbnail width:",
+                "<b>Thumbnail width</b><br>"
+                "Target width in pixels for each frame in the grid. Height "
+                "scales proportionally to preserve the video's aspect ratio."
+            ),
+            self.thumb_width,
+        )
+
+        # Spacing (own row)
         self.border_spacing = QSpinBox()
         self.border_spacing.setRange(0, 50)
         self.border_spacing.setValue(4)
         self.border_spacing.setSuffix(" px")
         self.border_spacing.setToolTip("Spacing between thumbnails and around the sheet edges.")
         self.border_spacing.valueChanged.connect(self.dirty.emit)
-        row2.addWidget(self.border_spacing)
-        sheet_layout.addLayout(row2)
-
-        row3 = QHBoxLayout()
-        row3.addWidget(QLabel("Hover preview width:"))
-        self.sheet_hover_preview_width = QSpinBox()
-        self.sheet_hover_preview_width.setRange(200, 1920)
-        self.sheet_hover_preview_width.setValue(640)
-        self.sheet_hover_preview_width.setSuffix(" px")
-        self.sheet_hover_preview_width.setSingleStep(20)
-        self.sheet_hover_preview_width.setToolTip(
-            "Width of the screenshot sheet preview shown when hovering "
-            "the film-reel icon in the Type column."
+        sheet_form.addRow(
+            _form_label(
+                "Spacing:",
+                "<b>Spacing</b><br>"
+                "Gap in pixels between thumbnails and around the outer edges "
+                "of the screenshot sheet."
+            ),
+            self.border_spacing,
         )
-        self.sheet_hover_preview_width.valueChanged.connect(self.dirty.emit)
-        row3.addWidget(self.sheet_hover_preview_width)
-        row3.addStretch()
-        sheet_layout.addLayout(row3)
+
+        # Format + Quality share a row; each gets its own info button.
+        self.output_format = QComboBox()
+        self.output_format.addItems(["JPG", "PNG"])
+        self.output_format.currentIndexChanged.connect(self.dirty.emit)
+        self.output_format.currentTextChanged.connect(self._on_format_changed)
+        self._jpg_quality_label = QLabel("Quality:")
+        self.jpg_quality = QSpinBox()
+        self.jpg_quality.setRange(1, 100)
+        self.jpg_quality.setValue(85)
+        self.jpg_quality.setSuffix("%")
+        self.jpg_quality.setToolTip("JPEG compression quality (1-100)")
+        self.jpg_quality.valueChanged.connect(self.dirty.emit)
+        fmt_row = QHBoxLayout()
+        fmt_row.setSpacing(4)
+        fmt_row.addWidget(self.output_format)
+        fmt_row.addSpacing(12)
+        fmt_row.addWidget(self._jpg_quality_label)
+        self._jpg_quality_info = InfoButton(
+            "<b>Quality</b><br>"
+            "JPEG compression quality, 1–100. Higher is better quality and "
+            "larger file size. Typical sweet-spot is 80–90."
+        )
+        fmt_row.addWidget(self._jpg_quality_info)
+        fmt_row.addWidget(self.jpg_quality)
+        fmt_row.addStretch()
+        sheet_form.addRow(
+            _form_label(
+                "Format:",
+                "<b>Format</b><br>"
+                "Image file format for the uploaded screenshot sheet. "
+                "<b>JPG</b> produces a smaller file with some compression artifacts; "
+                "<b>PNG</b> is lossless but larger."
+            ),
+            fmt_row,
+        )
 
         layout.addWidget(sheet_group, 1, 0)
 
         # ===== Row 1, Right: Preview =====
+        # Thumbnail on the left, dimensions + size + Pop Out button on the
+        # right — keeps the group's height close to Screenshot Sheet's.
         preview_group = QGroupBox("Preview")
-        preview_lay = QVBoxLayout(preview_group)
+        preview_lay = QHBoxLayout(preview_group)
         preview_lay.setContentsMargins(8, 8, 8, 8)
+        preview_lay.setSpacing(10)
 
         self._preview_label = QLabel()
         self._preview_label.setFixedSize(240, 160)
@@ -262,17 +298,19 @@ class VideoSettingsTab(QWidget):
         self._preview_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self._preview_label.setToolTip("Click to open full-size preview")
         self._preview_label.mousePressEvent = lambda _: self._pop_out_preview()
-        preview_lay.addWidget(self._preview_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        preview_lay.addWidget(self._preview_label, 0, Qt.AlignmentFlag.AlignTop)
 
-        preview_bottom = QHBoxLayout()
+        preview_info = QVBoxLayout()
+        preview_info.setSpacing(6)
         self._size_label = QLabel("")
-        preview_bottom.addWidget(self._size_label)
-        preview_bottom.addStretch()
+        self._size_label.setWordWrap(True)
+        preview_info.addWidget(self._size_label)
         pop_out_btn = QPushButton("Pop Out \u2197")
         pop_out_btn.setFixedWidth(90)
         pop_out_btn.clicked.connect(self._pop_out_preview)
-        preview_bottom.addWidget(pop_out_btn)
-        preview_lay.addLayout(preview_bottom)
+        preview_info.addWidget(pop_out_btn)
+        preview_info.addStretch()
+        preview_lay.addLayout(preview_info, 1)
 
         layout.addWidget(preview_group, 1, 1)
 
@@ -312,62 +350,61 @@ class VideoSettingsTab(QWidget):
 
         layout.addWidget(ts_group, 2, 0)
 
-        # ===== Row 2, Right: Appearance =====
-        appearance_group = QGroupBox("Appearance")
-        appearance_layout = QVBoxLayout(appearance_group)
+        # ===== Row 2, Right: Mixed Folders (checkbox on row 1, default on row 2) =====
+        mixed_group = QGroupBox("Mixed Folders")
+        mixed_layout = QVBoxLayout(mixed_group)
+        mixed_layout.setSpacing(4)
 
-        app_row1 = QHBoxLayout()
-        app_row1.addWidget(QLabel("Font:"))
-        app_row1.addWidget(InfoButton(
-            "<b>Appearance</b><br>"
-            "Controls the look of the overlay header and timestamps "
-            "rendered onto the screenshot sheet.<br><br>"
-            "<b>Font color</b> sets the header/timestamp text color. "
-            "<b>BG color</b> sets the header background. "
-            "Click the color swatch to open a picker, or type a hex value."
+        mixed_row1 = QHBoxLayout()
+        mixed_row1.setSpacing(4)
+        self.remember_mixed = QCheckBox("Remember mixed folder choice")
+        self.remember_mixed.toggled.connect(self.dirty.emit)
+        mixed_row1.addWidget(self.remember_mixed)
+        mixed_row1.addWidget(InfoButton(
+            "<b>Remember mixed folder choice</b><br>"
+            "When a folder contains both images and videos, BBDrop asks whether "
+            "to include images or upload videos only. "
+            "Enable this to skip the prompt and always use the selected default."
         ))
-        self.font_family = QFontComboBox()
-        self.font_family.currentFontChanged.connect(self.dirty.emit)
-        app_row1.addWidget(self.font_family, 1)
-        app_row1.addWidget(QLabel("Size:"))
-        self.header_font_size = QSpinBox()
-        self.header_font_size.setRange(6, 72)
-        self.header_font_size.setValue(14)
-        self.header_font_size.setSuffix(" pt")
-        self.header_font_size.valueChanged.connect(self.dirty.emit)
-        app_row1.addWidget(self.header_font_size)
-        appearance_layout.addLayout(app_row1)
+        mixed_row1.addStretch()
+        mixed_layout.addLayout(mixed_row1)
 
-        app_row2 = QHBoxLayout()
-        app_row2.addWidget(QLabel("Font color:"))
-        self.font_color = _ColorPicker("#ffffff")
-        self.font_color.colorChanged.connect(self.dirty.emit)
-        app_row2.addWidget(self.font_color)
-        app_row2.addWidget(QLabel("BG color:"))
-        self.bg_color = _ColorPicker("#000000")
-        self.bg_color.colorChanged.connect(self.dirty.emit)
-        app_row2.addWidget(self.bg_color)
-        app_row2.addStretch()
-        appearance_layout.addLayout(app_row2)
+        mixed_row2 = QHBoxLayout()
+        mixed_row2.setSpacing(6)
+        mixed_row2.addWidget(QLabel("Default:"))
+        mixed_row2.addWidget(InfoButton(
+            "<b>Default</b><br>"
+            "Which choice to use when \"Remember\" is enabled — include images "
+            "alongside the videos, or upload videos only."
+        ))
+        self.mixed_choice = QComboBox()
+        self.mixed_choice.addItems(["Include images", "Videos only"])
+        self.mixed_choice.setEnabled(False)
+        self.mixed_choice.currentIndexChanged.connect(self.dirty.emit)
+        self.remember_mixed.toggled.connect(self.mixed_choice.setEnabled)
+        mixed_row2.addWidget(self.mixed_choice, 1)
+        mixed_layout.addLayout(mixed_row2)
+        layout.addWidget(mixed_group, 2, 1)
 
-        layout.addWidget(appearance_group, 2, 1)
-
-        # ===== Row 3, Left: Image Overlay Template =====
-        overlay_group = QGroupBox("Image Overlay Template")
+        # ===== Row 3, Left: Text Overlay Template (with Appearance controls merged in) =====
+        overlay_group = QGroupBox("Text Overlay Template")
         overlay_layout = QVBoxLayout(overlay_group)
         overlay_title = QHBoxLayout()
         overlay_hint = QLabel("Text rendered onto the sheet above the grid.")
         overlay_title.addWidget(overlay_hint)
         overlay_title.addWidget(InfoButton(
-            "<b>Image Overlay Template</b><br>"
+            "<b>Text Overlay Template</b><br>"
             "This text is rendered directly onto the screenshot sheet image, above the thumbnail grid. "
             "It becomes part of the uploaded image.<br><br>"
             "Click the field to open the full editor with all available placeholders."
         ))
+        overlay_title.addStretch()
         overlay_layout.addLayout(overlay_title)
         self.image_overlay_template = QPlainTextEdit()
         self.image_overlay_template.setReadOnly(True)
-        self.image_overlay_template.setMaximumHeight(60)
+        # Roughly 5 lines of text (QPlainTextEdit line height ~18px + padding)
+        self.image_overlay_template.setMinimumHeight(110)
+        self.image_overlay_template.setMaximumHeight(120)
         self.image_overlay_template.setPlaceholderText(
             "e.g. #filename# | #resolution# | #duration# | #videoCodec# / #audioCodec#"
         )
@@ -377,6 +414,61 @@ class VideoSettingsTab(QWidget):
         self.image_overlay_template.textChanged.connect(self.dirty.emit)
         self.image_overlay_template.viewport().installEventFilter(self)
         overlay_layout.addWidget(self.image_overlay_template)
+
+        # Appearance controls styling the overlay header + timestamps.
+        # Row: Font | Row: Font size + Font color | Row: Background color
+        font_row = QHBoxLayout()
+        font_row.setSpacing(6)
+        font_row.addWidget(QLabel("Font:"))
+        font_row.addWidget(InfoButton(
+            "<b>Font</b><br>"
+            "Typeface used for the header text and timestamps rendered onto "
+            "the screenshot sheet."
+        ))
+        self.font_family = QFontComboBox()
+        # QFontComboBox is editable by default — disable typing so it acts as
+        # a pure dropdown (stops the text-field hover/cursor behaviour).
+        self.font_family.setEditable(False)
+        self.font_family.currentFontChanged.connect(self.dirty.emit)
+        font_row.addWidget(self.font_family, 1)
+        overlay_layout.addLayout(font_row)
+
+        size_color_row = QHBoxLayout()
+        size_color_row.setSpacing(6)
+        size_color_row.addWidget(QLabel("Font size:"))
+        self.header_font_size = QSpinBox()
+        self.header_font_size.setRange(6, 72)
+        self.header_font_size.setValue(14)
+        self.header_font_size.setSuffix(" pt")
+        self.header_font_size.valueChanged.connect(self.dirty.emit)
+        size_color_row.addWidget(self.header_font_size)
+        size_color_row.addSpacing(16)
+        size_color_row.addWidget(QLabel("Font color:"))
+        size_color_row.addWidget(InfoButton(
+            "<b>Font color</b><br>"
+            "Text color for the header and timestamps. Click the swatch to "
+            "open a picker, or type a hex value."
+        ))
+        self.font_color = _ColorPicker("#ffffff")
+        self.font_color.colorChanged.connect(self.dirty.emit)
+        size_color_row.addWidget(self.font_color)
+        size_color_row.addStretch()
+        overlay_layout.addLayout(size_color_row)
+
+        bg_row = QHBoxLayout()
+        bg_row.setSpacing(6)
+        bg_row.addWidget(QLabel("Background color:"))
+        bg_row.addWidget(InfoButton(
+            "<b>Background color</b><br>"
+            "Background color behind the header text band. Click the swatch "
+            "to open a picker, or type a hex value."
+        ))
+        self.bg_color = _ColorPicker("#000000")
+        self.bg_color.colorChanged.connect(self.dirty.emit)
+        bg_row.addWidget(self.bg_color)
+        bg_row.addStretch()
+        overlay_layout.addLayout(bg_row)
+
         layout.addWidget(overlay_group, 3, 0)
 
         # ===== Row 3, Right: Video Details Template =====
@@ -391,10 +483,12 @@ class VideoSettingsTab(QWidget):
             "Use <code>#videoDetails#</code> in your main BBCode template to insert it.<br><br>"
             "Click the field to open the full editor with all available placeholders."
         ))
+        details_title.addStretch()
         details_layout.addLayout(details_title)
         self.video_details_template = QPlainTextEdit()
         self.video_details_template.setReadOnly(True)
-        self.video_details_template.setMaximumHeight(60)
+        self.video_details_template.setMinimumHeight(110)
+        self.video_details_template.setMaximumHeight(120)
         self.video_details_template.setPlaceholderText(
             "e.g. [b]#filename#[/b]\\n#resolution# | #duration# | #filesize#"
         )
@@ -404,49 +498,53 @@ class VideoSettingsTab(QWidget):
         self.video_details_template.textChanged.connect(self.dirty.emit)
         self.video_details_template.viewport().installEventFilter(self)
         details_layout.addWidget(self.video_details_template)
+        details_layout.addStretch()
         layout.addWidget(details_group, 3, 1)
 
-        # ===== Row 4, Left: Defaults =====
+        # ===== Row 4: Defaults (Template and Image host each on own row, info per item) =====
         defaults_group = QGroupBox("Defaults")
-        defaults_layout = QHBoxLayout(defaults_group)
-        defaults_layout.addWidget(QLabel("Template:"))
-        defaults_layout.addWidget(InfoButton(
-            "<b>Defaults</b><br>"
-            "<b>Template</b> — the BBCode template used for video uploads.<br>"
-            "<b>Image host</b> — which host to upload the screenshot sheet to. "
-            "\"Use current selection\" uses whatever image host is active in the main window."
-        ))
+        defaults_form = QFormLayout(defaults_group)
+        defaults_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        def _label_with_info(text: str, info_html: str) -> QWidget:
+            """Build a 'Label: (i)' pair for use as a QFormLayout row label."""
+            w = QWidget()
+            lay = QHBoxLayout(w)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setSpacing(4)
+            lay.addWidget(QLabel(text))
+            lay.addWidget(InfoButton(info_html))
+            lay.addStretch()
+            return w
+
         self.default_template = QComboBox()
         self.default_template.currentIndexChanged.connect(self.dirty.emit)
-        defaults_layout.addWidget(self.default_template, 1)
-        defaults_layout.addWidget(QLabel("Image host:"))
+        defaults_form.addRow(
+            _label_with_info(
+                "Template:",
+                "<b>Template</b><br>"
+                "BBCode template used when uploading galleries that contain videos."
+            ),
+            self.default_template,
+        )
+
         self.image_host_override = QComboBox()
         self.image_host_override.currentIndexChanged.connect(self.dirty.emit)
-        defaults_layout.addWidget(self.image_host_override, 1)
+        defaults_form.addRow(
+            _label_with_info(
+                "Image host:",
+                "<b>Image host</b><br>"
+                "Which image host to upload the screenshot sheet to. "
+                "\"Use current selection\" uses whatever host is active in the main window."
+            ),
+            self.image_host_override,
+        )
         layout.addWidget(defaults_group, 4, 0)
         self._populate_combos()
 
-        # ===== Row 4, Right: Mixed Folders =====
-        mixed_group = QGroupBox("Mixed Folders")
-        mixed_layout = QHBoxLayout(mixed_group)
-        self.remember_mixed = QCheckBox("Remember mixed folder choice")
-        self.remember_mixed.toggled.connect(self.dirty.emit)
-        mixed_layout.addWidget(self.remember_mixed)
-        mixed_layout.addWidget(InfoButton(
-            "<b>Mixed Folders</b><br>"
-            "When a folder contains both images and videos, BBDrop asks whether "
-            "to include images or upload videos only.<br><br>"
-            "Enable <b>Remember</b> to skip the prompt and always use the "
-            "selected default."
-        ))
-        mixed_layout.addWidget(QLabel("Default:"))
-        self.mixed_choice = QComboBox()
-        self.mixed_choice.addItems(["Include images", "Videos only"])
-        self.mixed_choice.setEnabled(False)
-        self.mixed_choice.currentIndexChanged.connect(self.dirty.emit)
-        self.remember_mixed.toggled.connect(self.mixed_choice.setEnabled)
-        mixed_layout.addWidget(self.mixed_choice)
-        layout.addWidget(mixed_group, 4, 1)
+        # Soak up remaining vertical space so rows hug the top instead of
+        # being stretched to fill the tab.
+        layout.setRowStretch(5, 1)
 
         # Connect dirty to schedule preview
         self.dirty.connect(self._schedule_preview_update)
@@ -486,6 +584,7 @@ class VideoSettingsTab(QWidget):
         is_jpg = fmt == "JPG"
         self._jpg_quality_label.setEnabled(is_jpg)
         self.jpg_quality.setEnabled(is_jpg)
+        self._jpg_quality_info.setEnabled(is_jpg)
 
     def eventFilter(self, obj, event):
         """Open template editor when the overlay or details field is clicked.
@@ -497,7 +596,7 @@ class VideoSettingsTab(QWidget):
         if event.type() == event.Type.MouseButtonPress:
             if obj is self.image_overlay_template.viewport():
                 self._open_template_editor(
-                    "Image Overlay Template", self.image_overlay_template
+                    "Text Overlay Template", self.image_overlay_template
                 )
                 return True
             if obj is self.video_details_template.viewport():
@@ -683,7 +782,6 @@ class VideoSettingsTab(QWidget):
         """Load current values from QSettings."""
         widgets = [
             self.grid_rows, self.grid_cols, self.thumb_width, self.border_spacing,
-            self.sheet_hover_preview_width,
             self.output_format, self.jpg_quality, self.show_timestamps, self.show_ms,
             self.show_frame_number, self.ts_font_size, self.font_family,
             self.header_font_size, self.font_color, self.bg_color,
@@ -705,9 +803,6 @@ class VideoSettingsTab(QWidget):
             self.grid_cols.setValue(settings.value("grid_cols", 4, int))
             self.thumb_width.setValue(settings.value("thumb_width", 320, int))
             self.border_spacing.setValue(settings.value("border_spacing", 4, int))
-            self.sheet_hover_preview_width.setValue(
-                settings.value("sheet_preview_width_px", 640, int)
-            )
             self.show_timestamps.setChecked(settings.value("show_timestamps", True, bool))
             self.show_ms.setChecked(settings.value("show_ms", False, bool))
             self.show_frame_number.setChecked(settings.value("show_frame_number", False, bool))
@@ -749,7 +844,6 @@ class VideoSettingsTab(QWidget):
         settings.setValue("grid_cols", self.grid_cols.value())
         settings.setValue("thumb_width", self.thumb_width.value())
         settings.setValue("border_spacing", self.border_spacing.value())
-        settings.setValue("sheet_preview_width_px", self.sheet_hover_preview_width.value())
         settings.setValue("show_timestamps", self.show_timestamps.isChecked())
         settings.setValue("show_ms", self.show_ms.isChecked())
         settings.setValue("show_frame_number", self.show_frame_number.isChecked())
