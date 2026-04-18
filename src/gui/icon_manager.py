@@ -81,7 +81,6 @@ class IconManager:
         'help':                 'help.png',
         'hooks':                'hooks.png',
         'scan':                 'scan.png',
-        'filter':               'filter.png',
         'cover_photo':          'cover_photo.png',
         'toggle_theme':         ['toggle_theme-light.png',      'toggle_theme-dark.png'],
         'statistics':           'statistics.png',
@@ -99,6 +98,7 @@ class IconManager:
         'close':                'close.svg',
         'open_in_new':          'open_in_new.svg',
         'close_fullscreen':     'close_fullscreen.svg',
+        'filter':               'filter.svg',
 
         # Media type icons
         'media_photo':          'photo.png',

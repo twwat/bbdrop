@@ -216,6 +216,31 @@ class MultiLineHeaderView(QHeaderView):
 
         painter.restore()
 
+    def mousePressEvent(self, event):
+        """Swallow clicks on ICON/WIDGET columns so they don't take a sort click.
+
+        The first (host-icon) column sits under the filter button; sending
+        any stray click to the sort machinery would move the sort indicator
+        off whichever text column the user last sorted by.
+
+        Resize-grip drags still need to reach the base class, so defer to
+        Qt whenever the cursor is in a horizontal-resize state.
+        """
+        cursor_shape = self.cursor().shape()
+        is_resize_grip = cursor_shape in (
+            Qt.CursorShape.SplitHCursor, Qt.CursorShape.SizeHorCursor,
+        )
+        if not is_resize_grip:
+            widget = self._worker_widget
+            if widget and hasattr(widget, '_active_columns'):
+                logical_index = self.logicalIndexAt(event.pos())
+                if 0 <= logical_index < len(widget._active_columns):
+                    col_config = widget._active_columns[logical_index]
+                    if col_config.col_type in (ColumnType.ICON, ColumnType.WIDGET):
+                        event.accept()
+                        return
+        super().mousePressEvent(event)
+
     def event(self, event):
         """Handle tooltip events for column headers.
 
@@ -2517,6 +2542,11 @@ class WorkerStatusWidget(QWidget):
             self._pending_resize_columns.add(logical_index)
             self._resize_refit_timer.start()  # Restart timer (debounce)
 
+        # Filter button anchors to the first column — keep it aligned when
+        # any column width changes (header scroll / drag-resize).
+        if hasattr(self, '_filter_btn'):
+            self._position_filter_button()
+
     def _refit_resized_columns(self):
         """Re-fit text in columns that were resized (debounced)."""
         if not self._pending_resize_columns or not self._active_columns:
@@ -2603,6 +2633,9 @@ class WorkerStatusWidget(QWidget):
         # Only save if columns are fully initialized (not during startup)
         if self._active_columns:
             self._save_column_settings()
+
+        if hasattr(self, '_filter_btn'):
+            self._position_filter_button()
 
     def _on_column_clicked(self, logical_index: int):
         """Handle column header click for sorting."""
