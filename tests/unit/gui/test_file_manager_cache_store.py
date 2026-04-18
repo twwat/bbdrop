@@ -130,3 +130,66 @@ def test_load_all_discards_corrupt_row(tmp_cache_db):
     # And the next load confirms it was deleted, not re-discovered.
     loaded2 = store.load_all("rapidgator")
     assert "/bad" not in loaded2
+
+
+def test_clear_by_host_removes_only_that_host(tmp_cache_db):
+    r = _sample_result()
+    store.save("rapidgator", "/", r, 1.0)
+    store.save("keep2share", "/", r, 2.0)
+
+    store.clear("rapidgator")
+    assert store.load_all("rapidgator") == {}
+    assert "/" in store.load_all("keep2share")
+
+
+def test_clear_all_wipes_everything(tmp_cache_db):
+    r = _sample_result()
+    store.save("rapidgator", "/", r, 1.0)
+    store.save("keep2share", "/", r, 2.0)
+
+    store.clear()
+    assert store.load_all("rapidgator") == {}
+    assert store.load_all("keep2share") == {}
+
+
+def test_lookup_galleries_matches_by_host_and_file_id(tmp_path, monkeypatch):
+    """lookup_galleries queries file_host_uploads in bbdrop.db by (host_name, file_id)."""
+    # Build an isolated bbdrop.db with a gallery + a file_host_uploads row.
+    import sqlite3
+    db_path = str(tmp_path / "bbdrop.db")
+    conn = sqlite3.connect(db_path)
+    conn.executescript("""
+        CREATE TABLE galleries (id INTEGER PRIMARY KEY, name TEXT);
+        CREATE TABLE file_host_uploads (
+            gallery_fk INTEGER NOT NULL,
+            host_name TEXT NOT NULL,
+            file_id TEXT,
+            download_url TEXT
+        );
+        INSERT INTO galleries VALUES (1, 'My Gallery');
+        INSERT INTO galleries VALUES (2, 'Other Gallery');
+        INSERT INTO file_host_uploads VALUES (1, 'rapidgator', 'abc123', 'https://example/abc');
+        INSERT INTO file_host_uploads VALUES (2, 'rapidgator', 'def456', 'https://example/def');
+        INSERT INTO file_host_uploads VALUES (1, 'keep2share', 'zzz999', 'https://k2s/zzz');
+    """)
+    conn.commit()
+    conn.close()
+
+    # Point the store's queue-db lookup at our test file.
+    monkeypatch.setattr(store, "_queue_db_path", lambda: db_path)
+
+    mapping = store.lookup_galleries("rapidgator", ["abc123", "def456", "nomatch"])
+    assert mapping == {"abc123": "My Gallery", "def456": "Other Gallery"}
+
+    # Wrong host — no matches.
+    mapping = store.lookup_galleries("keep2share", ["abc123"])
+    assert mapping == {}
+
+    # Correct host for 'zzz999' finds it.
+    mapping = store.lookup_galleries("keep2share", ["zzz999"])
+    assert mapping == {"zzz999": "My Gallery"}
+
+
+def test_lookup_galleries_empty_list_returns_empty_dict(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "_queue_db_path", lambda: str(tmp_path / "no.db"))
+    assert store.lookup_galleries("rapidgator", []) == {}

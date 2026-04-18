@@ -202,3 +202,78 @@ def save(host_name: str, folder_id: str, result: FileListResult, fetched_at: flo
             level="warning", category="file_manager")
     finally:
         conn.close()
+
+
+def clear(host_name: Optional[str] = None) -> None:
+    """Wipe the cache — by host if host_name is given, otherwise everything.
+
+    Exposed for tests and future UI (e.g. a 'Clear Cache' debug menu item).
+    Failures are logged and swallowed.
+    """
+    try:
+        conn = _connect()
+    except sqlite3.Error as e:
+        log(f"file manager cache: cannot open DB for clear: {e}",
+            level="warning", category="file_manager")
+        return
+    try:
+        if host_name is None:
+            conn.execute("DELETE FROM cache")
+        else:
+            conn.execute("DELETE FROM cache WHERE host_name = ?", (host_name,))
+    except sqlite3.Error as e:
+        log(f"file manager cache: clear failed: {e}",
+            level="warning", category="file_manager")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Gallery cross-reference lookup
+# ---------------------------------------------------------------------------
+
+def _queue_db_path() -> str:
+    """Return the queue DB path. Overridable in tests via monkeypatch."""
+    return os.path.join(get_central_store_base_path(), "bbdrop.db")
+
+
+def lookup_galleries(host_name: str, file_ids) -> Dict[str, str]:
+    """Map each file_id to its source gallery name, for files originally
+    uploaded through BBDrop.
+
+    Returns a dict of {file_id: gallery_name}. file_ids without a matching
+    row in bbdrop.db's ``file_host_uploads`` table are simply absent from
+    the result (no 'Unknown' sentinels). Errors return an empty dict.
+    """
+    ids = [str(x) for x in file_ids if x]
+    if not ids:
+        return {}
+
+    path = _queue_db_path()
+    if not os.path.exists(path):
+        return {}
+
+    try:
+        conn = sqlite3.connect(path, timeout=5)
+    except sqlite3.Error as e:
+        log(f"file manager cache: cannot open queue DB: {e}",
+            level="warning", category="file_manager")
+        return {}
+
+    try:
+        placeholders = ",".join("?" for _ in ids)
+        sql = (
+            "SELECT fhu.file_id, g.name "
+            "FROM file_host_uploads fhu "
+            "JOIN galleries g ON g.id = fhu.gallery_fk "
+            f"WHERE fhu.host_name = ? AND fhu.file_id IN ({placeholders})"
+        )
+        rows = conn.execute(sql, (host_name, *ids)).fetchall()
+    except sqlite3.Error as e:
+        log(f"file manager cache: lookup_galleries failed: {e}",
+            level="warning", category="file_manager")
+        conn.close()
+        return {}
+
+    conn.close()
+    return {fid: name for (fid, name) in rows if fid}
