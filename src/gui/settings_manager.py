@@ -4,7 +4,7 @@ This module handles application settings persistence extracted from main_window.
 to improve maintainability and separation of concerns.
 
 Handles:
-    - Window geometry and splitter state persistence
+    - Window geometry and dock layout state persistence
     - Table column configuration (widths, visibility, order)
     - Quick settings auto-save to INI file
     - Theme and font size restoration
@@ -15,7 +15,7 @@ import configparser
 import os
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, QTimer
+from PyQt6.QtCore import QObject
 
 from src.utils.logger import log
 from src.utils.paths import load_user_defaults, get_config_path
@@ -28,7 +28,7 @@ class SettingsManager(QObject):
     """Manages application settings persistence for the main window.
 
     This manager handles all settings-related operations including:
-    - Window geometry and splitter state
+    - Window geometry and dock layout state
     - Table column configuration
     - Quick settings (thumbnails, templates, etc.)
     - Theme and font preferences
@@ -53,8 +53,8 @@ class SettingsManager(QObject):
     def restore_settings(self):
         """Restore window settings from QSettings.
 
-        Restores window geometry, splitter states, right panel collapsed state,
-        table column configuration, theme, and font size from persistent storage.
+        Restores window geometry, dock layout state, table column configuration,
+        theme, and font size from persistent storage.
         """
         mw = self._main_window
         settings = mw.settings
@@ -64,36 +64,22 @@ class SettingsManager(QObject):
         if geometry:
             mw.restoreGeometry(geometry)
 
-        # Restore splitter sizes from JSON integers (structure-independent)
-        if hasattr(mw, 'top_splitter'):
-            sizes_raw = settings.value("splitter/sizes")
-            if sizes_raw:
-                try:
-                    sizes = json.loads(sizes_raw)
-                    if isinstance(sizes, list) and len(sizes) == len(mw.top_splitter.sizes()):
-                        mw.top_splitter.setSizes(sizes)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
-        # Store vertical splitter sizes for later restoration
-        vertical_sizes_raw = None
-        if hasattr(mw, 'right_vertical_splitter'):
-            vertical_sizes_raw = settings.value("splitter/vertical_sizes")
-
-        # Restore right panel collapsed state
-        is_collapsed = settings.value("right_panel/collapsed", False, type=bool)
-        if is_collapsed and hasattr(mw, 'action_toggle_right_panel'):
-            # Collapse after a short delay to allow UI to initialize
-            QTimer.singleShot(100, lambda: mw.toggle_right_panel())
-            # Don't restore vertical splitter state when panel is collapsed
-            # The saved state would be from when panel was expanded
-        elif hasattr(mw, 'action_toggle_right_panel'):
-            mw.action_toggle_right_panel.setChecked(True)
-            # Stash vertical splitter sizes for restoration in showEvent,
-            # where the window has its final geometry and the splitter's
-            # total height is correct (restoring earlier causes size mismatch).
-            if vertical_sizes_raw and hasattr(mw, 'right_vertical_splitter'):
-                mw._pending_vertical_sizes = vertical_sizes_raw
+        # Restore dock layout (QMainWindow dock/toolbar geometry).
+        # Older QSettings keys for horizontal and vertical splitter dimensions
+        # and the right-panel collapsed flag are no longer written or read.
+        state = settings.value("layout/state")
+        restored = False
+        if state:
+            restored = mw.restoreState(state)
+            if not restored:
+                log(
+                    "layout/state present but restoreState returned False; "
+                    "falling back to Classic preset",
+                    level="warning",
+                    category="ui",
+                )
+        if not restored:
+            mw.layout_manager.apply_preset("classic")
 
         # Load settings from .ini file (for reference by other components)
         defaults = load_user_defaults()
@@ -120,8 +106,7 @@ class SettingsManager(QObject):
     def save_settings(self):
         """Save window settings to QSettings.
 
-        Persists window geometry, splitter states, right panel collapsed state,
-        and table column configuration.
+        Persists window geometry, dock layout state, and table column configuration.
         """
         mw = self._main_window
         settings = mw.settings
@@ -129,24 +114,8 @@ class SettingsManager(QObject):
         # Save window geometry
         settings.setValue("geometry", mw.saveGeometry())
 
-        # Save splitter sizes as JSON integers (structure-independent,
-        # unlike saveState() byte arrays which break when child widgets change)
-        if hasattr(mw, 'top_splitter'):
-            settings.setValue("splitter/sizes", json.dumps(mw.top_splitter.sizes()))
-
-        # Save vertical splitter sizes (Settings/Log divider)
-        # Only save when the right panel is NOT collapsed, as collapsed state would save
-        # invalid/zero sizes that can't be properly restored
-        if hasattr(mw, 'right_vertical_splitter') and hasattr(mw, 'top_splitter'):
-            right_panel_width = mw.top_splitter.sizes()[1] if len(mw.top_splitter.sizes()) > 1 else 0
-            if right_panel_width >= 50:  # Only save if panel is not collapsed
-                settings.setValue("splitter/vertical_sizes",
-                                json.dumps(mw.right_vertical_splitter.sizes()))
-
-        # Save right panel collapsed state
-        if hasattr(mw, 'action_toggle_right_panel'):
-            is_collapsed = not mw.action_toggle_right_panel.isChecked()
-            settings.setValue("right_panel/collapsed", is_collapsed)
+        # Save dock layout state
+        settings.setValue("layout/state", mw.saveState())
 
         # Save table column settings
         self.save_table_settings()
