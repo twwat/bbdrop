@@ -253,7 +253,7 @@ class RenameWorker(QObject):
             success = self.login()
             self.login_successful = success
             if success:
-                log("Re-authentication successful", level="info", category="auth")
+                log("Re-authentication successful", level="debug", category="auth")
             else:
                 log("Re-authentication failed - session will remain unauthenticated", level="debug", category="auth")
             return success
@@ -312,7 +312,7 @@ class RenameWorker(QObject):
                 # Test if keyring cookies work
                 test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                 if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                    log("RenameWorker (no credentials) authenticated using keyring cookies", category="auth", level="info")
+                    log("RenameWorker (no credentials) authenticated using keyring cookies", category="auth", level="debug")
                     return True
                 else:
                     log("Keyring cookies expired, trying other methods", level="debug", category="auth")
@@ -351,13 +351,13 @@ class RenameWorker(QObject):
                             log(f"Cookie operation failed: {e}", level="debug", category="auth")
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                        log("RenameWorker authenticated using cookies", category="auth", level="info")
+                        log("RenameWorker authenticated using cookies", category="auth", level="debug")
                         return True
                     else:
                         log(f"RenameWorker cookie auth failed (test URL: {test_response.url})", level="debug", category="auth")
             except Exception as e:
                 log(f"RenameWorker cookie auth exception: {e}", level="debug", category="auth")
-            log("No credentials available for RenameWorker", level="info", category="auth")
+            log("No credentials available for RenameWorker", level="debug", category="auth")
             return False
 
         max_retries = 1
@@ -385,7 +385,7 @@ class RenameWorker(QObject):
                     # Test if keyring cookies work
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                        log("RenameWorker authenticated using keyring cookies", category="auth", level="info")
+                        log("RenameWorker authenticated using keyring cookies", category="auth", level="debug")
                         return True
                     else:
                         log("Keyring cookies expired, trying other methods", level="debug", category="auth")
@@ -424,7 +424,7 @@ class RenameWorker(QObject):
                             log(f"Cookie operation failed: {e}", level="debug", category="auth")
                     test_response = self.session.get(f"{self.web_url}/user/gallery/manage")
                     if 'login' not in test_response.url and 'DDoS-Guard' not in test_response.text:
-                        log("RenameWorker authenticated using cookies", category="auth", level="info")
+                        log("RenameWorker authenticated using cookies", category="auth", level="debug")
                         return True
                     else:
                         has_ddos = 'DDoS-Guard' in test_response.text
@@ -462,7 +462,7 @@ class RenameWorker(QObject):
 
                 # Check if login was successful
                 if 'user' in response.url or 'dashboard' in response.url or 'gallery' in response.url:
-                    log("RenameWorker authenticated using credentials", category="auth", level="info")
+                    log("RenameWorker authenticated using credentials", category="auth", level="debug")
                     # Save session cookies to keyring for next time
                     save_session_cookies_to_keyring(self.session.cookies)
                     return True
@@ -506,7 +506,7 @@ class RenameWorker(QObject):
                 log("Authentication expired (HTTP 403)", level="debug", category="renaming")
                 # Try re-auth with rate limiting to prevent auth storms
                 if retry_on_auth_failure and self._attempt_reauth_with_rate_limit():
-                    log("Re-authenticated successfully, retrying rename", level="info", category="renaming")
+                    log("Re-authenticated successfully, retrying rename", level="debug", category="renaming")
                     return self.rename_gallery_with_session(gallery_id, new_name, retry_on_auth_failure=False)
                 else:
                     log("Re-authentication failed - marking session as dead", level="debug", category="renaming")
