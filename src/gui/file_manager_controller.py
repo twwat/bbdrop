@@ -758,6 +758,19 @@ class FileManagerController(QObject):
             # The "view" is trash mode or the current folder.
             current_view_folder = self._TRASH_KEY if self._in_trash else self._current_folder
             if request_host == self._current_host and request_folder == current_view_folder:
+                # Gallery cross-reference — look up file-id -> gallery-name
+                # for every non-folder entry so the Gallery column renders.
+                file_ids = [fi.id for fi in result.files if not fi.is_folder and fi.id]
+                try:
+                    gallery_map = file_manager_cache_store.lookup_galleries(
+                        request_host, file_ids,
+                    )
+                except Exception as e:
+                    log(f"File manager: gallery lookup failed for {request_host}: {e}",
+                        level="warning", category="file_manager")
+                    gallery_map = {}
+                self._dialog.file_list.set_gallery_map(gallery_map)
+
                 self._dialog.file_list.set_files(result)
                 self._dialog.reapply_filter()
 

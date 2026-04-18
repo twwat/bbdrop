@@ -82,3 +82,45 @@ def test_set_host_warms_file_cache_from_store(qtbot, monkeypatch):
     result, ts = c._file_cache[("rapidgator", "/")]
     assert result is cached_result
     assert ts == 1234.0
+
+
+def test_on_files_loaded_populates_gallery_map_before_set_files(qtbot, monkeypatch):
+    """Controller looks up gallery names for the result and passes them to
+    the file list widget before rendering."""
+    c = _make_controller()
+
+    c._current_host = "rapidgator"
+    c._current_folder = "/"
+    c._in_trash = False
+
+    op_id = "opG"
+    c._pending_file_folders[op_id] = ("rapidgator", "/")
+
+    fi1 = FileInfo(id="abc123", name="x.zip", is_folder=False)
+    fi2 = FileInfo(id="folder1", name="pics", is_folder=True)
+    result = FileListResult(files=[fi1, fi2], total=2, page=1, per_page=100)
+
+    # Make save a no-op so the test is not coupled to filesystem.
+    monkeypatch.setattr("src.gui.file_manager_cache_store.save", lambda *a, **k: None)
+
+    # lookup returns the gallery name for abc123 only.
+    lookup_spy = MagicMock(return_value={"abc123": "My Gallery"})
+    monkeypatch.setattr("src.gui.file_manager_cache_store.lookup_galleries", lookup_spy)
+
+    c._on_files_loaded(op_id, result)
+
+    # Lookup only asked about non-folder ids.
+    lookup_spy.assert_called_once()
+    called_host, called_ids = lookup_spy.call_args[0]
+    assert called_host == "rapidgator"
+    assert set(called_ids) == {"abc123"}   # folder id excluded
+
+    # set_gallery_map received the mapping before set_files was called.
+    c._dialog.file_list.set_gallery_map.assert_called_once_with({"abc123": "My Gallery"})
+
+    # Ordering: set_gallery_map must come before set_files.
+    gm_idx = next(i for i, call in enumerate(c._dialog.file_list.mock_calls)
+                  if call[0] == "set_gallery_map")
+    sf_idx = next(i for i, call in enumerate(c._dialog.file_list.mock_calls)
+                  if call[0] == "set_files")
+    assert gm_idx < sf_idx, "set_gallery_map must be called before set_files"
