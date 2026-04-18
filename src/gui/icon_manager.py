@@ -5,7 +5,9 @@ Centralized management of all application icons with validation and clear mappin
 
 import os
 from typing import Dict, Optional, List, Set, Union
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QStyle
 
 from src.utils.logger import log
@@ -254,7 +256,10 @@ class IconManager:
         # Try to load the icon
         if os.path.exists(icon_path):
             self._disk_loads += 1
-            icon = QIcon(icon_path)
+            if filename.lower().endswith('.svg'):
+                icon = self._render_tinted_svg(icon_path, theme_mode, requested_size)
+            else:
+                icon = QIcon(icon_path)
             if not icon.isNull():
                 self._icon_cache[cache_key] = icon
                 return icon
@@ -279,6 +284,26 @@ class IconManager:
         # Return empty icon as last resort
         return QIcon()
     
+    def _render_tinted_svg(self, svg_path: str, theme_mode: str, size: int) -> QIcon:
+        """Render a monochrome SVG tinted to the theme's foreground color.
+
+        SVG paths should use fill="currentColor" (or any solid color) — the
+        source-in composition ignores the SVG's own color and paints the
+        alpha mask with the theme color.
+        """
+        color = QColor('#1f1f1f') if theme_mode == 'light' else QColor('#e6e6e6')
+        renderer = QSvgRenderer(svg_path)
+        if not renderer.isValid():
+            return QIcon()
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), color)
+        painter.end()
+        return QIcon(pixmap)
+
     def _get_themed_filename(self, config: Union[str, List[str]], theme_mode: str, is_selected: bool) -> Optional[str]:
         """
         Get the appropriate filename based on theme and selection state.
