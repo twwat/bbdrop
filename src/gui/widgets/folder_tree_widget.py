@@ -199,6 +199,39 @@ class FolderTreeWidget(QWidget):
         """Check if a folder's children haven't been loaded yet."""
         return folder_id not in self._loaded_folders
 
+    def show_error(self, parent_id: str, message: str = "") -> None:
+        """Convert the transient Loading… placeholder into an error row.
+
+        Called by the controller when a list_folders fetch fails so the
+        tree doesn't lie about being mid-fetch forever. ``_loaded_folders``
+        is intentionally left untouched — collapsing and re-expanding the
+        folder re-runs _on_item_expanded, which restores the placeholder
+        to "Loading…" and retries.
+        """
+        parent_item = self._find_item(parent_id)
+        if not parent_item:
+            return
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            if not child:
+                continue
+            if child.data(0, Qt.ItemDataRole.UserRole) != _PLACEHOLDER:
+                continue
+            text = "Failed to load"
+            if message:
+                # Keep the row compact — full message is in the status bar.
+                short = message.splitlines()[0][:80]
+                text = f"Failed to load — {short}"
+            child.setText(0, text)
+            # No explicit colour: italic alone distinguishes the row, and
+            # the status bar already carries the red error message. Avoids
+            # hardcoding a colour that would miss the light/dark tokens.
+            font = child.font(0)
+            font.setItalic(True)
+            child.setFont(0, font)
+            child.setFlags(child.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            break
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

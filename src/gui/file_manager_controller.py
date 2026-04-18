@@ -899,11 +899,21 @@ class FileManagerController(QObject):
 
     def _on_error(self, op_id: str, message: str):
         action = self._pending_ops.pop(op_id, "unknown")
-        self._pending_folder_parents.pop(op_id, None)
+        folder_request = self._pending_folder_parents.pop(op_id, None)
         self._pending_file_folders.pop(op_id, None)
         log(f"File manager error [{action}]: {message}",
             level="error", category="file_manager")
         self._dialog.show_status(f"Error: {message}", error=True)
+
+        # Failed folder-tree fetch: convert the Loading… placeholder on
+        # the expanded parent into a visible error row. Collapse+re-expand
+        # will retry. Ignore responses for hosts we've since switched away
+        # from — leaving a stale error row on a no-longer-visible host is
+        # pointless.
+        if action == "list_folders" and folder_request:
+            request_host, parent_id = folder_request
+            if request_host == self._current_host:
+                self._dialog.folder_tree.show_error(parent_id, message)
 
         # Throttle popups: suppress identical errors within 3 seconds
         now = time.time()
