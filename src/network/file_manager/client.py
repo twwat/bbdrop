@@ -33,6 +33,7 @@ class FileInfo:
     download_count: Optional[int] = None    # RapidGator only
     content_type: Optional[str] = None
     parent_id: Optional[str] = None
+    metadata: dict = field(default_factory=dict)  # host-specific extras
 
 
 @dataclass
