@@ -129,6 +129,31 @@ ADVANCED_SETTINGS = [
         "max": 3600
     },
     {
+        "key": "artifacts/regen_debounce_ms",
+        "description": (
+            "Milliseconds to wait before regenerating BBCode after a file "
+            "host upload completes. A burst of sibling completions (e.g. "
+            "K2S family dedup hits) collapses into one regen with the "
+            "final link set. 0 disables debouncing."
+        ),
+        "default": 2000,
+        "type": "int",
+        "min": 0,
+        "max": 30000,
+    },
+    {
+        "key": "notifications/debounce_ms",
+        "description": (
+            "Milliseconds within which repeated notifications of the same "
+            "event (e.g. file host upload completed) collapse into one "
+            "sound/toast. 0 disables debouncing."
+        ),
+        "default": 1500,
+        "type": "int",
+        "min": 0,
+        "max": 30000,
+    },
+    {
         "key": "k2s_family/upload_access",
         "description": (
             "Access level written on new K2S / FileBoom / TezFiles "

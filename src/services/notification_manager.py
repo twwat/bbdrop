@@ -6,11 +6,18 @@ in ~/.bbdrop/bbdrop.ini under [NOTIFICATIONS].
 """
 
 import os
+import time
 from typing import Optional, Dict, Any
 
 from PyQt6.QtWidgets import QSystemTrayIcon
 
 from src.utils.logger import log
+
+
+# Default window within which repeated notifications of the same event_type
+# collapse into a single fire. Mainly stops a burst of file host completions
+# (4 sibling settlements within ~20 s) from stacking 4 back-to-back sounds.
+NOTIFICATION_DEBOUNCE_MS = 1500
 
 try:
     from src.utils.paths import load_user_defaults, read_config, get_config_path
@@ -90,12 +97,16 @@ class NotificationManager:
         self._settings: Dict[str, Any] = {'enabled': False}
         self._event_settings: Dict[str, Dict[str, Any]] = {}
         self._sound_effects: Dict[str, Any] = {}  # str -> QSoundEffect
+        self._last_fired_ts: Dict[str, float] = {}
         from src.utils.system_utils import get_resource_path
         self._sounds_dir = str(get_resource_path('assets/sounds'))
         self.load_settings()
 
     def notify(self, event_type: str, detail: str = '') -> None:
         """Fire notifications for an event if enabled.
+
+        Must be called from the GUI thread — QSoundEffect playback and
+        `_last_fired_ts` bookkeeping both assume single-thread access.
 
         Args:
             event_type: One of the keys from NOTIFICATION_EVENTS.
@@ -108,11 +119,34 @@ class NotificationManager:
         if event_cfg is None:
             return
 
+        debounce_ms = self._get_debounce_ms()
+        if debounce_ms > 0:
+            now = time.monotonic()
+            last = self._last_fired_ts.get(event_type, 0.0)
+            if (now - last) * 1000.0 < debounce_ms:
+                return
+            self._last_fired_ts[event_type] = now
+
         if event_cfg.get('sound', False):
             self._play_sound(event_type, event_cfg)
 
         if event_cfg.get('toast', False):
             self._show_toast(event_type, detail)
+
+    def _get_debounce_ms(self) -> int:
+        """Read the notification debounce window from the [Advanced] INI section."""
+        try:
+            if read_config is None:
+                return NOTIFICATION_DEBOUNCE_MS
+            config = read_config()
+            raw = config.get('Advanced', 'notifications/debounce_ms', fallback=None)
+            if raw is not None:
+                value = int(str(raw).strip())
+                if value >= 0:
+                    return value
+        except Exception:
+            pass
+        return NOTIFICATION_DEBOUNCE_MS
 
     def _play_sound(self, event_type: str, event_cfg: dict) -> None:
         """Play the sound for an event."""

@@ -19,10 +19,17 @@ import queue
 from queue import Queue
 from datetime import datetime
 
-from PyQt6.QtCore import QThread, pyqtSignal, QObject
+from PyQt6.QtCore import QThread, QTimer, pyqtSignal, QObject
 from PyQt6.QtWidgets import QMessageBox
 
 from src.utils.logger import log
+
+
+# When a file host completion arrives, regen is deferred by this window; any
+# later completion for the same gallery replaces the pending timer so a burst
+# of sibling completions (e.g. K2S family dedup hits settling near-simultaneously)
+# collapses into a single regen with the final link set.
+AUTO_REGEN_DEBOUNCE_MS = 2000
 
 
 class CompletionWorker(QThread):
@@ -253,6 +260,7 @@ class ArtifactHandler(QObject):
         self._queue_manager = queue_manager
         self._db_id_to_path = db_id_to_path
         self._parent_widget = parent_widget
+        self._pending_regen_timers: dict[int, QTimer] = {}
 
     def regenerate_bbcode_for_gallery(self, gallery_path: str, force: bool = False):
         """Regenerate BBCode for a gallery using its current template.
@@ -421,15 +429,46 @@ class ArtifactHandler(QObject):
         return True
 
     def auto_regenerate_for_db_id(self, db_id: int):
-        """Auto-regenerate artifacts for gallery by ID if setting enabled.
+        """Schedule debounced artifact regen for gallery by ID.
 
-        Args:
-            db_id: Database ID of the gallery
+        A burst of file host completions for the same gallery (K2S family
+        dedup hits settling together, etc.) produces only one regen with
+        the fully-settled link set. Manual single-host completions still
+        regen — they just land after the debounce window.
+
+        Must be called from the GUI thread (QTimer requires it).
         """
+        delay_ms = self._get_regen_debounce_ms()
+        existing = self._pending_regen_timers.pop(db_id, None)
+        if existing is not None:
+            existing.stop()
+            existing.deleteLater()
+
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self._run_auto_regen(db_id))
+        self._pending_regen_timers[db_id] = timer
+        timer.start(delay_ms)
+
+    def shutdown(self):
+        """Stop and clear any pending debounced regen timers.
+
+        Called from the shutdown path so a pending timer can't fire
+        during teardown and touch a half-dismantled queue manager.
+        """
+        for timer in self._pending_regen_timers.values():
+            timer.stop()
+            timer.deleteLater()
+        self._pending_regen_timers.clear()
+
+    def _run_auto_regen(self, db_id: int):
+        """Execute the deferred regen after the debounce window elapses."""
+        timer = self._pending_regen_timers.pop(db_id, None)
+        if timer is not None:
+            timer.deleteLater()
+
         path = self._db_id_to_path.get(db_id)
         if not path:
-            # Fallback: resolve path from QueueManager (the shared dict is
-            # never populated elsewhere, so we must look it up on demand)
             for item in self._queue_manager.get_all_items():
                 if item.db_id == db_id:
                     path = item.path
@@ -437,3 +476,17 @@ class ArtifactHandler(QObject):
                     break
         if path and self.should_auto_regenerate_bbcode(path):
             self.regenerate_bbcode_for_gallery(path, force=False)
+
+    def _get_regen_debounce_ms(self) -> int:
+        """Read the debounce window from the [Advanced] INI section."""
+        try:
+            from src.utils.paths import read_config
+            config = read_config()
+            raw = config.get('Advanced', 'artifacts/regen_debounce_ms', fallback=None)
+            if raw is not None:
+                value = int(str(raw).strip())
+                if value >= 0:
+                    return value
+        except Exception:
+            pass
+        return AUTO_REGEN_DEBOUNCE_MS

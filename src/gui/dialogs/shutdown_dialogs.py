@@ -676,6 +676,10 @@ class ShutdownWorker(QThread):
             if not self._force_stop_event.is_set():
                 self.mw.completion_worker.wait(3000)
 
+        # Cancel any pending debounced regen timers so they can't fire mid-teardown
+        if hasattr(self.mw, 'artifact_handler') and self.mw.artifact_handler:
+            self.mw.artifact_handler.shutdown()
+
         # Stop worker status monitoring
         if hasattr(self.mw, 'worker_status_widget'):
             self.mw.worker_status_widget.stop_monitoring()
