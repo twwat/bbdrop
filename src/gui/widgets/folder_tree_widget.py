@@ -89,6 +89,12 @@ class FolderTreeWidget(QWidget):
         if not parent_item:
             return
 
+        # Filter out parent-directory sentinel entries some hosts surface
+        # (e.g. Filedot returns ".." rows for non-root folders). The tree
+        # already represents the hierarchy visually, so ".." would be
+        # confusing here; file-list navigation uses the toolbar's Up button.
+        folders = [f for f in folders if f.name != ".."]
+
         # Diff: only remove children that aren't in the new list.
         # Keep matching children in place to preserve their expanded/loaded state.
         new_ids = {f.id for f in folders}
