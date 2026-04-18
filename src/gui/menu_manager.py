@@ -134,19 +134,6 @@ class MenuManager(QObject):
                 action.setText(dock.windowTitle())
                 panels_menu.addAction(action)
 
-            # Layouts submenu: switch between shipped preset arrangements
-            layouts_menu = view_menu.addMenu("Layouts")
-            for preset_name, label in (
-                ("classic", "Classic"),
-                ("focused_queue", "Focused Queue"),
-                ("two_column", "Two-Column"),
-            ):
-                action = layouts_menu.addAction(label)
-                action.triggered.connect(
-                    lambda checked=False, name=preset_name:
-                        mw.layout_manager.apply_preset(name)
-                )
-
             reset_layout_action = view_menu.addAction("Reset Layout")
             reset_layout_action.triggered.connect(mw.layout_manager.reset_layout)
 
