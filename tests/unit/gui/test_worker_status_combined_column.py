@@ -3,10 +3,8 @@
 import pytest
 from PyQt6.QtGui import QColor
 
-from src.gui.widgets.worker_status_widget import (
-    WorkerStatus,
-    format_status_speed_cell,
-)
+from src.gui.widgets.worker_status_widget import WorkerStatus
+from src.gui.widgets.worker_status_formatting import format_status_speed_cell
 
 
 def _w(**overrides):
@@ -100,3 +98,18 @@ class TestFormatStatusSpeedCell:
             _w(status="paused", speed_bps=999_999.0)
         )
         assert "M/s" not in text
+
+    def test_empty_status_falls_back_to_idle(self):
+        text, color, _, italic = format_status_speed_cell(
+            _w(status="", speed_bps=0.0)
+        )
+        assert text == "Idle"
+        assert color is None
+        assert italic is False
+
+    def test_multi_colon_status_keeps_remainder_as_detail(self):
+        # "failed:HTTP 500: connection reset" → base="failed", detail="HTTP 500: connection reset"
+        _, _, tooltip, _ = format_status_speed_cell(
+            _w(status="failed:HTTP 500: connection reset", speed_bps=0.0)
+        )
+        assert tooltip == "Failed: HTTP 500: connection reset"
