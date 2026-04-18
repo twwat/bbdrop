@@ -6,6 +6,7 @@ Auth is via permanent API key passed as access_token in JSON POST bodies.
 
 from __future__ import annotations
 
+import copy
 import json
 import pycurl
 import certifi
@@ -158,6 +159,7 @@ class K2SFileManagerClient(FileManagerClient):
             md5=item.get("md5"),
             content_type=content_type,
             parent_id=item.get("parent_id"),
+            metadata=copy.deepcopy(item),
         )
 
     # ------------------------------------------------------------------
