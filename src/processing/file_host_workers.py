@@ -1158,7 +1158,6 @@ class FileHostWorker(QThread):
             self.upload_completed.emit(db_id, host_name, result)
 
             # Increment shared K2S family storage counter
-            from src.core.file_host_config import get_host_family
             if get_host_family(self.host_id) == 'k2s':
                 total_uploaded = sum(p.stat().st_size for p in archive_paths)
                 if total_uploaded > 0:
