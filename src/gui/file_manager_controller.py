@@ -97,8 +97,11 @@ class FileManagerController(QObject):
         self._host_folder: Dict[str, str] = {}         # host_id -> last folder
         self._capabilities: Dict[str, FileManagerCapabilities] = {}
 
-        # Cache: (host_id, folder_id) -> (FileListResult, timestamp)
-        self._file_cache: "OrderedDict[Tuple[str, str], Tuple[FileListResult, float]]" = OrderedDict()
+        # Cache: (host_id, folder_id, page) -> (FileListResult, timestamp).
+        # Page is part of the key because hosts paginate; without it, clicking
+        # > or < would hit the cached page-1 entry and silently render stale
+        # data (or skip the fetch entirely under a fresh TTL).
+        self._file_cache: "OrderedDict[Tuple[str, str, int], Tuple[FileListResult, float]]" = OrderedDict()
         # Folder tree cache: (host_id, parent_id) -> (List[FileInfo], timestamp)
         self._folder_cache: "OrderedDict[Tuple[str, str], Tuple[List[FileInfo], float]]" = OrderedDict()
 
@@ -120,7 +123,7 @@ class FileManagerController(QObject):
         # Pending operation tracking
         self._pending_ops: Dict[str, str] = {}  # op_id -> action name
         self._pending_folder_parents: Dict[str, Tuple[str, str]] = {}  # op_id -> (host_id, parent_id)
-        self._pending_file_folders: Dict[str, Tuple[str, str]] = {}   # op_id -> (host_id, folder_id)
+        self._pending_file_folders: Dict[str, Tuple[str, str, int]] = {}   # op_id -> (host_id, folder_id, page)
         # op_id -> FileInfo of the file whose Properties dialog should
         # open once read_file_properties returns.
         self._pending_read_props: Dict[str, FileInfo] = {}
@@ -271,8 +274,10 @@ class FileManagerController(QObject):
         from src.gui import file_manager_cache_store
         try:
             persisted = file_manager_cache_store.load_all(host_id)
+            # Persistent cache only stores page 1 (that's what users see
+            # first on a fresh open), so warm in-memory keys at page=1.
             for folder_id, entry in persisted.items():
-                self._cache_put(self._file_cache, (host_id, folder_id), entry)
+                self._cache_put(self._file_cache, (host_id, folder_id, 1), entry)
         except Exception as e:  # defensive — cache errors must not block host switch
             log(f"File manager: cache warm failed for {host_id}: {e}",
                 level="warning", category="file_manager")
@@ -482,7 +487,7 @@ class FileManagerController(QObject):
             return
 
         # Show cached data immediately if available
-        cache_key = (self._current_host, self._current_folder)
+        cache_key = (self._current_host, self._current_folder, self._current_page)
         cached = self._file_cache.get(cache_key)
         if cached:
             self._apply_file_list(self._current_host, cached[0])
@@ -497,7 +502,7 @@ class FileManagerController(QObject):
             "per_page": self._per_page,
             "sort_by": self._sort_by,
             "sort_dir": self._sort_dir,
-        }, file_folder=(self._current_host, self._current_folder))
+        }, file_folder=(self._current_host, self._current_folder, self._current_page))
 
     def _load_folder_tree(self, parent_id: str):
         """Request folder listing for tree.
@@ -532,7 +537,7 @@ class FileManagerController(QObject):
     # ------------------------------------------------------------------
 
     def _submit(self, action: str, params: dict,
-                file_folder: Optional[Tuple[str, str]] = None,
+                file_folder: Optional[Tuple[str, str, int]] = None,
                 folder_parent: Optional[Tuple[str, str]] = None) -> str:
         """Submit an operation to the worker.
 
@@ -543,7 +548,7 @@ class FileManagerController(QObject):
         Args:
             action: Worker action name.
             params: Action-specific params.
-            file_folder: If this is a file-list request, (host_id, folder_id)
+            file_folder: If this is a file-list request, (host_id, folder_id, page)
                 to track for display gating and caching.
             folder_parent: If this is a folder-list request, (host_id, parent_id)
                 to track for the same reasons.
@@ -823,7 +828,7 @@ class FileManagerController(QObject):
             return
 
         # Show cached trash if available
-        cache_key = (self._current_host, self._TRASH_KEY)
+        cache_key = (self._current_host, self._TRASH_KEY, self._current_page)
         cached = self._file_cache.get(cache_key)
         if cached:
             self._apply_file_list(self._current_host, cached[0])
@@ -833,7 +838,7 @@ class FileManagerController(QObject):
         self._submit("trash_list", {
             "page": self._current_page,
             "per_page": self._per_page,
-        }, file_folder=(self._current_host, self._TRASH_KEY))
+        }, file_folder=(self._current_host, self._TRASH_KEY, self._current_page))
 
     def trash_restore(self):
         """Restore selected items from trash."""
@@ -870,30 +875,44 @@ class FileManagerController(QObject):
         self._pending_ops.pop(op_id, None)
         request = self._pending_file_folders.pop(op_id, None)
 
-        # Always cache the response under the host/folder it was actually for,
-        # so future navigation to that host+folder is instant.
+        # Always cache the response under the host/folder/page it was
+        # actually for, so future navigation/pagination is instant.
         if request:
-            request_host, request_folder = request
+            request_host, request_folder, request_page = request
             now = time.time()
-            self._cache_put(self._file_cache, (request_host, request_folder), (result, now))
+            self._cache_put(
+                self._file_cache,
+                (request_host, request_folder, request_page),
+                (result, now),
+            )
 
-            # Persist the cache entry so it survives restart.
-            from src.gui import file_manager_cache_store
-            try:
-                file_manager_cache_store.save(request_host, request_folder, result, now)
-            except Exception as e:  # defensive
-                log(f"File manager: cache save failed for {request_host}/{request_folder}: {e}",
-                    level="warning", category="file_manager")
+            # Persist only page 1 — the persistent cache warms first-open
+            # views. Caching deeper pages across restarts would bloat the
+            # DB for negligible gain (users rarely deep-link to page N).
+            if request_page == 1:
+                from src.gui import file_manager_cache_store
+                try:
+                    file_manager_cache_store.save(request_host, request_folder, result, now)
+                except Exception as e:  # defensive
+                    log(f"File manager: cache save failed for {request_host}/{request_folder}: {e}",
+                        level="warning", category="file_manager")
 
-            # Only update the display if we're still looking at that view.
-            # The "view" is trash mode or the current folder.
+            # Only update the display if we're still looking at that view
+            # AND at that page. A late response for a page the user has
+            # since clicked past must not clobber what they're seeing.
             current_view_folder = self._TRASH_KEY if self._in_trash else self._current_folder
-            if request_host == self._current_host and request_folder == current_view_folder:
+            if (request_host == self._current_host
+                    and request_folder == current_view_folder
+                    and request_page == self._current_page):
                 self._apply_file_list(request_host, result)
 
             # For hosts where list_files includes folder entries inline,
             # push those folders to the tree so list_folders is never called.
-            if self._host_list_files_includes_folders() and request_host == self._current_host:
+            # Only do this for page 1 — deeper pages on these hosts are
+            # file-only and would add nothing to the tree.
+            if (request_page == 1
+                    and self._host_list_files_includes_folders()
+                    and request_host == self._current_host):
                 folders = [fi for fi in result.files if fi.is_folder]
                 self._dialog.folder_tree.populate_children(request_folder, folders)
 
@@ -1016,9 +1035,17 @@ class FileManagerController(QObject):
             cache.popitem(last=False)
 
     def _invalidate_cache(self, folder_id: str):
-        """Remove cached data for a folder."""
-        if self._current_host:
-            key = (self._current_host, folder_id)
-            self._file_cache.pop(key, None)
-            self._folder_cache.pop(key, None)
+        """Remove cached data for a folder across all pages."""
+        if not self._current_host:
+            return
+        # File cache is keyed by (host, folder, page) — drop every page
+        # entry for this host+folder so a subsequent refresh really does
+        # hit the wire.
+        stale_file_keys = [
+            k for k in self._file_cache
+            if k[0] == self._current_host and k[1] == folder_id
+        ]
+        for k in stale_file_keys:
+            self._file_cache.pop(k, None)
+        self._folder_cache.pop((self._current_host, folder_id), None)
 

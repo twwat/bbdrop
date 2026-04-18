@@ -41,7 +41,7 @@ def test_on_files_loaded_calls_cache_store_save(qtbot, monkeypatch):
     # Register a pending request so _on_files_loaded knows where the
     # response belongs.
     op_id = "op1"
-    c._pending_file_folders[op_id] = ("rapidgator", "/")
+    c._pending_file_folders[op_id] = ("rapidgator", "/", 1)
 
     result = FileListResult(files=[], total=0, page=1, per_page=100)
 
@@ -78,8 +78,10 @@ def test_set_host_warms_file_cache_from_store(qtbot, monkeypatch):
     c.set_host("rapidgator")
 
     load_all_spy.assert_called_once_with("rapidgator")
-    assert ("rapidgator", "/") in c._file_cache
-    result, ts = c._file_cache[("rapidgator", "/")]
+    # Persistent cache stores page 1 only; the warm-start keys in-memory
+    # entries at page=1 so the first render hits the cache.
+    assert ("rapidgator", "/", 1) in c._file_cache
+    result, ts = c._file_cache[("rapidgator", "/", 1)]
     assert result is cached_result
     assert ts == 1234.0
 
@@ -94,7 +96,7 @@ def test_on_files_loaded_populates_gallery_map_before_set_files(qtbot, monkeypat
     c._in_trash = False
 
     op_id = "opG"
-    c._pending_file_folders[op_id] = ("rapidgator", "/")
+    c._pending_file_folders[op_id] = ("rapidgator", "/", 1)
 
     fi1 = FileInfo(id="abc123", name="x.zip", is_folder=False)
     fi2 = FileInfo(id="folder1", name="pics", is_folder=True)
@@ -142,7 +144,8 @@ def test_load_files_cached_path_populates_gallery_map(qtbot, monkeypatch):
     fi = FileInfo(id="abc123", name="x.zip", is_folder=False)
     result = FileListResult(files=[fi], total=1, page=1, per_page=100)
     import time
-    c._file_cache[("rapidgator", "/")] = (result, time.time())
+    # _load_files uses _current_page (defaults to 1) as part of the key.
+    c._file_cache[("rapidgator", "/", 1)] = (result, time.time())
 
     lookup_spy = MagicMock(return_value={"abc123": "My Gallery"})
     monkeypatch.setattr("src.gui.file_manager_cache_store.lookup_galleries", lookup_spy)
