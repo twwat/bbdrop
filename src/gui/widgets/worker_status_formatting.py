@@ -1,4 +1,4 @@
-"""Pure formatters for the worker status table.
+"""Pure data and formatters for the worker status table.
 
 Kept separate from worker_status_widget.py so unit tests can exercise the
 formatting logic without importing the heavy Qt widget module.
@@ -6,16 +6,35 @@ formatting logic without importing the heavy Qt widget module.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Optional
 
 from PyQt6.QtGui import QColor
 
-if TYPE_CHECKING:
-    from src.gui.widgets.worker_status_widget import WorkerStatus
+
+@dataclass
+class WorkerStatus:
+    """Data structure for worker status information."""
+    worker_id: str
+    worker_type: str  # 'imagehost' or 'filehost'
+    hostname: str
+    display_name: str
+    host_id: Optional[str] = None  # Canonical host identifier for config/logo/dedup lookups
+    speed_bps: float = 0.0
+    status: str = "idle"  # idle, uploading, paused, error
+    gallery_id: Optional[int] = None
+    progress_bytes: int = 0
+    total_bytes: int = 0
+    error_message: Optional[str] = None
+    last_update: float = 0.0
+    files_remaining: int = 0
+    bytes_remaining: int = 0
+    storage_used_bytes: int = 0
+    storage_total_bytes: int = 0
 
 
 def format_status_speed_cell(
-    worker: "WorkerStatus",
+    worker: WorkerStatus,
 ) -> tuple[str, "QColor | None", str, bool]:
     """Format the combined status/speed cell for one worker.
 

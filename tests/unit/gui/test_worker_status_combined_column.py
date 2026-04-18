@@ -3,8 +3,10 @@
 import pytest
 from PyQt6.QtGui import QColor
 
-from src.gui.widgets.worker_status_widget import WorkerStatus
-from src.gui.widgets.worker_status_formatting import format_status_speed_cell
+from src.gui.widgets.worker_status_formatting import (
+    WorkerStatus,
+    format_status_speed_cell,
+)
 
 
 def _w(**overrides):

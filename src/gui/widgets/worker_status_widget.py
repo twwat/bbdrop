@@ -28,7 +28,10 @@ from src.core.file_host_config import get_config_manager, get_file_host_setting,
 from src.core.host_registry import get_display_name
 from src.core.image_host_config import get_image_host_config_manager, is_image_host_enabled, save_image_host_enabled, get_all_hosts
 from src.gui.widgets.custom_widgets import StorageProgressBar
-from src.gui.widgets.worker_status_formatting import format_status_speed_cell
+from src.gui.widgets.worker_status_formatting import (
+    WorkerStatus,
+    format_status_speed_cell,
+)
 from src.core.constants import (
     METRIC_FONT_SIZE_SMALL,
     METRIC_FONT_SIZE_DEFAULT,
@@ -239,27 +242,6 @@ class MultiLineHeaderView(QHeaderView):
                         return True
 
         return super().event(event)
-
-
-@dataclass
-class WorkerStatus:
-    """Data structure for worker status information."""
-    worker_id: str
-    worker_type: str  # 'imagehost' or 'filehost'
-    hostname: str
-    display_name: str
-    host_id: Optional[str] = None  # Canonical host identifier for config/logo/dedup lookups
-    speed_bps: float = 0.0
-    status: str = "idle"  # idle, uploading, paused, error
-    gallery_id: Optional[int] = None
-    progress_bytes: int = 0
-    total_bytes: int = 0
-    error_message: Optional[str] = None
-    last_update: float = 0.0
-    files_remaining: int = 0
-    bytes_remaining: int = 0
-    storage_used_bytes: int = 0
-    storage_total_bytes: int = 0
 
 
 class ColumnType(Enum):
