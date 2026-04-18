@@ -321,11 +321,11 @@ class TestColumnVisibility:
         """Verify hidden columns remain hidden on restart."""
         settings = QSettings()
         settings.clear()  # Clear any previous settings
-        visible_columns = ['icon', 'hostname', 'status', 'status_speed']
+        visible_columns = ['icon', 'hostname', 'status']
         settings.setValue("worker_status/visible_columns", visible_columns)
 
         new_widget = WorkerStatusWidget()
-        assert not new_widget._is_column_visible('bytes_remaining')
+        assert not new_widget._is_column_visible('status_speed')
         assert new_widget._is_column_visible('hostname')
 
         new_widget.stop_monitoring()
@@ -353,7 +353,7 @@ class TestColumnPersistence:
 
         widget1 = WorkerStatusWidget()
         widget1._toggle_column('bytes_session', True)
-        widget1._toggle_column('bytes_remaining', False)
+        widget1._toggle_column('status_speed', False)
 
         hostname_idx = widget1._get_column_index('hostname')
         if hostname_idx >= 0:
@@ -368,7 +368,7 @@ class TestColumnPersistence:
         QTest.qWait(50)
 
         assert widget2._is_column_visible('bytes_session')
-        assert not widget2._is_column_visible('bytes_remaining')
+        assert not widget2._is_column_visible('status_speed')
 
         widget2.stop_monitoring()
         widget2.deleteLater()

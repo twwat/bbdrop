@@ -1458,52 +1458,6 @@ class WorkerStatusWidget(QWidget):
         if row is None:
             return
 
-        # Parse compound status (e.g., "retry_pending:45" or "failed:error message")
-        base_status = status
-        detail = ""
-        if ":" in status:
-            parts = status.split(":", 1)
-            base_status = parts[0]
-            detail = parts[1] if len(parts) > 1 else ""
-
-        # Determine display text, tooltip, and color based on base_status
-        display_text = base_status.capitalize()
-        tooltip_text = f"Status: {base_status.capitalize()}"
-        status_color = None  # Will use default if None
-
-        if base_status == 'retry_pending':
-            # Countdown display for retry
-            if detail:
-                display_text = f"Retrying in {detail}s"
-                tooltip_text = f"Retry pending - will retry in {detail} seconds"
-            else:
-                display_text = "Retrying..."
-                tooltip_text = "Retry pending"
-            status_color = QColor("#DAA520")  # Goldenrod for dark theme visibility
-        elif base_status == 'failed':
-            display_text = "Failed"
-            if detail:
-                tooltip_text = f"Failed: {detail}"
-            else:
-                tooltip_text = "Upload failed"
-            status_color = QColor("#FF6B6B")  # Red for dark theme, visible
-        elif base_status == 'network_error':
-            display_text = "Network Error"
-            if detail:
-                tooltip_text = f"Network Error: {detail}"
-            else:
-                tooltip_text = "Network error occurred"
-            status_color = QColor("#DAA520")  # Goldenrod
-        elif base_status == 'uploading':
-            status_color = QColor("darkgreen")
-        elif base_status == 'error':
-            display_text = "Failed"
-            if detail:
-                tooltip_text = f"Failed: {detail}"
-            status_color = QColor("#FF6B6B")
-        elif base_status == 'paused':
-            status_color = QColor("#B8860B")  # Dark goldenrod
-
         # Update icon column - show unified status icon
         icon_col_idx = self._get_column_index('status')
         if icon_col_idx >= 0:
@@ -2745,18 +2699,17 @@ class WorkerStatusWidget(QWidget):
         pass  # Column settings loaded
 
         # Migrate old settings: collapse the legacy 'speed' and 'status_text'
-        # columns into the combined 'status_speed' column. Insert it directly
-        # after 'status' so users keep their column ordering.
-        if visible_ids:
-            had_legacy = 'speed' in visible_ids or 'status_text' in visible_ids
-            if had_legacy or 'status_speed' not in visible_ids:
-                visible_ids = [c for c in visible_ids if c not in ('speed', 'status_text', 'status_speed')]
+        # columns into the combined 'status_speed' column. Only acts when
+        # legacy IDs are present — never force-inserts otherwise, so a user
+        # who deliberately hides 'status_speed' keeps it hidden.
+        if visible_ids and ('speed' in visible_ids or 'status_text' in visible_ids):
+            visible_ids = [c for c in visible_ids if c not in ('speed', 'status_text')]
+            if 'status_speed' not in visible_ids:
                 if 'status' in visible_ids:
                     visible_ids.insert(visible_ids.index('status') + 1, 'status_speed')
                 else:
                     visible_ids.append('status_speed')
-                if had_legacy:
-                    log("Migrated column settings: combined speed+status_text into status_speed", level="debug", category="ui")
+            log("Migrated column settings: combined speed+status_text into status_speed", level="debug", category="ui")
 
         if visible_ids:
             # Rebuild active columns from saved IDs (in saved order)
