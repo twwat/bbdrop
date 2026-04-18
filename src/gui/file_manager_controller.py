@@ -338,6 +338,27 @@ class FileManagerController(QObject):
     # Data loading
     # ------------------------------------------------------------------
 
+    def _apply_file_list(self, host_id: str, result: FileListResult) -> None:
+        """Render a file listing in the current view, populating the
+        Gallery column from the file_host_uploads cross-reference.
+
+        Used by all three paths that hand a FileListResult to the widget:
+        the fresh-fetch response, the warm cached-navigation path, and
+        the trash view. Keeping them all in one helper guarantees the
+        Gallery column is never blank on cached renders.
+        """
+        from src.gui import file_manager_cache_store
+        file_ids = [fi.id for fi in result.files if not fi.is_folder and fi.id]
+        try:
+            gallery_map = file_manager_cache_store.lookup_galleries(host_id, file_ids)
+        except Exception as e:
+            log(f"File manager: gallery lookup failed for {host_id}: {e}",
+                level="warning", category="file_manager")
+            gallery_map = {}
+        self._dialog.file_list.set_gallery_map(gallery_map)
+        self._dialog.file_list.set_files(result)
+        self._dialog.reapply_filter()
+
     def _load_files(self):
         """Request file listing for current folder.
 
@@ -352,8 +373,7 @@ class FileManagerController(QObject):
         cache_key = (self._current_host, self._current_folder)
         cached = self._file_cache.get(cache_key)
         if cached:
-            self._dialog.file_list.set_files(cached[0])
-            self._dialog.reapply_filter()
+            self._apply_file_list(self._current_host, cached[0])
             # Skip background fetch if cache is still fresh
             if (time.time() - cached[1]) < _CACHE_TTL:
                 return
@@ -694,8 +714,7 @@ class FileManagerController(QObject):
         cache_key = (self._current_host, self._TRASH_KEY)
         cached = self._file_cache.get(cache_key)
         if cached:
-            self._dialog.file_list.set_files(cached[0])
-            self._dialog.reapply_filter()
+            self._apply_file_list(self._current_host, cached[0])
             if (time.time() - cached[1]) < _CACHE_TTL:
                 return
 
@@ -758,21 +777,7 @@ class FileManagerController(QObject):
             # The "view" is trash mode or the current folder.
             current_view_folder = self._TRASH_KEY if self._in_trash else self._current_folder
             if request_host == self._current_host and request_folder == current_view_folder:
-                # Gallery cross-reference — look up file-id -> gallery-name
-                # for every non-folder entry so the Gallery column renders.
-                file_ids = [fi.id for fi in result.files if not fi.is_folder and fi.id]
-                try:
-                    gallery_map = file_manager_cache_store.lookup_galleries(
-                        request_host, file_ids,
-                    )
-                except Exception as e:
-                    log(f"File manager: gallery lookup failed for {request_host}: {e}",
-                        level="warning", category="file_manager")
-                    gallery_map = {}
-                self._dialog.file_list.set_gallery_map(gallery_map)
-
-                self._dialog.file_list.set_files(result)
-                self._dialog.reapply_filter()
+                self._apply_file_list(request_host, result)
 
             # For hosts where list_files includes folder entries inline,
             # push those folders to the tree so list_folders is never called.

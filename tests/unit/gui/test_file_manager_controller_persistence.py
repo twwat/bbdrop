@@ -124,3 +124,39 @@ def test_on_files_loaded_populates_gallery_map_before_set_files(qtbot, monkeypat
     sf_idx = next(i for i, call in enumerate(c._dialog.file_list.mock_calls)
                   if call[0] == "set_files")
     assert gm_idx < sf_idx, "set_gallery_map must be called before set_files"
+
+
+def test_load_files_cached_path_populates_gallery_map(qtbot, monkeypatch):
+    """When _load_files renders from cache, the Gallery column must still be populated.
+
+    Regression guard for the integration gap where warm-start rendered instantly
+    but with a blank Gallery column until the background fetch completed.
+    """
+    c = _make_controller()
+
+    c._current_host = "rapidgator"
+    c._current_folder = "/"
+    c._in_trash = False
+
+    # Seed the in-memory cache so _load_files hits the cached branch.
+    fi = FileInfo(id="abc123", name="x.zip", is_folder=False)
+    result = FileListResult(files=[fi], total=1, page=1, per_page=100)
+    import time
+    c._file_cache[("rapidgator", "/")] = (result, time.time())
+
+    lookup_spy = MagicMock(return_value={"abc123": "My Gallery"})
+    monkeypatch.setattr("src.gui.file_manager_cache_store.lookup_galleries", lookup_spy)
+
+    c._load_files()
+
+    lookup_spy.assert_called_once()
+    called_host, called_ids = lookup_spy.call_args[0]
+    assert called_host == "rapidgator"
+    assert list(called_ids) == ["abc123"]
+    c._dialog.file_list.set_gallery_map.assert_called_once_with({"abc123": "My Gallery"})
+    # set_gallery_map must precede set_files.
+    gm_idx = next(i for i, call in enumerate(c._dialog.file_list.mock_calls)
+                  if call[0] == "set_gallery_map")
+    sf_idx = next(i for i, call in enumerate(c._dialog.file_list.mock_calls)
+                  if call[0] == "set_files")
+    assert gm_idx < sf_idx
