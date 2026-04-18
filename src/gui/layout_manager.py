@@ -77,6 +77,12 @@ class LayoutManager(QObject):
             "Speed", self._build_speed_content(), "dock_speed"
         )
 
+        # Make the bottom dock area own both lower corners so Progress/Info/Speed
+        # span the full window width — matching today's layout where they sit
+        # below both the queue and the right-side panels.
+        mw.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.BottomDockWidgetArea)
+        mw.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.BottomDockWidgetArea)
+
         # Classic default placement
         mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock_quick_settings)
         mw.splitDockWidget(self.dock_quick_settings, self.dock_hosts, Qt.Orientation.Vertical)
