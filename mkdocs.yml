@@ -74,6 +74,7 @@ nav:
   - Guides:
     - guides/index.md
     - GUI Guide: guides/gui-guide.md
+    - Customize the Layout: guides/layout-customization.md
     - Image Hosts: guides/image-hosts.md
     - Multi-Host Upload: guides/multi-host-upload.md
     - Queue Management: guides/queue-management.md

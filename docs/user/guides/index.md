@@ -7,6 +7,7 @@ Detailed guides for using BBDrop's features effectively. Learn how to upload gal
 Essential guides for everyday use.
 
 - [GUI Guide](./gui-guide.md) - Complete interface walkthrough including tabs, queue management, and progress tracking
+- [Customize the Layout](./layout-customization.md) - Show, hide, rearrange, float, and tab the dockable panels around the Upload Queue
 - [Image Hosts](./image-hosts.md) - Configure IMX.to, Pixhost, and TurboImageHost
 - [Multi-Host Upload](./multi-host-upload.md) - Upload to 7 file hosting services: FileBoom, Filedot, Filespace, Katfile, Keep2Share, RapidGator, and TezFiles
 - [File Manager](./file-manager.md) - Browse and manage files on remote file hosts

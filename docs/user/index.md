@@ -31,6 +31,7 @@ Task-oriented instructions for specific features.
 ### Core
 
 - [GUI Guide](guides/gui-guide.md) — Interface walkthrough, tabs, and queue management
+- [Customize the Layout](guides/layout-customization.md) — Rearrange, float, and tab the dockable panels
 - [Image Hosts](guides/image-hosts.md) — IMX.to, Pixhost, and TurboImageHost configuration
 - [Multi-Host Upload](guides/multi-host-upload.md) — Upload to 7 premium file hosts
 - [File Manager](guides/file-manager.md) — Browse and manage files on remote file hosts

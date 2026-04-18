@@ -6,37 +6,42 @@ A quick tour of the BBDrop window and its features.
 
 ## Main Window
 
-### Queue Table (Center)
+The main window centers on the **Upload Queue**. Six dockable panels sit around it in a default arrangement called **Classic**, and you can show, hide, rearrange, float, or tab them together to fit your screen. See [Customize the layout](layout-customization.md) for the full guide.
+
+### Upload Queue (center)
 
 Shows all your galleries with status, progress, and settings. Right-click any gallery for actions like Copy BBCode, Retry, Move to Tab, or Remove.
 
-Key columns: Name, Status, Progress, Images, Size, Template, Image Host. Right-click the column header to show/hide over 25 available columns including custom fields, file host status, and online status.
+Key columns: Name, Status, Progress, Images, Size, Template, Image Host. Right-click the column header to show or hide over 25 available columns including custom fields, file host status, and online status.
 
-### Toolbar (Top)
+### Queue controls (below the queue)
 
-| Button | What It Does |
+| Button | What it does |
 |--------|--------------|
-| **Add Folder** | Browse for folders to add |
-| **Start** | Begin uploading all ready galleries |
-| **Pause** | Pause all active uploads |
+| **Browse** | Add folders to the queue |
+| **Start All** | Begin uploading all ready galleries |
+| **Pause All** | Pause all active uploads |
 | **Clear Completed** | Remove finished galleries from the queue |
-| **Settings** | Open the settings dialog |
 
-### Quick Settings (Right Panel)
+### Quick Settings panel
 
-Thumbnail size, template selection, image host selector, and shortcut buttons for host configuration, templates, and link scanning.
+Image host selector, thumbnail size and format, template selector, and shortcut buttons for host configuration, templates, link scanning, file manager, statistics, log viewer, hooks, theme toggle, and help.
 
-### Upload Workers (Right Panel)
+### Hosts panel
 
 Shows all available image and file hosts with their status. Right-click a host to enable, disable, or configure it. Double-click to open its configuration dialog.
 
-### Log Panel (Bottom Right)
+### Log panel
 
-Real-time upload messages. Filter by category or severity in **Settings > Logs**.
+Real-time upload messages. Filter by category or severity in **Settings → Logs**. Double-click any line to open the full Log Viewer.
 
-### Tabs (Bottom)
+### Current Tab Progress, Info, and Speed panels
 
-Organize galleries into groups. Right-click the tab bar to create new tabs. Ctrl+T to create, Ctrl+W to close, double-click to rename.
+Three compact panels along the bottom show the active tab's overall progress, totals (galleries and images uploaded, unnamed galleries), and transfer speed (current, fastest, total transferred).
+
+### Tabs (inside the queue)
+
+Organize galleries into groups. Right-click the tab bar to create new tabs. **Ctrl+T** to create, **Ctrl+W** to close, double-click to rename.
 
 ---
 

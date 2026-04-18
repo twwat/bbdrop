@@ -1382,6 +1382,28 @@ SETTINGS = {
 
 ---
 
+### Customizable Layout
+
+**Component:** `src/gui/layout_manager.py`
+
+**Description:** The Upload Queue is a fixed central widget; the six surrounding panels (Quick Settings, Hosts, Log, Current Tab Progress, Info, Speed) are each wrapped in a `QDockWidget` and can be shown, hidden, rearranged, floated, or tabbed together.
+
+**Menu actions** (under **View**):
+- **Panels** submenu — toggle visibility of each dock
+- **Edit Layout** — toggle between locked mode (no drag affordances) and edit mode (compact title bar with drag handle, float, and close buttons)
+- **Reset Layout** — restore the Classic default arrangement
+
+**Persistence:** Layout state is saved via `QMainWindow.saveState()` on close and restored via `restoreState()` on launch. Falls back to Classic placement silently if restore fails.
+
+**Default placement (Classic):**
+- Center: Upload Queue
+- Right column: Quick Settings, Hosts, Log (stacked vertically)
+- Bottom row: Current Tab Progress, Info, Speed (left to right, bottom corners owned by the bottom dock area)
+
+See [Customize the Layout](../guides/layout-customization.md) for the user-facing guide.
+
+---
+
 ### Keyboard Shortcuts
 
 **Tab Management:**
