@@ -1,10 +1,70 @@
 """Screenshot sheet generation for video files."""
+import os
+import sys
 import cv2
 import numpy as np
+from functools import lru_cache
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from typing import List, Optional, Tuple
 
 from src.utils.logger import log
+
+
+@lru_cache(maxsize=64)
+def _resolve_font_file(family: str) -> Optional[str]:
+    """Find a font file on disk for the given family name.
+
+    PIL's ImageFont.truetype needs a path or filename on the font search
+    path — passing a Qt family name like "Arial" fails on platforms where
+    the font file isn't named identically. We scan the platform's font
+    directories and match on normalised filename stem. Case-insensitive,
+    ignores spaces/hyphens/underscores.
+    """
+    if not family:
+        return None
+
+    if sys.platform == 'win32':
+        dirs = [
+            r'C:\Windows\Fonts',
+            os.path.expandvars(r'%LOCALAPPDATA%\Microsoft\Windows\Fonts'),
+        ]
+    elif sys.platform == 'darwin':
+        dirs = [
+            '/System/Library/Fonts',
+            '/Library/Fonts',
+            os.path.expanduser('~/Library/Fonts'),
+        ]
+    else:
+        dirs = [
+            '/usr/share/fonts',
+            '/usr/local/share/fonts',
+            os.path.expanduser('~/.fonts'),
+            os.path.expanduser('~/.local/share/fonts'),
+        ]
+
+    wanted = family.lower().replace(' ', '').replace('-', '').replace('_', '')
+    best: Optional[Tuple[int, str]] = None  # (score, path) — lower score wins
+
+    for d in dirs:
+        p = Path(d)
+        if not p.exists():
+            continue
+        for f in p.rglob('*'):
+            if f.suffix.lower() not in ('.ttf', '.otf', '.ttc'):
+                continue
+            stem = f.stem.lower().replace(' ', '').replace('-', '').replace('_', '')
+            if stem == wanted:
+                return str(f)            # exact match: return immediately
+            if wanted in stem:
+                # Prefer shorter stems (closer match), and "regular"-sounding variants.
+                penalty = len(stem) - len(wanted)
+                if any(v in stem for v in ('bold', 'italic', 'oblique', 'light', 'thin', 'black')):
+                    penalty += 100
+                if best is None or penalty < best[0]:
+                    best = (penalty, str(f))
+
+    return best[1] if best else None
 
 
 class ScreenshotSheetGenerator:
@@ -103,7 +163,21 @@ class ScreenshotSheetGenerator:
         return text
 
     def _get_font(self, font_family: str, size: int) -> ImageFont.FreeTypeFont:
-        """Load a font, falling back to default monospace."""
+        """Load a font, falling back to default monospace.
+
+        We resolve the family name to an actual font file path via
+        _resolve_font_file before handing it to PIL, because PIL's truetype
+        loader expects a file path (or filename on its search path), not a
+        Qt-style family name.
+        """
+        resolved = _resolve_font_file(font_family) if font_family else None
+        if resolved:
+            try:
+                return ImageFont.truetype(resolved, size)
+            except (OSError, IOError):
+                pass
+        # Try the raw family name too — works if PIL can resolve it via its
+        # own search path (common on Windows for installed fonts).
         try:
             return ImageFont.truetype(font_family, size)
         except (OSError, IOError):
