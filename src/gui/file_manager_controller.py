@@ -119,34 +119,43 @@ class FileManagerController(QObject):
         if host_id == self._current_host:
             return
 
-        self._current_host = host_id
+        # Probe BEFORE touching UI state — in particular before calling
+        # set_root() on the tree, which auto-expands "/" and synchronously
+        # fires children_requested. If the host isn't usable, that expand
+        # would queue a worker op with no session_client and blow up with
+        # a scary ValueError traceback.
+        caps, error = self._probe_host(host_id)
+
         self._pending_ops.clear()
         self._pending_folder_parents.clear()
         self._pending_file_folders.clear()
 
-        # Reset per-host state
+        # Clear display regardless of probe result so stale data from the
+        # previous host doesn't linger.
+        self._dialog.file_list.clear()
+        self._dialog.folder_tree.set_root()
+        self._dialog.update_account_info({})
+
+        if error is not None:
+            # Park in a neutral state — no current host means tree clicks,
+            # refresh, etc. all no-op via their `if not self._current_host`
+            # guards. The toolbar is disabled and the status bar carries
+            # the friendly "Enable X in File Hosts settings…" message.
+            self._current_host = None
+            self._breadcrumb = [("/", "/")]
+            self._in_trash = False
+            self._update_nav_state()
+            self._dialog.toolbar.update_capabilities(FileManagerCapabilities())
+            self._dialog.show_status(error, error=True)
+            return
+
+        # Probe succeeded — now commit to the new host and load data.
+        self._current_host = host_id
         self._current_folder = self._host_folder.get(host_id, "/")
         self._current_page = 1
         self._breadcrumb = [("/", "/")]
         self._in_trash = False
-
-        # Clear display immediately so stale data from the previous host
-        # doesn't linger while the new host loads (or fails to load).
-        self._dialog.file_list.clear()
-        self._dialog.folder_tree.set_root()
-        self._dialog.update_account_info({})
         self._update_nav_state()
-
-        # Probe the client synchronously — this surfaces missing-credential
-        # errors up front with a single friendly status message instead of
-        # three worker-thread failures (list_files, list_folders, account_info)
-        # each firing its own popup.
-        caps, error = self._probe_host(host_id)
-        if error is not None:
-            self._dialog.show_status(error, error=True)
-            # Disable toolbar actions since nothing will work
-            self._dialog.toolbar.update_capabilities(FileManagerCapabilities())
-            return
 
         if caps is not None:
             self._capabilities[host_id] = caps
