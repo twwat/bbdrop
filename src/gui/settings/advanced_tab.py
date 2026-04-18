@@ -128,6 +128,18 @@ ADVANCED_SETTINGS = [
         "min": 0,
         "max": 3600
     },
+    {
+        "key": "k2s_family/upload_access",
+        "description": (
+            "Access level written on new K2S / FileBoom / TezFiles "
+            "uploads. Overrides the host-side account default (which is "
+            "typically premium). Bulk-change already-uploaded files from "
+            "the File Manager if you need to flip them."
+        ),
+        "default": "public",
+        "type": "choice",
+        "choices": ["public", "premium", "private"],
+    },
 ]
 
 

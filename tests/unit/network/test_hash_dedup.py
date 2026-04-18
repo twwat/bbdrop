@@ -306,3 +306,58 @@ class TestHashDedupResponses:
 
         assert len(captured_url) == 1
         assert captured_url[0] == "https://api.keep2share.cc/v2/createFileByHash"
+
+
+class TestHashDedupAccessField:
+    """K2S-family dedup must pin ``access`` so dedup hits don't inherit the
+    account's server-side default (commonly ``premium``)."""
+
+    def test_access_public_by_default(self, k2s_config, bandwidth_counter, monkeypatch):
+        """With no Advanced override, the body must declare access=public."""
+        monkeypatch.setattr(
+            "src.network.file_host_client._k2s_default_upload_access",
+            lambda: "public",
+        )
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+
+        captured_body = {}
+
+        def fake_setopt(opt, val):
+            if opt == pycurl.POSTFIELDS:
+                captured_body.update(json.loads(val))
+            if opt == pycurl.WRITEDATA:
+                val.write(json.dumps({"status": "error", "errorCode": 20}).encode())
+
+        mock_curl = MagicMock()
+        mock_curl.setopt.side_effect = fake_setopt
+        mock_curl.getinfo.return_value = 200
+
+        with patch('pycurl.Curl', return_value=mock_curl):
+            client.try_create_by_hash("aabbccdd", "file.zip")
+
+        assert captured_body.get("access") == "public"
+
+    def test_access_respects_advanced_override(self, k2s_config, bandwidth_counter, monkeypatch):
+        """When the Advanced setting is flipped, the body carries that value."""
+        monkeypatch.setattr(
+            "src.network.file_host_client._k2s_default_upload_access",
+            lambda: "private",
+        )
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+
+        captured_body = {}
+
+        def fake_setopt(opt, val):
+            if opt == pycurl.POSTFIELDS:
+                captured_body.update(json.loads(val))
+            if opt == pycurl.WRITEDATA:
+                val.write(json.dumps({"status": "error", "errorCode": 20}).encode())
+
+        mock_curl = MagicMock()
+        mock_curl.setopt.side_effect = fake_setopt
+        mock_curl.getinfo.return_value = 200
+
+        with patch('pycurl.Curl', return_value=mock_curl):
+            client.try_create_by_hash("aabbccdd", "file.zip")
+
+        assert captured_body.get("access") == "private"

@@ -24,6 +24,38 @@ from src.proxy.models import ProxyEntry
 from src.core.constants import CHROME_UA as _CHROME_UA
 
 
+_K2S_ACCESS_VALUES = ("public", "premium", "private")
+
+
+def _k2s_default_upload_access() -> str:
+    """Return the access level to apply to new K2S-family uploads.
+
+    Without an explicit ``access`` field, ``getUploadFormData`` and
+    ``createFileByHash`` fall back to the account's server-side default —
+    which is typically "premium" and produces links that free-tier
+    forum readers can't fetch. We override to "public" unless the user
+    sets ``[Advanced] k2s_family/upload_access`` to something else.
+    Values other than public/premium/private are ignored (return public).
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    cfg = configparser.ConfigParser()
+    config_file = get_config_path()
+    if not os.path.exists(config_file):
+        return "public"
+    try:
+        cfg.read(config_file, encoding="utf-8")
+        raw = cfg.get("Advanced", "k2s_family/upload_access", fallback=None)
+    except configparser.Error:
+        return "public"
+    if raw is None:
+        return "public"
+    value = raw.strip().lower()
+    return value if value in _K2S_ACCESS_VALUES else "public"
+
+
 class FileHostClient:
     """pycurl-based file host uploader with bandwidth tracking."""
 
@@ -1065,7 +1097,11 @@ class FileHostClient:
         body = json.dumps({
             "access_token": self.auth_token or "",
             "hash": md5_hash,
-            "name": filename
+            "name": filename,
+            # Pin access so dedup hits don't inherit the account's
+            # server-side default (often "premium"). Same override as
+            # the normal upload path — see _k2s_default_upload_access.
+            "access": _k2s_default_upload_access(),
         }).encode('utf-8')
 
         curl = pycurl.Curl()
@@ -1193,10 +1229,14 @@ class FileHostClient:
         try:
             # Check if we need POST with JSON body (K2S-style) or GET with query params (RapidGator-style)
             if self.config.init_method == "POST" and self.config.init_body_json:
-                # POST with JSON body (K2S-style)
+                # POST with JSON body (K2S-style).
+                # Pass access explicitly so uploads don't inherit the
+                # account's server-side default (often "premium", which
+                # yields links free-tier forum readers can't fetch).
                 body = {
                     "access_token": self.auth_token or "",
-                    "parent_id": "/"  # Default to root folder
+                    "parent_id": "/",  # Default to root folder
+                    "access": _k2s_default_upload_access(),
                 }
                 body_json = json.dumps(body)
 

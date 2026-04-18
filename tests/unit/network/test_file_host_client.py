@@ -559,6 +559,84 @@ class TestFileHostClientUploadMultistep:
         assert "timeout" in str(exc_info.value).lower()
 
 
+class TestK2SInitBodyAccess:
+    """K2S-family multi-step init (getUploadFormData) must pin ``access`` so
+    new uploads don't inherit the account's server-side default."""
+
+    @pytest.fixture
+    def bandwidth_counter(self):
+        return AtomicCounter()
+
+    @pytest.fixture
+    def k2s_config(self):
+        config = Mock(spec=HostConfig)
+        config.name = "Keep2Share"
+        config.requires_auth = False  # skip login path in __init__
+        config.auth_type = None
+        config.upload_endpoint = "https://k2s.cc/upload"
+        config.upload_init_url = "https://api.k2s.cc/v2/getUploadFormData"
+        config.init_method = "POST"
+        config.init_body_json = True
+        config.upload_url_path = ["response", "upload", "form_action"]
+        config.upload_id_path = ["response", "upload", "id"]
+        config.file_field_path = None
+        config.form_data_path = None
+        config.file_field = "file"
+        config.require_file_hash = False
+        config.dedupe_endpoint = None  # skip dedup path to exercise init
+        config.file_id_path = ["id"]
+        return config
+
+    @patch("src.network.file_host_client.pycurl.Curl")
+    def test_init_body_declares_access(
+        self, mock_curl_class, k2s_config, bandwidth_counter, monkeypatch, tmp_path
+    ):
+        """The JSON sent to getUploadFormData must include ``access``; the
+        value matches _k2s_default_upload_access. We stop short of the
+        actual upload by returning ``upload_state=2`` (dedup-hit short
+        circuit) so this test stays focused on the init body."""
+        monkeypatch.setattr(
+            "src.network.file_host_client._k2s_default_upload_access",
+            lambda: "public",
+        )
+
+        captured_body = {}
+
+        def fake_setopt(opt, val):
+            if opt == pycurl.POSTFIELDS:
+                captured_body.update(json.loads(val))
+            if opt == pycurl.WRITEDATA:
+                val.write(json.dumps({
+                    "status": "success",
+                    "response": {
+                        "upload": {
+                            "state": 2,
+                            "file": {"url": "https://k2s.cc/file/abc/x.zip"},
+                        }
+                    },
+                }).encode())
+
+        mock_curl = MagicMock()
+        mock_curl.setopt.side_effect = fake_setopt
+        mock_curl.getinfo.return_value = 200
+        mock_curl_class.return_value = mock_curl
+
+        file_path = tmp_path / "x.zip"
+        file_path.write_bytes(b"payload")
+
+        client = FileHostClient(
+            host_config=k2s_config, bandwidth_counter=bandwidth_counter
+        )
+        client.auth_token = "tok"
+
+        result = client._upload_multistep(file_path)
+
+        assert result["deduplication"] is True  # sanity: took the short path
+        assert captured_body.get("access") == "public"
+        assert captured_body.get("access_token") == "tok"
+        assert captured_body.get("parent_id") == "/"
+
+
 class TestFileHostClientAuthentication:
     """Test suite for authentication mechanisms."""
 
