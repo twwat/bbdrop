@@ -1584,11 +1584,12 @@ class WorkerStatusWidget(QWidget):
                 return (type_priority, w.hostname.lower())
             return sorted(workers, key=sort_key, reverse=reverse)
         elif col_config.id == 'status_speed':
-            # Sort by status alphabetically, then by speed descending within
-            # the same status so the fastest uploaders bubble to the top.
+            # Both axes flip with the user's sort direction: ascending shows
+            # status A-Z and slowest-first within each status; descending
+            # shows status Z-A and fastest-first within each status.
             return sorted(
                 workers,
-                key=lambda w: (w.status.lower(), -w.speed_bps),
+                key=lambda w: (w.status.lower(), w.speed_bps),
                 reverse=reverse,
             )
         elif col_config.id == 'status':
