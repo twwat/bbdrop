@@ -920,8 +920,9 @@ class LayoutManager(QObject):
         from PyQt6.QtWidgets import QToolButton
 
         bar = QWidget()
-        bar.setFixedHeight(18)
+        bar.setFixedHeight(20)
         bar.setCursor(Qt.CursorShape.SizeAllCursor)
+        bar.setToolTip("Drag to move panel")
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(4, 0, 2, 0)
         layout.setSpacing(2)
@@ -929,20 +930,28 @@ class LayoutManager(QObject):
         handle = QLabel("\u2630")
         handle.setStyleSheet("color: #888; font-size: 10px;")
         handle.setCursor(Qt.CursorShape.SizeAllCursor)
+        handle.setToolTip("Drag to move panel")
 
         float_btn = QToolButton()
         float_btn.setText("\u26F6")
-        float_btn.setToolTip("Float / Re-dock panel")
         float_btn.setAutoRaise(True)
-        float_btn.setFixedSize(16, 16)
+        float_btn.setFixedSize(18, 18)
+        float_btn.setCursor(Qt.CursorShape.ArrowCursor)
         float_btn.clicked.connect(lambda: dock.setFloating(not dock.isFloating()))
 
         close_btn = QToolButton()
         close_btn.setText("\u2715")
         close_btn.setToolTip("Hide panel (re-open via View \u2192 Panels)")
         close_btn.setAutoRaise(True)
-        close_btn.setFixedSize(16, 16)
+        close_btn.setFixedSize(18, 18)
+        close_btn.setCursor(Qt.CursorShape.ArrowCursor)
         close_btn.clicked.connect(dock.hide)
+
+        def _sync_float_tooltip(is_floating: bool) -> None:
+            float_btn.setToolTip("Re-dock panel" if is_floating else "Float panel")
+
+        _sync_float_tooltip(dock.isFloating())
+        dock.topLevelChanged.connect(_sync_float_tooltip)
 
         layout.addWidget(handle)
         layout.addStretch()
