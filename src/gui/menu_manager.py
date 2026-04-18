@@ -40,7 +40,6 @@ class MenuManager(QObject):
 
     Attributes:
         _main_window: Reference to the main BBDropGUI window
-        _action_toggle_right_panel: Action for toggling right panel visibility
         _theme_action_light: Action for light theme selection
         _theme_action_dark: Action for dark theme selection
     """
@@ -54,22 +53,12 @@ class MenuManager(QObject):
         super().__init__()
         self._main_window = main_window
         # Action references for external access
-        self._action_toggle_right_panel = None
         self._theme_action_light = None
         self._theme_action_dark = None
 
     # =========================================================================
     # Properties for backward compatibility
     # =========================================================================
-
-    @property
-    def action_toggle_right_panel(self):
-        """Get the toggle right panel action.
-
-        Returns:
-            QAction: The toggle right panel action or None if not created
-        """
-        return self._action_toggle_right_panel
 
     @property
     def theme_action_light(self):
@@ -136,15 +125,36 @@ class MenuManager(QObject):
 
             view_menu.addSeparator()
 
-            # Toggle right panel visibility
-            self._action_toggle_right_panel = view_menu.addAction("Toggle Right Panel")
-            self._action_toggle_right_panel.setShortcut("Ctrl+R")
-            self._action_toggle_right_panel.setCheckable(True)
-            self._action_toggle_right_panel.setChecked(True)  # Initially visible
-            self._action_toggle_right_panel.triggered.connect(mw.toggle_right_panel)
+            # Panels submenu: one toggle per dock, auto-synced via dock.toggleViewAction()
+            panels_menu = view_menu.addMenu("Panels")
+            for dock in (
+                mw.layout_manager.dock_quick_settings,
+                mw.layout_manager.dock_hosts,
+                mw.layout_manager.dock_log,
+                mw.layout_manager.dock_progress,
+                mw.layout_manager.dock_info,
+                mw.layout_manager.dock_speed,
+            ):
+                action = dock.toggleViewAction()
+                # Default title is the dock objectName; use the window title for clarity
+                action.setText(dock.windowTitle())
+                panels_menu.addAction(action)
 
-            # Also set on main window for backward compatibility
-            mw.action_toggle_right_panel = self._action_toggle_right_panel
+            # Layouts submenu: switch between shipped preset arrangements
+            layouts_menu = view_menu.addMenu("Layouts")
+            for preset_name, label in (
+                ("classic", "Classic"),
+                ("focused_queue", "Focused Queue"),
+                ("two_column", "Two-Column"),
+            ):
+                action = layouts_menu.addAction(label)
+                action.triggered.connect(
+                    lambda checked=False, name=preset_name:
+                        mw.layout_manager.apply_preset(name)
+                )
+
+            reset_layout_action = view_menu.addAction("Reset Layout")
+            reset_layout_action.triggered.connect(mw.layout_manager.reset_layout)
 
             view_menu.addSeparator()
 
