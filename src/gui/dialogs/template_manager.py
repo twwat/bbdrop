@@ -35,7 +35,7 @@ class ConditionalInsertDialog(QDialog):
 
         self.placeholder_combo = QComboBox()
         self.placeholder_combo.addItems([
-            "folderName", "pictureCount", "width", "height", "longest",
+            "galleryName", "galleryTitle", "pictureCount", "width", "height", "longest",
             "extension", "folderSize", "galleryLink", "allImages", "hostLinks",
             "cover", "custom1", "custom2", "custom3", "custom4",
             "ext1", "ext2", "ext3", "ext4"
@@ -205,7 +205,8 @@ class TemplateManagerDialog(QDialog):
         self.active_template_name = current_template  # Store the active template name
 
         # Track pending changes (not yet saved to disk)
-        self.pending_changes = {}  # {template_name: content}
+        self.pending_changes = {}  # {template_name: body_content}
+        self.pending_post_titles = {}  # {template_name: post_title_template}
         self.pending_new_templates = set()  # Templates created but not committed
         self.pending_deleted_templates = set()  # Templates marked for deletion
 
@@ -260,8 +261,29 @@ class TemplateManagerDialog(QDialog):
         
         # Template editor section
         editor_group = QGroupBox("Template Editor")
-        editor_layout = QHBoxLayout(editor_group)
-        
+        editor_outer = QVBoxLayout(editor_group)
+
+        # Post Title row — forum thread title, supports placeholders.
+        # Empty = the auto-poster falls back to the gallery name.
+        post_title_row = QHBoxLayout()
+        post_title_label = QLabel("Post Title:")
+        post_title_label.setToolTip(
+            "Forum thread title for auto-posting. Supports placeholders like "
+            "#galleryName#, #pictureCount#, #resolution#. Leave empty to fall back "
+            "to the gallery name."
+        )
+        post_title_row.addWidget(post_title_label)
+        self.post_title_edit = QLineEdit()
+        self.post_title_edit.setPlaceholderText(
+            "Optional — e.g. #galleryName# (#pictureCount# pics, #resolution#)"
+        )
+        self.post_title_edit.textEdited.connect(self.on_post_title_changed)
+        post_title_row.addWidget(self.post_title_edit, 1)
+        editor_outer.addLayout(post_title_row)
+
+        editor_layout = QHBoxLayout()
+        editor_outer.addLayout(editor_layout)
+
         # Template content editor with syntax highlighting
         self.template_editor = QPlainTextEdit()
         self.template_editor.setProperty("class", "template-editor")
@@ -288,7 +310,8 @@ class TemplateManagerDialog(QDialog):
         placeholder_grid.setSpacing(3)
         
         placeholders = [
-            ("#folderName#", "Gallery Name"),
+            ("#galleryName#", "Gallery Name"),
+            ("#galleryTitle#", "Post Title"),
             ("#allImages#", "All Images"),
             ("#hostLinks#", "Host Links"),
             ("#height#", "Height"),
@@ -511,6 +534,7 @@ class TemplateManagerDialog(QDialog):
             # Before switching, save current content to pending_changes
             if self.current_template_name and self.current_template_name not in BUILTIN_TEMPLATES:
                 self.pending_changes[self.current_template_name] = self.template_editor.toPlainText()
+                self.pending_post_titles[self.current_template_name] = self.post_title_edit.text()
 
             self.load_template_content(template_name)
             self.current_template_name = template_name
@@ -521,6 +545,7 @@ class TemplateManagerDialog(QDialog):
             # Disable editing for built-in templates
             is_builtin = template_name in BUILTIN_TEMPLATES
             self.template_editor.setReadOnly(is_builtin)
+            self.post_title_edit.setReadOnly(is_builtin)
             self.rename_btn.setEnabled(not is_builtin)
             self.delete_btn.setEnabled(not is_builtin)
             self.copy_btn.setEnabled(True)
@@ -532,6 +557,7 @@ class TemplateManagerDialog(QDialog):
                 self.template_editor.style().polish(self.template_editor)
         else:
             self.template_editor.clear()
+            self.post_title_edit.clear()
             self.current_template_name = None
             self.unsaved_changes = False
             self.rename_btn.setEnabled(False)
@@ -544,22 +570,28 @@ class TemplateManagerDialog(QDialog):
         Checks pending_changes first, then loads from disk.
         """
         self.template_editor.blockSignals(True)
+        self.post_title_edit.blockSignals(True)
         try:
-            # Check pending_changes first
+            # Body (pending wins over disk)
             if template_name in self.pending_changes:
                 self.template_editor.setPlainText(self.pending_changes[template_name])
-                return
-
-            # Load from disk
-            from src.utils.templates import load_templates
-            templates = load_templates()
-
-            if template_name in templates:
-                self.template_editor.setPlainText(templates[template_name])
             else:
-                self.template_editor.clear()
+                from src.utils.templates import load_templates
+                templates = load_templates()
+                if template_name in templates:
+                    self.template_editor.setPlainText(templates[template_name])
+                else:
+                    self.template_editor.clear()
+
+            # Post title (pending wins over disk)
+            if template_name in self.pending_post_titles:
+                self.post_title_edit.setText(self.pending_post_titles[template_name])
+            else:
+                from src.utils.templates import load_post_titles
+                self.post_title_edit.setText(load_post_titles().get(template_name, ''))
         finally:
             self.template_editor.blockSignals(False)
+            self.post_title_edit.blockSignals(False)
     
     def insert_placeholder(self, placeholder):
         """Insert a placeholder at cursor position"""
@@ -652,6 +684,13 @@ class TemplateManagerDialog(QDialog):
             self.pending_changes[self.current_template_name] = self.template_editor.toPlainText()
             self.unsaved_changes = True
             self.content_changed.emit()
+
+    def on_post_title_changed(self, text: str):
+        """Track edits to the Post Title field."""
+        if self.current_template_name and self.current_template_name not in BUILTIN_TEMPLATES:
+            self.pending_post_titles[self.current_template_name] = text
+            self.unsaved_changes = True
+            self.content_changed.emit()
     
     def create_new_template(self):
         """Create a new template.
@@ -739,6 +778,8 @@ class TemplateManagerDialog(QDialog):
                 self.pending_new_templates.add(new_name)
                 if old_name in self.pending_changes:
                     self.pending_changes[new_name] = self.pending_changes.pop(old_name)
+                if old_name in self.pending_post_titles:
+                    self.pending_post_titles[new_name] = self.pending_post_titles.pop(old_name)
             else:
                 # Template exists on disk, rename file
                 from src.utils.templates import get_template_path
@@ -752,6 +793,8 @@ class TemplateManagerDialog(QDialog):
                     # Update pending changes key if any
                     if old_name in self.pending_changes:
                         self.pending_changes[new_name] = self.pending_changes.pop(old_name)
+                    if old_name in self.pending_post_titles:
+                        self.pending_post_titles[new_name] = self.pending_post_titles.pop(old_name)
                 except OSError as e:
                     QMessageBox.warning(self, "Error", f"Failed to rename template: {str(e)}")
                     return
@@ -804,6 +847,7 @@ class TemplateManagerDialog(QDialog):
 
             # Remove from pending changes if present
             self.pending_changes.pop(template_name, None)
+            self.pending_post_titles.pop(template_name, None)
 
             self.unsaved_changes = False
             self.current_template_name = None
@@ -829,6 +873,13 @@ class TemplateManagerDialog(QDialog):
         else:
             content = self.template_editor.toPlainText()
 
+        # Carry the post title along with the body copy
+        if source_name in self.pending_post_titles:
+            source_post_title = self.pending_post_titles[source_name]
+        else:
+            from src.utils.templates import load_post_titles
+            source_post_title = load_post_titles().get(source_name, '')
+
         # Prompt for new name
         new_name, ok = QInputDialog.getText(
             self, "Copy Template",
@@ -852,6 +903,8 @@ class TemplateManagerDialog(QDialog):
             # Track as new template with copied content
             self.pending_new_templates.add(new_name)
             self.pending_changes[new_name] = content
+            if source_post_title:
+                self.pending_post_titles[new_name] = source_post_title
 
             # Create list item
             item = QListWidgetItem(new_name)
@@ -881,6 +934,7 @@ class TemplateManagerDialog(QDialog):
             current_content = self.template_editor.toPlainText()
             if self.current_template_name in self.pending_changes or self.unsaved_changes:
                 self.pending_changes[self.current_template_name] = current_content
+                self.pending_post_titles[self.current_template_name] = self.post_title_edit.text()
 
         # Process deletions first
         for template_name in self.pending_deleted_templates:
@@ -891,17 +945,30 @@ class TemplateManagerDialog(QDialog):
             except OSError as e:
                 errors.append(f"Failed to delete '{template_name}': {e}")
 
-        # Save all pending changes
-        for template_name, content in self.pending_changes.items():
-            if template_name in self.pending_deleted_templates:
-                continue
-            if template_name in BUILTIN_TEMPLATES:
-                continue
+        # Collect every template that needs writing — either body or post-title
+        # changed. Reading from disk for unchanged pieces lets us save one
+        # without clobbering the other.
+        from src.utils.templates import (
+            load_post_titles, load_templates, serialize_template_file,
+        )
+        on_disk_bodies = load_templates()
+        on_disk_titles = load_post_titles()
+        names_to_write = (
+            set(self.pending_changes) | set(self.pending_post_titles)
+        ) - self.pending_deleted_templates - set(BUILTIN_TEMPLATES)
 
+        for template_name in names_to_write:
+            body = self.pending_changes.get(
+                template_name, on_disk_bodies.get(template_name, '')
+            )
+            post_title = self.pending_post_titles.get(
+                template_name, on_disk_titles.get(template_name, '')
+            )
+            serialized = serialize_template_file(post_title, body)
             template_file = os.path.join(template_path, f"{template_name}.template.txt")
             try:
                 with open(template_file, 'w', encoding='utf-8') as f:
-                    f.write(content)
+                    f.write(serialized)
             except OSError as e:
                 errors.append(f"Failed to save '{template_name}': {e}")
 
@@ -911,6 +978,7 @@ class TemplateManagerDialog(QDialog):
 
         # Clear pending state
         self.pending_changes.clear()
+        self.pending_post_titles.clear()
         self.pending_new_templates.clear()
         self.pending_deleted_templates.clear()
         self.unsaved_changes = False
@@ -923,6 +991,7 @@ class TemplateManagerDialog(QDialog):
         Called when Cancel is clicked in settings dialog.
         """
         self.pending_changes.clear()
+        self.pending_post_titles.clear()
         self.pending_new_templates.clear()
         self.pending_deleted_templates.clear()
         self.unsaved_changes = False
@@ -942,6 +1011,7 @@ class TemplateManagerDialog(QDialog):
 
         return bool(
             self.pending_changes
+            or self.pending_post_titles
             or self.pending_new_templates
             or self.pending_deleted_templates
         )

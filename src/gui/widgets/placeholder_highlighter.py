@@ -34,9 +34,13 @@ class PlaceholderHighlighter(QSyntaxHighlighter):
             self.conditional_format.setForeground(QColor("#0c5460"))
         self.conditional_format.setFontWeight(QFont.Weight.Bold)
 
-        # Define all placeholders (generic #word# pattern matching)
+        # Define all placeholders (generic #word# pattern matching).
+        # #folderName# stays here for backwards compatibility (it still
+        # highlights in existing templates) — the UI picker shown to users
+        # lives in template_manager.py and no longer surfaces it.
         self.placeholders = [
-            "#folderName#", "#width#", "#height#", "#longest#",
+            "#folderName#", "#galleryName#", "#galleryTitle#",
+            "#width#", "#height#", "#longest#",
             "#extension#", "#pictureCount#", "#folderSize#",
             "#galleryLink#", "#allImages#", "#hostLinks#", "#cover#",
             "#custom1#", "#custom2#", "#custom3#", "#custom4#",

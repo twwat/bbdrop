@@ -45,7 +45,7 @@ class TestConditionalInsertDialog:
         qtbot.addWidget(dialog)
 
         expected_items = [
-            "folderName", "pictureCount", "width", "height", "longest",
+            "galleryName", "galleryTitle", "pictureCount", "width", "height", "longest",
             "extension", "folderSize", "galleryLink", "allImages", "hostLinks",
             "cover", "custom1", "custom2", "custom3", "custom4",
             "ext1", "ext2", "ext3", "ext4"
@@ -83,13 +83,13 @@ class TestConditionalInsertDialog:
         dialog = ConditionalInsertDialog()
         qtbot.addWidget(dialog)
 
-        dialog.placeholder_combo.setCurrentText("folderName")
+        dialog.placeholder_combo.setCurrentText("galleryName")
         dialog.exists_radio.setChecked(True)
         dialog.include_else.setChecked(False)
 
         text = dialog.get_conditional_text()
 
-        assert text == "[if folderName]\nContent\n[/if]"
+        assert text == "[if galleryName]\nContent\n[/if]"
 
     def test_get_conditional_text_equals(self, qtbot):
         """Test generating conditional text for 'equals' check"""

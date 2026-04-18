@@ -25,6 +25,36 @@ def get_default_template():
     """Get the default template content"""
     return "#folderName#\n#allImages#"
 
+
+_POST_TITLE_DIRECTIVE = "#POSTTITLE:"
+
+
+def parse_template_file(content: str) -> tuple[str, str]:
+    """Split an optional post-title directive off the top of a template file.
+
+    The directive must be the very first line, at column 0, in the form:
+        #POSTTITLE: <title template>
+    Leading whitespace disqualifies the line so indented body content that
+    happens to start with the literal text isn't mistaken for a directive.
+    Returns (post_title, body). If no directive is present, post_title is "".
+    """
+    if not content:
+        return "", content or ""
+    first_line, _, rest = content.partition('\n')
+    if first_line.startswith(_POST_TITLE_DIRECTIVE):
+        post_title = first_line[len(_POST_TITLE_DIRECTIVE):].strip()
+        return post_title, rest
+    return "", content
+
+
+def serialize_template_file(post_title: str, body: str) -> str:
+    """Inverse of parse_template_file — prepends the directive when non-empty."""
+    post_title = post_title.strip()
+    if post_title:
+        return f"{_POST_TITLE_DIRECTIVE} {post_title}\n{body}"
+    return body
+
+
 def load_templates():
     """Load all available templates from the template directory"""
     template_path = get_template_path()
@@ -84,11 +114,45 @@ Video: #videoCodec#[if audioCodec] | Audio: #audioCodec#[/if]
                 template_file = os.path.join(template_path, filename)
                 try:
                     with open(template_file, 'r', encoding='utf-8') as f:
-                        templates[template_name] = f.read()
+                        raw = f.read()
+                    # Strip the optional #POSTTITLE: directive so template
+                    # body consumers (editor, BBCode generator) don't see it.
+                    _, body = parse_template_file(raw)
+                    templates[template_name] = body
                 except Exception as e:
                     log(f"Could not load template '{template_name}': {e}", level="error", category="template")
 
     return templates
+
+
+def load_post_titles() -> dict:
+    """Load the post-title directive from each custom template file.
+
+    Returns {template_name: post_title_template}. Built-in templates aren't
+    included — they have no post-title directive on disk.
+    """
+    template_path = get_template_path()
+    titles: dict = {}
+    if not os.path.isdir(template_path):
+        return titles
+    for filename in os.listdir(template_path):
+        template_name = filename
+        if template_name.startswith(".template"):
+            template_name = template_name[10:]
+        if template_name.endswith('.template.txt'):
+            template_name = template_name[:-13]
+        if template_name.endswith('.txt'):
+            template_name = template_name[:-4]
+        if not template_name:
+            continue
+        try:
+            with open(os.path.join(template_path, filename), 'r', encoding='utf-8') as f:
+                post_title, _ = parse_template_file(f.read())
+            if post_title:
+                titles[template_name] = post_title
+        except Exception as e:
+            log(f"Could not load post-title for '{template_name}': {e}", level="error", category="template")
+    return titles
 
 def _camel_to_snake(name):
     """Convert camelCase placeholder name to snake_case data key.
@@ -213,8 +277,16 @@ def apply_template(template_content, data):
     for placeholder, value in composite_replacements.items():
         result = result.replace(placeholder, str(value or ''))
 
+    # #galleryName# falls back to #folderName# binding when not explicitly set,
+    # so existing templates keep working and #galleryName# means the same thing
+    # in practice until an auto-posting workflow populates gallery_title distinctly.
+    gallery_name_value = data.get('gallery_name') or data.get('folder_name') or ''
+    gallery_title_value = data.get('gallery_title') or gallery_name_value
+
     replacements = {
         '#folderName#': str(data.get('folder_name') or ''),
+        '#galleryName#': str(gallery_name_value),
+        '#galleryTitle#': str(gallery_title_value),
         '#width#': str(data.get('width', 0)),
         '#height#': str(data.get('height', 0)),
         '#longest#': str(data.get('longest', 0)),
@@ -392,8 +464,14 @@ def save_gallery_artifacts(
             if r.get('status') == 'success' and r.get('bbcode')
         )
 
+    # Resolve the post-title template for this template (if any) before building
+    # template_data, so #galleryTitle# can be populated for the body pass.
+    post_title_templates = load_post_titles()
+    post_title_tpl = post_title_templates.get(template_name, '')
+
     template_data = {
         'folder_name': gallery_name,
+        'gallery_name': gallery_name,
         'width': avg_width,
         'height': avg_height,
         'longest': max(avg_width, avg_height),
@@ -488,12 +566,23 @@ def save_gallery_artifacts(
             'download_links': results.get('download_links', ''),
         })
 
+    # Resolve post title using the same placeholder engine. Pre-populate
+    # gallery_title to the gallery_name fallback so recursive #galleryTitle#
+    # references in the title template stay bounded.
+    if post_title_tpl:
+        title_data = {**template_data, 'gallery_title': gallery_name}
+        resolved_post_title = apply_template(post_title_tpl, title_data).strip()
+    else:
+        resolved_post_title = gallery_name
+    template_data['gallery_title'] = resolved_post_title
+
     bbcode_content = generate_bbcode_from_template(template_name, template_data)
 
     # Compose JSON payload (align with CLI structure)
     json_payload = {
         'meta': {
             'gallery_name': gallery_name,
+            'gallery_title': resolved_post_title,
             'gallery_id': gallery_id,
             'gallery_url': results.get('gallery_url', ''),
             'status': 'completed',
