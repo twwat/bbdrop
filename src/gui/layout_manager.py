@@ -77,6 +77,15 @@ class LayoutManager(QObject):
             "Speed", self._build_speed_content(), "dock_speed"
         )
 
+        # Disallow tab merging so dragging Progress/Info/Speed onto each other
+        # can't accidentally combine them into a tab group. They show
+        # unrelated stats and must remain independently visible at all times.
+        from PyQt6.QtWidgets import QMainWindow
+        mw.setDockOptions(
+            QMainWindow.DockOption.AnimatedDocks
+            | QMainWindow.DockOption.AllowNestedDocks
+        )
+
         # Make the bottom dock area own both lower corners so Progress/Info/Speed
         # span the full window width — matching today's layout where they sit
         # below both the queue and the right-side panels.
@@ -88,9 +97,22 @@ class LayoutManager(QObject):
         mw.splitDockWidget(self.dock_quick_settings, self.dock_hosts, Qt.Orientation.Vertical)
         mw.splitDockWidget(self.dock_hosts, self.dock_log, Qt.Orientation.Vertical)
 
+        # Bottom row: Progress | Info | Speed. Qt's dock layout is a binary
+        # tree — with three peers, one pair must nest. Nest Progress+Info
+        # (the pair that resizes together most naturally) so the Info|Speed
+        # handle lives at the outer level and can resize those two cleanly
+        # without cascading into Progress.
         mw.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.dock_progress)
+        mw.splitDockWidget(self.dock_progress, self.dock_speed, Qt.Orientation.Horizontal)
         mw.splitDockWidget(self.dock_progress, self.dock_info, Qt.Orientation.Horizontal)
-        mw.splitDockWidget(self.dock_info, self.dock_speed, Qt.Orientation.Horizontal)
+
+        # Give the bottom row explicit starting widths so nothing is pinned
+        # at minimum on first launch. Without this, Qt gives them equal thirds.
+        mw.resizeDocks(
+            [self.dock_progress, self.dock_info, self.dock_speed],
+            [600, 230, 230],
+            Qt.Orientation.Horizontal,
+        )
 
     def _wrap_dock(
         self, title: str, content: QWidget, object_name: str
