@@ -633,22 +633,13 @@ class TestSettingsPersistence:
 class TestRightPanel:
     """Test right panel visibility and updates"""
 
+    @pytest.mark.skip(
+        reason="toggle_right_panel removed in dock-based layout migration; "
+        "panel visibility now handled by QDockWidget close/show"
+    )
     def test_toggle_right_panel_visibility(self, create_minimal_window):
         """Test toggle_right_panel switches visibility"""
-        window = create_minimal_window()
-
-        # Mock splitter sizes for the toggle operation
-        window.top_splitter.sizes.return_value = [800, 200]
-        window.top_splitter.setSizes = Mock()
-
-        # Mock right panel
-        window.right_panel = Mock()
-        window.right_panel.isVisible.return_value = True
-        window.right_panel.width.return_value = 200
-
-        window.toggle_right_panel()
-        # After toggling, right panel should be hidden
-        window.top_splitter.setSizes.assert_called()
+        pass
 
 
 # ============================================================================
