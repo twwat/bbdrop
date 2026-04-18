@@ -252,7 +252,7 @@ class TableRowManager(QObject):
             if not isinstance(progress_widget, TableProgressWidget):
                 progress_widget = TableProgressWidget()
                 mw.gallery_table.setCellWidget(row, 3, progress_widget)
-            progress_widget.update_progress(item.progress, item.status)
+            self._seed_progress_widget(progress_widget, item)
 
         # Status icon and text
         self._set_status_cell_icon(row, item.status)
@@ -617,7 +617,7 @@ class TableRowManager(QObject):
             if not isinstance(progress_widget, TableProgressWidget):
                 progress_widget = TableProgressWidget()
                 table.setCellWidget(row, _Col.PROGRESS, progress_widget)
-                progress_widget.update_progress(item.progress, item.status)
+                self._seed_progress_widget(progress_widget, item)
 
             # Create action buttons if needed
             action_widget = table.cellWidget(row, _Col.ACTION)
@@ -791,6 +791,22 @@ class TableRowManager(QObject):
                 if timer_was_active:
                     mw.update_timer.start(timer_interval)
 
+    def _seed_progress_widget(self, widget: TableProgressWidget, item) -> None:
+        """Seed a progress widget from an item using the byte-weighted calc.
+
+        On restart and during initial row creation, the raw ``item.progress``
+        only reflects the image-host upload. When file-host uploads are part
+        of the gallery work, we need to route through
+        ``progress_tracker.compute_item_display`` so the displayed percent
+        and status match what live updates produce.
+        """
+        try:
+            percent, effective_status = self._main_window.progress_tracker.compute_item_display(item)
+        except Exception as e:
+            log(f"compute_item_display failed during seed: {e}", level="debug", category="ui")
+            percent, effective_status = int(getattr(item, 'progress', 0) or 0), getattr(item, 'status', '')
+        widget.update_progress(percent, effective_status)
+
     def _create_progress_widget_for_row(self, row: int):
         """Create progress widget for a single row if not already present.
 
@@ -809,7 +825,7 @@ class TableRowManager(QObject):
                     if not isinstance(progress_widget, TableProgressWidget):
                         progress_widget = TableProgressWidget()
                         mw.gallery_table.setCellWidget(row, _Col.PROGRESS, progress_widget)
-                        progress_widget.update_progress(item.progress, item.status)
+                        self._seed_progress_widget(progress_widget, item)
         except Exception as e:
             log(f"Failed to create progress widget for row {row}: {e}", level="warning", category="ui")
 
