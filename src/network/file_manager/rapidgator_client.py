@@ -140,6 +140,7 @@ class RapidgatorFileManagerClient(FileManagerClient):
             md5=item.get("hash"),
             download_count=item.get("nb_downloads"),
             parent_id=str(item.get("folder_id", "")) or None,
+            metadata=dict(item),
         )
 
     @staticmethod
@@ -164,6 +165,7 @@ class RapidgatorFileManagerClient(FileManagerClient):
             access=access,
             is_available=True,
             parent_id=str(item.get("parent_id", "")) or None,
+            metadata=dict(item),
         )
 
     # ------------------------------------------------------------------
