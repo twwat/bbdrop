@@ -811,3 +811,13 @@ class LayoutManager(QObject):
     def reset_layout(self) -> None:
         """Restore the Classic default layout."""
         self.apply_preset("classic")
+
+    def _dev_print_layout_state(self) -> None:
+        """TEMPORARY — remove once Task 6 captures all preset payloads.
+
+        Prints the current QMainWindow saveState() as base64 to stdout so it
+        can be pasted into src/gui/layout_presets.PRESETS.
+        """
+        state = self._mw.saveState()
+        b64 = bytes(QByteArray(state).toBase64()).decode()
+        print(f"LAYOUT STATE: {b64}")

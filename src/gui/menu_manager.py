@@ -156,6 +156,12 @@ class MenuManager(QObject):
             reset_layout_action = view_menu.addAction("Reset Layout")
             reset_layout_action.triggered.connect(mw.layout_manager.reset_layout)
 
+            # TEMPORARY — remove once Task 6 captures all preset payloads.
+            # Press Ctrl+Shift+D to print the current saveState() as base64.
+            dev_capture_action = view_menu.addAction("Capture Layout State (dev)")
+            dev_capture_action.setShortcut("Ctrl+Shift+D")
+            dev_capture_action.triggered.connect(mw.layout_manager._dev_print_layout_state)
+
             view_menu.addSeparator()
 
             # Theme submenu: System / Light / Dark
