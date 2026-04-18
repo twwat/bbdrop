@@ -815,9 +815,19 @@ class LayoutManager(QObject):
     def _dev_print_layout_state(self) -> None:
         """TEMPORARY — remove once Task 6 captures all preset payloads.
 
-        Prints the current QMainWindow saveState() as base64 to stdout so it
-        can be pasted into src/gui/layout_presets.PRESETS.
+        Captures the current QMainWindow saveState() as base64, then:
+        - copies it to the system clipboard so it can be pasted anywhere
+        - logs it to the app log so it is visible in the Log panel
+        - prints it to stdout as a fallback when a terminal is attached
         """
+        from PyQt6.QtWidgets import QApplication
+
         state = self._mw.saveState()
         b64 = bytes(QByteArray(state).toBase64()).decode()
+
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(b64)
+
+        log(f"LAYOUT STATE (copied to clipboard): {b64}", level="info", category="ui")
         print(f"LAYOUT STATE: {b64}")
