@@ -146,8 +146,7 @@ class TestColumnSorting:
 
         # Get column indices
         hostname_col = widget._get_column_index('hostname')
-        speed_col = widget._get_column_index('speed')
-        status_text_col = widget._get_column_index('status_text')  # Use status_text, not status (icon-only)
+        status_speed_col = widget._get_column_index('status_speed')
         icon_col = widget._get_column_index('icon')
 
         # Sort by hostname
@@ -170,21 +169,16 @@ class TestColumnSorting:
 
             # Verify data alignment for real workers
             hostname_item = widget.status_table.item(row, hostname_col)
-            speed_item = widget.status_table.item(row, speed_col)
-            status_item = widget.status_table.item(row, status_text_col)
+            status_speed_item = widget.status_table.item(row, status_speed_col)
 
             # Verify hostname matches
             assert hostname_item.text() == matching_worker.display_name, \
                 f"Hostname mismatch for {worker_id}"
 
-            # Verify speed matches this worker
-            if matching_worker.speed_bps > 0:
-                assert speed_item.text() != "---", f"Speed should not be '---' for {worker_id}"
-
-            # Verify status matches this worker
-            expected_status = "Failed" if matching_worker.status in ('error', 'failed') else matching_worker.status.capitalize()
-            assert status_item.text() == expected_status, \
-                f"Status mismatch for {worker_id}: expected {expected_status}, got {status_item.text()}"
+            # Verify combined cell carries this worker's speed via UserRole+10
+            stored_speed = status_speed_item.data(Qt.ItemDataRole.UserRole + 10)
+            assert stored_speed == matching_worker.speed_bps, \
+                f"Speed misalignment for {worker_id}"
 
     def test_sort_enum_conversion_no_exception(self, widget, sample_workers):
         """Test that Qt.SortOrder enum is properly converted to int (no TypeError)."""
@@ -203,33 +197,30 @@ class TestColumnSorting:
             pytest.fail(f"Qt.SortOrder conversion failed: {e}")
 
     def test_sort_by_speed_column(self, widget, sample_workers):
-        """Test sorting by speed column (text-based sorting with formatted values)."""
+        """Test sorting by combined status/speed column (text-based sorting)."""
         # Use "Active Only" filter to avoid placeholder workers
         widget._workers = sample_workers
         widget._filter_index = 4  # "Active Only"
         widget._refresh_display()
 
-        speed_col = widget._get_column_index('speed')
+        status_speed_col = widget._get_column_index('status_speed')
 
-        # Sort by speed ascending (note: QTableWidget sorts by TEXT, not numeric UserRole)
-        # So "1.0 MiB/s" comes before "512.0 KiB/s" alphabetically
-        widget.status_table.sortItems(speed_col, Qt.SortOrder.AscendingOrder)
+        # Sort ascending (text-based since QTableWidget sorts by text)
+        widget.status_table.sortItems(status_speed_col, Qt.SortOrder.AscendingOrder)
 
         # Verify that sorting doesn't crash and data remains aligned
-        # Note: Text-based sorting of formatted speeds won't be perfectly numeric
-        # but the important thing is no crashes and data alignment
         icon_col = widget._get_column_index('icon')
 
         for row in range(widget.status_table.rowCount()):
             icon_item = widget.status_table.item(row, icon_col)
-            speed_item = widget.status_table.item(row, speed_col)
+            cell_item = widget.status_table.item(row, status_speed_col)
 
             worker_id = icon_item.data(Qt.ItemDataRole.UserRole)
             worker = widget._workers.get(worker_id)
 
             if worker:
-                # Verify data alignment (speed text matches worker's speed)
-                speed_bps = speed_item.data(Qt.ItemDataRole.UserRole + 10)
+                # Verify data alignment (speed value matches worker's speed)
+                speed_bps = cell_item.data(Qt.ItemDataRole.UserRole + 10)
                 assert speed_bps == worker.speed_bps, \
                     f"Speed data misalignment for {worker_id}"
 
@@ -506,10 +497,10 @@ class TestDataIntegrity:
         widget._workers = sample_workers
         widget._refresh_display()
 
-        speed_col = widget._get_column_index('speed')
+        status_speed_col = widget._get_column_index('status_speed')
 
         for row in range(widget.status_table.rowCount()):
-            item = widget.status_table.item(row, speed_col)
+            item = widget.status_table.item(row, status_speed_col)
 
             # Verify UserRole+10 stores numeric value
             speed_bps = item.data(Qt.ItemDataRole.UserRole + 10)

@@ -136,7 +136,7 @@ class TestColumnReordering:
         """Verify column order is restored when creating new instance."""
         settings = QSettings()
         settings.clear()  # Clear any previous settings
-        custom_order = ['icon', 'speed', 'hostname', 'status', 'status_text']
+        custom_order = ['icon', 'status_speed', 'hostname', 'status']
         settings.setValue("worker_status/visible_columns", custom_order)
 
         new_widget = WorkerStatusWidget()
@@ -204,10 +204,10 @@ class TestColumnResizing:
         """Verify column widths are restored when creating new instance."""
         settings = QSettings()
         settings.clear()  # Clear any previous settings
-        custom_widths = {'hostname': 250, 'speed': 120, 'status': 100}
+        custom_widths = {'hostname': 250, 'status_speed': 170, 'status': 100}
         settings.setValue("worker_status/column_widths", custom_widths)
         settings.setValue("worker_status/visible_columns",
-                         ['icon', 'hostname', 'speed', 'status', 'status_text'])
+                         ['icon', 'hostname', 'status', 'status_speed'])
 
         new_widget = WorkerStatusWidget()
         QTest.qWait(50)
@@ -224,7 +224,7 @@ class TestColumnResizing:
         settings = QSettings()
         settings.clear()
 
-        columns_to_resize = [('hostname', 300), ('speed', 150), ('status', 120)]
+        columns_to_resize = [('hostname', 300), ('status_speed', 200), ('status', 120)]
 
         for col_id, width in columns_to_resize:
             col_idx = widget._get_column_index(col_id)
@@ -257,9 +257,9 @@ class TestColumnSorting:
             assert widget.status_table.item(0, hostname_idx) is not None
 
     def test_sort_by_speed(self, populated_widget):
-        """Test sorting by speed column."""
+        """Test sorting by combined status/speed column."""
         widget = populated_widget
-        speed_idx = widget._get_column_index('speed')
+        speed_idx = widget._get_column_index('status_speed')
         assert speed_idx >= 0
 
         widget.status_table.setSortingEnabled(True)
@@ -285,17 +285,17 @@ class TestColumnVisibility:
     def test_toggle_column_visibility_hide(self, widget):
         """Test hiding a column."""
         initial_count = len(widget._active_columns)
-        widget._toggle_column('speed', False)
+        widget._toggle_column('status_speed', False)
         assert len(widget._active_columns) == initial_count - 1
-        assert not widget._is_column_visible('speed')
+        assert not widget._is_column_visible('status_speed')
 
     def test_toggle_column_visibility_show(self, widget):
         """Test showing a hidden column."""
-        widget._toggle_column('speed', False)
+        widget._toggle_column('status_speed', False)
         initial_count = len(widget._active_columns)
-        widget._toggle_column('speed', True)
+        widget._toggle_column('status_speed', True)
         assert len(widget._active_columns) == initial_count + 1
-        assert widget._is_column_visible('speed')
+        assert widget._is_column_visible('status_speed')
 
     def test_cannot_hide_non_hideable_columns(self, widget):
         """Verify non-hideable columns cannot be hidden."""
@@ -313,19 +313,19 @@ class TestColumnVisibility:
         """Verify hidden column state is saved."""
         settings = QSettings()
         settings.clear()
-        widget._toggle_column('speed', False)
+        widget._toggle_column('status_speed', False)
         saved_columns = settings.value("worker_status/visible_columns", type=list)
-        assert 'speed' not in saved_columns or saved_columns is None
+        assert 'status_speed' not in saved_columns or saved_columns is None
 
     def test_hidden_column_restored_on_restart(self, mock_qsettings):
         """Verify hidden columns remain hidden on restart."""
         settings = QSettings()
         settings.clear()  # Clear any previous settings
-        visible_columns = ['icon', 'hostname', 'status', 'status_text']
+        visible_columns = ['icon', 'hostname', 'status', 'status_speed']
         settings.setValue("worker_status/visible_columns", visible_columns)
 
         new_widget = WorkerStatusWidget()
-        assert not new_widget._is_column_visible('speed')
+        assert not new_widget._is_column_visible('bytes_remaining')
         assert new_widget._is_column_visible('hostname')
 
         new_widget.stop_monitoring()
@@ -353,7 +353,7 @@ class TestColumnPersistence:
 
         widget1 = WorkerStatusWidget()
         widget1._toggle_column('bytes_session', True)
-        widget1._toggle_column('speed', False)
+        widget1._toggle_column('bytes_remaining', False)
 
         hostname_idx = widget1._get_column_index('hostname')
         if hostname_idx >= 0:
@@ -368,7 +368,7 @@ class TestColumnPersistence:
         QTest.qWait(50)
 
         assert widget2._is_column_visible('bytes_session')
-        assert not widget2._is_column_visible('speed')
+        assert not widget2._is_column_visible('bytes_remaining')
 
         widget2.stop_monitoring()
         widget2.deleteLater()
@@ -377,13 +377,13 @@ class TestColumnPersistence:
         """Test resetting columns to default settings."""
         settings = QSettings()
         widget._toggle_column('bytes_session', True)
-        widget._toggle_column('speed', False)
+        widget._toggle_column('status_speed', False)
         widget._save_column_settings()
 
         # Verify customized state was saved
         saved_before = settings.value("worker_status/visible_columns", type=list)
         assert 'bytes_session' in saved_before
-        assert 'speed' not in saved_before
+        assert 'status_speed' not in saved_before
 
         # Reset to defaults
         widget._reset_column_settings()
@@ -391,8 +391,8 @@ class TestColumnPersistence:
         # Verify reset worked
         assert not widget._is_column_visible('bytes_session'), \
             "Metric should be hidden after reset"
-        assert widget._is_column_visible('speed'), \
-            "Speed should be visible after reset"
+        assert widget._is_column_visible('status_speed'), \
+            "Status/speed should be visible after reset"
 
         # Settings should be removed or restored to defaults
         # Note: _reset_column_settings rebuilds table, which saves default state
@@ -403,7 +403,7 @@ class TestColumnPersistence:
         settings = QSettings()
         settings.clear()  # Ensure clean state
         settings.setValue("worker_status/visible_columns",
-                         ['icon', 'hostname', 'status', 'status_text'])
+                         ['icon', 'hostname', 'status', 'status_speed'])
 
         widget = WorkerStatusWidget()
         assert widget._is_column_visible('hostname')
@@ -457,7 +457,7 @@ class TestColumnIntegration:
         """Test that removing a column doesn't affect worker data."""
         widget = populated_widget
         initial_row_count = widget.status_table.rowCount()
-        widget._toggle_column('speed', False)
+        widget._toggle_column('status_speed', False)
         assert widget.status_table.rowCount() == initial_row_count
         assert widget.get_worker_count() > 0
 
@@ -470,7 +470,7 @@ class TestColumnIntegration:
         )
 
         widget._toggle_column('bytes_session', True)
-        widget._toggle_column('speed', False)
+        widget._toggle_column('status_speed', False)
 
         if widget.status_table.rowCount() > 0:
             widget.status_table.selectRow(0)
@@ -489,16 +489,16 @@ class TestEdgeCases:
 
     def test_empty_widget_column_operations(self, widget):
         """Test column operations on widget with no data."""
-        widget._toggle_column('speed', False)
+        widget._toggle_column('status_speed', False)
         widget._toggle_column('bytes_session', True)
         widget._save_column_settings()
 
     def test_rapid_column_toggles(self, widget):
         """Test rapidly toggling columns."""
         for _ in range(10):
-            widget._toggle_column('speed', False)
-            widget._toggle_column('speed', True)
-        assert widget._is_column_visible('speed')
+            widget._toggle_column('status_speed', False)
+            widget._toggle_column('status_speed', True)
+        assert widget._is_column_visible('status_speed')
 
     def test_all_hideable_columns_hidden(self, widget):
         """Test hiding all hideable columns."""

@@ -74,23 +74,23 @@ class TestColumnHeaderAlignment:
         assert host_col.alignment & Qt.AlignmentFlag.AlignLeft
 
     def test_status_column_alignment(self, widget):
-        """Verify 'Status Text' column header is left-aligned."""
-        # Status text column should use left alignment
-        status_col = next((c for c in widget._active_columns if c.id == 'status_text'), None)
-        assert status_col is not None, "Status text column not found"
+        """Verify combined 'status_speed' column header is left-aligned."""
+        # Combined status/speed column should use left alignment
+        status_col = next((c for c in widget._active_columns if c.id == 'status_speed'), None)
+        assert status_col is not None, "status_speed column not found"
 
         # Check alignment flags
         assert status_col.alignment & Qt.AlignmentFlag.AlignLeft
 
     def test_other_columns_center_aligned(self, widget):
-        """Verify other columns are center-aligned (not left)."""
-        # Speed and metric columns should be center/right aligned, not left
-        speed_col = next((c for c in widget._active_columns if c.id == 'speed'), None)
-        assert speed_col is not None
+        """Verify metric columns are right-aligned (not left)."""
+        # bytes_remaining column should be right-aligned
+        bytes_col = next((c for c in widget._active_columns if c.id == 'bytes_remaining'), None)
+        assert bytes_col is not None
 
-        # Speed should be right-aligned
-        assert speed_col.alignment & Qt.AlignmentFlag.AlignRight
-        assert not (speed_col.alignment & Qt.AlignmentFlag.AlignLeft)
+        # Should be right-aligned
+        assert bytes_col.alignment & Qt.AlignmentFlag.AlignRight
+        assert not (bytes_col.alignment & Qt.AlignmentFlag.AlignLeft)
 
     def test_multiline_header_honors_alignment(self, widget):
         """Verify MultiLineHeaderView respects alignment from ColumnConfig."""
@@ -98,7 +98,7 @@ class TestColumnHeaderAlignment:
         widget._active_columns = [
             ColumnConfig('hostname', 'Host', 120, ColumnType.TEXT),
             ColumnConfig('status', 'Status', 80, ColumnType.TEXT),
-            ColumnConfig('speed', 'Speed', 90, ColumnType.SPEED)
+            ColumnConfig('status_speed', 'Status', 170, ColumnType.TEXT)
         ]
 
         widget._rebuild_table_columns()
@@ -247,14 +247,14 @@ class TestRegressionColumnOperations:
         """Test toggling column visibility."""
         initial_count = len(widget._active_columns)
 
-        # Hide a column
-        widget._toggle_column('speed', False)
+        # Hide a column (use bytes_remaining which is hideable)
+        widget._toggle_column('bytes_remaining', False)
 
         # Should have one fewer column
         assert len(widget._active_columns) == initial_count - 1
 
         # Show it again
-        widget._toggle_column('speed', True)
+        widget._toggle_column('bytes_remaining', True)
         assert len(widget._active_columns) == initial_count
 
     def test_get_column_index(self, widget):

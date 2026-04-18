@@ -179,7 +179,7 @@ class TestImplementationIntegration:
     def test_all_columns_defined(self):
         """Verify all required columns are properly defined"""
         # At least these core columns should exist
-        required_core_ids = ['icon', 'hostname', 'speed', 'status', 'storage']
+        required_core_ids = ['icon', 'hostname', 'status_speed', 'status', 'storage']
 
         for col_id in required_core_ids:
             assert col_id in AVAILABLE_COLUMNS, \

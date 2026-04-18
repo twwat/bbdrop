@@ -307,16 +307,12 @@ CORE_COLUMNS = [
     ),
     ColumnConfig('hostname', 'host', 120, ColumnType.TEXT),
     ColumnConfig(
-        'speed', 'speed', 90, ColumnType.SPEED,
-        alignment=_ALIGN_RIGHT,
-    ),
-    ColumnConfig(
         'status', '', 34, ColumnType.ICON,
         default_visible=True, resizable=False,
         hideable=False, alignment=_ALIGN_CENTER,
     ),
     ColumnConfig(
-        'status_text', 'status text', 100, ColumnType.TEXT,
+        'status_speed', 'status', 170, ColumnType.TEXT,
         default_visible=True, alignment=_ALIGN_LEFT,
     ),
     ColumnConfig(
@@ -1406,25 +1402,50 @@ class WorkerStatusWidget(QWidget):
                 else:
                     item.setText(str(value))
 
+    def _refresh_status_speed_cell(self, worker_id: str) -> None:
+        """Re-render the combined status/speed cell for one worker."""
+        col_idx = self._get_column_index('status_speed')
+        if col_idx < 0:
+            return
+        row = self._worker_row_map.get(worker_id)
+        if row is None:
+            return
+        worker = self._workers.get(worker_id)
+        if worker is None:
+            return
+
+        item = self.status_table.item(row, col_idx)
+        if item is None:
+            return
+
+        text, color, tooltip, italic = format_status_speed_cell(worker)
+        item.setText(text)
+        item.setToolTip(tooltip)
+        item.setData(Qt.ItemDataRole.UserRole + 10, worker.speed_bps)
+
+        font = item.font()
+        font.setItalic(italic)
+        item.setFont(font)
+
+        if color is not None:
+            item.setForeground(color)
+        elif italic:
+            item.setForeground(
+                self.palette().color(QPalette.ColorRole.PlaceholderText)
+            )
+        else:
+            item.setForeground(
+                self.palette().color(QPalette.ColorRole.Text)
+            )
+
     def _update_worker_speed(self, worker_id: str, speed_bps: float):
-        """Update only the speed cell for a worker.
+        """Update only the speed portion of the combined status/speed cell.
 
         Args:
             worker_id: Worker identifier
             speed_bps: Speed in bytes per second
         """
-        col_idx = self._get_column_index('speed')
-        if col_idx >= 0:
-            self._update_worker_cell(worker_id, col_idx, speed_bps, self._format_speed)
-            # Also update tooltip
-            row = self._worker_row_map.get(worker_id)
-            if row is not None:
-                item = self.status_table.item(row, col_idx)
-                if item:
-                    worker = self._workers.get(worker_id)
-                    display_name = worker.display_name if worker else worker_id
-                    speed_text = self._format_speed(speed_bps)
-                    item.setToolTip(f"Current Speed\n{display_name}: {speed_text}")
+        self._refresh_status_speed_cell(worker_id)
 
     def _update_worker_status_cell(self, worker_id: str, status: str):
         """Update status icon and text cells separately.
@@ -1490,30 +1511,9 @@ class WorkerStatusWidget(QWidget):
             if worker:
                 self._update_status_icon_for_row(row, worker)
 
-        # Update text column
-        text_col_idx = self._get_column_index('status_text')
-        if text_col_idx >= 0:
-            text_item = self.status_table.item(row, text_col_idx)
-            if text_item:
-                text_item.setText(display_text)
-                text_item.setToolTip(tooltip_text)
-
-                # Reset font to non-italic first (in case previously disabled)
-                font = text_item.font()
-                font.setItalic(False)
-                text_item.setFont(font)
-
-                # Apply color coding based on status
-                if status_color:
-                    text_item.setForeground(status_color)
-                elif base_status == 'disabled':
-                    text_item.setForeground(self.palette().color(QPalette.ColorRole.PlaceholderText))
-                    font = text_item.font()
-                    font.setItalic(True)
-                    text_item.setFont(font)
-                else:
-                    # Reset to default color for other statuses
-                    text_item.setForeground(self.palette().color(QPalette.ColorRole.Text))
+        # Combined column: re-render via the shared formatter so text, color,
+        # tooltip, and italic stay in sync with the worker's current state.
+        self._refresh_status_speed_cell(worker_id)
 
     def _update_worker_progress_cell(self, worker_id: str, progress_bytes: int, total_bytes: int):
         """Update progress cell for a specific worker - targeted update.
@@ -1629,8 +1629,14 @@ class WorkerStatusWidget(QWidget):
                 type_priority = 0 if w.worker_type == 'imagehost' else 1
                 return (type_priority, w.hostname.lower())
             return sorted(workers, key=sort_key, reverse=reverse)
-        elif col_config.id == 'speed':
-            return sorted(workers, key=lambda w: w.speed_bps, reverse=reverse)
+        elif col_config.id == 'status_speed':
+            # Sort by status alphabetically, then by speed descending within
+            # the same status so the fastest uploaders bubble to the top.
+            return sorted(
+                workers,
+                key=lambda w: (w.status.lower(), -w.speed_bps),
+                reverse=reverse,
+            )
         elif col_config.id == 'status':
             return sorted(workers, key=lambda w: w.status.lower(), reverse=reverse)
         elif col_config.metric_key:
@@ -1790,23 +1796,6 @@ class WorkerStatusWidget(QWidget):
 
                         self.status_table.setItem(row_idx, col_idx, hostname_item)
 
-                elif col_config.id == 'speed':
-                    # Speed column
-                    speed_text = self._format_speed(worker.speed_bps)
-                    speed_item = QTableWidgetItem(speed_text)
-                    speed_item.setTextAlignment(col_config.alignment)
-                    speed_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
-                    speed_item.setData(Qt.ItemDataRole.UserRole + 10, worker.speed_bps)
-                    speed_item.setToolTip(f"Current Speed\n{worker.display_name}: {speed_text}")
-
-                    # Monospace font for speed
-                    speed_font = QFont("Consolas")
-                    speed_font.setPointSizeF(METRIC_FONT_SIZE_DEFAULT)
-                    speed_font.setStyleHint(QFont.StyleHint.Monospace)
-                    speed_item.setFont(speed_font)
-
-                    self.status_table.setItem(row_idx, col_idx, speed_item)
-
                 elif col_config.id == 'status':
                     icon_key, tooltip = self._resolve_status_icon(worker)
                     icon = self._icon_cache.get(icon_key, QIcon())
@@ -1817,28 +1806,27 @@ class WorkerStatusWidget(QWidget):
                     status_icon_item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
                     self.status_table.setItem(row_idx, col_idx, status_icon_item)
 
-                elif col_config.id == 'status_text':
-                    # Status text column (text only with color coding)
-                    display_status = "Failed" if worker.status in ('error', 'failed') else worker.status.capitalize()
-                    status_text_item = QTableWidgetItem(display_status)
-                    status_text_item.setTextAlignment(col_config.alignment)
-                    tooltip = f"Failed: {worker.error_message}" if worker.status in ('error', 'failed') and worker.error_message else f"Status: {display_status}"
-                    status_text_item.setToolTip(tooltip)
+                elif col_config.id == 'status_speed':
+                    text, color, tooltip, italic = format_status_speed_cell(worker)
+                    item = QTableWidgetItem(text)
+                    item.setTextAlignment(col_config.alignment)
+                    item.setToolTip(tooltip)
+                    item.setData(Qt.ItemDataRole.UserRole, worker.worker_id)
+                    item.setData(Qt.ItemDataRole.UserRole + 10, worker.speed_bps)
 
-                    # Color coding
-                    if worker.status == 'uploading':
-                        status_text_item.setForeground(QColor("darkgreen"))
-                    elif worker.status in ('error', 'failed'):
-                        status_text_item.setForeground(QColor("#FF6B6B"))
-                    elif worker.status == 'paused':
-                        status_text_item.setForeground(QColor("#B8860B"))  # Dark goldenrod
-                    elif worker.status == 'disabled':
-                        status_text_item.setForeground(self.palette().color(QPalette.ColorRole.PlaceholderText))
-                        font = status_text_item.font()
+                    if color is not None:
+                        item.setForeground(color)
+                    elif italic:
+                        item.setForeground(
+                            self.palette().color(QPalette.ColorRole.PlaceholderText)
+                        )
+
+                    if italic:
+                        font = item.font()
                         font.setItalic(True)
-                        status_text_item.setFont(font)
+                        item.setFont(font)
 
-                    self.status_table.setItem(row_idx, col_idx, status_text_item)
+                    self.status_table.setItem(row_idx, col_idx, item)
 
                 elif col_config.id == 'files_remaining':
                     # Files remaining column
@@ -2756,11 +2744,19 @@ class WorkerStatusWidget(QWidget):
 
         pass  # Column settings loaded
 
-        # Migrate old settings: if "status" column exists but "status_text" doesn't, add it
-        if visible_ids and 'status' in visible_ids and 'status_text' not in visible_ids:
-            status_idx = visible_ids.index('status')
-            visible_ids.insert(status_idx + 1, 'status_text')
-            log("Migrated column settings: added status_text after status", level="debug", category="ui")
+        # Migrate old settings: collapse the legacy 'speed' and 'status_text'
+        # columns into the combined 'status_speed' column. Insert it directly
+        # after 'status' so users keep their column ordering.
+        if visible_ids:
+            had_legacy = 'speed' in visible_ids or 'status_text' in visible_ids
+            if had_legacy or 'status_speed' not in visible_ids:
+                visible_ids = [c for c in visible_ids if c not in ('speed', 'status_text', 'status_speed')]
+                if 'status' in visible_ids:
+                    visible_ids.insert(visible_ids.index('status') + 1, 'status_speed')
+                else:
+                    visible_ids.append('status_speed')
+                if had_legacy:
+                    log("Migrated column settings: combined speed+status_text into status_speed", level="debug", category="ui")
 
         if visible_ids:
             # Rebuild active columns from saved IDs (in saved order)
@@ -2776,6 +2772,12 @@ class WorkerStatusWidget(QWidget):
 
         # Load column widths
         widths = settings.value("worker_status/column_widths", None, type=dict)
+
+        if isinstance(widths, dict):
+            legacy_speed = widths.pop('speed', None)
+            legacy_text = widths.pop('status_text', None)
+            if 'status_speed' not in widths and (legacy_speed or legacy_text):
+                widths['status_speed'] = (legacy_speed or 90) + (legacy_text or 100)
 
         # RESTORE SORT STATE BEFORE rebuilding table
         # This ensures _refresh_display() (called by _rebuild_table_columns) uses correct sort
