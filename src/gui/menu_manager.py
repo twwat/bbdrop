@@ -112,12 +112,6 @@ class MenuManager(QObject):
 
             # View menu
             view_menu = menu_bar.addMenu("View")
-            action_log = view_menu.addAction("Open Log Viewer (Settings)")
-            action_log.triggered.connect(mw.open_log_viewer)
-
-            # Standalone log viewer popup
-            action_log_popup = view_menu.addAction("Open Log Viewer (Popup)")
-            action_log_popup.triggered.connect(mw.open_log_viewer_popup)
 
             # Icon Manager
             action_icon_manager = view_menu.addAction("Icon Manager")
@@ -218,6 +212,9 @@ class MenuManager(QObject):
 
             # Tools menu
             tools_menu = menu_bar.addMenu("Tools")
+
+            action_log_viewer = tools_menu.addAction("Log Viewer")
+            action_log_viewer.triggered.connect(mw.open_log_viewer_popup)
 
             # Statistics
             action_statistics = tools_menu.addAction("Statistics")
