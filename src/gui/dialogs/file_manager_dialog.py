@@ -284,7 +284,12 @@ class FileManagerDialog(QDialog):
             delete_action.setShortcut("Delete")
 
         menu.addSeparator()
-        menu.addAction("Open in Browser", self.open_in_browser)
+        # Pass the current selection so we can open the specific file's
+        # web page instead of dumping the user onto /myfiles.
+        menu.addAction(
+            "Open in Browser",
+            lambda: self.open_in_browser(selected),
+        )
 
         menu.exec(pos)
 
@@ -436,21 +441,52 @@ class FileManagerDialog(QDialog):
     # Open in browser
     # ------------------------------------------------------------------
 
-    def open_in_browser(self, file_id: str = ""):
-        """Open the host's web file manager in the default browser."""
+    # Per-host URL builders for the "Open in Browser" action. When exactly
+    # one file is selected we open its public file page; otherwise we fall
+    # back to the host's "my files" dashboard. The domains differ across
+    # the K2S family even though they share an API client.
+    _MYFILES_URLS = {
+        "keep2share": "https://k2s.cc/myfiles",
+        "fileboom": "https://fboom.me/myfiles",
+        "tezfiles": "https://tezfiles.com/myfiles",
+        "rapidgator": "https://rapidgator.net/myfiles",
+        "katfile": "https://katfile.cloud/?op=my_files",
+        "filespace": "https://filespace.com/?op=my_files",
+        "filedot": "https://filedot.to/?op=my_files",
+    }
+    _FILE_URL_BUILDERS = {
+        "keep2share": lambda fid: f"https://k2s.cc/file/{fid}",
+        "fileboom": lambda fid: f"https://fboom.me/file/{fid}",
+        "tezfiles": lambda fid: f"https://tezfiles.com/file/{fid}",
+        "rapidgator": lambda fid: f"https://rapidgator.net/file/{fid}",
+        "katfile": lambda fid: f"https://katfile.cloud/{fid}",
+        "filespace": lambda fid: f"https://filespace.com/{fid}",
+        "filedot": lambda fid: f"https://filedot.to/{fid}",
+    }
+
+    def open_in_browser(self, selected=None):
+        """Open the selected file's web page, or fall back to /myfiles.
+
+        Args:
+            selected: Optional list of FileInfo. When it contains exactly
+                one non-folder entry, we open that file's public page
+                (useful to verify the listing is still live). Any other
+                shape — empty, multi-select, folder, or None — falls
+                through to the host's my-files dashboard.
+        """
         import webbrowser
 
         host_id = self._host_combo.currentData()
-        urls = {
-            "keep2share": "https://k2s.cc/myfiles",
-            "fileboom": "https://fboom.me/myfiles",
-            "tezfiles": "https://tezfiles.com/myfiles",
-            "rapidgator": "https://rapidgator.net/myfiles",
-            "katfile": "https://katfile.cloud/?op=my_files",
-            "filespace": "https://filespace.com/?op=my_files",
-            "filedot": "https://filedot.to/?op=my_files",
-        }
-        url = urls.get(host_id, "")
+        if not host_id:
+            return
+
+        if selected and len(selected) == 1 and not selected[0].is_folder:
+            builder = self._FILE_URL_BUILDERS.get(host_id)
+            if builder:
+                webbrowser.open(builder(selected[0].id))
+                return
+
+        url = self._MYFILES_URLS.get(host_id, "")
         if url:
             webbrowser.open(url)
 
