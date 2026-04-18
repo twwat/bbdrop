@@ -149,6 +149,7 @@ class XFSFileManagerClient(FileManagerClient):
             is_available=True,
             md5=item.get("file_md5"),
             content_type=item.get("file_content_type"),
+            metadata=dict(item),
         )
 
     @staticmethod
@@ -159,6 +160,7 @@ class XFSFileManagerClient(FileManagerClient):
             name=item.get("name", ""),
             is_folder=True,
             parent_id=str(item.get("parent_id", "")) or None,
+            metadata=dict(item),
         )
 
     # ------------------------------------------------------------------
