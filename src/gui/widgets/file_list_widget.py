@@ -33,6 +33,11 @@ COL_SIZE = 1
 COL_DATE = 2
 COL_ACCESS = 3
 COL_STATUS = 4
+COL_GALLERY = 5
+COL_DOWNLOADS = 6
+COL_LAST_DL = 7
+
+_NUM_COLUMNS = 8
 
 
 class FileListWidget(QWidget):
@@ -47,6 +52,7 @@ class FileListWidget(QWidget):
         super().__init__(parent)
 
         self._files: List[FileInfo] = []
+        self._gallery_map: dict[str, str] = {}   # file_id -> gallery name
         self._current_page = 1
         self._total_pages = 1
         self._total_items = 0
@@ -70,8 +76,10 @@ class FileListWidget(QWidget):
 
         # Table
         self._table = QTableWidget()
-        self._table.setColumnCount(5)
-        self._table.setHorizontalHeaderLabels(["Name", "Size", "Date", "Access", "Status"])
+        self._table.setColumnCount(_NUM_COLUMNS)
+        self._table.setHorizontalHeaderLabels(
+            ["Name", "Size", "Date", "Access", "Status", "Gallery", "Downloads", "Last DL"]
+        )
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -88,6 +96,9 @@ class FileListWidget(QWidget):
         header.setSectionResizeMode(COL_DATE, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(COL_ACCESS, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_GALLERY, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_DOWNLOADS, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_LAST_DL, QHeaderView.ResizeMode.ResizeToContents)
         header.sectionClicked.connect(self._on_header_clicked)
 
         self._table.doubleClicked.connect(self._on_double_click)
@@ -126,6 +137,14 @@ class FileListWidget(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
+    def set_gallery_map(self, mapping: dict) -> None:
+        """Set the file_id -> gallery_name lookup used by the Gallery column.
+
+        Controller calls this before (or right after) set_files with the
+        result of file_manager_cache_store.lookup_galleries().
+        """
+        self._gallery_map = dict(mapping or {})
+
     def set_files(self, result: FileListResult):
         """Populate the table from an API response."""
         self._files = result.files
@@ -144,8 +163,8 @@ class FileListWidget(QWidget):
             name_item.setData(Qt.ItemDataRole.UserRole, fi)
             self._table.setItem(row, COL_NAME, name_item)
 
-            # Size
-            size_text = "" if fi.is_folder else format_binary_size(fi.size)
+            # Size: folder rows show nb_files/nb_folders/size_files summary
+            size_text = _format_size_cell(fi)
             size_item = QTableWidgetItem(size_text)
             size_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._table.setItem(row, COL_SIZE, size_item)
@@ -163,6 +182,25 @@ class FileListWidget(QWidget):
             if not fi.is_available:
                 status_item.setForeground(Qt.GlobalColor.red)
             self._table.setItem(row, COL_STATUS, status_item)
+
+            # Gallery (cross-ref)
+            gallery_name = self._gallery_map.get(fi.id, "")
+            self._table.setItem(row, COL_GALLERY, QTableWidgetItem(gallery_name))
+
+            # Downloads — try several known key names so any host that
+            # exposes a counter populates the column without a code change.
+            m = fi.metadata
+            dl = (m.get("nb_downloads") if m else None) \
+                or (m.get("downloads") if m else None) \
+                or (m.get("download_count") if m else None)
+            dl_text = str(dl) if dl not in (None, "") else ""
+            dl_item = QTableWidgetItem(dl_text)
+            dl_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._table.setItem(row, COL_DOWNLOADS, dl_item)
+
+            # Last DL — K2S stashes it under extended_info.date_download_last.
+            last = _extract_last_downloaded(m)
+            self._table.setItem(row, COL_LAST_DL, QTableWidgetItem(last))
 
         # Update pagination
         self._page_label.setText(f"{self._current_page} / {self._total_pages}")
@@ -270,3 +308,49 @@ class FileListWidget(QWidget):
         selected = self.get_selected_files()
         global_pos = self._table.viewport().mapToGlobal(pos)
         self.context_menu_requested.emit(global_pos, selected)
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers (not methods — used by set_files and testable directly)
+# ---------------------------------------------------------------------------
+
+def _format_size_cell(fi) -> str:
+    """Render the Size column text: a byte size for files, a content
+    summary for folders (file count + folder count + aggregate size) when
+    the host provided those numbers."""
+    if not fi.is_folder:
+        return format_binary_size(fi.size)
+
+    m = fi.metadata or {}
+    nb_files = m.get("nb_files")
+    nb_folders = m.get("nb_folders")
+    size_files = m.get("size_files")
+    parts = []
+    if nb_files is not None:
+        parts.append(f"{nb_files} files")
+    if nb_folders:
+        parts.append(f"{nb_folders} folders")
+    if size_files:
+        parts.append(format_binary_size(int(size_files)))
+    return " · ".join(parts)
+
+
+def _extract_last_downloaded(metadata: dict) -> str:
+    """Find the last-downloaded timestamp wherever a host might have stashed it.
+
+    Checks top-level and nested extended_info for known key names. Returns
+    a short string or empty string."""
+    if not metadata:
+        return ""
+    # Top-level fallbacks first.
+    for key in ("last_downloaded", "date_download_last"):
+        val = metadata.get(key)
+        if val:
+            return str(val)
+    # K2S nests it under extended_info.
+    ext = metadata.get("extended_info") or {}
+    for key in ("date_download_last", "last_downloaded"):
+        val = ext.get(key) if isinstance(ext, dict) else None
+        if val:
+            return str(val)
+    return ""
