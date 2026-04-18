@@ -178,24 +178,29 @@ class MenuManager(QObject):
             else:
                 self._theme_action_dark.setChecked(True)
 
-            # Settings menu
+            # Settings menu — mirrors the sidebar of ComprehensiveSettingsDialog
+            # in both label and order. Update both when adding/removing a tab.
             settings_menu = menu_bar.addMenu("Settings")
             from src.gui.settings import TabIndex
-            action_general = settings_menu.addAction("General")
-            action_general.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.GENERAL))
-            action_image_hosts = settings_menu.addAction("Image Hosts")
-            action_image_hosts.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS))
-            action_file_hosts = settings_menu.addAction("File Hosts")
-            action_file_hosts.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.FILE_HOSTS))
-            action_templates = settings_menu.addAction("Templates")
-            action_templates.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.TEMPLATES))
-            # Tabs and Icons menu items removed - functionality hidden
-            action_scanning = settings_menu.addAction("Image Scanning")
-            action_scanning.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.IMAGE_SCAN))
-            action_external_apps = settings_menu.addAction("Hooks (External Apps)")
-            action_external_apps.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.HOOKS))
-            action_logs = settings_menu.addAction("Log Settings")
-            action_logs.triggered.connect(lambda: mw.open_comprehensive_settings(tab_index=TabIndex.LOGS))
+            for label, tab in (
+                ("General", TabIndex.GENERAL),
+                ("Image Hosts", TabIndex.IMAGE_HOSTS),
+                ("File Hosts", TabIndex.FILE_HOSTS),
+                ("BBCode templates", TabIndex.TEMPLATES),
+                ("Image Scanner", TabIndex.IMAGE_SCAN),
+                ("Cover Photos", TabIndex.COVERS),
+                ("App Hooks", TabIndex.HOOKS),
+                ("Proxies & Tor", TabIndex.PROXY),
+                ("Logging", TabIndex.LOGS),
+                ("Notifications", TabIndex.NOTIFICATIONS),
+                ("Zip Archives", TabIndex.ARCHIVE),
+                ("Contact Sheets", TabIndex.VIDEO),
+                ("Advanced", TabIndex.ADVANCED),
+            ):
+                action = settings_menu.addAction(label)
+                action.triggered.connect(
+                    lambda _checked=False, t=tab: mw.open_comprehensive_settings(tab_index=t)
+                )
 
             # Tools menu
             tools_menu = menu_bar.addMenu("Tools")
