@@ -114,6 +114,9 @@ class LayoutManager(QObject):
             Qt.Orientation.Horizontal,
         )
 
+        # Start locked — edit mode is opt-in per session via View → Edit Layout.
+        self.set_edit_mode(False)
+
     def _wrap_dock(
         self, title: str, content: QWidget, object_name: str
     ) -> QDockWidget:
@@ -833,6 +836,46 @@ class LayoutManager(QObject):
     def reset_layout(self) -> None:
         """Restore the Classic default layout."""
         self.apply_preset("classic")
+
+    def set_edit_mode(self, enabled: bool) -> None:
+        """Toggle layout edit mode for all six docks.
+
+        Locked (default): dock title bars are hidden and drag/float/close
+        features disabled. The inner QGroupBox title is the only label;
+        accidental drags or closes can't happen. Splitter handles between
+        docks remain functional (Qt provides no API to hide them).
+
+        Edit: Qt's default title bar is restored with close/float buttons,
+        and all three dock features (Movable | Floatable | Closable) are
+        re-enabled so the user can rearrange.
+
+        Args:
+            enabled: True to enter edit mode, False to lock.
+        """
+        self._edit_mode = enabled
+
+        if enabled:
+            features = (
+                QDockWidget.DockWidgetFeature.DockWidgetMovable
+                | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                | QDockWidget.DockWidgetFeature.DockWidgetClosable
+            )
+        else:
+            features = QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+
+        for dock in (
+            self.dock_quick_settings,
+            self.dock_hosts,
+            self.dock_log,
+            self.dock_progress,
+            self.dock_info,
+            self.dock_speed,
+        ):
+            dock.setFeatures(features)
+            if enabled:
+                dock.setTitleBarWidget(None)
+            else:
+                dock.setTitleBarWidget(QWidget())
 
     def _dev_print_layout_state(self) -> None:
         """TEMPORARY — remove once Task 6 captures all preset payloads.

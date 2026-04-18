@@ -114,6 +114,60 @@ class TestResetLayout:
         lm.apply_preset.assert_called_once_with("classic")
 
 
+class TestSetEditMode:
+    """Verify set_edit_mode toggles features and title bars on all six docks."""
+
+    def _make_lm_with_mock_docks(self, qapp):
+        from src.gui.layout_manager import LayoutManager
+
+        lm = LayoutManager(MagicMock())
+        lm.dock_quick_settings = MagicMock()
+        lm.dock_hosts = MagicMock()
+        lm.dock_log = MagicMock()
+        lm.dock_progress = MagicMock()
+        lm.dock_info = MagicMock()
+        lm.dock_speed = MagicMock()
+        return lm
+
+    def test_set_edit_mode_true_enables_features_and_restores_title_bar(self, qapp):
+        from PyQt6.QtWidgets import QDockWidget
+
+        lm = self._make_lm_with_mock_docks(qapp)
+        lm.set_edit_mode(True)
+
+        expected_features = (
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        for dock in (
+            lm.dock_quick_settings, lm.dock_hosts, lm.dock_log,
+            lm.dock_progress, lm.dock_info, lm.dock_speed,
+        ):
+            dock.setFeatures.assert_called_once_with(expected_features)
+            dock.setTitleBarWidget.assert_called_once_with(None)
+        assert lm._edit_mode is True
+
+    def test_set_edit_mode_false_disables_features_and_hides_title_bar(self, qapp):
+        from PyQt6.QtWidgets import QDockWidget, QWidget
+
+        lm = self._make_lm_with_mock_docks(qapp)
+        lm.set_edit_mode(False)
+
+        for dock in (
+            lm.dock_quick_settings, lm.dock_hosts, lm.dock_log,
+            lm.dock_progress, lm.dock_info, lm.dock_speed,
+        ):
+            dock.setFeatures.assert_called_once_with(
+                QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+            )
+            # Title bar is replaced with an empty QWidget
+            dock.setTitleBarWidget.assert_called_once()
+            placeholder = dock.setTitleBarWidget.call_args[0][0]
+            assert isinstance(placeholder, QWidget)
+        assert lm._edit_mode is False
+
+
 class TestBuild:
     """Verify LayoutManager.build() produces the expected dock structure.
 

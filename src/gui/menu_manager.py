@@ -156,6 +156,15 @@ class MenuManager(QObject):
             reset_layout_action = view_menu.addAction("Reset Layout")
             reset_layout_action.triggered.connect(mw.layout_manager.reset_layout)
 
+            # Edit Layout: toggles dock title bars, drag handles, and
+            # close/float buttons. Locked by default so the UI is clean;
+            # users opt in when they want to rearrange.
+            edit_layout_action = view_menu.addAction("Edit Layout")
+            edit_layout_action.setCheckable(True)
+            edit_layout_action.setChecked(False)
+            edit_layout_action.setShortcut("Ctrl+L")
+            edit_layout_action.toggled.connect(mw.layout_manager.set_edit_mode)
+
             # TEMPORARY — remove once Task 6 captures all preset payloads.
             # Press Ctrl+Shift+D to print the current saveState() as base64.
             dev_capture_action = view_menu.addAction("Capture Layout State (dev)")
