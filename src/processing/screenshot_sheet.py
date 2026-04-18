@@ -11,6 +11,64 @@ from typing import List, Optional, Tuple
 from src.utils.logger import log
 
 
+def _fmt_fps(value) -> str:
+    """Round fps to 3 decimals, drop trailing zeros (29.969732 -> 29.97)."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if v <= 0:
+        return ''
+    return f"{v:.3f}".rstrip('0').rstrip('.')
+
+
+def _fmt_bitrate(value) -> str:
+    """Convert bps -> 'NNNN kbps' (4500000 -> '4500 kbps')."""
+    try:
+        bps = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if bps <= 0:
+        return ''
+    return f"{int(round(bps / 1000))} kbps"
+
+
+def _fmt_sample_rate(value) -> str:
+    """Convert Hz -> 'NNkHz' (48000 -> '48kHz', 44100 -> '44.1kHz')."""
+    try:
+        hz = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if hz <= 0:
+        return ''
+    khz = hz / 1000
+    if khz == int(khz):
+        return f"{int(khz)}kHz"
+    return f"{khz:g}kHz"
+
+
+def _fmt_audio_track(track: dict) -> str:
+    """Format one audio track, omitting missing fields.
+
+    Example: 'AAC: 2ch 48kHz 128 kbps' — or any subset when fields are None.
+    """
+    fmt = track.get('format') or ''
+    parts = []
+    ch = track.get('channels')
+    if ch is not None and ch != '':
+        parts.append(f"{ch}ch")
+    rate_str = _fmt_sample_rate(track.get('sampling_rate'))
+    if rate_str:
+        parts.append(rate_str)
+    br_str = _fmt_bitrate(track.get('bit_rate'))
+    if br_str:
+        parts.append(br_str)
+    detail = ' '.join(parts)
+    if fmt and detail:
+        return f"{fmt}: {detail}"
+    return fmt or detail
+
+
 @lru_cache(maxsize=64)
 def _resolve_font_file(family: str) -> Optional[str]:
     """Find a font file on disk for the given family name.
@@ -328,7 +386,6 @@ class ScreenshotSheetGenerator:
 
         width = metadata.get('width', '')
         height = metadata.get('height', '')
-        bitrate_raw = metadata.get('bitrate', '')
 
         placeholders = {
             'filename': os.path.basename(video_path),
@@ -337,8 +394,8 @@ class ScreenshotSheetGenerator:
             'resolution': f"{width}x{height}" if width and height else '',
             'width': str(width),
             'height': str(height),
-            'fps': str(metadata.get('fps', '')),
-            'bitrate': str(bitrate_raw),
+            'fps': _fmt_fps(metadata.get('fps')),
+            'bitrate': _fmt_bitrate(metadata.get('bitrate')),
             'videoCodec': video_streams[0].get('format', '') if video_streams else '',
             'audioCodec': audio_streams[0].get('format', '') if audio_streams else '',
             'filesize': filesize_fmt,
@@ -348,11 +405,7 @@ class ScreenshotSheetGenerator:
         # Numbered audio track placeholders
         track_lines = []
         for i, track in enumerate(audio_streams):
-            fmt = track.get('format', 'Unknown')
-            ch = track.get('channels', '?')
-            rate = track.get('sampling_rate', '?')
-            br = track.get('bit_rate', '?')
-            line = f"{fmt}: {ch}-CH {rate}Hz {br} bps"
+            line = _fmt_audio_track(track)
             placeholders[f'audioTrack{i+1}'] = line
             track_lines.append(line)
         placeholders['audioTracks'] = ', '.join(track_lines)
