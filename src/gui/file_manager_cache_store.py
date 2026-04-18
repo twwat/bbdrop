@@ -98,6 +98,107 @@ def load_all(host_name: str) -> Dict[str, Tuple[FileListResult, float]]:
     return out
 
 
-# Placeholder — implemented in Task 7.
+# ---------------------------------------------------------------------------
+# Serialization helpers
+# ---------------------------------------------------------------------------
+
+def _file_info_to_dict(fi) -> dict:
+    """FileInfo -> JSON-friendly dict. created goes out as ISO string."""
+    return {
+        "id": fi.id,
+        "name": fi.name,
+        "is_folder": fi.is_folder,
+        "size": fi.size,
+        "created": fi.created.isoformat() if fi.created else None,
+        "access": fi.access,
+        "is_available": fi.is_available,
+        "md5": fi.md5,
+        "download_count": fi.download_count,
+        "content_type": fi.content_type,
+        "parent_id": fi.parent_id,
+        "metadata": fi.metadata,
+    }
+
+
+def _file_info_from_dict(d: dict):
+    """Inverse of _file_info_to_dict. Isolated import to avoid circularity."""
+    from datetime import datetime
+    from src.network.file_manager.client import FileInfo
+
+    created_raw = d.get("created")
+    created = None
+    if created_raw:
+        try:
+            created = datetime.fromisoformat(created_raw)
+        except (ValueError, TypeError):
+            created = None
+
+    return FileInfo(
+        id=d.get("id", ""),
+        name=d.get("name", ""),
+        is_folder=bool(d.get("is_folder", False)),
+        size=int(d.get("size", 0) or 0),
+        created=created,
+        access=d.get("access", "public"),
+        is_available=bool(d.get("is_available", True)),
+        md5=d.get("md5"),
+        download_count=d.get("download_count"),
+        content_type=d.get("content_type"),
+        parent_id=d.get("parent_id"),
+        metadata=dict(d.get("metadata") or {}),
+    )
+
+
+def _file_list_result_to_json(result: FileListResult) -> str:
+    payload = {
+        "files": [_file_info_to_dict(fi) for fi in result.files],
+        "total": int(result.total),
+        "page": int(result.page),
+        "per_page": int(result.per_page),
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
 def _file_list_result_from_json(text: str) -> FileListResult:
-    raise NotImplementedError("Implemented in Task 7")
+    payload = json.loads(text)
+    return FileListResult(
+        files=[_file_info_from_dict(d) for d in payload.get("files", [])],
+        total=int(payload.get("total", 0)),
+        page=int(payload.get("page", 1)),
+        per_page=int(payload.get("per_page", 100)),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Writers
+# ---------------------------------------------------------------------------
+
+def save(host_name: str, folder_id: str, result: FileListResult, fetched_at: float) -> None:
+    """Upsert one cache row. Errors are logged and swallowed — cache writes
+    must never block the file manager."""
+    try:
+        conn = _connect()
+    except sqlite3.Error as e:
+        log(f"file manager cache: cannot open DB for write: {e}",
+            level="warning", category="file_manager")
+        return
+
+    try:
+        data_json = _file_list_result_to_json(result)
+    except (TypeError, ValueError) as e:
+        log(f"file manager cache: serialize failed for {host_name}/{folder_id}: {e}",
+            level="warning", category="file_manager")
+        conn.close()
+        return
+
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO cache (host_name, folder_id, data_json, fetched_at) "
+            "VALUES (?, ?, ?, ?)",
+            (host_name, folder_id, data_json, int(fetched_at)),
+        )
+    except sqlite3.Error as e:
+        log(f"file manager cache: write failed: {e}",
+            level="warning", category="file_manager")
+    finally:
+        conn.close()
