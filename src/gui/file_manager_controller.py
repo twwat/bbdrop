@@ -132,6 +132,14 @@ class FileManagerController(QObject):
         self._session_clients: Dict[str, "FileHostClient"] = {}
         self._session_workers: Dict[str, "FileHostWorker"] = {}
 
+        # The manager owns worker lifecycle — when a host is disabled, the
+        # cached client/worker references above go stale. Subscribe to its
+        # signal so the controller doesn't learn this the hard way by
+        # submitting ops against a dead session.
+        fhm = self._resolve_worker_manager()
+        if fhm is not None:
+            fhm.enabled_workers_changed.connect(self._on_enabled_workers_changed)
+
         # Error popup dedup/throttle
         self._last_error_key: Optional[Tuple[str, str]] = None
         self._last_error_time: float = 0.0
@@ -140,6 +148,71 @@ class FileManagerController(QObject):
         """Stop the worker thread."""
         self._worker.stop()
         self._worker.wait(3000)
+
+    # ------------------------------------------------------------------
+    # Worker-manager plumbing
+    # ------------------------------------------------------------------
+
+    def _resolve_worker_manager(self):
+        """Return the FileHostWorkerManager, or None if unreachable.
+
+        The controller needs the manager to look up session-host workers
+        and to subscribe to lifecycle signals. The dialog is parented to
+        the main window which exposes the manager as ``file_host_manager``.
+        Returns None in test/standalone contexts where the parent chain
+        doesn't include the main window.
+        """
+        main_window = self._dialog.parent() if self._dialog is not None else None
+        if main_window is None:
+            return None
+        return getattr(main_window, "file_host_manager", None)
+
+    def _on_enabled_workers_changed(self, enabled_host_ids: list) -> None:
+        """Invalidate cached session refs for hosts that have been disabled.
+
+        Fires whenever a FileHostWorker is spun up or torn down. We only
+        care about teardown: any session host we had cached but that's no
+        longer in the enabled list must have its client/worker/capabilities
+        dropped so the next probe re-validates from scratch. If the user
+        happens to be looking at that host right now, fall back to the
+        same neutral empty state set_host uses on probe failure so the
+        dialog doesn't try to submit ops against a dead session.
+        """
+        active = set(enabled_host_ids)
+        stale = [h for h in _SESSION_BASED_HOSTS if
+                 h in self._session_workers and h not in active]
+        if not stale:
+            return
+
+        for host_id in stale:
+            self._session_clients.pop(host_id, None)
+            self._session_workers.pop(host_id, None)
+            self._capabilities.pop(host_id, None)
+            log(f"File manager: evicted stale session refs for {host_id} "
+                "(worker was disabled)",
+                level="debug", category="file_manager")
+
+        if self._current_host in stale:
+            host_id = self._current_host
+            self._current_host = None
+            self._current_folder = "/"
+            self._current_page = 1
+            self._breadcrumb = [("/", "/")]
+            self._in_trash = False
+            self._pending_ops.clear()
+            self._pending_folder_parents.clear()
+            self._pending_file_folders.clear()
+            self._pending_read_props.clear()
+            self._dialog.file_list.clear()
+            self._dialog.folder_tree.set_root()
+            self._dialog.update_account_info({})
+            self._update_nav_state()
+            self._dialog.toolbar.update_capabilities(FileManagerCapabilities())
+            self._dialog.show_status(
+                f"{get_display_name(host_id)} was disabled — enable it in "
+                "File Hosts settings to resume.",
+                error=True,
+            )
 
     # ------------------------------------------------------------------
     # Host switching
@@ -160,6 +233,7 @@ class FileManagerController(QObject):
         self._pending_ops.clear()
         self._pending_folder_parents.clear()
         self._pending_file_folders.clear()
+        self._pending_read_props.clear()
 
         # Clear display regardless of probe result so stale data from the
         # previous host doesn't linger.
@@ -216,14 +290,12 @@ class FileManagerController(QObject):
         """
         # Session-based hosts route through the running FileHostWorker's
         # session. Cache the worker + a derived FileHostClient per-host so
-        # switching between session hosts doesn't clobber the slot.
+        # switching between session hosts doesn't clobber the slot; stale
+        # entries are evicted by _on_enabled_workers_changed when the
+        # underlying worker is torn down.
         if host_id in _SESSION_BASED_HOSTS and host_id not in self._session_workers:
-            main_window = self._dialog.parent() if self._dialog is not None else None
-            worker = None
-            if main_window is not None:
-                fhm = getattr(main_window, "file_host_manager", None)
-                if fhm is not None:
-                    worker = fhm.get_worker(host_id)
+            fhm = self._resolve_worker_manager()
+            worker = fhm.get_worker(host_id) if fhm is not None else None
             if worker is None:
                 return (
                     None,
