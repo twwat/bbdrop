@@ -152,6 +152,17 @@ class FileManagerController(QObject):
             self._capabilities[host_id] = caps
             self._dialog.toolbar.update_capabilities(caps)
 
+        # Warm in-memory cache from persistent storage so the first render
+        # happens immediately instead of waiting on the background fetch.
+        from src.gui import file_manager_cache_store
+        try:
+            persisted = file_manager_cache_store.load_all(host_id)
+            for folder_id, entry in persisted.items():
+                self._cache_put(self._file_cache, (host_id, folder_id), entry)
+        except Exception as e:  # defensive — cache errors must not block host switch
+            log(f"File manager: cache warm failed for {host_id}: {e}",
+                level="warning", category="file_manager")
+
         # Client is ready — load data
         self._load_folder_tree("/")
         self._load_files()
@@ -732,7 +743,16 @@ class FileManagerController(QObject):
         # so future navigation to that host+folder is instant.
         if request:
             request_host, request_folder = request
-            self._cache_put(self._file_cache, (request_host, request_folder), (result, time.time()))
+            now = time.time()
+            self._cache_put(self._file_cache, (request_host, request_folder), (result, now))
+
+            # Persist the cache entry so it survives restart.
+            from src.gui import file_manager_cache_store
+            try:
+                file_manager_cache_store.save(request_host, request_folder, result, now)
+            except Exception as e:  # defensive
+                log(f"File manager: cache save failed for {request_host}/{request_folder}: {e}",
+                    level="warning", category="file_manager")
 
             # Only update the display if we're still looking at that view.
             # The "view" is trash mode or the current folder.
