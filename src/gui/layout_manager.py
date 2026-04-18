@@ -77,13 +77,16 @@ class LayoutManager(QObject):
             "Speed", self._build_speed_content(), "dock_speed"
         )
 
-        # Disallow tab merging so dragging Progress/Info/Speed onto each other
-        # can't accidentally combine them into a tab group. They show
-        # unrelated stats and must remain independently visible at all times.
+        # Enable nested splitter trees AND tabbed docking. Tabbed docking is
+        # required by the Focused Queue preset (Quick Settings + Hosts + Log
+        # tabbed into one stack). Accidental tabbing can't happen in locked
+        # mode because locked mode disables dragging entirely — tabs can only
+        # form via a deliberate drag in edit mode.
         from PyQt6.QtWidgets import QMainWindow
         mw.setDockOptions(
             QMainWindow.DockOption.AnimatedDocks
             | QMainWindow.DockOption.AllowNestedDocks
+            | QMainWindow.DockOption.AllowTabbedDocks
         )
 
         # Make the bottom dock area own both lower corners so Progress/Info/Speed
