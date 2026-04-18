@@ -857,8 +857,14 @@ class LayoutManager(QObject):
             )
 
     def reset_layout(self) -> None:
-        """Restore the Classic default layout."""
-        self.apply_preset("classic")
+        """Restore the Classic default layout via the hardcoded placement.
+
+        Bypasses the PRESETS lookup so Reset Layout works regardless of
+        whether any preset payloads have been captured. The placement
+        logic lives in _apply_classic_placement and is the same code
+        called during initial build().
+        """
+        self._apply_classic_placement()
 
     def set_edit_mode(self, enabled: bool) -> None:
         """Toggle layout edit mode for all six docks.

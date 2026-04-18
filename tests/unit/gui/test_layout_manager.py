@@ -101,17 +101,17 @@ class TestApplyPreset:
 
 
 class TestResetLayout:
-    """Verify reset_layout delegates to the Classic preset."""
+    """Verify reset_layout applies the hardcoded Classic placement."""
 
-    def test_reset_layout_calls_apply_preset_classic(self, qapp):
+    def test_reset_layout_calls_apply_classic_placement(self, qapp):
         from src.gui.layout_manager import LayoutManager
 
         mw = MagicMock()
         lm = LayoutManager(mw)
-        # Spy on apply_preset by replacing it on the instance
-        lm.apply_preset = MagicMock()
+        # Spy on _apply_classic_placement by replacing it on the instance
+        lm._apply_classic_placement = MagicMock()
         lm.reset_layout()
-        lm.apply_preset.assert_called_once_with("classic")
+        lm._apply_classic_placement.assert_called_once_with()
 
 
 class TestSetEditMode:
