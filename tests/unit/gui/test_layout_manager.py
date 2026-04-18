@@ -129,8 +129,8 @@ class TestSetEditMode:
         lm.dock_speed = MagicMock()
         return lm
 
-    def test_set_edit_mode_true_enables_features_and_restores_title_bar(self, qapp):
-        from PyQt6.QtWidgets import QDockWidget
+    def test_set_edit_mode_true_enables_features_and_installs_custom_title_bar(self, qapp):
+        from PyQt6.QtWidgets import QDockWidget, QToolButton, QWidget
 
         lm = self._make_lm_with_mock_docks(qapp)
         lm.set_edit_mode(True)
@@ -145,7 +145,12 @@ class TestSetEditMode:
             lm.dock_progress, lm.dock_info, lm.dock_speed,
         ):
             dock.setFeatures.assert_called_once_with(expected_features)
-            dock.setTitleBarWidget.assert_called_once_with(None)
+            dock.setTitleBarWidget.assert_called_once()
+            title_bar = dock.setTitleBarWidget.call_args[0][0]
+            # Custom title bar with a drag handle and two tool buttons (float + close)
+            assert isinstance(title_bar, QWidget)
+            buttons = title_bar.findChildren(QToolButton)
+            assert len(buttons) == 2, "edit title bar must have float and close buttons"
         assert lm._edit_mode is True
 
     def test_set_edit_mode_false_disables_features_and_hides_title_bar(self, qapp):

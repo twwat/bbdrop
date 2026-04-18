@@ -89,13 +89,36 @@ class LayoutManager(QObject):
             | QMainWindow.DockOption.AllowTabbedDocks
         )
 
+        self._apply_classic_placement()
+
+        # Start locked — edit mode is opt-in per session via View → Edit Layout.
+        self.set_edit_mode(False)
+
+    def _apply_classic_placement(self) -> None:
+        """Place all six docks in the Classic default arrangement.
+
+        Used as the initial layout during build() and as the fallback for
+        apply_preset("classic") when PRESETS["classic"] has no captured
+        payload yet. Idempotent — safe to call on docks that are already
+        placed, floating, tabbed, or hidden.
+        """
+        mw = self._mw
+
+        # Show any hidden dock so placement operates on a known-visible set.
+        for dock in (
+            self.dock_quick_settings, self.dock_hosts, self.dock_log,
+            self.dock_progress, self.dock_info, self.dock_speed,
+        ):
+            dock.setFloating(False)
+            dock.setVisible(True)
+
         # Make the bottom dock area own both lower corners so Progress/Info/Speed
         # span the full window width — matching today's layout where they sit
         # below both the queue and the right-side panels.
         mw.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.BottomDockWidgetArea)
         mw.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.BottomDockWidgetArea)
 
-        # Classic default placement
+        # Right column: Quick Settings / Hosts / Log, stacked vertically.
         mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock_quick_settings)
         mw.splitDockWidget(self.dock_quick_settings, self.dock_hosts, Qt.Orientation.Vertical)
         mw.splitDockWidget(self.dock_hosts, self.dock_log, Qt.Orientation.Vertical)
@@ -110,15 +133,12 @@ class LayoutManager(QObject):
         mw.splitDockWidget(self.dock_progress, self.dock_info, Qt.Orientation.Horizontal)
 
         # Give the bottom row explicit starting widths so nothing is pinned
-        # at minimum on first launch. Without this, Qt gives them equal thirds.
+        # at minimum. Without this, Qt gives them equal thirds.
         mw.resizeDocks(
             [self.dock_progress, self.dock_info, self.dock_speed],
             [600, 230, 230],
             Qt.Orientation.Horizontal,
         )
-
-        # Start locked — edit mode is opt-in per session via View → Edit Layout.
-        self.set_edit_mode(False)
 
     def _wrap_dock(
         self, title: str, content: QWidget, object_name: str
@@ -843,14 +863,13 @@ class LayoutManager(QObject):
     def set_edit_mode(self, enabled: bool) -> None:
         """Toggle layout edit mode for all six docks.
 
-        Locked (default): dock title bars are hidden and drag/float/close
-        features disabled. The inner QGroupBox title is the only label;
-        accidental drags or closes can't happen. Splitter handles between
-        docks remain functional (Qt provides no API to hide them).
+        Locked (default): dock title bars are hidden entirely; the inner
+        QGroupBox title is the only label. All dock features disabled.
 
-        Edit: Qt's default title bar is restored with close/float buttons,
-        and all three dock features (Movable | Floatable | Closable) are
-        re-enabled so the user can rearrange.
+        Edit: each dock gets a compact custom title bar — drag handle on
+        the left, float/close buttons on the right, no title text (the
+        QGroupBox inside already labels the panel, so title text would
+        duplicate it).
 
         Args:
             enabled: True to enter edit mode, False to lock.
@@ -876,9 +895,49 @@ class LayoutManager(QObject):
         ):
             dock.setFeatures(features)
             if enabled:
-                dock.setTitleBarWidget(None)
+                dock.setTitleBarWidget(self._make_edit_title_bar(dock))
             else:
                 dock.setTitleBarWidget(QWidget())
+
+    def _make_edit_title_bar(self, dock: "QDockWidget") -> QWidget:
+        """Build a compact custom title bar for edit mode.
+
+        Layout: [drag handle]  ·  (stretch)  ·  [float btn] [close btn].
+        No title text — the QGroupBox inside the dock already labels the
+        panel, so duplicating it on the dock title bar is noise.
+        """
+        from PyQt6.QtWidgets import QToolButton
+
+        bar = QWidget()
+        bar.setFixedHeight(18)
+        bar.setCursor(Qt.CursorShape.SizeAllCursor)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(4, 0, 2, 0)
+        layout.setSpacing(2)
+
+        handle = QLabel("\u2630")
+        handle.setStyleSheet("color: #888; font-size: 10px;")
+        handle.setCursor(Qt.CursorShape.SizeAllCursor)
+
+        float_btn = QToolButton()
+        float_btn.setText("\u26F6")
+        float_btn.setToolTip("Float / Re-dock panel")
+        float_btn.setAutoRaise(True)
+        float_btn.setFixedSize(16, 16)
+        float_btn.clicked.connect(lambda: dock.setFloating(not dock.isFloating()))
+
+        close_btn = QToolButton()
+        close_btn.setText("\u2715")
+        close_btn.setToolTip("Hide panel (re-open via View \u2192 Panels)")
+        close_btn.setAutoRaise(True)
+        close_btn.setFixedSize(16, 16)
+        close_btn.clicked.connect(dock.hide)
+
+        layout.addWidget(handle)
+        layout.addStretch()
+        layout.addWidget(float_btn)
+        layout.addWidget(close_btn)
+        return bar
 
     def _dev_print_layout_state(self) -> None:
         """TEMPORARY — remove once Task 6 captures all preset payloads.
