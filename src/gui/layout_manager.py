@@ -876,6 +876,11 @@ class LayoutManager(QObject):
         """
         self._edit_mode = enabled
 
+        # DockWidgetClosable stays on in BOTH modes. Without it, Qt disables
+        # toggleViewAction() (used by View → Panels), so the menu items
+        # appear greyed out and clicks do nothing. The dock itself can
+        # only be closed via the menu in locked mode — the custom empty
+        # title bar has no close button.
         if enabled:
             features = (
                 QDockWidget.DockWidgetFeature.DockWidgetMovable
@@ -883,7 +888,7 @@ class LayoutManager(QObject):
                 | QDockWidget.DockWidgetFeature.DockWidgetClosable
             )
         else:
-            features = QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+            features = QDockWidget.DockWidgetFeature.DockWidgetClosable
 
         for dock in (
             self.dock_quick_settings,

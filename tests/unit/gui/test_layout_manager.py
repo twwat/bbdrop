@@ -153,7 +153,7 @@ class TestSetEditMode:
             assert len(buttons) == 2, "edit title bar must have float and close buttons"
         assert lm._edit_mode is True
 
-    def test_set_edit_mode_false_disables_features_and_hides_title_bar(self, qapp):
+    def test_set_edit_mode_false_keeps_only_closable_and_hides_title_bar(self, qapp):
         from PyQt6.QtWidgets import QDockWidget, QWidget
 
         lm = self._make_lm_with_mock_docks(qapp)
@@ -163,10 +163,12 @@ class TestSetEditMode:
             lm.dock_quick_settings, lm.dock_hosts, lm.dock_log,
             lm.dock_progress, lm.dock_info, lm.dock_speed,
         ):
+            # Closable stays on so toggleViewAction (View → Panels) keeps working;
+            # Movable and Floatable are off so the dock can't be dragged or floated.
             dock.setFeatures.assert_called_once_with(
-                QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+                QDockWidget.DockWidgetFeature.DockWidgetClosable
             )
-            # Title bar is replaced with an empty QWidget
+            # Title bar is replaced with an empty QWidget — no visible buttons.
             dock.setTitleBarWidget.assert_called_once()
             placeholder = dock.setTitleBarWidget.call_args[0][0]
             assert isinstance(placeholder, QWidget)
