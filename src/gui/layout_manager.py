@@ -927,31 +927,42 @@ class LayoutManager(QObject):
         layout.setContentsMargins(4, 0, 2, 0)
         layout.setSpacing(2)
 
-        handle = QLabel("\u2630")
-        handle.setStyleSheet("color: #888; font-size: 10px;")
+        from src.gui.icon_manager import get_icon_manager
+
+        handle = QLabel()
+        icon_mgr = get_icon_manager()
+        if icon_mgr is not None:
+            handle.setPixmap(icon_mgr.get_icon('drag_handle').pixmap(16, 16))
+        handle.setFixedSize(16, 20)
+        handle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         handle.setCursor(Qt.CursorShape.SizeAllCursor)
         handle.setToolTip("Drag to move panel")
 
         float_btn = QToolButton()
-        float_btn.setText("\u26F6")
+        float_btn.setIconSize(QSize(12, 12))
         float_btn.setAutoRaise(True)
         float_btn.setFixedSize(18, 18)
         float_btn.setCursor(Qt.CursorShape.ArrowCursor)
         float_btn.clicked.connect(lambda: dock.setFloating(not dock.isFloating()))
 
         close_btn = QToolButton()
-        close_btn.setText("\u2715")
+        if icon_mgr is not None:
+            close_btn.setIcon(icon_mgr.get_icon('close'))
+            close_btn.setIconSize(QSize(12, 12))
         close_btn.setToolTip("Hide panel (re-open via View \u2192 Panels)")
         close_btn.setAutoRaise(True)
         close_btn.setFixedSize(18, 18)
         close_btn.setCursor(Qt.CursorShape.ArrowCursor)
         close_btn.clicked.connect(dock.hide)
 
-        def _sync_float_tooltip(is_floating: bool) -> None:
+        def _sync_float_state(is_floating: bool) -> None:
             float_btn.setToolTip("Re-dock panel" if is_floating else "Float panel")
+            if icon_mgr is not None:
+                key = 'close_fullscreen' if is_floating else 'open_in_new'
+                float_btn.setIcon(icon_mgr.get_icon(key))
 
-        _sync_float_tooltip(dock.isFloating())
-        dock.topLevelChanged.connect(_sync_float_tooltip)
+        _sync_float_state(dock.isFloating())
+        dock.topLevelChanged.connect(_sync_float_state)
 
         layout.addWidget(handle)
         layout.addStretch()

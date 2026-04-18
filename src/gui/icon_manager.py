@@ -94,6 +94,12 @@ class IconManager:
         'main_window':          'bbdrop-main-icon.png',
         'app_icon':             'bbdrop.ico',
 
+        # Monochrome SVG icons (tinted to current theme text color at load)
+        'drag_handle':          'drag_handle.svg',
+        'close':                'close.svg',
+        'open_in_new':          'open_in_new.svg',
+        'close_fullscreen':     'close_fullscreen.svg',
+
         # Media type icons
         'media_photo':          'photo.png',
         'media_video':          'video.png',
