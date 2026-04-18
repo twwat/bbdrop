@@ -160,6 +160,19 @@ class FolderTreeWidget(QWidget):
         folder_id = item.data(0, Qt.ItemDataRole.UserRole)
         if folder_id and folder_id != _PLACEHOLDER and folder_id not in self._loaded_folders:
             self._pending_expands[folder_id] = item
+            # Reveal the invisible placeholder as a "Loading…" row so the
+            # user sees feedback during slow fetches (Filedot scraping can
+            # take several seconds). populate_children removes placeholders
+            # when real children arrive.
+            for i in range(item.childCount()):
+                child = item.child(i)
+                if child and child.data(0, Qt.ItemDataRole.UserRole) == _PLACEHOLDER:
+                    child.setText(0, "Loading…")
+                    font = child.font(0)
+                    font.setItalic(True)
+                    child.setFont(0, font)
+                    child.setFlags(child.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+                    break
             # Only request children — don't navigate
             self.children_requested.emit(folder_id, item.text(0))
 

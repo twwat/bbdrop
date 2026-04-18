@@ -231,8 +231,25 @@ class FileListWidget(QWidget):
         self._btn_next.setEnabled(False)
 
     def set_loading(self, loading: bool):
-        """Show/hide a loading state."""
+        """Show/hide a loading state.
+
+        When the table is empty we surface a visible "Loading…" hint in
+        the status label so the user knows a fetch is in flight rather
+        than seeing a blank pane. When cached rows are already showing
+        we deliberately leave the status alone — a silent background
+        revalidation shouldn't overwrite the item-count readout.
+
+        Callers normally follow set_loading(False) with set_files(...)
+        or clear(), both of which overwrite the status. The empty-table
+        branch in the ``not loading`` path is a safety net for error
+        cases (worker exception, cancelled fetch) where neither runs —
+        without it, "Loading…" would linger forever.
+        """
         self._table.setEnabled(not loading)
+        if loading and self._table.rowCount() == 0:
+            self._status_label.setText("Loading…")
+        elif not loading and self._table.rowCount() == 0:
+            self._status_label.setText("")
 
     # ------------------------------------------------------------------
     # Sort column mapping
