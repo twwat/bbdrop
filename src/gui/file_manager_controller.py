@@ -34,9 +34,36 @@ if TYPE_CHECKING:
     from src.network.file_host_client import FileHostClient
     from src.processing.file_host_workers import FileHostWorker
 
-# Cache TTL in seconds and max size (LRU eviction when exceeded)
-_CACHE_TTL = 60.0
+# Default cache TTL in seconds; overridable via
+# [Advanced] -> file_manager/cache_ttl_seconds. Max size caps the
+# in-memory cache (LRU eviction when exceeded).
+_DEFAULT_CACHE_TTL = 60.0
 _CACHE_MAX_ENTRIES = 256
+
+
+def _load_cache_ttl() -> float:
+    """Read cache TTL from the [Advanced] INI section.
+
+    Returns the default if the key is missing or malformed. A value of 0
+    disables the cache (every lookup falls through to a fresh fetch).
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    cfg = configparser.ConfigParser()
+    config_file = get_config_path()
+    if not os.path.exists(config_file):
+        return _DEFAULT_CACHE_TTL
+    try:
+        cfg.read(config_file, encoding="utf-8")
+        raw = cfg.get("Advanced", "file_manager/cache_ttl_seconds", fallback=None)
+        if raw is None:
+            return _DEFAULT_CACHE_TTL
+        value = float(raw)
+        return max(0.0, value)
+    except (ValueError, configparser.Error):
+        return _DEFAULT_CACHE_TTL
 
 # Hosts whose file managers route through the running FileHostWorker's
 # session instead of loading credentials themselves. Must match the
@@ -52,6 +79,10 @@ class FileManagerController(QObject):
     def __init__(self, dialog: 'FileManagerDialog'):
         super().__init__(dialog)
         self._dialog = dialog
+
+        # Cache TTL is read once at construction — changes to the setting
+        # take effect the next time the file manager is opened.
+        self._cache_ttl: float = _load_cache_ttl()
 
         # State per host
         self._current_host: Optional[str] = None
@@ -384,7 +415,7 @@ class FileManagerController(QObject):
         if cached:
             self._apply_file_list(self._current_host, cached[0])
             # Skip background fetch if cache is still fresh
-            if (time.time() - cached[1]) < _CACHE_TTL:
+            if self._cache_ttl > 0 and (time.time() - cached[1]) < self._cache_ttl:
                 return
 
         # Fetch fresh data
@@ -412,7 +443,7 @@ class FileManagerController(QObject):
         if cached:
             self._dialog.folder_tree.populate_children(parent_id, cached[0])
             # Skip background fetch if cache is still fresh
-            if (time.time() - cached[1]) < _CACHE_TTL:
+            if self._cache_ttl > 0 and (time.time() - cached[1]) < self._cache_ttl:
                 return
 
         self._submit("list_folders", {"parent_id": parent_id},
@@ -724,7 +755,7 @@ class FileManagerController(QObject):
         cached = self._file_cache.get(cache_key)
         if cached:
             self._apply_file_list(self._current_host, cached[0])
-            if (time.time() - cached[1]) < _CACHE_TTL:
+            if self._cache_ttl > 0 and (time.time() - cached[1]) < self._cache_ttl:
                 return
 
         self._submit("trash_list", {

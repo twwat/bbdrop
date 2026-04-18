@@ -115,6 +115,19 @@ ADVANCED_SETTINGS = [
         "min": 200,
         "max": 1920
     },
+    {
+        "key": "file_manager/cache_ttl_seconds",
+        "description": (
+            "File Manager cache TTL in seconds — how long a folder's "
+            "listing is reused before re-fetching from the host. Higher = "
+            "less API traffic, staler data. 0 always revalidates. "
+            "Takes effect next time you open File Manager."
+        ),
+        "default": 60,
+        "type": "int",
+        "min": 0,
+        "max": 3600
+    },
 ]
 
 
