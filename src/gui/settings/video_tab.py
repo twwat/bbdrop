@@ -366,13 +366,16 @@ class VideoSettingsTab(QWidget):
         ))
         overlay_layout.addLayout(overlay_title)
         self.image_overlay_template = QPlainTextEdit()
+        self.image_overlay_template.setReadOnly(True)
         self.image_overlay_template.setMaximumHeight(60)
         self.image_overlay_template.setPlaceholderText(
             "e.g. #filename# | #resolution# | #duration# | #videoCodec# / #audioCodec#"
         )
         self.image_overlay_template.setToolTip("Click to open the full editor.")
+        self.image_overlay_template.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.image_overlay_template.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         self.image_overlay_template.textChanged.connect(self.dirty.emit)
-        self.image_overlay_template.installEventFilter(self)
+        self.image_overlay_template.viewport().installEventFilter(self)
         overlay_layout.addWidget(self.image_overlay_template)
         layout.addWidget(overlay_group, 3, 0)
 
@@ -390,13 +393,16 @@ class VideoSettingsTab(QWidget):
         ))
         details_layout.addLayout(details_title)
         self.video_details_template = QPlainTextEdit()
+        self.video_details_template.setReadOnly(True)
         self.video_details_template.setMaximumHeight(60)
         self.video_details_template.setPlaceholderText(
             "e.g. [b]#filename#[/b]\\n#resolution# | #duration# | #filesize#"
         )
         self.video_details_template.setToolTip("Click to open the full editor.")
+        self.video_details_template.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.video_details_template.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         self.video_details_template.textChanged.connect(self.dirty.emit)
-        self.video_details_template.installEventFilter(self)
+        self.video_details_template.viewport().installEventFilter(self)
         details_layout.addWidget(self.video_details_template)
         layout.addWidget(details_group, 3, 1)
 
@@ -482,17 +488,22 @@ class VideoSettingsTab(QWidget):
         self.jpg_quality.setEnabled(is_jpg)
 
     def eventFilter(self, obj, event):
-        """Open template editor when overlay or details field gains focus."""
-        if event.type() == event.Type.FocusIn:
-            if obj is self.image_overlay_template:
-                QTimer.singleShot(0, lambda: self._open_template_editor(
+        """Open template editor when the overlay or details field is clicked.
+
+        The filter is installed on the QPlainTextEdit's viewport rather than
+        the widget itself so FocusIn doesn't trigger a reopen loop after the
+        dialog closes and focus returns to the field.
+        """
+        if event.type() == event.Type.MouseButtonPress:
+            if obj is self.image_overlay_template.viewport():
+                self._open_template_editor(
                     "Image Overlay Template", self.image_overlay_template
-                ))
+                )
                 return True
-            elif obj is self.video_details_template:
-                QTimer.singleShot(0, lambda: self._open_template_editor(
+            if obj is self.video_details_template.viewport():
+                self._open_template_editor(
                     "Video Details Template", self.video_details_template
-                ))
+                )
                 return True
         return super().eventFilter(obj, event)
 
