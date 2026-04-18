@@ -110,19 +110,23 @@ class GalleryContextMenuHelper(QObject):
         open_action = menu.addAction("Open Folder")
         open_action.triggered.connect(lambda: self._delegate_to_main_window('open_folders_via_menu', selected_paths))
         
-        # Manage Files (single selection only)
+        # Manage Files / Rename / Preview (single selection only)
         if len(selected_paths) == 1:
-            manage_files_action = menu.addAction("Manage Files...")
-            manage_files_action.triggered.connect(lambda: self._delegate_to_main_window('manage_gallery_files', selected_paths[0]))
+            path = selected_paths[0]
+            item = self._get_queue_item(path)
+            is_video = bool(item and getattr(item, 'media_type', '') == 'video')
+
+            # Manage Files is image-gallery-specific; skip for single-file video items
+            if not is_video:
+                manage_files_action = menu.addAction("Manage Files...")
+                manage_files_action.triggered.connect(lambda: self._delegate_to_main_window('manage_gallery_files', path))
 
             # Rename Gallery (single selection only)
             rename_action = menu.addAction("✏️ Rename Gallery")
-            rename_action.triggered.connect(lambda: self._delegate_to_main_window('rename_gallery', selected_paths[0]))
+            rename_action.triggered.connect(lambda: self._delegate_to_main_window('rename_gallery', path))
 
             # Preview Screenshot Sheet (single selection, video only)
-            path = selected_paths[0]
-            item = self._get_queue_item(path)
-            if item and getattr(item, 'media_type', '') == 'video':
+            if is_video:
                 preview_action = menu.addAction("Preview Screenshot Sheet")
                 preview_action.triggered.connect(lambda: self._delegate_to_main_window('preview_screenshot_sheet', path))
     
