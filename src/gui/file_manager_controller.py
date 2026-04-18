@@ -592,10 +592,12 @@ class FileManagerController(QObject):
         if page < 1:
             return
         self._current_page = page
-        # Note: the file cache key doesn't include page, so different pages
-        # overwrite each other. Acceptable for now — most hosts return all
-        # files on page 1 with high per_page limits.
-        self._load_files()
+        # Respect the current view mode — paging in trash must stay in
+        # trash, not silently drop the user back to the folder listing.
+        if self._in_trash:
+            self._load_trash()
+        else:
+            self._load_files()
 
     def on_selection_changed(self, selected: list):
         has_files = any(not fi.is_folder for fi in selected)
