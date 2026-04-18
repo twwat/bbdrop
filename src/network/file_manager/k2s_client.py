@@ -34,6 +34,15 @@ K2S_API_BASES = {
     "tezfiles": "https://tezfiles.com/api/v2",
 }
 
+# Public file-page domains per host — used to build Copy-Link / Open-in-
+# Browser URLs. The API client is shared across the family but the three
+# sites live on distinct domains, so the link must come from host_id.
+K2S_FILE_DOMAINS = {
+    "keep2share": "https://k2s.cc",
+    "fileboom": "https://fboom.me",
+    "tezfiles": "https://tezfiles.com",
+}
+
 K2S_CAPABILITIES = FileManagerCapabilities(
     can_rename=True,
     can_move=True,
@@ -336,10 +345,12 @@ class K2SFileManagerClient(FileManagerClient):
 
     def get_download_link(self, file_id: str) -> str:
         info = self.get_info([file_id])
-        if info:
-            # K2S download link pattern
-            return f"https://k2s.cc/file/{file_id}"
-        return ""
+        if not info:
+            return ""
+        domain = K2S_FILE_DOMAINS.get(self.host_id)
+        if not domain:
+            return ""
+        return f"{domain}/file/{file_id}"
 
     def remote_upload_add(
         self, urls: List[str], folder_id: str = "/"
