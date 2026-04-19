@@ -115,8 +115,36 @@ class FileHostsSettingsWidget(QWidget):
 
         layout.addWidget(limits_group)
 
-        # Available Hosts Group
-        hosts_group = QGroupBox("Available Hosts")
+        # Image Hosts groupbox
+        image_hosts_group = QGroupBox("Image Hosts")
+        image_hosts_layout = QVBoxLayout(image_hosts_group)
+
+        image_scroll = QScrollArea()
+        image_scroll.setWidgetResizable(True)
+        image_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        image_scroll.setMinimumHeight(120)
+
+        image_container = QWidget()
+        self.image_hosts_layout_inner = QVBoxLayout(image_container)
+        self.image_hosts_layout_inner.setSpacing(8)
+
+        from src.core.image_host_config import get_all_hosts, is_image_host_enabled
+        all_image_hosts = get_all_hosts()
+        sorted_image_hosts = sorted(
+            all_image_hosts.items(),
+            key=lambda item: (not is_image_host_enabled(item[0]), item[1].name.lower())
+        )
+        for host_id, config in sorted_image_hosts:
+            self._create_host_row(host_id, config, kind='image')
+
+        self.image_hosts_layout_inner.addStretch()
+        image_scroll.setWidget(image_container)
+        image_hosts_layout.addWidget(image_scroll)
+
+        layout.addWidget(image_hosts_group)
+
+        # File Hosts Group
+        hosts_group = QGroupBox("File Hosts")
         hosts_layout = QVBoxLayout(hosts_group)
 
         # Create scrollable area for hosts list
@@ -132,7 +160,7 @@ class FileHostsSettingsWidget(QWidget):
         # Load hosts and create UI
         config_manager = get_config_manager()
         for host_id, host_config in config_manager.hosts.items():
-            self._create_host_row(host_id, host_config)
+            self._create_host_row(host_id, host_config, kind='file')
 
         self.hosts_container_layout.addStretch()
         scroll_area.setWidget(hosts_container)
@@ -149,12 +177,13 @@ class FileHostsSettingsWidget(QWidget):
         # Load initial storage for enabled hosts
         self._load_initial_storage()
 
-    def _create_host_row(self, host_id: str, host_config):
+    def _create_host_row(self, host_id: str, host_config, kind: str = 'file'):
         """Create UI row for a single host using compact single-row layout.
 
         Args:
             host_id: Host identifier
-            host_config: HostConfig instance
+            host_config: HostConfig (file host) or ImageHostConfig (image host) instance
+            kind: 'file' for file hosts, 'image' for image hosts
         """
         from PyQt6.QtWidgets import QSizePolicy
         from src.core.file_host_config import get_file_host_setting
@@ -201,14 +230,32 @@ class FileHostsSettingsWidget(QWidget):
         configure_btn.setFixedWidth(80)
         configure_btn.setToolTip(f"Configuration settings for {host_config.name}")
         configure_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        configure_btn.clicked.connect(lambda: self._show_host_config_dialog(host_id, host_config))
+
+        # Route button click by kind
+        if kind == 'image':
+            configure_btn.clicked.connect(
+                lambda: self._open_image_host_dialog(host_id, host_config)
+            )
+        else:
+            configure_btn.clicked.connect(
+                lambda: self._show_host_config_dialog(host_id, host_config)
+            )
         frame_layout.addWidget(configure_btn)
 
-        # 4. Storage Bar (expanding, shows amount free)
+        # 4. Storage Bar (expanding, shows amount free) or Unlimited label for hosts without storage
         storage_bar = None
+        unlimited_label = None
         from src.core.file_host_config import get_host_family
-        has_per_host_storage = host_config.user_info_url and (host_config.storage_left_path or host_config.storage_regex)
-        is_k2s_family = get_host_family(host_id) == 'k2s'
+
+        has_per_host_storage = (
+            kind == 'file'
+            and hasattr(host_config, 'user_info_url')
+            and host_config.user_info_url
+            and (hasattr(host_config, 'storage_left_path') and host_config.storage_left_path
+                 or hasattr(host_config, 'storage_regex') and host_config.storage_regex)
+        )
+        is_k2s_family = kind == 'file' and get_host_family(host_id) == 'k2s'
+
         if has_per_host_storage or is_k2s_family:
             storage_bar = QProgressBar()
             storage_bar.setMinimumWidth(180)
@@ -219,18 +266,30 @@ class FileHostsSettingsWidget(QWidget):
             storage_bar.setFormat("")
             storage_bar.setProperty("class", "storage-bar")
             storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            # Tooltip will show full details
-            #storage_bar.setToolTip("Storage information loading...")
             frame_layout.addWidget(storage_bar)
+        else:
+            unlimited_label = QLabel("Unlimited")
+            unlimited_label.setProperty("class", "status-muted")
+            unlimited_label.setAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            unlimited_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            )
+            frame_layout.addWidget(unlimited_label)
 
         # 5. Status Display (expanding, shows Ready/Disabled status)
         status_label = QLabel()
         status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        # Set initial semantic status
-        status_text = self._get_status_text(host_id, host_config)
-        status_label.setText(status_text)
-        self._update_status_label_style(host_id, host_config, status_label)
+
+        # Set initial semantic status based on kind
+        if kind == 'image':
+            self._update_image_status_label(host_id)
+        else:
+            status_text = self._get_status_text(host_id, host_config)
+            status_label.setText(status_text)
+            self._update_status_label_style(host_id, host_config, status_label)
         frame_layout.addWidget(status_label)
 
         # Store widgets for later access
@@ -239,19 +298,27 @@ class FileHostsSettingsWidget(QWidget):
             "status_icon": status_icon,
             "status_label": status_label,
             "storage_bar": storage_bar,
+            "unlimited_label": unlimited_label,
             "logo_label": logo_label,  # Store logo for theme updates
             "configure_btn": configure_btn,
+            "kind": kind,
             "enable_btn": None  # Removed - redundant with status icon
         }
 
-        # Load cached storage immediately for this host
-        self.refresh_storage_display(host_id)
+        # Load cached storage immediately for file hosts
+        if kind == 'file':
+            self.refresh_storage_display(host_id)
+            # Update status icon to reflect current enabled state
+            self._update_status_icon(host_id)
+        else:
+            # For image hosts, update the status icon
+            self._update_image_status_icon(host_id)
 
-        # Update status icon to reflect current enabled state
-        self._update_status_icon(host_id)
-
-        # Add to layout
-        self.hosts_container_layout.addWidget(host_frame)
+        # Add to layout based on kind
+        if kind == 'image':
+            self.image_hosts_layout_inner.addWidget(host_frame)
+        else:
+            self.hosts_container_layout.addWidget(host_frame)
 
     def _load_host_logo(self, host_id: str, host_config: HostConfig, height: int = 40) -> Optional[QLabel]:
         """Load and create a clickable QLabel with the host's logo.
@@ -314,6 +381,10 @@ class FileHostsSettingsWidget(QWidget):
         if not widgets or not widgets.get('status_icon'):
             return
 
+        # Guard against image hosts - use _update_image_status_icon instead
+        if widgets.get('kind') == 'image':
+            return
+
         status_icon = widgets['status_icon']
         is_enabled = self.worker_manager.is_enabled(host_id) if self.worker_manager else False
 
@@ -338,6 +409,11 @@ class FileHostsSettingsWidget(QWidget):
         Returns: "Ready (Auto)", "Ready (Manual)", "Credentials Required", or "Disabled"
         """
         from src.core.file_host_config import get_file_host_setting
+
+        # Guard against image hosts - they use _update_image_status_label
+        widgets = self.host_widgets.get(host_id, {})
+        if widgets.get('kind') == 'image':
+            return ""
 
         # Check if host is enabled
         is_enabled = get_file_host_setting(host_id, "enabled", "bool")
@@ -379,6 +455,11 @@ class FileHostsSettingsWidget(QWidget):
             status_label: QLabel to update
         """
         from src.core.file_host_config import get_file_host_setting
+
+        # Guard against image hosts - they use _update_image_status_label
+        widgets = self.host_widgets.get(host_id, {})
+        if widgets.get('kind') == 'image':
+            return
 
         # Get current status
         is_enabled = get_file_host_setting(host_id, "enabled", "bool")
@@ -524,6 +605,11 @@ class FileHostsSettingsWidget(QWidget):
         Args:
             host_id: Host identifier
         """
+        widgets = self.host_widgets.get(host_id, {})
+        # Guard against image hosts - they don't have storage
+        if widgets.get('kind') == 'image':
+            return
+
         from src.core.file_host_config import get_host_family
         if get_host_family(host_id) == 'k2s':
             from src.core.file_host_config import get_k2s_family_storage
@@ -719,6 +805,85 @@ class FileHostsSettingsWidget(QWidget):
             self._update_status_label(host_id, host_config, widgets["status_label"])
 
         self.refresh_storage_display(host_id)
+    def _update_image_status_icon(self, host_id: str) -> None:
+        """Update status icon for an image host based on enabled/active/cover state.
+
+        Args:
+            host_id: Image host identifier
+        """
+        widgets = self.host_widgets.get(host_id)
+        if not widgets:
+            return
+
+        from src.core.image_host_config import is_image_host_enabled
+        enabled = is_image_host_enabled(host_id)
+        is_active = (host_id == self._active_image_host)
+        cover_host = self.settings.value('cover/host_id', 'imx', type=str)
+        is_cover = self._covers_enabled and (host_id == cover_host)
+
+        if enabled and is_active:
+            key = 'status-active-cover' if is_cover else 'status-active'
+        elif enabled:
+            key = 'status-enabled-cover' if is_cover else 'status-enabled'
+        else:
+            key = 'status-disabled-cover' if is_cover else 'status-disabled'
+
+        if self.icon_manager is None:
+            return
+
+        icon = self.icon_manager.get_icon(key, theme_mode=None)
+        widgets['status_icon'].setPixmap(icon.pixmap(20, 20))
+
+    def _update_image_status_label(self, host_id: str) -> None:
+        """Update status label for an image host based on credentials.
+
+        Args:
+            host_id: Image host identifier
+        """
+        widgets = self.host_widgets.get(host_id)
+        if not widgets:
+            return
+
+        from src.core.image_host_config import get_image_host_config_manager
+        from src.utils.credentials import get_credential
+
+        manager = get_image_host_config_manager()
+        config = manager.get_host(host_id)
+        label = widgets['status_label']
+
+        if config and not config.requires_auth:
+            username = get_credential('username', host_id)
+            if username:
+                label.setText("<span style='color:green;'>Credentials: Set</span>")
+            else:
+                label.setText("<span style='color:green;'>Ready (no auth required)</span>")
+            return
+
+        api_key = get_credential('api_key', host_id)
+        if api_key:
+            label.setText("<span style='color:green;'>API Key: Set</span>")
+        else:
+            label.setText("<span style='color:orange;'>API Key: Not Set</span>")
+
+    def _open_image_host_dialog(self, host_id: str, config) -> None:
+        """Open configuration dialog for an image host.
+
+        Args:
+            host_id: Image host identifier
+            config: ImageHostConfig instance
+        """
+        from src.gui.dialogs.image_host_config_dialog import ImageHostConfigDialog
+
+        dialog = ImageHostConfigDialog(self, host_id, config)
+        dialog.panel.cover_gallery_changed.connect(self.cover_gallery_changed)
+        dialog.exec()
+
+        if dialog.enabled_changed():
+            self.settings_changed.emit()
+
+        self._update_image_status_label(host_id)
+        self._update_image_status_icon(host_id)
+
     def _add_custom_host(self):
         """Add a custom host from JSON file"""
         # TODO: Implement custom host loading
@@ -912,15 +1077,19 @@ class FileHostsSettingsWidget(QWidget):
             host_id: Image host identifier (e.g., 'imx', 'turbo', 'pixhost')
         """
         self._active_image_host = host_id
-        # UI refresh handled in a later task once the image groupbox exists.
+        # Refresh status icons for all image hosts
+        for hid, widgets in self.host_widgets.items():
+            if widgets.get('kind') == 'image':
+                self._update_image_status_icon(hid)
 
     def set_covers_enabled(self, enabled: bool) -> None:
         """Called by the Covers tab when cover uploads toggle.
 
         Args:
             enabled: Whether cover uploads are enabled
-
-        Note:
-            Stubbed here; the image groupbox wiring in Task 2 consumes this state.
         """
         self._covers_enabled = enabled
+        # Refresh status icons for all image hosts
+        for hid, widgets in self.host_widgets.items():
+            if widgets.get('kind') == 'image':
+                self._update_image_status_icon(hid)
