@@ -15,7 +15,6 @@ from src.utils.format_utils import format_binary_size
 from src.utils.logger import log
 from src.core.file_host_config import get_config_manager, HostConfig
 from src.gui.icon_manager import get_icon_manager
-from src.gui.widgets.info_button import InfoButton
 
 
 class FileHostsSettingsWidget(QWidget):
@@ -70,51 +69,6 @@ class FileHostsSettingsWidget(QWidget):
         intro_label.setProperty("class", "tab-description")
         layout.addWidget(intro_label)
 
-        # Connection Limits Group
-        limits_group = QGroupBox("Connection Limits")
-        limits_layout = QFormLayout(limits_group)
-
-        limits_info_row = QHBoxLayout()
-        limits_info_row.addWidget(InfoButton(
-            "<b>Global limit:</b> Total concurrent uploads across ALL file "
-            "hosts combined. Prevents saturating your upload bandwidth.<br><br>"
-            "<b>Per-host limit:</b> Max concurrent uploads to a single host. "
-            "Some hosts rate-limit or ban accounts that open too many "
-            "connections.<br><br>"
-            "<b>Example:</b> global=3, per-host=2 means at most 3 uploads "
-            "total, but no single host gets more than 2 at once."
-        ))
-        limits_info_row.addStretch()
-        limits_layout.addRow(limits_info_row)
-
-        self.global_limit_spin = QSpinBox()
-        self.global_limit_spin.setMinimum(1)
-        self.global_limit_spin.setMaximum(10)
-        self.global_limit_spin.setToolTip(
-            "Maximum total concurrent file host uploads across all hosts"
-        )
-        # Block signals during initial value set, then connect
-        self.global_limit_spin.blockSignals(True)
-        self.global_limit_spin.setValue(3)
-        self.global_limit_spin.blockSignals(False)
-        self.global_limit_spin.valueChanged.connect(lambda: self.settings_changed.emit())
-        limits_layout.addRow("Global upload limit:", self.global_limit_spin)
-
-        self.per_host_limit_spin = QSpinBox()
-        self.per_host_limit_spin.setMinimum(1)
-        self.per_host_limit_spin.setMaximum(5)
-        self.per_host_limit_spin.setToolTip(
-            "Maximum concurrent uploads per individual host"
-        )
-        # Block signals during initial value set, then connect
-        self.per_host_limit_spin.blockSignals(True)
-        self.per_host_limit_spin.setValue(2)
-        self.per_host_limit_spin.blockSignals(False)
-        self.per_host_limit_spin.valueChanged.connect(lambda: self.settings_changed.emit())
-        limits_layout.addRow("Per-host limit:", self.per_host_limit_spin)
-
-        layout.addWidget(limits_group)
-
         # Image Hosts groupbox
         image_hosts_group = QGroupBox("Image Hosts")
         image_hosts_layout = QVBoxLayout(image_hosts_group)
@@ -165,12 +119,6 @@ class FileHostsSettingsWidget(QWidget):
         self.hosts_container_layout.addStretch()
         scroll_area.setWidget(hosts_container)
         hosts_layout.addWidget(scroll_area)
-
-        # Add custom host button
-        add_custom_btn = QPushButton("+ Add Custom Host")
-        add_custom_btn.setToolTip("Add a custom host configuration from JSON file")
-        add_custom_btn.clicked.connect(self._add_custom_host)
-        hosts_layout.addWidget(add_custom_btn)
 
         layout.addWidget(hosts_group)
 
@@ -883,15 +831,6 @@ class FileHostsSettingsWidget(QWidget):
 
         self._update_image_status_label(host_id)
         self._update_image_status_icon(host_id)
-
-    def _add_custom_host(self):
-        """Add a custom host from JSON file"""
-        # TODO: Implement custom host loading
-        QMessageBox.information(
-            self,
-            "Not Implemented",
-            "Custom host loading will be implemented in a future update."
-        )
 
     def _load_initial_storage(self):
         """Load cached storage ONLY - no workers, no timers"""
