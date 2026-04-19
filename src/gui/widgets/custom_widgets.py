@@ -1063,51 +1063,6 @@ class FileHostsActionWidget(QWidget):
         self.setLayout(layout)
 
 
-def _format_k2s_traffic_tooltip_line(host_id: str) -> str:
-    """Render a tooltip line showing daily traffic quota for K2S-family hosts.
-
-    Reads per-host values cached by FileHostWorker from QSettings. Returns an
-    empty string for non-K2S-family hosts or when no traffic data has been
-    cached yet (so callers can simply append on a newline).
-    """
-    if not host_id:
-        return ""
-    from src.core.file_host_config import get_host_family
-    if get_host_family(host_id) != "k2s":
-        return ""
-
-    from PyQt6.QtCore import QSettings
-    from src.utils.format_utils import format_host_storage_size, format_duration
-
-    settings = QSettings("BBDropUploader", "BBDropGUI")
-    prefix = f"FileHosts/{host_id}"
-    try:
-        available = int(settings.value(f"{prefix}/traffic_available", "0") or 0)
-        ceiling = int(settings.value(f"{prefix}/traffic_ceiling", "0") or 0)
-    except (ValueError, TypeError):
-        return ""
-    reset_at = settings.value(f"{prefix}/traffic_reset_at", "", type=str)
-
-    if available <= 0 and ceiling <= 0:
-        return ""
-
-    available_fmt = format_host_storage_size(host_id, available)
-    if ceiling > 0 and ceiling != available:
-        ceiling_fmt = format_host_storage_size(host_id, ceiling)
-        line = f"Traffic: {available_fmt} / {ceiling_fmt} left"
-    else:
-        line = f"Traffic: {available_fmt} left"
-
-    if reset_at:
-        try:
-            from datetime import datetime, timezone
-            reset_dt = datetime.fromisoformat(reset_at)
-            secs = int((reset_dt - datetime.now(timezone.utc)).total_seconds())
-            if secs > 0:
-                line += f" · resets in {format_duration(secs)}"
-        except (ValueError, TypeError):
-            pass
-    return line
 
 
 class StorageTrafficBar(QWidget):
@@ -1446,8 +1401,3 @@ class StorageTrafficBar(QWidget):
         """Force style refresh to apply property changes."""
         self.main_bar.update()
 
-
-# Legacy alias. New code should reference StorageTrafficBar directly.
-class StorageProgressBar(StorageTrafficBar):
-    """Deprecated — use StorageTrafficBar. Kept for backwards compatibility."""
-    pass

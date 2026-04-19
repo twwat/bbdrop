@@ -1285,8 +1285,3 @@ class TestStorageTrafficBar:
         w._on_double_click()
         assert w.primary == initial
 
-    def test_storage_progress_bar_shim_still_importable(self, qtbot):
-        from src.gui.widgets.custom_widgets import StorageProgressBar
-        w = StorageProgressBar()
-        qtbot.addWidget(w)
-        assert isinstance(w, StorageTrafficBar)
