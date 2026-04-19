@@ -257,6 +257,7 @@ class FileHostsSettingsWidget(QWidget):
 
         frame = QFrame()
         frame.setFrameShape(QFrame.Shape.StyledPanel)
+        frame.setFrameShadow(QFrame.Shadow.Raised)
         frame.setProperty("class", "host-panel")
         frame.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         frame.customContextMenuRequested.connect(
@@ -300,9 +301,15 @@ class FileHostsSettingsWidget(QWidget):
         )
         row_layout.addWidget(configure_btn)
 
-        # Status label (expanding, right-aligned)
+        # Spacer column — matches file-host storage-bar width so columns line up.
+        storage_spacer = QWidget()
+        storage_spacer.setMinimumWidth(180)
+        storage_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        row_layout.addWidget(storage_spacer)
+
+        # Status label (right-aligned, same fixed styling as file-host column).
         status_label = QLabel()
-        status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        status_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         row_layout.addWidget(status_label)
 
@@ -879,19 +886,28 @@ class FileHostsSettingsWidget(QWidget):
         config = manager.get_host(host_id)
         label = widgets['status_label']
 
-        if config and not config.requires_auth:
-            username = get_credential('username', host_id)
-            if username:
-                label.setText("<span style='color:green;'>Credentials: Set</span>")
-            else:
-                label.setText("<span style='color:green;'>Ready (no auth required)</span>")
-            return
+        from src.core.image_host_config import is_image_host_enabled
+        enabled = is_image_host_enabled(host_id)
 
-        api_key = get_credential('api_key', host_id)
-        if api_key:
-            label.setText("<span style='color:green;'>API Key: Set</span>")
+        if not enabled:
+            text, css = "Disabled", "status-disabled"
+        elif config and not config.requires_auth:
+            username = get_credential('username', host_id)
+            text = "Credentials: Set" if username else "Ready (no auth required)"
+            css = "status-success-light"
         else:
-            label.setText("<span style='color:orange;'>API Key: Not Set</span>")
+            api_key = get_credential('api_key', host_id)
+            if api_key:
+                text, css = "API Key: Set", "status-success-light"
+            else:
+                text, css = "API Key: Not Set", "status-warning-light"
+
+        label.setText(text)
+        label.setProperty("class", css)
+        style = label.style()
+        if style is not None:
+            style.unpolish(label)
+            style.polish(label)
 
     def _open_image_host_dialog(self, host_id: str, config) -> None:
         """Open configuration dialog for an image host.
