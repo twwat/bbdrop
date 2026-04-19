@@ -1027,16 +1027,22 @@ class FileHostsSettingsWidget(QWidget):
         self.settings_changed.emit()
 
     def _browse_files_for_host(self, host_id: str) -> None:
-        """Open the file manager for a host.
+        """Open the File Manager parented to the Settings dialog.
 
-        Args:
-            host_id: File host identifier
+        Parenting to the settings dialog (rather than the main window) lets
+        the child dialog receive input and stack above the modal parent.
+        Without this, the File Manager opens behind the Settings dialog
+        and is unreachable until Settings closes.
         """
-        # Placeholder: replaced in Task 5 with the parent-override path.
-        parent_dialog = getattr(self, 'parent_dialog', None)
-        main_window = getattr(parent_dialog, 'parent_window', None) if parent_dialog else None
-        if main_window and hasattr(main_window, 'open_file_manager_dialog'):
-            main_window.open_file_manager_dialog(host_id=host_id)
+        from src.gui.dialogs.file_manager_dialog import FileManagerDialog
+        from PyQt6.QtCore import Qt as _Qt
+
+        settings_dialog = getattr(self, 'parent_dialog', None) or self.window()
+        dialog = FileManagerDialog(parent=settings_dialog, host_id=host_id)
+        dialog.setAttribute(_Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _load_initial_storage(self):
         """Load cached storage ONLY - no workers, no timers"""
