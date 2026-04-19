@@ -132,9 +132,11 @@ class ScanCoordinator:
         self._completion_callback = completion_callback
         self._cancelled = threading.Event()
         self._scan_thread: Optional[threading.Thread] = None
-        # K2S family shared inventory cache (populated by first _run_k2s_job)
-        self._k2s_inventory: Dict[str, dict] = {}
-        self._k2s_storage_used: Optional[int] = None
+        # K2S family per-host inventory cache. keep2share/fileboom/tezfiles are
+        # three separate services with three distinct file trees, so each needs
+        # its own inventory; they are NOT one shared account.
+        self._k2s_inventory_by_host: Dict[str, Dict[str, dict]] = {}
+        self._k2s_storage_by_host: Dict[str, int] = {}
         self._k2s_lock = threading.Lock()
 
     @property
@@ -209,11 +211,13 @@ class ScanCoordinator:
 
             elapsed = time.time() - start_time
             if self._completion_callback:
+                k2s_total = (sum(self._k2s_storage_by_host.values())
+                             if self._k2s_storage_by_host else None)
                 self._completion_callback({
                     'total_hosts': len(all_jobs),
                     'total_galleries': len(all_results),
                     'elapsed': elapsed,
-                    'k2s_storage_used': self._k2s_storage_used,
+                    'k2s_storage_used': k2s_total,
                 })
 
         except Exception as e:
@@ -302,16 +306,19 @@ class ScanCoordinator:
 
         checker = K2SFileChecker(api_base=api_base, auth_token=token)
 
-        # K2S family hosts share one account — walk once, reuse across hosts
+        # Each K2S-family host (keep2share/fileboom/tezfiles) has its own file
+        # tree, so walk each host's account once and cache it separately.
         with self._k2s_lock:
-            if not self._k2s_inventory:
-                log(f"Walking K2S account folders via {job.host_id}",
+            inventory = self._k2s_inventory_by_host.get(job.host_id)
+            if inventory is None:
+                log(f"Walking {job.host_id} account folders",
                     level="info", category="scanner")
                 all_files = checker.get_all_files()
-                self._k2s_inventory = {f['id']: f for f in all_files}
-                self._k2s_storage_used = checker.calc_storage_used(all_files)
-                log(f"K2S folder walk complete: {len(all_files)} files, "
-                    f"{self._k2s_storage_used} bytes used",
+                inventory = {f['id']: f for f in all_files}
+                self._k2s_inventory_by_host[job.host_id] = inventory
+                self._k2s_storage_by_host[job.host_id] = checker.calc_storage_used(all_files)
+                log(f"{job.host_id} folder walk complete: {len(all_files)} files, "
+                    f"{self._k2s_storage_by_host[job.host_id]} bytes used",
                     level="info", category="scanner")
 
         results = []
@@ -328,7 +335,7 @@ class ScanCoordinator:
             db_id = gallery['db_id']
 
             check_result = checker.check_gallery_from_inventory(
-                file_ids, self._k2s_inventory)
+                file_ids, inventory)
 
             cumulative_online += check_result.get('online', 0)
             cumulative_items += check_result.get('total', 0)

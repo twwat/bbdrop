@@ -114,8 +114,8 @@ class TestScanCoordinatorExecution:
         coord._connection_limiter.connection.return_value.__exit__ = Mock(return_value=False)
         coord._progress_callback = None
         coord._credentials = {'keep2share': 'test-token'}
-        coord._k2s_inventory = {}
-        coord._k2s_storage_used = None
+        coord._k2s_inventory_by_host = {}
+        coord._k2s_storage_by_host = {}
         coord._k2s_lock = threading.Lock()
 
         job = HostScanJob(
