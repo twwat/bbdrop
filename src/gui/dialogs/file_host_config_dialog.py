@@ -451,6 +451,20 @@ class FileHostConfigDialog(QDialog):
                 self.storage_bar.mousePressEvent = self._on_storage_bar_clicked
 
             storage_layout.addWidget(self.storage_bar)
+
+            # K2S family: add separate traffic bar below storage bar
+            if is_k2s_family:
+                from src.gui.widgets.custom_widgets import TrafficBar
+
+                traffic_label = QLabel("Traffic")
+                traffic_label.setStyleSheet("color: #4a90e2; font-weight: bold; margin-top: 8px;")
+                storage_layout.addWidget(traffic_label)
+
+                self.traffic_bar = TrafficBar()
+                storage_layout.addWidget(self.traffic_bar)
+            else:
+                self.traffic_bar = None
+
             content_layout.addWidget(storage_group)
 
             # Load storage from cache immediately if available
@@ -1293,7 +1307,7 @@ class FileHostConfigDialog(QDialog):
             except (TypeError, ValueError):
                 avail, ceiling = 0, 0
             reset_at = s.value(f"{prefix}/traffic_reset_at", "", type=str) or ""
-            self.storage_bar.update_traffic(avail, ceiling, reset_at)
+            self.traffic_bar.update_traffic(avail, ceiling, reset_at, self.host_id)
 
     def load_and_display_test_results(self):
         """Load and display existing test results from QSettings cache.
@@ -1529,7 +1543,7 @@ class FileHostConfigDialog(QDialog):
             except (TypeError, ValueError):
                 avail, ceiling = 0, 0
             reset_at = s.value(f"{prefix}/traffic_reset_at", "", type=str) or ""
-            self.storage_bar.update_traffic(avail, ceiling, reset_at)
+            self.traffic_bar.update_traffic(avail, ceiling, reset_at, self.host_id)
 
     def _on_storage_bar_clicked(self, event):
         """Open dialog to edit K2S family storage quota."""

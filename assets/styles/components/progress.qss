@@ -28,6 +28,11 @@ QProgressBar[class="storage-bar"] { font-size: 11px; font-weight: bold; }
 QProgressBar[class="traffic-strip"]        { border-radius: 3px; }
 QProgressBar[class="traffic-strip"]::chunk { border-radius: 2px; }
 
+/* Traffic bar: separate full-size bar for K2S family file host dialogs.
+   Independent amber color for traffic quota display. */
+QProgressBar[class="traffic-bar"]        { border-radius: 6px; font-size: 11px; font-weight: bold; }
+QProgressBar[class="traffic-bar"]::chunk { border-radius: 4px; }
+
 /* ==========================================================================
    LIGHT THEME
    ========================================================================== */
@@ -69,6 +74,10 @@ QProgressBar[storage_status="unknown"]::chunk  { background-color: $colors.light
 /* Traffic strip (light) — amber accent independent of storage_status */
 QProgressBar[class="traffic-strip"]        { border: 1px solid #b45309; background-color: #fef3c7; }
 QProgressBar[class="traffic-strip"]::chunk { background-color: #f59e0b; }
+
+/* Traffic bar (light) — full-size separate bar for K2S family dialogs */
+QProgressBar[class="traffic-bar"]        { border: 1px solid #9575cd; background-color: #ede7f6; color: #222222; }
+QProgressBar[class="traffic-bar"]::chunk { background-color: #7e57c2; }
 
 /* Progress text colors */
 QProgressBar[class="overall-progress"]      { color: #222222; }
@@ -118,6 +127,10 @@ QProgressBar[storage_status="unknown"]::chunk  { background-color: $colors.dark.
 /* Traffic strip (dark) — amber accent independent of storage_status */
 QProgressBar[class="traffic-strip"]        { border: 1px solid #78350f; background-color: #1f1206; }
 QProgressBar[class="traffic-strip"]::chunk { background-color: #f59e0b; }
+
+/* Traffic bar (dark) — full-size separate bar for K2S family dialogs */
+QProgressBar[class="traffic-bar"]        { border: 1px solid #4527a0; background-color: #1a0033; color: #eeeeee; }
+QProgressBar[class="traffic-bar"]::chunk { background-color: #674ea7; }
 
 /* Progress text colors */
 QProgressBar[class="overall-progress"]      { color: #eeeeee; }

@@ -1215,10 +1215,11 @@ class StorageTrafficBar(QWidget):
         self._restore_primary_from_settings()
 
     def _update_text_format(self, width: int):
-        """Update text format based on available width (short-form only, no 'free' suffix)."""
+        """Update text format based on available width."""
         if self._total_bytes <= 0:
             return
-        text = self._left_formatted if width >= 40 else ""
+        from src.utils.format_utils import format_host_storage_size
+        text = f"{format_host_storage_size(self._host_id, self._left_bytes)} Free" if width >= 40 else ""
         self.main_bar.setFormat(text)
 
     def set_unlimited(self):
@@ -1401,4 +1402,89 @@ class StorageTrafficBar(QWidget):
     def _refresh_style(self):
         """Force style refresh to apply property changes."""
         self.main_bar.update()
+
+
+class TrafficBar(QWidget):
+    """Standalone traffic quota progress bar for K2S family hosts.
+
+    Full-size (14px) amber progress bar showing traffic quota usage.
+    Displayed separately from storage bar in K2S file host dialogs.
+    """
+
+    def __init__(self, parent=None):
+        """Initialize traffic bar widget."""
+        super().__init__(parent)
+        self._traffic_available = 0
+        self._traffic_ceiling = 0
+        self._traffic_reset_at = ""
+        self._host_id = ""
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """Create traffic progress bar."""
+        self.setFixedHeight(16)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(1, 1, 1, 1)
+        layout.setSpacing(0)
+
+        self.bar = QProgressBar()
+        self.bar.setFixedHeight(14)
+        self.bar.setMaximum(100)
+        self.bar.setValue(0)
+        self.bar.setTextVisible(True)
+        self.bar.setFormat("")
+        self.bar.setProperty("class", "traffic-bar")
+
+        # Force purple chunk color directly
+        self.bar.setStyleSheet(
+            "QProgressBar::chunk { background-color: #674ea7; border-radius: 4px; }"
+        )
+
+        layout.addWidget(self.bar)
+
+    def update_traffic(self, available_bytes: int, ceiling_bytes: int, reset_at_iso: str, host_id: str = "") -> None:
+        """Update traffic bar display."""
+        if host_id:
+            self._host_id = host_id
+        self._traffic_available = max(0, int(available_bytes or 0))
+        self._traffic_ceiling = max(0, int(ceiling_bytes or 0))
+        self._traffic_reset_at = str(reset_at_iso or "")
+
+        if self._traffic_ceiling <= 0:
+            self.bar.setValue(0)
+            from src.utils.format_utils import format_quota_compact
+            self.bar.setFormat(format_quota_compact(self._host_id, self._traffic_available))
+            self._refresh_tooltip()
+            return
+
+        used_pct = int(((self._traffic_ceiling - self._traffic_available) / self._traffic_ceiling) * 100)
+        used_pct = max(0, min(100, used_pct))
+        free_pct = 100 - used_pct
+
+        from src.utils.format_utils import format_host_storage_size
+        text = f"{format_host_storage_size(self._host_id, self._traffic_available)} Free"
+
+        self.bar.setValue(free_pct)
+        self.bar.setFormat(text)
+        self._refresh_tooltip()
+
+    def _refresh_tooltip(self) -> None:
+        """Rebuild tooltip from cached data."""
+        from src.utils.format_utils import format_host_storage_size, format_duration
+
+        if self._traffic_ceiling > 0:
+            avail_fmt = format_host_storage_size(self._host_id, self._traffic_available)
+            ceil_fmt = format_host_storage_size(self._host_id, self._traffic_ceiling)
+            line = f"Traffic: {avail_fmt} / {ceil_fmt} left"
+            if self._traffic_reset_at:
+                try:
+                    from datetime import datetime, timezone
+                    reset_dt = datetime.fromisoformat(self._traffic_reset_at)
+                    secs = int((reset_dt - datetime.now(timezone.utc)).total_seconds())
+                    if secs > 0:
+                        line += f" \u00b7 resets in {format_duration(secs)}"
+                except (ValueError, TypeError):
+                    pass
+            self.bar.setToolTip(line)
 
