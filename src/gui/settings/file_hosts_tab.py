@@ -183,10 +183,10 @@ class FileHostsSettingsWidget(QWidget):
         )
         frame_layout.addWidget(configure_btn)
 
-        # 4. Storage Bar or "Unlimited" label
-        storage_bar = None
-        unlimited_label = None
+        # 4. Storage Bar — same StorageTrafficBar used in the worker table.
+        #    Hosts without a per-host quota render the bar in unlimited mode.
         from src.core.file_host_config import get_host_family
+        from src.gui.widgets.custom_widgets import StorageTrafficBar
 
         has_per_host_storage = (
             hasattr(host_config, 'user_info_url')
@@ -196,27 +196,14 @@ class FileHostsSettingsWidget(QWidget):
         )
         is_k2s_family = get_host_family(host_id) == 'k2s'
 
-        if has_per_host_storage or is_k2s_family:
-            storage_bar = QProgressBar()
-            storage_bar.setMinimumWidth(180)
-            storage_bar.setMaximumHeight(20)
-            storage_bar.setMaximum(100)
-            storage_bar.setValue(0)
-            storage_bar.setTextVisible(True)
-            storage_bar.setFormat("")
-            storage_bar.setProperty("class", "storage-bar")
-            storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            frame_layout.addWidget(storage_bar)
-        else:
-            unlimited_label = QLabel("Unlimited")
-            unlimited_label.setProperty("class", "status-muted")
-            unlimited_label.setAlignment(
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-            )
-            unlimited_label.setSizePolicy(
-                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-            )
-            frame_layout.addWidget(unlimited_label)
+        storage_bar = StorageTrafficBar()
+        storage_bar.setMinimumWidth(180)
+        storage_bar.setMaximumHeight(20)
+        storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        if not (has_per_host_storage or is_k2s_family):
+            storage_bar.set_unlimited()
+        frame_layout.addWidget(storage_bar)
+        unlimited_label = None  # retained key for back-compat with existing code paths
 
         # 5. Status Display (expanding, shows Ready/Disabled status)
         status_label = QLabel()
@@ -301,11 +288,15 @@ class FileHostsSettingsWidget(QWidget):
         )
         row_layout.addWidget(configure_btn)
 
-        # Spacer column — matches file-host storage-bar width so columns line up.
-        storage_spacer = QWidget()
-        storage_spacer.setMinimumWidth(180)
-        storage_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        row_layout.addWidget(storage_spacer)
+        # Storage bar — image hosts have no quota, so display the unlimited state
+        # via the same StorageTrafficBar used in the worker table.
+        from src.gui.widgets.custom_widgets import StorageTrafficBar
+        storage_bar = StorageTrafficBar()
+        storage_bar.setMinimumWidth(180)
+        storage_bar.setMaximumHeight(20)
+        storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        storage_bar.set_unlimited()
+        row_layout.addWidget(storage_bar)
 
         # Status label (right-aligned, same fixed styling as file-host column).
         status_label = QLabel()
@@ -671,48 +662,14 @@ class FileHostsSettingsWidget(QWidget):
 
         # ONLY update if we have valid data - NEVER clear existing display
         if total == 0 and left == 0:
-            # No cached data - keep current display unchanged
-            # (Initial "Loading..." will stay until first successful update)
             return
 
         # Validate storage data before updating
         if total <= 0 or left < 0 or left > total:
-            # Invalid data - keep current display unchanged (preserve existing good data)
             return
 
-        # Calculate percentages
-        used = total - left
-        percent_used = int((used / total) * 100) if total > 0 else 0
-        percent_free = 100 - percent_used
-
-        # Format strings for compact display and tooltip
-        from src.utils.format_utils import format_host_storage_size
-        left_formatted = format_host_storage_size(host_id, left)
-        total_formatted = format_host_storage_size(host_id, total)
-        used_formatted = format_host_storage_size(host_id, used)
-
-        # Compact format: show amount free (e.g., "15.2 GB free")
-        compact_format = self._format_storage_compact(left, total, host_id)
-
-        # Update progress bar with compact format
-        storage_bar.setValue(percent_free)
-        storage_bar.setFormat(compact_format)  # Shows "15.2 GB free"
-
-        # Detailed tooltip
-        tooltip = f"Storage: {left_formatted} free / {total_formatted} total\nUsed: {used_formatted} ({percent_used}%)"
-        storage_bar.setToolTip(tooltip)
-
-        # Color coding based on usage
-        if percent_used >= 90:
-            storage_bar.setProperty("storage_status", "low")
-        elif percent_used >= 75:
-            storage_bar.setProperty("storage_status", "medium")
-        else:
-            storage_bar.setProperty("storage_status", "plenty")
-
-        # Refresh styling
-        storage_bar.style().unpolish(storage_bar)
-        storage_bar.style().polish(storage_bar)
+        # StorageTrafficBar handles formatting, colors and tooltip internally.
+        storage_bar.update_storage(total, left, host_id)
 
 
     def refresh_test_results(self, host_id: str):

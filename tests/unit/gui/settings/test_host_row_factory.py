@@ -4,9 +4,10 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PyQt6.QtWidgets import QApplication, QLabel, QProgressBar, QPushButton
+from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
 
 from src.gui.settings.file_hosts_tab import FileHostsSettingsWidget
+from src.gui.widgets.custom_widgets import StorageTrafficBar
 
 
 @pytest.fixture(scope="module")
@@ -23,7 +24,7 @@ def test_file_host_with_storage_gets_progress_bar(qapp):
     widget = FileHostsSettingsWidget(parent=None, worker_manager=None)
     entry = widget.host_widgets.get('rapidgator')
     assert entry is not None
-    assert isinstance(entry['storage_bar'], QProgressBar)
+    assert isinstance(entry['storage_bar'], StorageTrafficBar)
 
 
 def test_image_host_row_omits_storage_slot(qapp):
