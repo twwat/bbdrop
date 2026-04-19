@@ -1286,9 +1286,9 @@ class FileHostConfigDialog(QDialog):
         percent_used = int((used / total) * 100) if total > 0 else 0
         percent_free = 100 - percent_used
 
-        # Format with already-imported format_binary_size
-        total_str = format_binary_size(total)
-        left_str = format_binary_size(left)
+        from src.utils.format_utils import format_host_storage_size
+        total_str = format_host_storage_size(self.host_id, total)
+        left_str = format_host_storage_size(self.host_id, left)
 
         self.storage_bar.setValue(percent_free)
         self.storage_bar.setFormat(f"{left_str} / {total_str} free ({percent_free}%)")

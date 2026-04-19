@@ -1094,6 +1094,7 @@ class StorageProgressBar(QWidget):
         self._total_bytes = 0
         self._left_bytes = 0
         self._left_formatted = ""  # Cache formatted string for performance
+        self._host_id: str = ""  # Host id — routes K2S family through family formatter
 
         self._setup_ui()
 
@@ -1118,7 +1119,7 @@ class StorageProgressBar(QWidget):
 
         layout.addWidget(self.progress_bar)
 
-    def update_storage(self, total_bytes: int, left_bytes: int):
+    def update_storage(self, total_bytes: int, left_bytes: int, host_id: str = ""):
         """Update storage display with new values.
 
         Thread Safety: This method MUST be called from the main GUI thread only.
@@ -1129,11 +1130,18 @@ class StorageProgressBar(QWidget):
         Args:
             total_bytes: Total storage capacity in bytes
             left_bytes: Free storage remaining in bytes
+            host_id: Host id — routes K2S family sizes through the family
+                formatter so quotas match K2S's site wording.
         """
         from PyQt6.QtCore import QThread
         assert QThread.currentThread() == self.thread(), \
             "update_storage() must be called from main GUI thread"
-        from src.utils.format_utils import format_binary_size
+        from src.utils.format_utils import format_host_storage_size
+
+        if host_id:
+            self._host_id = host_id
+        def _fmt(n: int) -> str:
+            return format_host_storage_size(self._host_id, n)
 
         # Validate inputs
         if total_bytes <= 0:
@@ -1173,7 +1181,7 @@ class StorageProgressBar(QWidget):
         self._left_bytes = left_bytes
 
         # Cache formatted string for performance (avoid re-formatting on resize)
-        self._left_formatted = format_binary_size(left_bytes)
+        self._left_formatted = _fmt(left_bytes)
 
         # Calculate percentages
         used_bytes = total_bytes - left_bytes
@@ -1182,8 +1190,8 @@ class StorageProgressBar(QWidget):
 
         # Format strings for tooltip
         left_formatted = self._left_formatted
-        total_formatted = format_binary_size(total_bytes)
-        used_formatted = format_binary_size(used_bytes)
+        total_formatted = _fmt(total_bytes)
+        used_formatted = _fmt(used_bytes)
 
         # Update progress bar - setValue shows FREE percentage (green when high)
         self.progress_bar.setValue(percent_free)

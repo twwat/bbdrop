@@ -491,12 +491,13 @@ class FileHostsSettingsWidget(QWidget):
         # Trigger test (result will be cached in QSettings)
         worker.test_connection()
 
-    def _format_storage_compact(self, left: int, total: int) -> str:
+    def _format_storage_compact(self, left: int, total: int, host_id: str = "") -> str:
         """Format storage as compact string showing amount free.
 
         Args:
             left: Free storage in bytes
             total: Total storage in bytes
+            host_id: Host identifier for family-aware formatting
 
         Returns:
             Compact storage string showing free amount (e.g., "15.2 GB free")
@@ -504,10 +505,8 @@ class FileHostsSettingsWidget(QWidget):
         if total <= 0:
             return "Unknown"
 
-        # Format free space with human-readable size
-        left_formatted = format_binary_size(left)
-
-        # Show amount free (e.g., "15.2 GB free")
+        from src.utils.format_utils import format_host_storage_size
+        left_formatted = format_host_storage_size(host_id, left)
         return f"{left_formatted} free"
 
     def refresh_storage_display(self, host_id: str):
@@ -557,12 +556,13 @@ class FileHostsSettingsWidget(QWidget):
         percent_free = 100 - percent_used
 
         # Format strings for compact display and tooltip
-        left_formatted = format_binary_size(left)
-        total_formatted = format_binary_size(total)
-        used_formatted = format_binary_size(used)
+        from src.utils.format_utils import format_host_storage_size
+        left_formatted = format_host_storage_size(host_id, left)
+        total_formatted = format_host_storage_size(host_id, total)
+        used_formatted = format_host_storage_size(host_id, used)
 
         # Compact format: show amount free (e.g., "15.2 GB free")
-        compact_format = self._format_storage_compact(left, total)
+        compact_format = self._format_storage_compact(left, total, host_id)
 
         # Update progress bar with compact format
         storage_bar.setValue(percent_free)

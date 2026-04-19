@@ -51,6 +51,39 @@ def format_binary_size(num_bytes: int | float, precision: int = 1) -> str:
     return f"{value:.{precision}f}\u00A0{units[unit_index]}"
 
 
+def format_k2s_family_size(num_bytes: int | float, precision: int = 1) -> str:
+    """K2S family storage display: binary prefixes, 1000-step rollover at TiB.
+
+    K2S's site shows total quota as "10000 GB" which users read as 10 TiB.
+    To match, this rolls over at 1000 GiB -> 1 TiB so 10000 GiB stored
+    renders as "10 TiB". Below 1000 GiB, delegates to format_binary_size.
+    """
+    GiB = 1024 ** 3
+    TiB_threshold = 1000 * GiB
+    try:
+        value = float(num_bytes or 0)
+    except Exception:
+        value = 0.0
+    if value < 0:
+        value = 0.0
+    if value >= TiB_threshold:
+        return f"{value / TiB_threshold:.{precision}f}\u00A0TiB"
+    return format_binary_size(value, precision)
+
+
+def format_host_storage_size(host_id: str, num_bytes: int | float, precision: int = 1) -> str:
+    """Single dispatcher for host-aware storage size formatting.
+
+    K2S family hosts use 1000-step TiB rollover (matches their site's wording);
+    all other hosts use standard binary formatting. Call this from every
+    storage-bar display so the rules live in one place.
+    """
+    from src.core.file_host_config import get_host_family
+    if host_id and get_host_family(host_id) == 'k2s':
+        return format_k2s_family_size(num_bytes, precision)
+    return format_binary_size(num_bytes, precision)
+
+
 def format_binary_rate(kib_per_s: float | int, precision: int = 1) -> str:
     """Format a transfer rate given in KiB/s using binary prefixes.
     

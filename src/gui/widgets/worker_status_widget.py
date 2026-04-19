@@ -976,13 +976,14 @@ class WorkerStatusWidget(QWidget):
         except Exception:
             return None
 
-    def _create_storage_progress_widget(self, used_bytes: int, total_bytes: int, worker_id: str) -> QWidget:
+    def _create_storage_progress_widget(self, used_bytes: int, total_bytes: int, worker_id: str, host_id: str = "") -> QWidget:
         """Create storage progress bar widget using reusable StorageProgressBar class.
 
         Args:
             used_bytes: Used storage in bytes
             total_bytes: Total storage in bytes
             worker_id: Worker identifier for tracking
+            host_id: File host id — routes K2S family through family formatter.
 
         Returns:
             StorageProgressBar widget configured with storage values
@@ -995,7 +996,7 @@ class WorkerStatusWidget(QWidget):
 
         # CRITICAL: Call update_storage() BEFORE setCellWidget() to avoid race condition
         # This ensures the widget is fully populated before Qt geometry events fire
-        storage_widget.update_storage(total_bytes, left_bytes)
+        storage_widget.update_storage(total_bytes, left_bytes, host_id)
 
         # Store worker_id for updates
         storage_widget.setProperty("worker_id", worker_id)
@@ -1552,7 +1553,9 @@ class WorkerStatusWidget(QWidget):
             left_bytes = total_bytes - used_bytes if total_bytes > 0 else 0
 
             # Update storage using the widget's update_storage() method
-            widget.update_storage(total_bytes, left_bytes)
+            worker = self._workers.get(worker_id)
+            host_id = (worker.host_id if worker else "") or ""
+            widget.update_storage(total_bytes, left_bytes, host_id)
 
     def _refresh_display(self):
         """Refresh the table display with current worker data."""
@@ -1833,7 +1836,8 @@ class WorkerStatusWidget(QWidget):
                         storage_widget = self._create_storage_progress_widget(
                             worker.storage_used_bytes,
                             worker.storage_total_bytes,
-                            worker.worker_id
+                            worker.worker_id,
+                            worker.host_id or ""
                         )
                     self.status_table.setCellWidget(row_idx, col_idx, storage_widget)
 
