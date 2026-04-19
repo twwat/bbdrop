@@ -1710,14 +1710,14 @@ class BBDropGUI(QMainWindow):
         self.template_combo.blockSignals(False)
     
     def manage_credentials(self):
-        """Open comprehensive settings to Image Hosts tab"""
+        """Open comprehensive settings to Hosts tab"""
         from src.gui.settings import TabIndex
-        self.open_comprehensive_settings(tab_index=TabIndex.IMAGE_HOSTS)
+        self.open_comprehensive_settings(tab_index=TabIndex.HOSTS)
 
     def manage_file_hosts(self):
-        """Open comprehensive settings to file hosts tab"""
+        """Open comprehensive settings to Hosts tab"""
         from src.gui.settings import TabIndex
-        self.open_comprehensive_settings(tab_index=TabIndex.FILE_HOSTS)
+        self.open_comprehensive_settings(tab_index=TabIndex.HOSTS)
 
     def open_comprehensive_settings(self, tab_index=0):
         """Open comprehensive settings dialog to specific tab"""

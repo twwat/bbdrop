@@ -139,7 +139,6 @@ class ComprehensiveSettingsDialog(QDialog):
 
         # Create tabs
         self.setup_general_tab()
-        self.setup_image_hosts_tab()
         self.setup_file_hosts_tab()
         self.setup_templates_tab()
         self.setup_tabs_tab()  # Create widgets but don't add tab
@@ -201,17 +200,6 @@ class ComprehensiveSettingsDialog(QDialog):
         self.general_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
         self._add_settings_page(self.general_tab, "General")
 
-    def setup_image_hosts_tab(self):
-        """Setup the Image Hosts tab using dedicated widget"""
-        from src.gui.settings.image_hosts_tab import ImageHostsSettingsWidget
-
-        self.image_hosts_widget = ImageHostsSettingsWidget(self)
-        self.image_hosts_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.IMAGE_HOSTS))
-        # Live-refresh the main window's host combo when hosts are enabled/disabled
-        if self.parent_window and hasattr(self.parent_window, 'refresh_image_host_combo'):
-            self.image_hosts_widget.settings_changed.connect(self.parent_window.refresh_image_host_combo)
-        self._add_settings_page(self.image_hosts_widget, "Image Hosts")
-
     def setup_templates_tab(self):
         """Setup the Templates tab (delegated to TemplatesTab widget)."""
         from src.gui.settings.templates_tab import TemplatesTab
@@ -265,22 +253,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.covers_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.COVERS))
         self._add_settings_page(self.covers_tab, "Cover Photos")
 
-        # Sync cover changes between Image Hosts tab and Covers tab
-        if hasattr(self, 'image_hosts_widget'):
-            self.image_hosts_widget.cover_gallery_changed.connect(
-                self.covers_tab.on_external_cover_gallery_change
-            )
-            self.image_hosts_widget.cover_host_changed.connect(
-                self.covers_tab.on_external_cover_host_change
-            )
-            # Disable cover host radios + icons when covers are toggled off
-            self.covers_tab.covers_enabled_check.toggled.connect(
-                self.image_hosts_widget.set_covers_enabled
-            )
-
-        # Same relay against the unified Hosts tab. The image_hosts_widget
-        # block above is removed in Task 8 (after image_hosts_tab.py is
-        # deleted); both coexist during the refactor.
+        # Sync cover changes between Hosts tab and Covers tab
         if hasattr(self, 'file_hosts_widget'):
             self.file_hosts_widget.cover_gallery_changed.connect(
                 self.covers_tab.on_external_cover_gallery_change
@@ -314,7 +287,7 @@ class ComprehensiveSettingsDialog(QDialog):
             error_label.setStyleSheet("color: red; font-weight: bold;")
             layout.addWidget(error_label)
             layout.addStretch()
-            self._add_settings_page(error_widget, "File Hosts")
+            self._add_settings_page(error_widget, "Hosts")
             return
 
         # Create file hosts widget (no signals - reads from QSettings cache)
@@ -333,7 +306,7 @@ class ComprehensiveSettingsDialog(QDialog):
             )
 
         # Add tab
-        self._add_settings_page(self.file_hosts_widget, "File Hosts")
+        self._add_settings_page(self.file_hosts_widget, "Hosts")
 
     def setup_proxy_tab(self):
         """Setup the Proxy settings tab."""
@@ -500,22 +473,6 @@ class ComprehensiveSettingsDialog(QDialog):
             save_image_host_setting('imx', 'upload_read_timeout', 120)
             save_image_host_setting('imx', 'auto_rename', True)
 
-            # Refresh Image Hosts tab if it exists
-            if hasattr(self, 'image_hosts_widget') and self.image_hosts_widget:
-                for panel in self.image_hosts_widget.panels.values():
-                    # Rebuild panel UI to reflect reset values
-                    panel.auto_retry_check.setChecked(False)
-                    panel.max_retries_spin.setValue(3)
-                    panel.concurrent_uploads_spin.setValue(4)
-                    panel.connect_timeout_spin.setValue(30)
-                    panel.inactivity_timeout_spin.setValue(120)
-                    panel.max_upload_time_spin.setValue(0)
-                    panel.max_file_size_spin.setValue(0)
-                    panel.thumbnail_size_combo.setCurrentIndex(2)
-                    panel.thumbnail_format_combo.setCurrentIndex(1)
-                    if hasattr(panel, 'auto_rename_check'):
-                        panel.auto_rename_check.setChecked(True)
-
             # Reset general tab
             if hasattr(self, 'general_tab'):
                 self.general_tab.reset_to_defaults()
@@ -645,14 +602,12 @@ class ComprehensiveSettingsDialog(QDialog):
 
         try:
             # NOTE: Tabs and Icons tabs are created but not added to tab widget
-            # Actual tab order: General(0), Image Hosts(1), File Hosts(2), Templates(3),
-            #                   Image Scan(4), Covers(5), Hooks(6), Proxy(7), Logs(8),
-            #                   Notifications(9), Archive(10), Video(11), Advanced(12)
+            # Actual tab order: General(0), Hosts(1), Templates(2),
+            #                   Image Scan(3), Covers(4), Hooks(5), Proxy(6), Logs(7),
+            #                   Notifications(8), Archive(9), Video(10), Advanced(11)
             if current_index == TabIndex.GENERAL:
                 return self.general_tab.save_settings()
-            elif current_index == TabIndex.IMAGE_HOSTS:
-                return self.image_hosts_widget.save_to_config()
-            elif current_index == TabIndex.FILE_HOSTS:
+            elif current_index == TabIndex.HOSTS:
                 if hasattr(self, 'file_hosts_widget') and self.file_hosts_widget:
                     self.file_hosts_widget.save_to_config()
                 return True

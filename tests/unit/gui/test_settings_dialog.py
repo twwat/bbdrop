@@ -589,10 +589,6 @@ class TestSettingsDialogReset:
         # Change from defaults
         dialog.general_tab.theme_combo.setCurrentText("light")
 
-        # Mock the image_hosts_widget.panels that _handle_reset_confirmation iterates
-        if hasattr(dialog, 'image_hosts_widget') and dialog.image_hosts_widget:
-            dialog.image_hosts_widget.panels = {}
-
         # Reset — should not raise
         dialog._handle_reset_confirmation(QMessageBox.StandardButton.Yes)
 

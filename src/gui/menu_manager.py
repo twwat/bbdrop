@@ -184,8 +184,7 @@ class MenuManager(QObject):
             from src.gui.settings import TabIndex
             for label, tab in (
                 ("General", TabIndex.GENERAL),
-                ("Image Hosts", TabIndex.IMAGE_HOSTS),
-                ("File Hosts", TabIndex.FILE_HOSTS),
+                ("Hosts", TabIndex.HOSTS),
                 ("BBCode templates", TabIndex.TEMPLATES),
                 ("Image Scanner", TabIndex.IMAGE_SCAN),
                 ("Cover Photos", TabIndex.COVERS),

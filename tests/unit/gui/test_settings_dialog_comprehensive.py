@@ -198,7 +198,7 @@ class TestSettingsDialogGeneralTab:
         dialog = ComprehensiveSettingsDialog()
         qtbot.addWidget(dialog)
 
-        # Sliders live on per-host config panels, accessed via image_hosts_widget
+        # Sliders live on per-host config panels, accessed via file_hosts_widget (Hosts tab)
         from src.gui.widgets.image_host_config_panel import ImageHostConfigPanel
         from src.core.image_host_config import ImageHostConfig
         config = ImageHostConfig(name='IMX.to', host_id='imx', auth_type='api_key')
