@@ -597,7 +597,8 @@ class WorkerSignalHandler(QObject):
                     worker_type='filehost',
                     hostname=worker.hostname,
                     speed_bps=worker.speed_bps,
-                    status=status_text
+                    status=status_text,
+                    host_id=host_id
                 )
             else:
                 # Create new worker with this status
@@ -606,7 +607,8 @@ class WorkerSignalHandler(QObject):
                     worker_type='filehost',
                     hostname=host_id,  # Use host_id as display name
                     speed_bps=0.0,
-                    status=status_text
+                    status=status_text,
+                    host_id=host_id
                 )
 
     def _on_enabled_workers_changed(self, enabled_host_ids: list) -> None:
