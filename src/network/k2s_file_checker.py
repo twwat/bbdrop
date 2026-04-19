@@ -98,18 +98,28 @@ class K2SFileChecker:
             log(f"K2S getFoldersList failed for folder '{folder_id}': {e}", level="error", category="scanner")
             subfolder_ids = []
 
-        # Enumerate files in this folder (skip root — root has no files directly)
+        # Enumerate files in this folder (skip root — root has no files directly).
+        # Paginate with the API's max page size (1000); API rejects larger limits
+        # with HTTP 406 "Params limit must be between 1 and 1000".
         if folder_id != '/':
-            try:
-                fresp = self._api_post('getFilesList', {
-                    'parent': folder_id,
-                    'limit': 10000,
-                    'extended_info': True,
-                })
-                files = fresp.get('files', [])
-                all_files.extend(files)
-            except Exception as e:
-                log(f"K2S getFilesList failed for folder '{folder_id}': {e}", level="error", category="scanner")
+            page_size = 1000
+            offset = 0
+            while True:
+                try:
+                    fresp = self._api_post('getFilesList', {
+                        'parent': folder_id,
+                        'limit': page_size,
+                        'offset': offset,
+                        'extended_info': True,
+                    })
+                except Exception as e:
+                    log(f"K2S getFilesList failed for folder '{folder_id}': {e}", level="error", category="scanner")
+                    break
+                page = fresp.get('files', [])
+                all_files.extend(page)
+                if len(page) < page_size:
+                    break
+                offset += page_size
 
         # Recurse into subfolders
         for subfolder_id in subfolder_ids:
