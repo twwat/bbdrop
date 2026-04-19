@@ -16,12 +16,11 @@ class TestRapidgatorFileCheckerBasic:
     @patch.object(RapidgatorFileChecker, '_api_call')
     def test_all_available(self, mock_api, checker):
         mock_api.return_value = {
-            "response": {
-                "links": [
-                    {"url": "https://rapidgator.net/file/abc/a.zip", "filename": "a.zip", "status": 1, "size": 1000},
-                    {"url": "https://rapidgator.net/file/def/b.zip", "filename": "b.zip", "status": 1, "size": 2000},
-                ]
-            }
+            "response": [
+                {"url": "https://rapidgator.net/file/abc/a.zip", "filename": "a.zip", "status": "ACCESS", "size": 1000},
+                {"url": "https://rapidgator.net/file/def/b.zip", "filename": "b.zip", "status": "ACCESS", "size": 2000},
+            ],
+            "status": 200,
         }
         urls = ["https://rapidgator.net/file/abc/a.zip", "https://rapidgator.net/file/def/b.zip"]
         result = checker.check_urls(urls)
@@ -31,11 +30,10 @@ class TestRapidgatorFileCheckerBasic:
     @patch.object(RapidgatorFileChecker, '_api_call')
     def test_unavailable_file(self, mock_api, checker):
         mock_api.return_value = {
-            "response": {
-                "links": [
-                    {"url": "https://rapidgator.net/file/abc/a.zip", "filename": "a.zip", "status": 0, "size": 0},
-                ]
-            }
+            "response": [
+                {"url": "https://rapidgator.net/file/abc/a.zip", "status": "NO ACCESS"},
+            ],
+            "status": 200,
         }
         result = checker.check_urls(["https://rapidgator.net/file/abc/a.zip"])
         assert result["https://rapidgator.net/file/abc/a.zip"] == False
@@ -49,9 +47,8 @@ class TestRapidgatorFileCheckerBatching:
     @patch.object(RapidgatorFileChecker, '_api_call')
     def test_batch_splits_at_25(self, mock_api, checker):
         mock_api.return_value = {
-            "response": {
-                "links": [{"url": f"https://rg.to/file/{i}", "status": 1} for i in range(25)]
-            }
+            "response": [{"url": f"https://rg.to/file/{i}", "status": "ACCESS"} for i in range(25)],
+            "status": 200,
         }
         urls = [f"https://rg.to/file/{i}" for i in range(60)]
         checker.check_urls(urls)
@@ -60,7 +57,8 @@ class TestRapidgatorFileCheckerBatching:
     @patch.object(RapidgatorFileChecker, '_api_call')
     def test_under_25_single_call(self, mock_api, checker):
         mock_api.return_value = {
-            "response": {"links": [{"url": "u", "status": 1}]}
+            "response": [{"url": "u", "status": "ACCESS"}],
+            "status": 200,
         }
         checker.check_urls(["https://rg.to/file/1"])
         assert mock_api.call_count == 1

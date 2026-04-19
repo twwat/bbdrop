@@ -80,12 +80,18 @@ class RapidgatorFileChecker:
             batch = urls[i:i + self.BATCH_SIZE]
             try:
                 response = self._api_call(batch)
-                links = response.get('response', {}).get('links', [])
+                # API returns {"response": [{"url": ..., "status": "ACCESS"|"NO ACCESS"|...}],
+                # "status": 200}. A missing URL simply won't appear in the list.
+                links = response.get('response') or []
+                if not isinstance(links, list):
+                    links = []
                 for link_info in links:
+                    if not isinstance(link_info, dict):
+                        continue
                     link_url = link_info.get('url', '')
-                    link_status = link_info.get('status', 0)
+                    link_status = link_info.get('status', '')
                     if link_url in result:
-                        result[link_url] = (link_status == 1)
+                        result[link_url] = (str(link_status).upper() == 'ACCESS')
             except Exception as e:
                 log(f"RapidGator check_link batch failed: {e}", level="error", category="scanner")
 
