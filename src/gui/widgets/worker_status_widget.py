@@ -1206,16 +1206,21 @@ class WorkerStatusWidget(QWidget):
             storage_total = 0
             lookup_id = host_id or hostname.lower()
             if worker_type == 'filehost':
-                settings = QSettings("BBDropUploader", "BBDropGUI")
-                total_str = settings.value(f"FileHosts/{lookup_id}/storage_total", "0")
-                left_str = settings.value(f"FileHosts/{lookup_id}/storage_left", "0")
-                try:
-                    storage_total = int(total_str) if total_str else 0
-                    storage_left = int(left_str) if left_str else 0
-                    storage_used = storage_total - storage_left
-                except (ValueError, TypeError):
-                    storage_used = 0
-                    storage_total = 0
+                from src.core.file_host_config import get_host_family
+                if get_host_family(lookup_id) == 'k2s':
+                    from src.core.file_host_config import get_k2s_family_storage
+                    storage_used, storage_total = get_k2s_family_storage()
+                else:
+                    settings = QSettings("BBDropUploader", "BBDropGUI")
+                    total_str = settings.value(f"FileHosts/{lookup_id}/storage_total", "0")
+                    left_str = settings.value(f"FileHosts/{lookup_id}/storage_left", "0")
+                    try:
+                        storage_total = int(total_str) if total_str else 0
+                        storage_left = int(left_str) if left_str else 0
+                        storage_used = storage_total - storage_left
+                    except (ValueError, TypeError):
+                        storage_used = 0
+                        storage_total = 0
 
             self._workers[worker_id] = WorkerStatus(
                 worker_id=worker_id,
