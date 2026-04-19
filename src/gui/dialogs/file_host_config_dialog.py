@@ -442,12 +442,8 @@ class FileHostConfigDialog(QDialog):
             storage_group = QGroupBox("Storage")
             storage_layout = QVBoxLayout(storage_group)
 
-            self.storage_bar = QProgressBar()
-            self.storage_bar.setMaximum(100)
-            self.storage_bar.setValue(0)
-            self.storage_bar.setTextVisible(True)
-            self.storage_bar.setMaximumHeight(20)
-            self.storage_bar.setProperty("class", "storage-bar")
+            from src.gui.widgets.custom_widgets import StorageTrafficBar
+            self.storage_bar = StorageTrafficBar()
 
             if is_k2s_family:
                 self.storage_bar.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1281,27 +1277,23 @@ class FileHostConfigDialog(QDialog):
                 log(f"Invalid cached storage for {self.host_id}: total={total}, left={left}", level="warning", category="file_hosts")
                 return
 
-        # Calculate percentages
-        used = total - left
-        percent_used = int((used / total) * 100) if total > 0 else 0
-        percent_free = 100 - percent_used
-
-        from src.utils.format_utils import format_host_storage_size
-        total_str = format_host_storage_size(self.host_id, total)
-        left_str = format_host_storage_size(self.host_id, left)
-
-        self.storage_bar.setValue(percent_free)
-        self.storage_bar.setFormat(f"{left_str} / {total_str} free ({percent_free}%)")
-
-        if percent_used >= 90:
-            self.storage_bar.setProperty("storage_status", "low")
-        elif percent_used >= 75:
-            self.storage_bar.setProperty("storage_status", "medium")
-        else:
-            self.storage_bar.setProperty("storage_status", "plenty")
-
-        self.storage_bar.style().unpolish(self.storage_bar)
-        self.storage_bar.style().polish(self.storage_bar)
+        self.storage_bar.update_storage(
+            total_bytes=total,
+            left_bytes=left,
+            host_id=self.host_id,
+        )
+        from src.core.file_host_config import get_host_family
+        if get_host_family(self.host_id) == "k2s":
+            from PyQt6.QtCore import QSettings
+            s = QSettings("BBDropUploader", "BBDropGUI")
+            prefix = f"FileHosts/{self.host_id}"
+            try:
+                avail = int(s.value(f"{prefix}/traffic_available", "0") or 0)
+                ceiling = int(s.value(f"{prefix}/traffic_ceiling", "0") or 0)
+            except (TypeError, ValueError):
+                avail, ceiling = 0, 0
+            reset_at = s.value(f"{prefix}/traffic_reset_at", "", type=str) or ""
+            self.storage_bar.update_traffic(avail, ceiling, reset_at)
 
     def load_and_display_test_results(self):
         """Load and display existing test results from QSettings cache.
@@ -1521,22 +1513,23 @@ class FileHostConfigDialog(QDialog):
             return
 
         # Update storage bar
-        used = total - left
-        percent_used = int((used / total) * 100) if total > 0 else 0
-        percent_free = 100 - percent_used
-
-        total_str = format_binary_size(total)
-        left_str = format_binary_size(left)
-
-        self.storage_bar.setValue(percent_free)
-        self.storage_bar.setFormat(f"{left_str} / {total_str} free ({percent_free}%)")
-
-        if percent_used >= 90:
-            self.storage_bar.setProperty("storage_status", "low")
-        elif percent_used >= 75:
-            self.storage_bar.setProperty("storage_status", "medium")
-        else:
-            self.storage_bar.setProperty("storage_status", "plenty")
+        self.storage_bar.update_storage(
+            total_bytes=total,
+            left_bytes=left,
+            host_id=self.host_id,
+        )
+        from src.core.file_host_config import get_host_family
+        if get_host_family(self.host_id) == "k2s":
+            from PyQt6.QtCore import QSettings
+            s = QSettings("BBDropUploader", "BBDropGUI")
+            prefix = f"FileHosts/{self.host_id}"
+            try:
+                avail = int(s.value(f"{prefix}/traffic_available", "0") or 0)
+                ceiling = int(s.value(f"{prefix}/traffic_ceiling", "0") or 0)
+            except (TypeError, ValueError):
+                avail, ceiling = 0, 0
+            reset_at = s.value(f"{prefix}/traffic_reset_at", "", type=str) or ""
+            self.storage_bar.update_traffic(avail, ceiling, reset_at)
 
     def _on_storage_bar_clicked(self, event):
         """Open dialog to edit K2S family storage quota."""

@@ -338,8 +338,9 @@ class TestFileHostConfigDialogInit:
         )
         qtbot.addWidget(dialog)
 
+        from src.gui.widgets.custom_widgets import StorageTrafficBar
         assert dialog.storage_bar is not None
-        assert isinstance(dialog.storage_bar, QProgressBar)
+        assert isinstance(dialog.storage_bar, StorageTrafficBar)
 
     def test_log_list_initialized(self, qtbot, mock_host_config, mock_worker_manager,
                                    mock_main_widgets, dialog_patches):
@@ -1079,8 +1080,11 @@ class TestStorageDisplay:
         qtbot.addWidget(dialog)
 
         # Storage bar should show cached values
+        from src.gui.widgets.custom_widgets import StorageTrafficBar
         assert dialog.storage_bar is not None
-        assert dialog.storage_bar.value() == 50  # 50% free
+        assert isinstance(dialog.storage_bar, StorageTrafficBar)
+        assert dialog.storage_bar._total_bytes == 1073741824
+        assert dialog.storage_bar._left_bytes == 536870912
 
     def test_storage_updated_signal_updates_bar(self, qtbot, mock_host_config,
                                                  mock_worker_manager, mock_main_widgets,
@@ -1098,8 +1102,11 @@ class TestStorageDisplay:
 
         dialog._on_worker_storage_updated("testhost", total, left)
 
-        # Should update to 25% free (75% used)
-        assert dialog.storage_bar.value() == 25
+        # Should update to show total and left bytes
+        from src.gui.widgets.custom_widgets import StorageTrafficBar
+        assert isinstance(dialog.storage_bar, StorageTrafficBar)
+        assert dialog.storage_bar._total_bytes == total
+        assert dialog.storage_bar._left_bytes == left
 
 
 # ============================================================================
@@ -1279,6 +1286,19 @@ class TestBBCodeLinkFormatIntegration:
         labels = dialog.findChildren(QLabel)
         bbcode_labels = [l for l in labels if "BBCode" in l.text()]
         assert any("link format" in l.text().lower() for l in bbcode_labels)
+
+
+def test_config_dialog_uses_storage_traffic_bar(qtbot, mock_host_config, mock_worker_manager,
+                                                  mock_main_widgets, dialog_patches):
+    """The file host config dialog embeds a StorageTrafficBar, not a raw QProgressBar."""
+    from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog
+    from src.gui.widgets.custom_widgets import StorageTrafficBar
+    dialog = FileHostConfigDialog(
+        None, "testhost", mock_host_config,
+        mock_main_widgets, mock_worker_manager
+    )
+    qtbot.addWidget(dialog)
+    assert isinstance(dialog.storage_bar, StorageTrafficBar)
 
 
 # ============================================================================
