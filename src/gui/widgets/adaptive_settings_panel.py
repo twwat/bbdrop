@@ -19,9 +19,9 @@ class AdaptiveQuickSettingsPanel(QWidget):
     - Individual button width → determines TEXT vs ICON per button
 
     Result: 3 possible layout modes:
-    - 2 rows: Row 1: Settings + Theme (icon) | Row 2: Image Hosts, File Hosts, Templates, Hooks, Logs, Help (icons only)
-    - 3 rows: Row 1: Settings + Theme (icon) | Row 2: Image Hosts, File Hosts, Templates, Hooks | Row 3: Logs, Help, Stats, Link Scan
-    - 4 rows: Row 1: Settings + Theme (icon) | Row 2: Image Hosts, File Hosts | Row 3: Templates, Hooks | Row 4: Logs, Help, Stats, Link Scan
+    - 2 rows: Row 1: Settings + Theme (icon) | Row 2: Hosts, Files, Templates, Hooks, Logs, Help (icons only)
+    - 3 rows: Row 1: Settings + Theme (icon) | Row 2: Hosts, Files, Templates, Hooks | Row 3: Logs, Help, Stats, Link Scan
+    - 4 rows: Row 1: Settings + Theme (icon) | Row 2: Hosts, Files | Row 3: Templates, Hooks | Row 4: Logs, Help, Stats, Link Scan
     """
 
     # Vertical thresholds - determine NUMBER OF ROWS (2, 3, or 4)
@@ -99,9 +99,9 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
         Args:
             settings_btn: Comprehensive Settings button
-            credentials_btn: Credentials manager button
+            credentials_btn: Hosts settings button
             templates_btn: Templates manager button
-            file_hosts_btn: File Hosts manager button
+            file_hosts_btn: File Manager dialog button
             hooks_btn: Hooks configuration button
             log_viewer_btn: Log viewer button
             help_btn: Help/documentation button
@@ -125,9 +125,9 @@ class AdaptiveQuickSettingsPanel(QWidget):
         # Store original button text for restoration
         self._button_labels = {
             'settings': ' Settings',
-            'credentials': ' Image Hosts',
+            'hosts': ' Hosts',
             'templates': ' Templates',
-            'file_hosts': '  File Hosts',
+            'files': '  Files',
             'hooks': '  App Hooks',
             'log_viewer': ' Logs',
             'help': ' Docs',
@@ -223,13 +223,13 @@ class AdaptiveQuickSettingsPanel(QWidget):
             ]
         elif self._num_rows == 3:
             # Row 1: Settings checks width, Theme is icon-only
-            # Row 2: Credentials, Templates, File Hosts check width
-            # Row 3: Hooks, Logs, Help, Statistics, Online Checker, File Manager check width
+            # Row 2: Hosts, Files, Templates, Hooks check width
+            # Row 3: Logs, Help, Statistics, Link Scan, File Manager check width
             buttons_to_check = [
                 (self.settings_btn, 'settings'),
-                (self.credentials_btn, 'credentials'),
+                (self.credentials_btn, 'hosts'),
                 (self.templates_btn, 'templates'),
-                (self.file_hosts_btn, 'file_hosts'),
+                (self.file_hosts_btn, 'files'),
                 (self.hooks_btn, 'hooks'),
                 (self.log_viewer_btn, 'log_viewer'),
                 (self.help_btn, 'help'),
@@ -239,14 +239,14 @@ class AdaptiveQuickSettingsPanel(QWidget):
             ]
         elif self._num_rows == 4:
             # Row 1: Settings checks width, Theme is icon-only
-            # Row 2: Credentials, Templates check width
-            # Row 3: File Hosts, Hooks check width
-            # Row 4: Logs, Help, Statistics, Online Checker, File Manager check width
+            # Row 2: Hosts, Files check width
+            # Row 3: Templates, Hooks check width
+            # Row 4: Logs, Help, Statistics, Link Scan, File Manager check width
             buttons_to_check = [
                 (self.settings_btn, 'settings'),
-                (self.credentials_btn, 'credentials'),
+                (self.credentials_btn, 'hosts'),
                 (self.templates_btn, 'templates'),
-                (self.file_hosts_btn, 'file_hosts'),
+                (self.file_hosts_btn, 'files'),
                 (self.hooks_btn, 'hooks'),
                 (self.log_viewer_btn, 'log_viewer'),
                 (self.help_btn, 'help'),
@@ -271,7 +271,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
     def _build_2_row(self):
         """Build 2 row layout
         Row 1: Settings (expanding) + Theme (icon-only, square, right)
-        Row 2: Image Hosts, File Hosts, Templates, Hooks, Logs, Help, Stats, Link Scan (all icon-only)
+        Row 2: Hosts, Files, Templates, Hooks, Logs, Help, Stats, Link Scan (all icon-only)
         """
         self._clear_layout()
 
@@ -306,7 +306,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
         main.addLayout(row1)
 
-        # Second row: Image Hosts, File Hosts, Templates, Hooks, Logs, Help, Statistics, Online Checker (all icon-only per spec)
+        # Second row: Hosts, Files, Templates, Hooks, Logs, Help, Statistics, Link Scan, File Manager (all icon-only per spec)
         row2 = QHBoxLayout()
         row2.setSpacing(6)
 
@@ -339,8 +339,8 @@ class AdaptiveQuickSettingsPanel(QWidget):
     def _build_3_row(self):
         """Build 3 row layout
         Row 1: Settings (expanding) + Theme (icon-only, square, right)
-        Row 2: Image Hosts, File Hosts, Templates, Hooks (each checks own width for text)
-        Row 3: Logs, Help, Statistics, Online Checker (each checks own width for text)
+        Row 2: Hosts, Files, Templates, Hooks (each checks own width for text)
+        Row 3: Logs, Help, Statistics, Link Scan, File Manager (each checks own width for text)
         """
         self._clear_layout()
 
@@ -375,7 +375,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
         main.addLayout(row1)
 
-        # Second row: Image Hosts, File Hosts, Templates, Hooks (equal width, check own width for text)
+        # Second row: Hosts, Files, Templates, Hooks (equal width, check own width for text)
         row2 = QHBoxLayout()
         row2.setSpacing(6)
 
@@ -426,9 +426,9 @@ class AdaptiveQuickSettingsPanel(QWidget):
     def _build_4_row(self):
         """Build 4 row layout
         Row 1: Settings (expanding) + Theme (icon-only, square, right)
-        Row 2: Image Hosts, File Hosts (equal width, check own width for text)
+        Row 2: Hosts, Files (equal width, check own width for text)
         Row 3: Templates, Hooks (equal width, check own width for text)
-        Row 4: Logs, Help, Statistics, Online Checker (equal width, check own width for text)
+        Row 4: Logs, Help, Statistics, Link Scan, File Manager (equal width, check own width for text)
         """
         self._clear_layout()
 
@@ -463,7 +463,7 @@ class AdaptiveQuickSettingsPanel(QWidget):
 
         main.addLayout(row1)
 
-        # Second row: Image Hosts, File Hosts (equal width, check own width for text)
+        # Second row: Hosts, Files (equal width, check own width for text)
         row2 = QHBoxLayout()
         row2.setSpacing(6)
 

@@ -392,7 +392,7 @@ class LayoutManager(QObject):
         mw.manage_templates_btn = QPushButton("") # previously  QPushButton(" Templates")
         mw.manage_templates_btn.setToolTip("Manage BBCode templates for gallery output")
         mw.manage_credentials_btn = QPushButton("")
-        mw.manage_credentials_btn.setToolTip("Configure image host settings and credentials")
+        mw.manage_credentials_btn.setToolTip("Configure image and file host settings")
 
         # Add icons if available
 
@@ -456,9 +456,9 @@ class LayoutManager(QObject):
         from src.gui.settings import TabIndex as _TabIndex
         mw.hooks_btn.clicked.connect(lambda: mw.open_comprehensive_settings(tab_index=_TabIndex.HOOKS))
 
-        # File Hosts button (opens comprehensive settings to File Hosts tab)
+        # File Manager button (opens File Manager dialog)
         mw.file_hosts_btn = QPushButton("")
-        mw.file_hosts_btn.setToolTip("Configure file host credentials and settings")
+        mw.file_hosts_btn.setToolTip("Open the remote file manager")
         try:
             icon_mgr = get_icon_manager()
             if icon_mgr:
@@ -469,7 +469,7 @@ class LayoutManager(QObject):
         except Exception as e:
             log(f"Exception in main_window: {e}", level="error", category="ui")
             raise
-        mw.file_hosts_btn.clicked.connect(mw.manage_file_hosts)
+        mw.file_hosts_btn.clicked.connect(mw.open_file_manager_dialog)
         mw.file_hosts_btn.setProperty("class", "quick-settings-btn")
 
         # Theme toggle button (icon-only, small)
