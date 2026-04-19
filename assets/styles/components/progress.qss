@@ -22,6 +22,12 @@ QLabel[class="progress-text-large"] { background: transparent; font-weight: bold
 /* Storage bars font size */
 QProgressBar[class="storage-bar"] { font-size: 11px; font-weight: bold; }
 
+/* Traffic strip: thin amber-accent bar under the storage bar (K2S daily quota).
+   Uses an always-on accent color distinct from the storage-bar palette so the
+   two bars are visually independent. */
+QProgressBar[class="traffic-strip"]        { border-radius: 3px; }
+QProgressBar[class="traffic-strip"]::chunk { border-radius: 2px; }
+
 /* ==========================================================================
    LIGHT THEME
    ========================================================================== */
@@ -59,6 +65,10 @@ QProgressBar[storage_status="low"]::chunk     { background-color: $colors.light.
 /* Storage progress bars - unknown/unavailable (neutral gray) */
 QProgressBar[storage_status="unknown"]         { border: 1px solid #d0d0d0; background-color: $colors.light.background.secondary; }
 QProgressBar[storage_status="unknown"]::chunk  { background-color: $colors.light.border.default; }
+
+/* Traffic strip (light) — amber accent independent of storage_status */
+QProgressBar[class="traffic-strip"]        { border: 1px solid #b45309; background-color: #fef3c7; }
+QProgressBar[class="traffic-strip"]::chunk { background-color: #f59e0b; }
 
 /* Progress text colors */
 QProgressBar[class="overall-progress"]      { color: #222222; }
@@ -104,6 +114,10 @@ QProgressBar[storage_status="low"]::chunk     { background-color: $colors.dark.p
 /* Storage progress bars - unknown/unavailable (neutral gray) */
 QProgressBar[storage_status="unknown"]         { border: 1px solid $colors.dark.border.default; background-color: $colors.dark.scrollbar.background; }
 QProgressBar[storage_status="unknown"]::chunk  { background-color: $colors.dark.progress.default; }
+
+/* Traffic strip (dark) — amber accent independent of storage_status */
+QProgressBar[class="traffic-strip"]        { border: 1px solid #78350f; background-color: #1f1206; }
+QProgressBar[class="traffic-strip"]::chunk { background-color: #f59e0b; }
 
 /* Progress text colors */
 QProgressBar[class="overall-progress"]      { color: #eeeeee; }

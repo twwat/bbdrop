@@ -1160,7 +1160,7 @@ class StorageTrafficBar(QWidget):
         self.setFixedHeight(24)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(2, 1, 2, 2)
         layout.setSpacing(0)
 
         self.main_bar = QProgressBar()
@@ -1173,7 +1173,7 @@ class StorageTrafficBar(QWidget):
         self.main_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.traffic_strip = QProgressBar()
-        self.traffic_strip.setFixedHeight(5)
+        self.traffic_strip.setFixedHeight(7)
         self.traffic_strip.setMaximum(100)
         self.traffic_strip.setValue(0)
         self.traffic_strip.setTextVisible(False)
@@ -1337,7 +1337,8 @@ class StorageTrafficBar(QWidget):
         """Update the thin traffic strip below the main bar (K2S family only).
 
         Strip is hidden if no traffic data is available; otherwise renders
-        percent remaining with the same color thresholds as the main bar.
+        percent remaining with a consistent amber accent color (styled via
+        the ``traffic-strip`` QSS class, independent of storage_status).
         """
         self._traffic_available = max(0, int(available_bytes or 0))
         self._traffic_ceiling = max(0, int(ceiling_bytes or 0))
@@ -1352,14 +1353,6 @@ class StorageTrafficBar(QWidget):
         free_pct = 100 - used_pct
 
         self.traffic_strip.setValue(free_pct)
-        if used_pct >= 90:
-            self.traffic_strip.setProperty("storage_status", "low")
-        elif used_pct >= 75:
-            self.traffic_strip.setProperty("storage_status", "medium")
-        else:
-            self.traffic_strip.setProperty("storage_status", "plenty")
-        self.traffic_strip.style().unpolish(self.traffic_strip)
-        self.traffic_strip.style().polish(self.traffic_strip)
         self.traffic_strip.setVisible(True)
 
         self._refresh_tooltip()
@@ -1405,7 +1398,7 @@ class StorageTrafficBar(QWidget):
         self.primary = "traffic" if self.primary == "storage" else "storage"
         self._persist_primary()
         if self.primary == "traffic":
-            self.main_bar.setFixedHeight(5)
+            self.main_bar.setFixedHeight(7)
             self.main_bar.setTextVisible(False)
             self.traffic_strip.setFixedHeight(14)
             self.traffic_strip.setTextVisible(True)
@@ -1415,7 +1408,7 @@ class StorageTrafficBar(QWidget):
             self.main_bar.setFixedHeight(14)
             self.main_bar.setTextVisible(True)
             self._update_text_format(self.width())
-            self.traffic_strip.setFixedHeight(5)
+            self.traffic_strip.setFixedHeight(7)
             self.traffic_strip.setTextVisible(False)
             self.traffic_strip.setFormat("")
 
