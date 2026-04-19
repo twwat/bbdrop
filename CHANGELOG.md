@@ -4,6 +4,56 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.8] - 2026-04-19 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.7...v0.9.8))
+
+### Added
+- **File Manager persistent cache**: File list cache now survives across sessions via SQLite, with configurable TTL in **Settings → Advanced**
+  - Cache entries keyed by host and pagination state for accurate resumption
+  - Galleries linked via file_host_uploads table; file list displays Gallery, Downloads, and Last DL columns
+  - Loading feedback ("Loading…") shown in tree and file list during refresh
+- **K2S family shared storage display**: Keep2Share, FileBoom, and TezFiles now display shared 10 TiB quota across all three hosts, matching the host's UI
+  - Clickable storage bar in **File Hosts** tab and worker status panel opens quota editor for quick adjustment
+  - Daily traffic line visible in storage bar tooltip for bandwidth monitoring
+  - Storage usage auto-updates on scan completion and file host uploads
+- **Contact Sheets tab (renamed from Video)**: Video settings tab renamed for clarity and redesigned with two-column grid layout
+  - Video template placeholders added to syntax highlighter
+  - Infobuttons reorganised for better navigation
+- **BBCode link format editor**: Customisable format string for file host download links accessible via file host config dialog
+  - `#fileSize#` placeholder now available in file host link templates for including file sizes in BBCode
+  - PlaceholderEditorDialog supports all format, link, and metadata placeholders with live syntax highlighting
+- **Customisable dock layout**: Save and restore window panel layouts via View menu
+  - Preset layouts selectable from View menu
+  - **Edit Layout** mode to unlock docks for rearrangement; a compact drag handle replaces the dock title bar when unlocked
+  - Reset Layout entry to restore defaults
+  - Layout persists across sessions via `saveState`/`restoreState`
+- **Settings menu**: All 13 settings tabs now accessible directly from the **Settings** menu
+
+### Changed
+- **Worker table speed + status columns combined**: Speed and status text now share a single column for a tighter layout; hiding this column is respected across restarts
+- **File Manager for video galleries**: Manage Files menu item no longer appears for video queue entries
+- **K2S upload access**: K2S family uploads now explicitly set `access=public` by default
+- **Post Title template field**: Templates gain a per-template Post Title with `#galleryName#` and `#galleryTitle#` support; BBCode regeneration and notifications debounced during file host upload bursts
+- **Worker table filter alignment**: Filter button stays aligned regardless of columns; icon column is non-clickable
+- **Quieter logs**: Routine settings-save, startup-complete, and rename-worker auth-success logs demoted to debug
+
+### Fixed
+- **Theme toggle preserves storage bar**: Traffic/storage bar accent is re-applied after a theme switch so the display no longer reverts
+- **Screenshot sheet metadata**: FPS, bitrate, and audio track info now formatted correctly on the screenshot sheet overlay
+- **File Manager trash pagination**: Page state is preserved when browsing the trash view
+- **File Manager token refresh**: RapidGator refreshes the session token on "Session doesn't exist" instead of failing
+- **File Manager domain selection**: K2S Copy Link uses the correct domain per host (K2S, FileBoom, or TezFiles)
+- **File Manager folder errors**: Failed folder fetches now surface visibly in the tree instead of failing silently
+- **File Manager file navigation**: Clicking a file opens that file's page, not `/myfiles`
+- **File Manager disabled host**: Switching to a disabled file host no longer crashes
+- **File Manager folder tree**: `..` entries no longer appear in the folder tree
+- **File Manager gallery column**: Gallery column is populated correctly on cached file-list renders
+- **File Manager session cleanup**: Stale session references are evicted when a file host worker is disabled
+- **K2S / RapidGator upload retry**: Resolved an UnboundLocalError on upload retry
+- **Startup progress bar**: Progress bar now seeds from the combined byte-weighted percent on queue load instead of snapping
+- **UTF-8 INI handling**: All INI file read/write paths now enforce UTF-8 so non-ASCII values round-trip correctly
+- **Scanner robustness**: K2S inventory cache is thread-safe; missing inventory files are treated as offline rather than errors; K2S storage is written back on scan completion and incremented thread-safely during uploads
+- **Dock layout polish**: Bottom docks no longer lump or cascade on resize; Reset Layout always works; `View Panels` toggles work in locked mode; dock title-bar cursor, tooltips, and button sizing corrected
+
 ## [0.9.7] - 2026-04-15 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.6...v0.9.7))
 
 ### Added
