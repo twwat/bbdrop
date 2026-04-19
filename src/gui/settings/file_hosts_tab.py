@@ -321,6 +321,9 @@ class FileHostsSettingsWidget(QWidget):
         storage_bar = StorageTrafficBar()
         storage_bar.setMinimumWidth(180)
         storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # Match file-host QProgressBar height (20px) instead of StorageTrafficBar's default 14.
+        storage_bar.setFixedHeight(20)
+        storage_bar.main_bar.setFixedHeight(20)
         storage_bar.set_unlimited()
         row_layout.addWidget(storage_bar)
 
