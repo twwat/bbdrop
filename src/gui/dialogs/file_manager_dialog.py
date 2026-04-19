@@ -219,8 +219,15 @@ class FileManagerDialog(QDialog):
 
     def _on_host_changed(self):
         host_id = self._host_combo.currentData()
-        if host_id:
-            self._controller.set_host(host_id)
+        if not host_id:
+            return
+        self._controller.set_host(host_id)
+        self._settings.beginGroup("FileManager")
+        raw = self._settings.value(f"tree_expanded_{host_id}", "")
+        self._settings.endGroup()
+        if raw:
+            ids = {s for s in raw.split(",") if s}
+            self.folder_tree.restore_expanded(ids)
 
     def _on_filter_changed(self, text: str):
         """Handle toolbar filter input changes."""
@@ -437,6 +444,8 @@ class FileManagerDialog(QDialog):
         host_id = self._host_combo.currentData()
         if host_id:
             self._settings.setValue("last_host", host_id)
+            expanded = self.folder_tree.get_expanded_ids()
+            self._settings.setValue(f"tree_expanded_{host_id}", ",".join(expanded))
         self._settings.endGroup()
 
     # ------------------------------------------------------------------

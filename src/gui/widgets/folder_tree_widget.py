@@ -61,6 +61,8 @@ class FolderTreeWidget(QWidget):
         self._loaded_folders: set[str] = set()
         # Pending expand requests (folder_id -> tree item)
         self._pending_expands: dict[str, QTreeWidgetItem] = {}
+        # Folder IDs to auto-expand as children arrive (tree state restoration)
+        self._restore_ids: set[str] = set()
 
     # ------------------------------------------------------------------
     # Public API
@@ -71,6 +73,7 @@ class FolderTreeWidget(QWidget):
         self._tree.clear()
         self._loaded_folders.clear()
         self._pending_expands.clear()
+        self._restore_ids.clear()
 
         root = QTreeWidgetItem(self._tree, ["/"])
         root.setData(0, Qt.ItemDataRole.UserRole, "/")
@@ -133,11 +136,59 @@ class FolderTreeWidget(QWidget):
         if parent_id in self._pending_expands:
             del self._pending_expands[parent_id]
 
+        # Auto-expand children that are part of a saved expansion state
+        if self._restore_ids:
+            for i in range(parent_item.childCount()):
+                child = parent_item.child(i)
+                if not child:
+                    continue
+                cid = child.data(0, Qt.ItemDataRole.UserRole)
+                if cid and cid != _PLACEHOLDER and cid in self._restore_ids:
+                    child.setExpanded(True)
+
     def select_folder(self, folder_id: str):
         """Programmatically select a folder in the tree."""
         item = self._find_item(folder_id)
         if item:
             self._tree.setCurrentItem(item)
+
+    def restore_expanded(self, ids: set[str]) -> None:
+        """Mark a set of folder IDs to auto-expand as children arrive.
+
+        Also expands any matching items already present in the tree (for
+        the case where the cache populated children synchronously before
+        this call).
+        """
+        self._restore_ids = set(ids)
+        if not self._restore_ids:
+            return
+        root = self._tree.invisibleRootItem()
+        queue = [root.child(i) for i in range(root.childCount())]
+        while queue:
+            item = queue.pop()
+            if item is None:
+                continue
+            cid = item.data(0, Qt.ItemDataRole.UserRole)
+            if cid and cid != _PLACEHOLDER and cid in self._restore_ids:
+                item.setExpanded(True)
+            for i in range(item.childCount()):
+                queue.append(item.child(i))
+
+    def get_expanded_ids(self) -> set[str]:
+        """Return IDs of all currently expanded folders (excluding root)."""
+        result: set[str] = set()
+        root = self._tree.invisibleRootItem()
+        queue = [root.child(i) for i in range(root.childCount())]
+        while queue:
+            item = queue.pop()
+            if item is None:
+                continue
+            cid = item.data(0, Qt.ItemDataRole.UserRole)
+            if cid and cid != _PLACEHOLDER and cid != "/" and item.isExpanded():
+                result.add(cid)
+            for i in range(item.childCount()):
+                queue.append(item.child(i))
+        return result
 
     def get_selected_folder_id(self) -> Optional[str]:
         """Return the currently selected folder ID."""
