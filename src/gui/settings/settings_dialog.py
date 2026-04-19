@@ -278,6 +278,20 @@ class ComprehensiveSettingsDialog(QDialog):
                 self.image_hosts_widget.set_covers_enabled
             )
 
+        # Same relay against the unified Hosts tab. The image_hosts_widget
+        # block above is removed in Task 8 (after image_hosts_tab.py is
+        # deleted); both coexist during the refactor.
+        if hasattr(self, 'file_hosts_widget'):
+            self.file_hosts_widget.cover_gallery_changed.connect(
+                self.covers_tab.on_external_cover_gallery_change
+            )
+            self.file_hosts_widget.cover_host_changed.connect(
+                self.covers_tab.on_external_cover_host_change
+            )
+            self.covers_tab.covers_enabled_check.toggled.connect(
+                self.file_hosts_widget.set_covers_enabled
+            )
+
     def setup_external_apps_tab(self):
         """Setup the External Apps tab (delegated to HooksTab widget)."""
         from src.gui.settings.hooks_tab import HooksTab
@@ -306,6 +320,17 @@ class ComprehensiveSettingsDialog(QDialog):
         # Create file hosts widget (no signals - reads from QSettings cache)
         self.file_hosts_widget = FileHostsSettingsWidget(self, self.file_host_manager)
 
+        # Forward primary-host selection from the Hosts tab to the main window
+        if self.parent_window and hasattr(self.parent_window, '_set_primary_image_host'):
+            self.file_hosts_widget.primary_host_changed.connect(
+                self.parent_window._set_primary_image_host
+            )
+
+        # Refresh the main-window image-host combo when image-host settings change
+        if self.parent_window and hasattr(self.parent_window, 'refresh_image_host_combo'):
+            self.file_hosts_widget.settings_changed.connect(
+                self.parent_window.refresh_image_host_combo
+            )
 
         # Add tab
         self._add_settings_page(self.file_hosts_widget, "File Hosts")
