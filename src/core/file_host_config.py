@@ -657,7 +657,7 @@ def set_family_dedup_enabled(enabled: bool) -> None:
 
 _k2s_storage_lock = Lock()  # Protects read-modify-write on shared K2S storage counter
 
-_K2S_DEFAULT_TOTAL = 10000 * 1024 * 1024 * 1024  # 10TB
+_K2S_DEFAULT_TOTAL = 10000 * 1024 * 1024 * 1024  # 10000 GiB — K2S labels this "10 TB" on their site
 
 
 def get_k2s_family_storage() -> tuple[int, int]:

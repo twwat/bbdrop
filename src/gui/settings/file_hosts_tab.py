@@ -197,7 +197,10 @@ class FileHostsSettingsWidget(QWidget):
 
         # 4. Storage Bar (expanding, shows amount free)
         storage_bar = None
-        if host_config.user_info_url and (host_config.storage_left_path or host_config.storage_regex):
+        from src.core.file_host_config import get_host_family
+        has_per_host_storage = host_config.user_info_url and (host_config.storage_left_path or host_config.storage_regex)
+        is_k2s_family = get_host_family(host_id) == 'k2s'
+        if has_per_host_storage or is_k2s_family:
             storage_bar = QProgressBar()
             storage_bar.setMinimumWidth(180)
             storage_bar.setMaximumHeight(20)
@@ -513,16 +516,22 @@ class FileHostsSettingsWidget(QWidget):
         Args:
             host_id: Host identifier
         """
-        # Read from QSettings cache (written by worker as strings to avoid Qt 32-bit overflow)
-        total_str = self.settings.value(f"FileHosts/{host_id}/storage_total", "0")
-        left_str = self.settings.value(f"FileHosts/{host_id}/storage_left", "0")
+        from src.core.file_host_config import get_host_family
+        if get_host_family(host_id) == 'k2s':
+            from src.core.file_host_config import get_k2s_family_storage
+            used, total = get_k2s_family_storage()
+            left = max(0, total - used)
+        else:
+            # Read from QSettings cache (written by worker as strings to avoid Qt 32-bit overflow)
+            total_str = self.settings.value(f"FileHosts/{host_id}/storage_total", "0")
+            left_str = self.settings.value(f"FileHosts/{host_id}/storage_left", "0")
 
-        try:
-            total = int(total_str) if total_str else 0
-            left = int(left_str) if left_str else 0
-        except (ValueError, TypeError):
-            total = 0
-            left = 0
+            try:
+                total = int(total_str) if total_str else 0
+                left = int(left_str) if left_str else 0
+            except (ValueError, TypeError):
+                total = 0
+                left = 0
 
         widgets = self.host_widgets.get(host_id, {})
         storage_bar = widgets.get('storage_bar')

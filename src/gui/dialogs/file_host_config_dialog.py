@@ -1544,19 +1544,19 @@ class FileHostConfigDialog(QDialog):
         from src.core.file_host_config import get_k2s_family_storage, save_k2s_family_quota
 
         used, total = get_k2s_family_storage()
-        current_gb = total / (1024 * 1024 * 1024)
+        current_gib = total / (1024 * 1024 * 1024)
 
-        new_gb, ok = QInputDialog.getInt(
+        new_gib, ok = QInputDialog.getInt(
             self, "K2S Family Storage Quota",
-            "Total storage quota (GB):\n\n"
+            "Total storage quota (GiB):\n\n"
             "This quota is shared across Keep2Share, TezFiles, and FileBoom.",
-            value=int(current_gb),
+            value=int(current_gib),
             min=1,
             max=1000000,
         )
 
-        if ok and new_gb > 0:
-            new_total = new_gb * 1024 * 1024 * 1024
+        if ok and new_gib > 0:
+            new_total = new_gib * 1024 * 1024 * 1024
             save_k2s_family_quota(new_total)
             self._load_storage_from_cache()
             # Propagate to sibling K2S dialogs via storage_updated signal
