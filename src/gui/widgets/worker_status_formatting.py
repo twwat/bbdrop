@@ -9,7 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWidgets import QApplication
+
+
+def _is_dark_palette() -> bool:
+    app = QApplication.instance()
+    if app is None:
+        return False
+    return app.palette().color(QPalette.ColorRole.Window).lightness() < 128
 
 
 @dataclass
@@ -57,7 +65,7 @@ def format_status_speed_cell(
     italic = False
 
     if base_status == "uploading":
-        color = QColor("darkgreen")
+        color = QColor("#66BB6A") if _is_dark_palette() else QColor("darkgreen")
         if speed_bps > 0:
             speed_text = _format_speed_value(speed_bps)
             text = f"Uploading · {speed_text}"
