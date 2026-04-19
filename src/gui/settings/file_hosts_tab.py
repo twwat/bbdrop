@@ -21,6 +21,9 @@ from src.gui.widgets.info_button import InfoButton
 class FileHostsSettingsWidget(QWidget):
     """Widget for configuring file host settings - PASSIVE: only displays and collects data"""
     settings_changed = pyqtSignal()  # Notify parent of unsaved changes
+    primary_host_changed = pyqtSignal(str)       # host_id — new primary image host
+    cover_host_changed = pyqtSignal(str)         # host_id — new cover image host
+    cover_gallery_changed = pyqtSignal(str, str) # host_id, gallery_id
 
     def __init__(self, parent, worker_manager):
         """Initialize file hosts settings widget.
@@ -34,6 +37,12 @@ class FileHostsSettingsWidget(QWidget):
         self.worker_manager = worker_manager
         self.settings = QSettings("BBDropUploader", "BBDropGUI")
         self.host_widgets: Dict[str, Dict[str, Any]] = {}
+
+        # Track active image host and cover settings state
+        self._active_image_host: str = self.settings.value(
+            'image_host/default', 'imx', type=str
+        )
+        self._covers_enabled = self.settings.value('cover/enabled', False, type=bool)
 
         # Icon manager for status icons
         self.icon_manager = get_icon_manager()
@@ -895,3 +904,23 @@ class FileHostsSettingsWidget(QWidget):
         """
         # Method kept for backward compatibility but does nothing
         pass
+
+    def set_active_image_host(self, host_id: str) -> None:
+        """Update the active (primary) image host indicator.
+
+        Args:
+            host_id: Image host identifier (e.g., 'imx', 'turbo', 'pixhost')
+        """
+        self._active_image_host = host_id
+        # UI refresh handled in a later task once the image groupbox exists.
+
+    def set_covers_enabled(self, enabled: bool) -> None:
+        """Called by the Covers tab when cover uploads toggle.
+
+        Args:
+            enabled: Whether cover uploads are enabled
+
+        Note:
+            Stubbed here; the image groupbox wiring in Task 2 consumes this state.
+        """
+        self._covers_enabled = enabled
