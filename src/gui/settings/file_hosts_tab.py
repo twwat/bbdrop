@@ -69,11 +69,20 @@ class FileHostsSettingsWidget(QWidget):
         intro_label.setProperty("class", "tab-description")
         layout.addWidget(intro_label)
 
-        # Image Hosts groupbox - sized to content (no scroll; only a handful of hosts)
+        # Image Hosts groupbox — mirrors file-host groupbox structure
+        # (scroll area + inner container) so backgrounds / margins match.
         from PyQt6.QtWidgets import QSizePolicy
         image_hosts_group = QGroupBox("Image Hosts")
         image_hosts_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        self.image_hosts_layout_inner = QVBoxLayout(image_hosts_group)
+        image_hosts_outer = QVBoxLayout(image_hosts_group)
+
+        image_scroll = QScrollArea()
+        image_scroll.setWidgetResizable(True)
+        image_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        image_scroll.setMinimumHeight(150)
+
+        image_container = QWidget()
+        self.image_hosts_layout_inner = QVBoxLayout(image_container)
         self.image_hosts_layout_inner.setSpacing(8)
 
         from src.core.image_host_config import get_all_hosts, is_image_host_enabled
@@ -84,6 +93,10 @@ class FileHostsSettingsWidget(QWidget):
         )
         for host_id, config in sorted_image_hosts:
             self._create_image_host_row(host_id, config)
+
+        self.image_hosts_layout_inner.addStretch()
+        image_scroll.setWidget(image_container)
+        image_hosts_outer.addWidget(image_scroll)
 
         layout.addWidget(image_hosts_group)
 
@@ -302,19 +315,13 @@ class FileHostsSettingsWidget(QWidget):
         )
         row_layout.addWidget(configure_btn)
 
-        # Storage bar — identical QProgressBar widget/sizing as file-host rows.
-        # Image hosts have no quota, so the bar is filled and labelled "∞".
-        storage_bar = QProgressBar()
+        # Storage bar — reuse the worker-table StorageTrafficBar in unlimited
+        # mode so the infinity glyph matches the worker table exactly.
+        from src.gui.widgets.custom_widgets import StorageTrafficBar
+        storage_bar = StorageTrafficBar()
         storage_bar.setMinimumWidth(180)
-        storage_bar.setMaximumHeight(20)
-        storage_bar.setMaximum(100)
-        storage_bar.setValue(100)
-        storage_bar.setTextVisible(True)
-        storage_bar.setFormat("∞")
-        storage_bar.setProperty("class", "storage-bar")
-        storage_bar.setProperty("storage_status", "plenty")
         storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        storage_bar.setToolTip("Unlimited storage — no quota")
+        storage_bar.set_unlimited()
         row_layout.addWidget(storage_bar)
 
         # Status label — identical sizing / alignment to file-host row.
