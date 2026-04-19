@@ -84,6 +84,40 @@ def format_host_storage_size(host_id: str, num_bytes: int | float, precision: in
     return format_binary_size(num_bytes, precision)
 
 
+def format_quota_compact(host_id: str, num_bytes: int | float, precision: int = 1) -> str:
+    """Short-form host-aware byte formatter for in-cell storage/traffic labels.
+
+    Single-letter suffix (B/K/M/G/T/P), one decimal, trailing .0 dropped.
+    K2S family hosts use the 1000-step TiB rollover (so 10000 GiB renders as
+    "10 T"); all other hosts use strict binary.
+    """
+    from src.core.file_host_config import get_host_family
+    try:
+        value = float(num_bytes or 0)
+    except (TypeError, ValueError):
+        value = 0.0
+    if value < 0:
+        value = 0.0
+
+    use_k2s_rollover = bool(host_id) and get_host_family(host_id) == "k2s"
+    if use_k2s_rollover and value >= 1000 * 1024 ** 3:
+        tib_value = value / (1000 * 1024 ** 3)
+        text = f"{tib_value:.{precision}f}".rstrip("0").rstrip(".")
+        return f"{text or '0'}\u00A0T"
+
+    units = ["B", "K", "M", "G", "T", "P"]
+    idx = 0
+    while value >= 1024.0 and idx < len(units) - 1:
+        value /= 1024.0
+        idx += 1
+
+    if units[idx] == "B":
+        return f"{int(value)}\u00A0B"
+
+    text = f"{value:.{precision}f}".rstrip("0").rstrip(".")
+    return f"{text or '0'}\u00A0{units[idx]}"
+
+
 def format_binary_rate(kib_per_s: float | int, precision: int = 1) -> str:
     """Format a transfer rate given in KiB/s using binary prefixes.
     

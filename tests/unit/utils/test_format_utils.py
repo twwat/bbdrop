@@ -373,3 +373,48 @@ class TestFormatPercentage:
         """Test high precision"""
         result = format_percentage(0.123456789, 5)
         assert result == "12.34568%"
+
+
+from src.utils.format_utils import format_quota_compact
+
+
+class TestFormatQuotaCompact:
+    """format_quota_compact: host-aware short-form byte formatter."""
+
+    def test_zero_bytes(self):
+        assert format_quota_compact("", 0) == f"0{NBSP}B"
+
+    def test_bytes_under_kib(self):
+        assert format_quota_compact("", 512) == f"512{NBSP}B"
+
+    def test_kib_drops_trailing_zero(self):
+        assert format_quota_compact("", 1024) == f"1{NBSP}K"
+
+    def test_mib_one_decimal(self):
+        assert format_quota_compact("", int(1.5 * 1024 * 1024)) == f"1.5{NBSP}M"
+
+    def test_gib_drops_trailing_zero_on_whole(self):
+        assert format_quota_compact("", 10 * 1024 ** 3) == f"10{NBSP}G"
+
+    def test_tib_with_decimal(self):
+        val = int(9.8 * 1024 ** 4)
+        assert format_quota_compact("", val) == f"9.8{NBSP}T"
+
+    def test_k2s_family_1000_gib_rollover(self):
+        val = 10000 * 1024 ** 3
+        assert format_quota_compact("keep2share", val) == f"10{NBSP}T"
+
+    def test_k2s_family_8_1_gib(self):
+        val = 8741796761
+        assert format_quota_compact("keep2share", val) == f"8.1{NBSP}G"
+
+    def test_non_k2s_uses_binary(self):
+        val = 10000 * 1024 ** 3
+        assert format_quota_compact("rapidgator", val) == f"9.8{NBSP}T"
+
+    def test_negative_clamps_to_zero(self):
+        assert format_quota_compact("", -1) == f"0{NBSP}B"
+
+    def test_petabyte(self):
+        val = 2 * 1024 ** 5
+        assert format_quota_compact("", val) == f"2{NBSP}P"
