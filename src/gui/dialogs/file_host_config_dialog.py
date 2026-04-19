@@ -518,15 +518,18 @@ class FileHostConfigDialog(QDialog):
             self.creds_password_input.textChanged.connect(self._mark_dirty)
         self.trigger_combo.currentIndexChanged.connect(self._mark_dirty)
 
-        # Upload Settings (editable) - Read from settings layer
-        settings_group = QGroupBox("Upload Settings")
-        settings_layout = QFormLayout(settings_group)
+        # Connection Settings - 2-column grid layout for proper alignment
+        settings_group = QGroupBox("Connection Settings")
+        settings_layout = QGridLayout(settings_group)
+        settings_layout.setColumnStretch(1, 1)
+        settings_layout.setColumnStretch(3, 1)
+        settings_layout.setHorizontalSpacing(12)
+        settings_layout.setVerticalSpacing(6)
 
         # Load current values
-        max_connections = get_file_host_setting(self.host_id, "max_connections", "int")
         max_file_size_mb = get_file_host_setting(self.host_id, "max_file_size_mb", "int")
 
-        # 1. auto_retry + max_retries - unified row
+        # Row 0: auto_retry + max_retries - unified full-width row
         retry_row = QHBoxLayout()
 
         retry_label = QLabel("Auto-retry")
@@ -557,163 +560,115 @@ class FileHostConfigDialog(QDialog):
 
         retry_row_widget = QWidget()
         retry_row_widget.setLayout(retry_row)
-        settings_layout.addRow(retry_row_widget)
+        settings_layout.addWidget(retry_row_widget, 0, 0, 1, 4)
 
-        # 2. max_connections - QSpinBox
-        concurrent_label_row = QHBoxLayout()
+        # Row 1 left: Concurrent uploads - fixed at 1 (not user-configurable yet)
+        concurrent_label_widget = QWidget()
+        concurrent_label_row = QHBoxLayout(concurrent_label_widget)
+        concurrent_label_row.setContentsMargins(0, 0, 0, 0)
         concurrent_label_row.addWidget(QLabel("Concurrent uploads"))
         concurrent_label_row.addWidget(InfoButton(
-            "Number of files uploaded simultaneously to this host. Higher values "
-            "are faster but most file hosts limit concurrent connections. The "
-            "global limit across all file hosts is 3."
+            "Number of simultaneous uploads to this host. Currently fixed at 1 "
+            "— per-host concurrency will be configurable in a future release."
         ))
-        concurrent_label_widget = QWidget()
-        concurrent_label_widget.setLayout(concurrent_label_row)
+        concurrent_label_row.addStretch()
 
         self.max_connections_spin = QSpinBox()
-        self.max_connections_spin.setRange(1, 10)
-        self.max_connections_spin.setValue(max_connections)
-        self.max_connections_spin.setMaximumWidth(150)
-        self.max_connections_spin.setToolTip("Maximum concurrent upload connections to this host")
-        self.max_connections_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow(concurrent_label_widget, self.max_connections_spin)
+        self.max_connections_spin.setRange(1, 1)
+        self.max_connections_spin.setValue(1)
+        self.max_connections_spin.setEnabled(False)
+        self.max_connections_spin.setMaximumWidth(80)
+        self.max_connections_spin.setToolTip("Concurrent uploads is currently fixed at 1")
+        settings_layout.addWidget(concurrent_label_widget, 1, 0)
+        settings_layout.addWidget(self.max_connections_spin, 1, 1)
 
-        # 3. connect_timeout - QSpinBox (new setting)
-        connect_timeout_label_row = QHBoxLayout()
-        connect_timeout_label_row.addWidget(QLabel("Connect timeout"))
-        connect_timeout_label_row.addWidget(InfoButton(
-            "How long to wait when establishing a connection to the host before "
-            "giving up. Increase if you're on a slow or unreliable network. "
-            "Most connections complete in under 10 seconds."
-        ))
-        connect_timeout_label_widget = QWidget()
-        connect_timeout_label_widget.setLayout(connect_timeout_label_row)
-
-        connect_timeout = get_file_host_setting(self.host_id, 'connect_timeout', 'int')
-        self.connect_timeout_spin = QSpinBox()
-        self.connect_timeout_spin.setRange(10, 180)
-        self.connect_timeout_spin.setSuffix("s")
-        self.connect_timeout_spin.setMaximumWidth(150)
-        self.connect_timeout_spin.setValue(connect_timeout if connect_timeout is not None else 30)
-        self.connect_timeout_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow(connect_timeout_label_widget, self.connect_timeout_spin)
-
-        # 4. max_file_size_mb - QSpinBox (nullable)
-        max_file_size_label_row = QHBoxLayout()
-        max_file_size_label_row.addWidget(QLabel("Max file size"))
-        max_file_size_label_row.addWidget(InfoButton(
-            "Maximum file size this host accepts. Files larger than this will be "
-            "skipped. The default is the host's documented limit — increase only "
-            "if your account has higher limits."
-        ))
-        max_file_size_label_widget = QWidget()
-        max_file_size_label_widget.setLayout(max_file_size_label_row)
-
-        self.max_file_size_spin = QSpinBox()
-        self.max_file_size_spin.setRange(0, 10000)
-        self.max_file_size_spin.setValue(max_file_size_mb if max_file_size_mb else 0)
-        self.max_file_size_spin.setSuffix(" MiB")
-        self.max_file_size_spin.setSpecialValueText("No limit")
-        self.max_file_size_spin.setMaximumWidth(150)
-        self.max_file_size_spin.setToolTip("Maximum file size for uploads (0 = no limit)")
-        self.max_file_size_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow(max_file_size_label_widget, self.max_file_size_spin)
-
-        # 5. inactivity_timeout - QSpinBox
-        inactivity_timeout = get_file_host_setting(self.host_id, "inactivity_timeout", "int")
-        if inactivity_timeout is None:
-            # Get from host config if not in INI
-            inactivity_timeout = self.host_config.inactivity_timeout if self.host_config else 300
-
-        inactivity_label_row = QHBoxLayout()
-        inactivity_label_row.addWidget(QLabel("Inactivity timeout"))
-        inactivity_label_row.addWidget(InfoButton(
-            "How long to wait for data during an active upload before treating it "
-            "as stalled. File host uploads can be large (multiple GB), so brief "
-            "pauses are normal. Increase for slow connections."
-        ))
-        inactivity_label_widget = QWidget()
-        inactivity_label_widget.setLayout(inactivity_label_row)
-
-        self.inactivity_timeout_spin = QSpinBox()
-        self.inactivity_timeout_spin.setRange(30, 3600)
-        self.inactivity_timeout_spin.setValue(inactivity_timeout)
-        self.inactivity_timeout_spin.setSuffix("s")
-        self.inactivity_timeout_spin.setMaximumWidth(150)
-        self.inactivity_timeout_spin.setToolTip("Abort upload if no progress for this many seconds (default: 300)")
-        self.inactivity_timeout_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow(inactivity_label_widget, self.inactivity_timeout_spin)
-
-        # 6. upload_timeout - QSpinBox (nullable)
+        # Row 1 right: Max upload time
         upload_timeout = get_file_host_setting(self.host_id, "upload_timeout", "int")
         if upload_timeout is None:
-            # Get from host config if not in INI
             upload_timeout = self.host_config.upload_timeout if self.host_config else None
 
-        upload_timeout_label_row = QHBoxLayout()
+        upload_timeout_label_widget = QWidget()
+        upload_timeout_label_row = QHBoxLayout(upload_timeout_label_widget)
+        upload_timeout_label_row.setContentsMargins(0, 0, 0, 0)
         upload_timeout_label_row.addWidget(QLabel("Max upload time"))
         upload_timeout_label_row.addWidget(InfoButton(
             "Maximum total time allowed for a single file upload. Set to 0 to "
             "disable. Large archives can take a long time — set this high enough "
             "to accommodate your largest uploads on your connection speed."
         ))
-        upload_timeout_label_widget = QWidget()
-        upload_timeout_label_widget.setLayout(upload_timeout_label_row)
+        upload_timeout_label_row.addStretch()
 
         self.upload_timeout_spin = QSpinBox()
         self.upload_timeout_spin.setRange(0, 7200)
         self.upload_timeout_spin.setValue(upload_timeout if upload_timeout else 0)
         self.upload_timeout_spin.setSuffix("s")
         self.upload_timeout_spin.setSpecialValueText("Off")
-        self.upload_timeout_spin.setMaximumWidth(150)
+        self.upload_timeout_spin.setMaximumWidth(80)
         self.upload_timeout_spin.setToolTip("Maximum total upload time (0 = unlimited, not recommended)")
         self.upload_timeout_spin.valueChanged.connect(self._mark_dirty)
-        settings_layout.addRow(upload_timeout_label_widget, self.upload_timeout_spin)
+        settings_layout.addWidget(upload_timeout_label_widget, 1, 2)
+        settings_layout.addWidget(self.upload_timeout_spin, 1, 3)
 
-        # 7. bbcode_format - QPlainTextEdit (auto-expanding up to 3 lines)
-        bbcode_format = get_file_host_setting(self.host_id, "bbcode_format", "str")
+        # Row 2 left: Connect timeout
+        connect_timeout = get_file_host_setting(self.host_id, 'connect_timeout', 'int')
 
-        bbcode_label_row = QHBoxLayout()
-        bbcode_label_row.addWidget(QLabel("BBCode link format"))
-        bbcode_label_row.addWidget(InfoButton(
-            "Template for the download link BBCode. Click the field to open "
-            "the full editor with all available placeholders. This is inserted "
-            "into your gallery template's #hostLinks# placeholder."
+        connect_timeout_label_widget = QWidget()
+        connect_timeout_label_row = QHBoxLayout(connect_timeout_label_widget)
+        connect_timeout_label_row.setContentsMargins(0, 0, 0, 0)
+        connect_timeout_label_row.addWidget(QLabel("Connect timeout"))
+        connect_timeout_label_row.addWidget(InfoButton(
+            "How long to wait when establishing a connection to the host before "
+            "giving up. Increase if you're on a slow or unreliable network. "
+            "Most connections complete in under 10 seconds."
         ))
-        bbcode_label_widget = QWidget()
-        bbcode_label_widget.setLayout(bbcode_label_row)
+        connect_timeout_label_row.addStretch()
 
-        self.bbcode_format_edit = QPlainTextEdit()
-        self.bbcode_format_edit.setPlainText(bbcode_format if bbcode_format else "")
-        self.bbcode_format_edit.setPlaceholderText("[url=#link#]#hostName#[/url]")
-        self.bbcode_format_edit.setToolTip(
-            "Format for download links in BBCode. Click to open the full editor. "
-            "Leave empty for raw URL."
-        )
-        # Auto-expand height based on content (1-3 lines)
-        self.bbcode_format_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.bbcode_format_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.bbcode_format_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        line_height = self.bbcode_format_edit.fontMetrics().lineSpacing()
-        # Start with 1 line height, expand up to 3
-        self.bbcode_format_edit.setMinimumHeight(line_height + 12)
-        self.bbcode_format_edit.setMaximumHeight(line_height * 3 + 12)
-        self.bbcode_format_edit.textChanged.connect(self._mark_dirty)
-        self.bbcode_format_edit.textChanged.connect(self._adjust_bbcode_height)
-        self._adjust_bbcode_height()  # Initial adjustment
-        settings_layout.addRow(bbcode_label_widget, self.bbcode_format_edit)
-        self.bbcode_format_edit.installEventFilter(self)
+        self.connect_timeout_spin = QSpinBox()
+        self.connect_timeout_spin.setRange(10, 180)
+        self.connect_timeout_spin.setSuffix("s")
+        self.connect_timeout_spin.setMaximumWidth(80)
+        self.connect_timeout_spin.setValue(connect_timeout if connect_timeout is not None else 30)
+        self.connect_timeout_spin.valueChanged.connect(self._mark_dirty)
+        settings_layout.addWidget(connect_timeout_label_widget, 2, 0)
+        settings_layout.addWidget(self.connect_timeout_spin, 2, 1)
 
-        # 8. Proxy - SimpleProxyDropdown widget with test button
-        proxy_label_row = QHBoxLayout()
+        # Row 2 right: Inactivity timeout
+        inactivity_timeout = get_file_host_setting(self.host_id, "inactivity_timeout", "int")
+        if inactivity_timeout is None:
+            inactivity_timeout = self.host_config.inactivity_timeout if self.host_config else 300
+
+        inactivity_label_widget = QWidget()
+        inactivity_label_row = QHBoxLayout(inactivity_label_widget)
+        inactivity_label_row.setContentsMargins(0, 0, 0, 0)
+        inactivity_label_row.addWidget(QLabel("Inactivity timeout"))
+        inactivity_label_row.addWidget(InfoButton(
+            "How long to wait for data during an active upload before treating it "
+            "as stalled. File host uploads can be large (multiple GB), so brief "
+            "pauses are normal. Increase for slow connections."
+        ))
+        inactivity_label_row.addStretch()
+
+        self.inactivity_timeout_spin = QSpinBox()
+        self.inactivity_timeout_spin.setRange(30, 3600)
+        self.inactivity_timeout_spin.setValue(inactivity_timeout)
+        self.inactivity_timeout_spin.setSuffix("s")
+        self.inactivity_timeout_spin.setMaximumWidth(80)
+        self.inactivity_timeout_spin.setToolTip("Abort upload if no progress for this many seconds (default: 300)")
+        self.inactivity_timeout_spin.valueChanged.connect(self._mark_dirty)
+        settings_layout.addWidget(inactivity_label_widget, 2, 2)
+        settings_layout.addWidget(self.inactivity_timeout_spin, 2, 3)
+
+        # Row 3: Proxy - label col 0, widget spans cols 1-3
+        proxy_label_widget = QWidget()
+        proxy_label_row = QHBoxLayout(proxy_label_widget)
+        proxy_label_row.setContentsMargins(0, 0, 0, 0)
         proxy_label_row.addWidget(QLabel("Proxy"))
         proxy_label_row.addWidget(InfoButton(
             "Route uploads through a proxy server. Select a proxy profile from "
             "your configured proxy pools, or use 'Direct' for no proxy. Click "
             "'Test' to verify the proxy can reach this host."
         ))
-        proxy_label_widget = QWidget()
-        proxy_label_widget.setLayout(proxy_label_row)
+        proxy_label_row.addStretch()
 
         proxy_widget = QWidget()
         proxy_layout = QHBoxLayout(proxy_widget)
@@ -734,14 +689,72 @@ class FileHostConfigDialog(QDialog):
         self.proxy_test_btn.clicked.connect(self._test_proxy)
         proxy_layout.addWidget(self.proxy_test_btn)
 
-        # Check if global/category proxy disables per-host config
         self._update_proxy_section_state()
-        # Update test button state based on current selection
         self._update_proxy_test_button()
 
-        settings_layout.addRow(proxy_label_widget, proxy_widget)
+        settings_layout.addWidget(proxy_label_widget, 3, 0)
+        settings_layout.addWidget(proxy_widget, 3, 1, 1, 3)
 
         content_layout.addWidget(settings_group)
+
+        # Upload Settings: max file size and BBCode link format
+        upload_group = QGroupBox("Upload Settings")
+        upload_layout = QFormLayout(upload_group)
+        upload_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        upload_layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+        max_file_size_label_widget = QWidget()
+        max_file_size_label_row = QHBoxLayout(max_file_size_label_widget)
+        max_file_size_label_row.setContentsMargins(0, 0, 0, 0)
+        max_file_size_label_row.addWidget(QLabel("Max file size"))
+        max_file_size_label_row.addWidget(InfoButton(
+            "Maximum file size this host accepts. Files larger than this will be "
+            "skipped. The default is the host's documented limit — increase only "
+            "if your account has higher limits."
+        ))
+
+        self.max_file_size_spin = QSpinBox()
+        self.max_file_size_spin.setRange(0, 10000)
+        self.max_file_size_spin.setValue(max_file_size_mb if max_file_size_mb else 0)
+        self.max_file_size_spin.setSuffix(" MiB")
+        self.max_file_size_spin.setSpecialValueText("No limit")
+        self.max_file_size_spin.setMaximumWidth(150)
+        self.max_file_size_spin.setToolTip("Maximum file size for uploads (0 = no limit)")
+        self.max_file_size_spin.valueChanged.connect(self._mark_dirty)
+        upload_layout.addRow(max_file_size_label_widget, self.max_file_size_spin)
+
+        bbcode_format = get_file_host_setting(self.host_id, "bbcode_format", "str")
+
+        bbcode_label_widget = QWidget()
+        bbcode_label_row = QHBoxLayout(bbcode_label_widget)
+        bbcode_label_row.setContentsMargins(0, 0, 0, 0)
+        bbcode_label_row.addWidget(QLabel("BBCode link format"))
+        bbcode_label_row.addWidget(InfoButton(
+            "Template for the download link BBCode. Click the field to open "
+            "the full editor with all available placeholders. This is inserted "
+            "into your gallery template's #hostLinks# placeholder."
+        ))
+
+        self.bbcode_format_edit = QPlainTextEdit()
+        self.bbcode_format_edit.setPlainText(bbcode_format if bbcode_format else "")
+        self.bbcode_format_edit.setPlaceholderText("[url=#link#]#hostName#[/url]")
+        self.bbcode_format_edit.setToolTip(
+            "Format for download links in BBCode. Click to open the full editor. "
+            "Leave empty for raw URL."
+        )
+        self.bbcode_format_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.bbcode_format_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.bbcode_format_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        line_height = self.bbcode_format_edit.fontMetrics().lineSpacing()
+        self.bbcode_format_edit.setMinimumHeight(line_height + 12)
+        self.bbcode_format_edit.setMaximumHeight(line_height * 3 + 12)
+        self.bbcode_format_edit.textChanged.connect(self._mark_dirty)
+        self.bbcode_format_edit.textChanged.connect(self._adjust_bbcode_height)
+        self._adjust_bbcode_height()
+        upload_layout.addRow(bbcode_label_widget, self.bbcode_format_edit)
+        self.bbcode_format_edit.installEventFilter(self)
+
+        content_layout.addWidget(upload_group)
 
         # Test Results section (only for no-auth hosts; auth hosts have it in credentials group)
         if not self.host_config.requires_auth:
