@@ -582,5 +582,55 @@ class TestCoverIconGating:
             assert '-cover' not in key
 
 
+def test_storage_progress_pushes_traffic_cache_for_k2s(qtbot, tmp_path, monkeypatch):
+    """Traffic cache values from QSettings are pushed into the StorageTrafficBar
+    whenever _update_storage_progress runs on a K2S family worker."""
+    from PyQt6.QtCore import QSettings
+    from src.gui.widgets.worker_status_widget import WorkerStatusWidget
+    from src.gui.widgets.worker_status_formatting import WorkerStatus
+
+    settings_file = tmp_path / "settings.ini"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    QSettings.setPath(
+        QSettings.Format.IniFormat,
+        QSettings.Scope.UserScope,
+        str(tmp_path),
+    )
+
+    widget = WorkerStatusWidget()
+    qtbot.addWidget(widget)
+
+    s = QSettings("BBDropUploader", "BBDropGUI")
+    s.setValue("FileHosts/keep2share/traffic_available", "8741796761")
+    s.setValue("FileHosts/keep2share/traffic_ceiling", "10737418240")
+    s.setValue("FileHosts/keep2share/traffic_reset_at", "2099-12-31T23:59:59+00:00")
+    s.sync()
+
+    worker = WorkerStatus(
+        worker_id="filehost_keep2share",
+        worker_type="filehost",
+        hostname="keep2share",
+        display_name="Keep2Share",
+        host_id="keep2share",
+        status="idle",
+        speed_bps=0.0,
+        last_update=0.0,
+        storage_used_bytes=0,
+        storage_total_bytes=10 * 1024 ** 4,
+    )
+    widget._workers[worker.worker_id] = worker
+    widget._refresh_display()
+
+    widget._update_storage_progress(worker.worker_id, 0, 10 * 1024 ** 4)
+
+    col_idx = widget._get_column_index("storage")
+    row = widget._worker_row_map[worker.worker_id]
+    cell = widget.status_table.cellWidget(row, col_idx)
+    # Parent must be shown for child visibility queries (Qt quirk)
+    widget.show()
+    qtbot.waitExposed(widget)
+    assert cell.traffic_strip.isVisible()
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

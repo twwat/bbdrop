@@ -27,7 +27,7 @@ from src.gui.icon_manager import get_icon_manager
 from src.core.file_host_config import get_config_manager, get_file_host_setting, save_file_host_setting
 from src.core.host_registry import get_display_name
 from src.core.image_host_config import get_image_host_config_manager, is_image_host_enabled, save_image_host_enabled, get_all_hosts
-from src.gui.widgets.custom_widgets import StorageProgressBar
+from src.gui.widgets.custom_widgets import StorageTrafficBar
 from src.gui.widgets.worker_status_formatting import (
     WorkerStatus,
     format_status_speed_cell,
@@ -977,7 +977,7 @@ class WorkerStatusWidget(QWidget):
             return None
 
     def _create_storage_progress_widget(self, used_bytes: int, total_bytes: int, worker_id: str, host_id: str = "") -> QWidget:
-        """Create storage progress bar widget using reusable StorageProgressBar class.
+        """Create storage progress bar widget using reusable StorageTrafficBar class.
 
         Args:
             used_bytes: Used storage in bytes
@@ -986,13 +986,13 @@ class WorkerStatusWidget(QWidget):
             host_id: File host id — routes K2S family through family formatter.
 
         Returns:
-            StorageProgressBar widget configured with storage values
+            StorageTrafficBar widget configured with storage values
         """
         # Calculate left_bytes from used and total
         left_bytes = total_bytes - used_bytes if total_bytes > 0 else 0
 
-        # Create widget using reusable StorageProgressBar class
-        storage_widget = StorageProgressBar()
+        # Create widget using reusable StorageTrafficBar class
+        storage_widget = StorageTrafficBar()
 
         # CRITICAL: Call update_storage() BEFORE setCellWidget() to avoid race condition
         # This ensures the widget is fully populated before Qt geometry events fire
@@ -1531,7 +1531,7 @@ class WorkerStatusWidget(QWidget):
             self._update_worker_cell(worker_id, col_idx, bytes_remaining, lambda v: format_bytes(v) if v > 0 else "—")
 
     def _update_storage_progress(self, worker_id: str, used_bytes: int, total_bytes: int):
-        """Update storage progress bar for a worker using StorageProgressBar.update_storage().
+        """Update storage progress bar for a worker using StorageTrafficBar.update_storage().
 
         Args:
             worker_id: Worker identifier
@@ -1546,16 +1546,33 @@ class WorkerStatusWidget(QWidget):
         if col_idx < 0:
             return
 
-        # Get the StorageProgressBar widget
+        # Get the StorageTrafficBar widget
         widget = self.status_table.cellWidget(row, col_idx)
-        if isinstance(widget, StorageProgressBar):
-            # Calculate left_bytes from used and total
+        from src.gui.widgets.custom_widgets import StorageTrafficBar
+        if isinstance(widget, StorageTrafficBar):
             left_bytes = total_bytes - used_bytes if total_bytes > 0 else 0
-
-            # Update storage using the widget's update_storage() method
             worker = self._workers.get(worker_id)
             host_id = (worker.host_id if worker else "") or ""
             widget.update_storage(total_bytes, left_bytes, host_id)
+            self._push_traffic_cache(widget, host_id)
+
+    def _push_traffic_cache(self, widget, host_id: str) -> None:
+        """Pull cached traffic values from QSettings and push to widget (K2S only)."""
+        if not host_id:
+            return
+        from src.core.file_host_config import get_host_family
+        if get_host_family(host_id) != "k2s":
+            return
+        from PyQt6.QtCore import QSettings
+        s = QSettings("BBDropUploader", "BBDropGUI")
+        prefix = f"FileHosts/{host_id}"
+        try:
+            avail = int(s.value(f"{prefix}/traffic_available", "0") or 0)
+            ceiling = int(s.value(f"{prefix}/traffic_ceiling", "0") or 0)
+        except (TypeError, ValueError):
+            return
+        reset_at = s.value(f"{prefix}/traffic_reset_at", "", type=str) or ""
+        widget.update_traffic(avail, ceiling, reset_at)
 
     def _refresh_display(self):
         """Refresh the table display with current worker data."""
@@ -1829,7 +1846,7 @@ class WorkerStatusWidget(QWidget):
                     # Storage progress bar column
                     # Image hosts have unlimited storage - show green bar with infinity symbol
                     if worker.worker_type == 'imagehost':
-                        storage_widget = StorageProgressBar()
+                        storage_widget = StorageTrafficBar()
                         storage_widget.set_unlimited()
                         storage_widget.setProperty("worker_id", worker.worker_id)
                     else:
@@ -1839,6 +1856,7 @@ class WorkerStatusWidget(QWidget):
                             worker.worker_id,
                             worker.host_id or ""
                         )
+                        self._push_traffic_cache(storage_widget, worker.host_id or "")
                     self.status_table.setCellWidget(row_idx, col_idx, storage_widget)
 
                 elif col_config.metric_key:
