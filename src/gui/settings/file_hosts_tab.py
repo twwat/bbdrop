@@ -141,6 +141,15 @@ class FileHostsSettingsWidget(QWidget):
         host_frame.setFrameShape(QFrame.Shape.StyledPanel)
         host_frame.setFrameShadow(QFrame.Shadow.Raised)
         host_frame.setProperty("class", "host-panel")
+
+        # Enable right-click context menu
+        host_frame.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        host_frame.customContextMenuRequested.connect(
+            lambda pos, hid=host_id, f=host_frame: self._build_host_menu(hid).exec(
+                f.mapToGlobal(pos)
+            )
+        )
+
         frame_layout = QHBoxLayout(host_frame)
         frame_layout.setContentsMargins(8, 4, 8, 4)  # Tighter vertical spacing
         frame_layout.setSpacing(8)
@@ -831,6 +840,203 @@ class FileHostsSettingsWidget(QWidget):
 
         self._update_image_status_label(host_id)
         self._update_image_status_icon(host_id)
+
+    def _build_host_menu(self, host_id: str) -> 'QMenu':
+        """Build the right-click menu for a host row.
+
+        Mirrors the worker-table menu in worker_status_widget.py so users
+        learn one menu and use it in both places.
+
+        Args:
+            host_id: Host identifier
+
+        Returns:
+            QMenu with appropriate actions for this host kind and state
+        """
+        from PyQt6.QtWidgets import QMenu
+
+        widgets = self.host_widgets.get(host_id)
+        if not widgets:
+            return QMenu(self)
+        kind = widgets.get('kind', 'file')
+        menu = QMenu(self)
+        menu.setToolTipsVisible(True)
+
+        if kind == 'image':
+            from src.core.image_host_config import is_image_host_enabled
+            enabled = is_image_host_enabled(host_id)
+            if enabled:
+                disable_action = menu.addAction("Disable Host")
+                disable_action.triggered.connect(
+                    lambda: self._toggle_image_host(host_id, False)
+                )
+            else:
+                enable_action = menu.addAction("Enable Host")
+                enable_action.triggered.connect(
+                    lambda: self._toggle_image_host(host_id, True)
+                )
+
+            if enabled:
+                menu.addSeparator()
+                is_primary = (host_id == self._active_image_host)
+                primary_action = menu.addAction("Set as Primary Host")
+                primary_action.setCheckable(True)
+                primary_action.setChecked(is_primary)
+                primary_action.setEnabled(not is_primary)
+                primary_action.triggered.connect(
+                    lambda: self.primary_host_changed.emit(host_id)
+                )
+
+                qsettings = QSettings("BBDropUploader", "BBDropGUI")
+                covers_on = qsettings.value('cover/enabled', False, type=bool)
+                current_cover = qsettings.value('cover/host_id', 'imx', type=str)
+                is_cover = covers_on and (host_id == current_cover)
+                cover_action = menu.addAction("Set as Cover Host")
+                cover_action.setCheckable(True)
+                cover_action.setChecked(is_cover)
+                cover_action.setEnabled(not is_cover)
+                cover_action.triggered.connect(
+                    lambda: self._on_cover_host_selected(host_id)
+                )
+
+            menu.addSeparator()
+            configure_action = menu.addAction("Configure Host...")
+            configure_action.triggered.connect(
+                lambda: self._open_image_host_dialog(
+                    host_id, self._get_image_host_config(host_id)
+                )
+            )
+            return menu
+
+        # ----- file host menu -----
+        from src.core.file_host_config import get_file_host_setting, get_config_manager
+        enabled = bool(self.worker_manager and self.worker_manager.is_enabled(host_id))
+        trigger = get_file_host_setting(host_id, "trigger", "str") or "disabled"
+
+        if enabled:
+            disable_action = menu.addAction("Disable Host")
+            disable_action.triggered.connect(
+                lambda: self._toggle_file_host(host_id, False)
+            )
+        else:
+            enable_action = menu.addAction("Enable Host")
+            enable_action.triggered.connect(
+                lambda: self._toggle_file_host(host_id, True)
+            )
+
+        menu.addSeparator()
+        trigger_menu = menu.addMenu("Set Auto-Upload Trigger")
+        for label, value in [
+            ("On Added", "on_added"),
+            ("On Started", "on_started"),
+            ("On Completed", "on_completed"),
+            ("Disabled", "disabled"),
+        ]:
+            action = trigger_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(trigger == value)
+            action.triggered.connect(
+                lambda checked, v=value: self._set_file_host_trigger(host_id, v)
+            )
+
+        menu.addSeparator()
+        from src.network.file_manager.factory import is_host_supported
+        browse_action = menu.addAction("Browse Files...")
+        supported = is_host_supported(host_id)
+        browse_action.setEnabled(enabled and supported)
+        if not supported:
+            browse_action.setToolTip("File manager not supported for this host")
+        elif not enabled:
+            browse_action.setToolTip("Enable the host to browse its files")
+        browse_action.triggered.connect(
+            lambda: self._browse_files_for_host(host_id)
+        )
+
+        hc = get_config_manager().hosts.get(host_id)
+        configure_action = menu.addAction("Configure Host...")
+        if hc is not None:
+            configure_action.triggered.connect(
+                lambda: self._show_host_config_dialog(host_id, hc)
+            )
+        return menu
+
+    def _get_image_host_config(self, host_id: str):
+        """Get the ImageHostConfig for an image host.
+
+        Args:
+            host_id: Image host identifier
+
+        Returns:
+            ImageHostConfig instance or None
+        """
+        from src.core.image_host_config import get_image_host_config_manager
+        return get_image_host_config_manager().get_host(host_id)
+
+    def _toggle_image_host(self, host_id: str, enabled: bool) -> None:
+        """Enable or disable an image host.
+
+        Args:
+            host_id: Image host identifier
+            enabled: Whether to enable or disable
+        """
+        from src.core.image_host_config import save_image_host_enabled
+        save_image_host_enabled(host_id, enabled)
+        self._update_image_status_icon(host_id)
+        self._update_image_status_label(host_id)
+        self.settings_changed.emit()
+
+    def _toggle_file_host(self, host_id: str, enabled: bool) -> None:
+        """Enable or disable a file host.
+
+        Args:
+            host_id: File host identifier
+            enabled: Whether to enable or disable
+        """
+        if not self.worker_manager:
+            return
+        if enabled:
+            self.worker_manager.enable_host(host_id)
+        else:
+            self.worker_manager.disable_host(host_id)
+        self._update_status_icon(host_id)
+        self.settings_changed.emit()
+
+    def _set_file_host_trigger(self, host_id: str, trigger: str) -> None:
+        """Set the auto-upload trigger for a file host.
+
+        Args:
+            host_id: File host identifier
+            trigger: Trigger value ('on_added', 'on_started', 'on_completed', 'disabled')
+        """
+        from src.core.file_host_config import save_file_host_setting
+        save_file_host_setting(host_id, "trigger", trigger)
+        self._update_status_icon(host_id)
+        self.settings_changed.emit()
+
+    def _on_cover_host_selected(self, host_id: str) -> None:
+        """Handle cover host selection from menu.
+
+        Args:
+            host_id: Image host identifier to set as cover host
+        """
+        self.settings.setValue('cover/host_id', host_id)
+        self.cover_host_changed.emit(host_id)
+        for hid, widgets in self.host_widgets.items():
+            if widgets.get('kind') == 'image':
+                self._update_image_status_icon(hid)
+        self.settings_changed.emit()
+
+    def _browse_files_for_host(self, host_id: str) -> None:
+        """Open the file manager for a host.
+
+        Args:
+            host_id: File host identifier
+        """
+        # Placeholder: replaced in Task 5 with the parent-override path.
+        parent_dialog = getattr(self, 'parent_dialog', None)
+        main_window = getattr(parent_dialog, 'parent_window', None) if parent_dialog else None
+        if main_window and hasattr(main_window, 'open_file_manager_dialog'):
+            main_window.open_file_manager_dialog(host_id=host_id)
 
     def _load_initial_storage(self):
         """Load cached storage ONLY - no workers, no timers"""
