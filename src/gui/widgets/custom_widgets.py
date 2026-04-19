@@ -1311,6 +1311,7 @@ class StorageTrafficBar(QWidget):
         self.traffic_strip.setVisible(True)
 
         self._refresh_tooltip()
+        self._restore_primary_from_settings()
 
     def _refresh_tooltip(self) -> None:
         """Rebuild the main bar tooltip from cached storage and traffic data."""
