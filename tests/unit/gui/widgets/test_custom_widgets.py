@@ -1193,3 +1193,100 @@ class TestFileHostsActionWidget:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '--tb=short'])
+
+
+# ============================================================================
+# StorageTrafficBar Tests
+# ============================================================================
+
+from src.gui.widgets.custom_widgets import StorageTrafficBar
+
+
+class TestStorageTrafficBar:
+    def test_initial_state_no_data(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        assert w.minimumHeight() == 24
+        assert not w.traffic_strip.isVisible()
+
+    def test_update_storage_sets_main_bar(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        w.update_storage(total_bytes=10 * 1024 ** 4, left_bytes=int(9.8 * 1024 ** 4), host_id="")
+        assert w.main_bar.value() > 0
+        assert "T" in w.main_bar.format()
+
+    def test_k2s_storage_uses_family_format(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        total = 10000 * 1024 ** 3
+        w.update_storage(total_bytes=total, left_bytes=total, host_id="keep2share")
+        assert "10" in w.main_bar.format()
+
+    def test_set_unlimited_hides_strip(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        w.set_unlimited()
+        assert not w.traffic_strip.isVisible()
+        assert w.main_bar.value() == 100
+
+    def test_update_traffic_shows_strip(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        w.show()
+        w.update_storage(total_bytes=10 * 1024 ** 4, left_bytes=int(9.8 * 1024 ** 4), host_id="keep2share")
+        w.update_traffic(
+            available_bytes=8741796761,
+            ceiling_bytes=10737418240,
+            reset_at_iso="2099-12-31T23:59:59+00:00",
+        )
+        assert w.traffic_strip.isVisible()
+        assert w.traffic_strip.value() > 0
+
+    def test_no_traffic_keeps_strip_hidden(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        w.update_storage(total_bytes=10 * 1024 ** 4, left_bytes=int(9.8 * 1024 ** 4), host_id="keep2share")
+        assert not w.traffic_strip.isVisible()
+
+    def test_tooltip_includes_storage_and_traffic(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        w.update_storage(total_bytes=10 * 1024 ** 4, left_bytes=int(9.8 * 1024 ** 4), host_id="keep2share")
+        w.update_traffic(
+            available_bytes=8741796761,
+            ceiling_bytes=10737418240,
+            reset_at_iso="2099-12-31T23:59:59+00:00",
+        )
+        tip = w.main_bar.toolTip()
+        assert "Storage:" in tip
+        assert "Traffic:" in tip
+
+    def test_double_click_swaps_primary_on_k2s(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        w.update_storage(total_bytes=10 * 1024 ** 4, left_bytes=int(9.8 * 1024 ** 4), host_id="keep2share")
+        w.update_traffic(
+            available_bytes=8741796761,
+            ceiling_bytes=10737418240,
+            reset_at_iso="2099-12-31T23:59:59+00:00",
+        )
+        assert w.primary == "storage"
+        w._on_double_click()
+        assert w.primary == "traffic"
+        w._on_double_click()
+        assert w.primary == "storage"
+
+    def test_double_click_ignored_non_k2s(self, qtbot):
+        w = StorageTrafficBar()
+        qtbot.addWidget(w)
+        w.update_storage(total_bytes=10 * 1024 ** 4, left_bytes=int(9.8 * 1024 ** 4), host_id="rapidgator")
+        initial = w.primary
+        w._on_double_click()
+        assert w.primary == initial
+
+    def test_storage_progress_bar_shim_still_importable(self, qtbot):
+        from src.gui.widgets.custom_widgets import StorageProgressBar
+        w = StorageProgressBar()
+        qtbot.addWidget(w)
+        assert isinstance(w, StorageTrafficBar)

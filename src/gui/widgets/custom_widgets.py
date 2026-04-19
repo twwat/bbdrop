@@ -1110,22 +1110,24 @@ def _format_k2s_traffic_tooltip_line(host_id: str) -> str:
     return line
 
 
-class StorageProgressBar(QWidget):
-    """Reusable storage progress bar with compact 'X.X TiB free' format.
+class StorageTrafficBar(QWidget):
+    """Storage progress bar with optional thin traffic strip below.
 
-    Matches the File Hosts settings tab display exactly:
-    - Shows free space only ("9.4 TiB free")
-    - Green when plenty of space (< 75% used)
-    - Yellow when medium space (75-90% used)
-    - Red when low space (>= 90% used)
-    - Tooltip with detailed storage information
+    Main bar (14 px, QSS class ``storage-bar``) shows free storage with a
+    compact label. A thin secondary strip (5 px, QSS class ``traffic-strip``)
+    appears below the main bar when traffic quota data is available (K2S
+    family only). The outer widget is always 24 px tall.
+
+    Double-clicking on a row that has traffic data swaps which metric is
+    displayed as the primary (taller) bar. The choice is persisted per-host
+    via QSettings.
 
     Widget Lifecycle:
     1. Construction: __init__() creates widget and sets up UI
     2. Pre-insertion: update_storage() MUST be called BEFORE setCellWidget()
        to populate data and avoid race conditions
     3. Insertion: setCellWidget() adds widget to table (triggers geometry events)
-    4. Updates: update_storage() can be called any time to refresh data
+    4. Updates: update_storage() / update_traffic() can be called any time
     5. Resize: Responsive text formatting adjusts to available width
 
     Thread Safety:
@@ -1134,7 +1136,7 @@ class StorageProgressBar(QWidget):
     """
 
     def __init__(self, parent=None):
-        """Initialize storage progress bar widget."""
+        """Initialize storage+traffic bar widget."""
         super().__init__(parent)
 
         # Cache storage values for responsive text formatting
@@ -1143,28 +1145,47 @@ class StorageProgressBar(QWidget):
         self._left_formatted = ""  # Cache formatted string for performance
         self._host_id: str = ""  # Host id — routes K2S family through family formatter
 
+        # Traffic quota cache (K2S family only)
+        self._traffic_available: int = 0
+        self._traffic_ceiling: int = 0
+        self._traffic_reset_at: str = ""
+        self.primary: str = "storage"
+
         self._setup_ui()
 
     def _setup_ui(self):
-        """Initialize the UI with progress bar matching File Hosts tab style."""
+        """Initialize the UI with main bar and thin traffic strip."""
         from PyQt6.QtWidgets import QSizePolicy
 
-        layout = QHBoxLayout(self)
+        self.setFixedHeight(24)
+
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(0)
 
-        # Create progress bar with exact settings from file_hosts_settings_widget.py
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMinimumWidth(50)
-        self.progress_bar.setMaximumHeight(20)
-        self.progress_bar.setMaximum(100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(True)
-        self.progress_bar.setFormat("")
-        self.progress_bar.setProperty("class", "storage-bar")
-        self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.main_bar = QProgressBar()
+        self.main_bar.setFixedHeight(14)
+        self.main_bar.setMaximum(100)
+        self.main_bar.setValue(0)
+        self.main_bar.setTextVisible(True)
+        self.main_bar.setFormat("")
+        self.main_bar.setProperty("class", "storage-bar")
+        self.main_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        layout.addWidget(self.progress_bar)
+        self.traffic_strip = QProgressBar()
+        self.traffic_strip.setFixedHeight(5)
+        self.traffic_strip.setMaximum(100)
+        self.traffic_strip.setValue(0)
+        self.traffic_strip.setTextVisible(False)
+        self.traffic_strip.setProperty("class", "traffic-strip")
+        self.traffic_strip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.traffic_strip.setVisible(False)
+
+        layout.addWidget(self.main_bar)
+        layout.addWidget(self.traffic_strip)
+
+        # Backwards-compat alias: some code references .progress_bar
+        self.progress_bar = self.main_bar
 
     def update_storage(self, total_bytes: int, left_bytes: int, host_id: str = ""):
         """Update storage display with new values.
@@ -1183,116 +1204,67 @@ class StorageProgressBar(QWidget):
         from PyQt6.QtCore import QThread
         assert QThread.currentThread() == self.thread(), \
             "update_storage() must be called from main GUI thread"
-        from src.utils.format_utils import format_host_storage_size
+        from src.utils.format_utils import format_quota_compact
 
         if host_id:
             self._host_id = host_id
-        def _fmt(n: int) -> str:
-            return format_host_storage_size(self._host_id, n)
 
         # Validate inputs
         if total_bytes <= 0:
             # Unknown storage - show empty neutral bar with no text
-            self.progress_bar.setValue(0)
-            self.progress_bar.setFormat("")  # Empty bar, no "Unknown" text
-
-            # Informative tooltip explaining why storage is unavailable
-            tooltip = (
-                "Storage information unavailable\n\n"
-                "Possible reasons:\n"
-                "• Host doesn't report storage quota\n"
-                "• Credentials not configured\n"
-                "• Quota check not yet performed"
-            )
-            self.progress_bar.setToolTip(tooltip)
-
-            # Use new "unknown" status for neutral gray styling
-            self.progress_bar.setProperty("storage_status", "unknown")
-
-            # Cache as invalid so resizeEvent doesn't try to format
+            self.main_bar.setValue(0)
+            self.main_bar.setFormat("")
+            self.main_bar.setProperty("storage_status", "unknown")
+            self._refresh_style()
             self._total_bytes = 0
             self._left_bytes = 0
-
-            self._refresh_style()
+            self._refresh_tooltip()
             return
 
         if left_bytes < 0 or left_bytes > total_bytes:
             # Invalid data - keep current display unchanged
             import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Invalid storage data: left_bytes={left_bytes}, total_bytes={total_bytes}")
+            logging.getLogger(__name__).warning(
+                f"Invalid storage data: left_bytes={left_bytes}, total_bytes={total_bytes}"
+            )
             return
 
         # Cache values for responsive text formatting during resize
         self._total_bytes = total_bytes
         self._left_bytes = left_bytes
 
-        # Cache formatted string for performance (avoid re-formatting on resize)
-        self._left_formatted = _fmt(left_bytes)
+        # Cache compact-form label (short: "9.8 T", "5.2 G", etc.)
+        self._left_formatted = format_quota_compact(self._host_id, left_bytes)
 
         # Calculate percentages
         used_bytes = total_bytes - left_bytes
         percent_used = int((used_bytes / total_bytes) * 100) if total_bytes > 0 else 0
         percent_free = 100 - percent_used
 
-        # Format strings for tooltip
-        left_formatted = self._left_formatted
-        total_formatted = _fmt(total_bytes)
-        used_formatted = _fmt(used_bytes)
-
-        # Update progress bar - setValue shows FREE percentage (green when high)
-        self.progress_bar.setValue(percent_free)
+        # Update progress bar — setValue shows FREE percentage (green when high)
+        self.main_bar.setValue(percent_free)
 
         # Set responsive text format based on current width
         self._update_text_format(self.width())
 
-        # Detailed tooltip matching File Hosts tab format
-        tooltip = f"Storage: {left_formatted} free / {total_formatted} total\nUsed: {used_formatted} ({percent_used}%)"
-        traffic_line = _format_k2s_traffic_tooltip_line(self._host_id)
-        if traffic_line:
-            tooltip += f"\n{traffic_line}"
-        self.progress_bar.setToolTip(tooltip)
-
-        # Color coding based on usage (EXACT thresholds from file_hosts_settings_widget.py)
+        # Color coding
         if percent_used >= 90:
-            self.progress_bar.setProperty("storage_status", "low")  # Red - critical
+            self.main_bar.setProperty("storage_status", "low")
         elif percent_used >= 75:
-            self.progress_bar.setProperty("storage_status", "medium")  # Yellow - warning
+            self.main_bar.setProperty("storage_status", "medium")
         else:
-            self.progress_bar.setProperty("storage_status", "plenty")  # Green - good
-
-        # Refresh styling to apply storage_status property
+            self.main_bar.setProperty("storage_status", "plenty")
         self._refresh_style()
 
+        self._refresh_tooltip()
+        self._restore_primary_from_settings()
+
     def _update_text_format(self, width: int):
-        """Update text format based on available width.
-
-        Responsive tiers:
-        - width >= 70px: "X.X TiB free"
-        - 50px <= width < 70px: "X.X TiB" (remove "free")
-        - width < 50px: "" (no text)
-
-        Args:
-            width: Current widget width in pixels
-        """
-        # If no valid storage data, don't update format
+        """Update text format based on available width (short-form only, no 'free' suffix)."""
         if self._total_bytes <= 0:
             return
-
-        # Use cached formatted string (set in update_storage) instead of re-formatting
-        left_formatted = self._left_formatted
-
-        if width >= 70:
-            # Normal width: "X.X TiB free"
-            text = f"{left_formatted} free"
-        elif width >= 50:
-            # Narrow width: "X.X TiB" (drop "free")
-            text = left_formatted
-        else:
-            # Very narrow: No text (tooltip still available)
-            text = ""
-
-        self.progress_bar.setFormat(text)
+        text = self._left_formatted if width >= 40 else ""
+        self.main_bar.setFormat(text)
 
     def set_unlimited(self):
         """Set storage display to unlimited/infinity mode for hosts with no storage limit.
@@ -1312,39 +1284,36 @@ class StorageProgressBar(QWidget):
         self._left_formatted = "∞"
 
         # Full bar (100%) to indicate maximum available space
-        self.progress_bar.setValue(100)
+        self.main_bar.setValue(100)
 
-        # Show infinity symbol - responsive to width
+        # Green color to indicate "plenty" of space
+        self.main_bar.setProperty("storage_status", "plenty")
+
+        # Show infinity symbol — responsive to width
         self._update_unlimited_text_format(self.width())
 
         # Tooltip explaining unlimited storage
-        self.progress_bar.setToolTip("Unlimited storage - no quota restrictions")
-
-        # Green color to indicate "plenty" of space
-        self.progress_bar.setProperty("storage_status", "plenty")
+        self.main_bar.setToolTip("Unlimited storage - no quota restrictions")
+        self.traffic_strip.setVisible(False)
 
         self._refresh_style()
 
     def _update_unlimited_text_format(self, width: int):
-        """Update text format for unlimited storage based on width.
-
-        Args:
-            width: Current widget width in pixels
-        """
+        """Update text format for unlimited storage based on width."""
         if width >= 50:
-            self.progress_bar.setFormat("")
-            self.progress_bar.setTextVisible(False)
+            self.main_bar.setFormat("")
+            self.main_bar.setTextVisible(False)
             self._show_infinity_label(True)
         else:
             self._show_infinity_label(False)
-            self.progress_bar.setFormat("")
+            self.main_bar.setFormat("")
 
     def _show_infinity_label(self, show: bool):
         """Show or hide a centered infinity overlay label on the progress bar."""
         if not hasattr(self, '_infinity_label'):
             from PyQt6.QtGui import QFont
             from PyQt6.QtCore import Qt
-            lbl = QLabel("∞", self.progress_bar)
+            lbl = QLabel("∞", self.main_bar)
             font = QFont()
             font.setFamilies(["Segoe UI Symbol", "DejaVu Sans", "Symbola"])
             font.setPointSize(14)
@@ -1362,26 +1331,130 @@ class StorageProgressBar(QWidget):
             from src.gui.theme_manager import is_dark_mode
             text_color = "white" if is_dark_mode() else "black"
             self._infinity_label.setStyleSheet(f"background: transparent; color: {text_color};")
-            self._infinity_label.setGeometry(0, -3, self.progress_bar.width(), self.progress_bar.height())
+            self._infinity_label.setGeometry(0, -3, self.main_bar.width(), self.main_bar.height())
+
+    def update_traffic(self, available_bytes: int, ceiling_bytes: int, reset_at_iso: str) -> None:
+        """Update the thin traffic strip below the main bar (K2S family only).
+
+        Strip is hidden if no traffic data is available; otherwise renders
+        percent remaining with the same color thresholds as the main bar.
+        """
+        self._traffic_available = max(0, int(available_bytes or 0))
+        self._traffic_ceiling = max(0, int(ceiling_bytes or 0))
+        self._traffic_reset_at = str(reset_at_iso or "")
+
+        if self._traffic_ceiling <= 0:
+            self.traffic_strip.setVisible(False)
+            return
+
+        used_pct = int(((self._traffic_ceiling - self._traffic_available) / self._traffic_ceiling) * 100)
+        used_pct = max(0, min(100, used_pct))
+        free_pct = 100 - used_pct
+
+        self.traffic_strip.setValue(free_pct)
+        if used_pct >= 90:
+            self.traffic_strip.setProperty("storage_status", "low")
+        elif used_pct >= 75:
+            self.traffic_strip.setProperty("storage_status", "medium")
+        else:
+            self.traffic_strip.setProperty("storage_status", "plenty")
+        self.traffic_strip.style().unpolish(self.traffic_strip)
+        self.traffic_strip.style().polish(self.traffic_strip)
+        self.traffic_strip.setVisible(True)
+
+        self._refresh_tooltip()
+
+    def _refresh_tooltip(self) -> None:
+        """Rebuild the main bar tooltip from cached storage and traffic data."""
+        from src.utils.format_utils import format_host_storage_size, format_duration
+        parts: list[str] = []
+        if self._total_bytes > 0:
+            left_fmt = format_host_storage_size(self._host_id, self._left_bytes)
+            total_fmt = format_host_storage_size(self._host_id, self._total_bytes)
+            used_fmt = format_host_storage_size(self._host_id, self._total_bytes - self._left_bytes)
+            used_pct = int(((self._total_bytes - self._left_bytes) / self._total_bytes) * 100) if self._total_bytes else 0
+            parts.append(f"Storage: {left_fmt} free / {total_fmt} total")
+            parts.append(f"Used: {used_fmt} ({used_pct}%)")
+        if self._traffic_ceiling > 0:
+            avail_fmt = format_host_storage_size(self._host_id, self._traffic_available)
+            ceil_fmt = format_host_storage_size(self._host_id, self._traffic_ceiling)
+            line = f"Traffic: {avail_fmt} / {ceil_fmt} left"
+            if self._traffic_reset_at:
+                try:
+                    from datetime import datetime, timezone
+                    reset_dt = datetime.fromisoformat(self._traffic_reset_at)
+                    secs = int((reset_dt - datetime.now(timezone.utc)).total_seconds())
+                    if secs > 0:
+                        line += f" \u00b7 resets in {format_duration(secs)}"
+                except (ValueError, TypeError):
+                    pass
+            parts.append(line)
+        self.main_bar.setToolTip("\n".join(parts) if parts else "")
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._on_double_click()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def _on_double_click(self) -> None:
+        """Swap primary bar (storage ↔ traffic). Ignored when no traffic data."""
+        if self._traffic_ceiling <= 0:
+            return
+        self.primary = "traffic" if self.primary == "storage" else "storage"
+        self._persist_primary()
+        if self.primary == "traffic":
+            self.main_bar.setFixedHeight(5)
+            self.main_bar.setTextVisible(False)
+            self.traffic_strip.setFixedHeight(14)
+            self.traffic_strip.setTextVisible(True)
+            from src.utils.format_utils import format_quota_compact
+            self.traffic_strip.setFormat(format_quota_compact(self._host_id, self._traffic_available))
+        else:
+            self.main_bar.setFixedHeight(14)
+            self.main_bar.setTextVisible(True)
+            self._update_text_format(self.width())
+            self.traffic_strip.setFixedHeight(5)
+            self.traffic_strip.setTextVisible(False)
+            self.traffic_strip.setFormat("")
+
+    def _persist_primary(self) -> None:
+        if not self._host_id:
+            return
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        settings.setValue(f"WorkerTable/StorageTrafficPrimary/{self._host_id}", self.primary)
+
+    def _restore_primary_from_settings(self) -> None:
+        if not self._host_id:
+            return
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("BBDropUploader", "BBDropGUI")
+        saved = settings.value(f"WorkerTable/StorageTrafficPrimary/{self._host_id}", "storage", type=str)
+        if saved in ("storage", "traffic") and saved != self.primary and self._traffic_ceiling > 0:
+            self.primary = "storage"
+            self._on_double_click()
 
     def resizeEvent(self, event):
-        """Update text format when widget is resized.
-
-        Args:
-            event: QResizeEvent containing old and new sizes
-        """
+        """Update text format when widget is resized."""
         super().resizeEvent(event)
 
         # Check if unlimited mode (sentinel value)
         if self._total_bytes == -1:
             self._update_unlimited_text_format(event.size().width())
             if hasattr(self, '_infinity_label') and self._infinity_label.isVisible():
-                self._infinity_label.setGeometry(0, -3, self.progress_bar.width(), self.progress_bar.height())
+                self._infinity_label.setGeometry(0, -3, self.main_bar.width(), self.main_bar.height())
         elif self._total_bytes > 0:
             # Normal storage mode
             self._update_text_format(event.size().width())
 
     def _refresh_style(self):
         """Force style refresh to apply property changes."""
-        # Use update() instead of unpolish/polish for better performance
-        self.progress_bar.update()
+        self.main_bar.update()
+
+
+# Legacy alias. New code should reference StorageTrafficBar directly.
+class StorageProgressBar(StorageTrafficBar):
+    """Deprecated — use StorageTrafficBar. Kept for backwards compatibility."""
+    pass
