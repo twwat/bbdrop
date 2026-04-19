@@ -41,6 +41,23 @@ from src.core.constants import (
 )
 
 
+class StayOpenMenu(QMenu):
+    """QMenu that stays open when checkable actions are clicked.
+
+    Standard QMenu closes on any action trigger. This variant keeps the menu
+    visible after toggling a checkable action so users can flip multiple
+    items without reopening. Non-checkable actions still close as usual.
+    Closes on Escape or click outside.
+    """
+
+    def mouseReleaseEvent(self, event):
+        action = self.activeAction()
+        if action is not None and action.isEnabled() and action.isCheckable():
+            action.trigger()
+            return
+        super().mouseReleaseEvent(event)
+
+
 class NoAutoScrollTable(QTableWidget):
     """QTableWidget subclass that disables auto-scroll-to-selection behavior.
 
@@ -1997,8 +2014,18 @@ class WorkerStatusWidget(QWidget):
         config_manager = get_config_manager()
         enabled_only = (filter_idx == 3)
 
-        result = list(all_workers)
-        existing_hosts = {w.hostname.lower() for w in all_workers}
+        def _worker_is_enabled(w: WorkerStatus) -> bool:
+            if w.worker_type == 'imagehost':
+                return is_image_host_enabled(w.host_id)
+            if w.worker_type == 'filehost':
+                return bool(get_file_host_setting(w.host_id, "enabled", "bool"))
+            return True
+
+        if enabled_only:
+            result = [w for w in all_workers if _worker_is_enabled(w)]
+        else:
+            result = list(all_workers)
+        existing_hosts = {w.hostname.lower() for w in result}
 
         # Add image host placeholders
         image_host_config_mgr = get_image_host_config_manager()
@@ -2401,7 +2428,8 @@ class WorkerStatusWidget(QWidget):
         menu = QMenu(self)
 
         # Filter submenu
-        filter_menu = menu.addMenu("Filter")
+        filter_menu = StayOpenMenu("Filter", menu)
+        menu.addMenu(filter_menu)
         for i, label in enumerate(self._filter_labels):
             action = filter_menu.addAction(label)
             action.setCheckable(True)
@@ -2412,7 +2440,8 @@ class WorkerStatusWidget(QWidget):
         menu.addSeparator()
 
         # Core columns section
-        core_menu = menu.addMenu("Core Columns")
+        core_menu = StayOpenMenu("Core Columns", menu)
+        menu.addMenu(core_menu)
         for col in CORE_COLUMNS:
             if col.hideable:
                 action = core_menu.addAction(col.name if col.name else col.id.capitalize())
@@ -2424,12 +2453,14 @@ class WorkerStatusWidget(QWidget):
         # Metrics columns section - GROUP BY METRIC TYPE
         metrics_menu = menu.addMenu("Metrics Columns")
 
-        # Group by metric type instead of period
-        bytes_menu = metrics_menu.addMenu("Bytes Uploaded")
-        files_menu = metrics_menu.addMenu("Files Uploaded")
-        avg_speed_menu = metrics_menu.addMenu("Average Speed")
-        peak_speed_menu = metrics_menu.addMenu("Peak Speed")
-        success_menu = metrics_menu.addMenu("Success Rate")
+        # Group by metric type instead of period (stay-open submenus)
+        bytes_menu = StayOpenMenu("Bytes Uploaded", metrics_menu)
+        files_menu = StayOpenMenu("Files Uploaded", metrics_menu)
+        avg_speed_menu = StayOpenMenu("Average Speed", metrics_menu)
+        peak_speed_menu = StayOpenMenu("Peak Speed", metrics_menu)
+        success_menu = StayOpenMenu("Success Rate", metrics_menu)
+        for m in (bytes_menu, files_menu, avg_speed_menu, peak_speed_menu, success_menu):
+            metrics_menu.addMenu(m)
 
         # Map metric_key to menu
         metric_to_menu = {
