@@ -26,13 +26,15 @@ def test_file_host_with_storage_gets_progress_bar(qapp):
     assert isinstance(entry['storage_bar'], QProgressBar)
 
 
-def test_image_host_gets_unlimited_label(qapp):
+def test_image_host_row_omits_storage_slot(qapp):
+    """Image hosts have their own row layout — no storage bar, no Unlimited label."""
     widget = FileHostsSettingsWidget(parent=None, worker_manager=None)
     entry = widget.host_widgets.get('imx')
     assert entry is not None, "Image host 'imx' should appear in host_widgets"
-    assert entry['storage_bar'] is None
-    assert isinstance(entry['unlimited_label'], QLabel)
-    assert entry['unlimited_label'].text() == 'Unlimited'
+    assert entry.get('kind') == 'image'
+    assert 'storage_bar' not in entry
+    assert 'unlimited_label' not in entry
+    assert isinstance(entry['status_label'], QLabel)
 
 
 def test_every_row_has_configure_button(qapp):

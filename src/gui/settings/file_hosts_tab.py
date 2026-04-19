@@ -69,17 +69,11 @@ class FileHostsSettingsWidget(QWidget):
         intro_label.setProperty("class", "tab-description")
         layout.addWidget(intro_label)
 
-        # Image Hosts groupbox
+        # Image Hosts groupbox - sized to content (no scroll; only a handful of hosts)
+        from PyQt6.QtWidgets import QSizePolicy
         image_hosts_group = QGroupBox("Image Hosts")
-        image_hosts_layout = QVBoxLayout(image_hosts_group)
-
-        image_scroll = QScrollArea()
-        image_scroll.setWidgetResizable(True)
-        image_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        image_scroll.setMinimumHeight(120)
-
-        image_container = QWidget()
-        self.image_hosts_layout_inner = QVBoxLayout(image_container)
+        image_hosts_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        self.image_hosts_layout_inner = QVBoxLayout(image_hosts_group)
         self.image_hosts_layout_inner.setSpacing(8)
 
         from src.core.image_host_config import get_all_hosts, is_image_host_enabled
@@ -89,11 +83,7 @@ class FileHostsSettingsWidget(QWidget):
             key=lambda item: (not is_image_host_enabled(item[0]), item[1].name.lower())
         )
         for host_id, config in sorted_image_hosts:
-            self._create_host_row(host_id, config, kind='image')
-
-        self.image_hosts_layout_inner.addStretch()
-        image_scroll.setWidget(image_container)
-        image_hosts_layout.addWidget(image_scroll)
+            self._create_image_host_row(host_id, config)
 
         layout.addWidget(image_hosts_group)
 
@@ -126,12 +116,12 @@ class FileHostsSettingsWidget(QWidget):
         self._load_initial_storage()
 
     def _create_host_row(self, host_id: str, host_config, kind: str = 'file'):
-        """Create UI row for a single host using compact single-row layout.
+        """Create UI row for a single file host (image hosts use _create_image_host_row).
 
         Args:
             host_id: Host identifier
-            host_config: HostConfig (file host) or ImageHostConfig (image host) instance
-            kind: 'file' for file hosts, 'image' for image hosts
+            host_config: HostConfig instance
+            kind: retained for backward compat; only 'file' is supported here.
         """
         from PyQt6.QtWidgets import QSizePolicy
         from src.core.file_host_config import get_file_host_setting
@@ -188,30 +178,23 @@ class FileHostsSettingsWidget(QWidget):
         configure_btn.setToolTip(f"Configuration settings for {host_config.name}")
         configure_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        # Route button click by kind
-        if kind == 'image':
-            configure_btn.clicked.connect(
-                lambda: self._open_image_host_dialog(host_id, host_config)
-            )
-        else:
-            configure_btn.clicked.connect(
-                lambda: self._show_host_config_dialog(host_id, host_config)
-            )
+        configure_btn.clicked.connect(
+            lambda: self._show_host_config_dialog(host_id, host_config)
+        )
         frame_layout.addWidget(configure_btn)
 
-        # 4. Storage Bar (expanding, shows amount free) or Unlimited label for hosts without storage
+        # 4. Storage Bar or "Unlimited" label
         storage_bar = None
         unlimited_label = None
         from src.core.file_host_config import get_host_family
 
         has_per_host_storage = (
-            kind == 'file'
-            and hasattr(host_config, 'user_info_url')
+            hasattr(host_config, 'user_info_url')
             and host_config.user_info_url
             and (hasattr(host_config, 'storage_left_path') and host_config.storage_left_path
                  or hasattr(host_config, 'storage_regex') and host_config.storage_regex)
         )
-        is_k2s_family = kind == 'file' and get_host_family(host_id) == 'k2s'
+        is_k2s_family = get_host_family(host_id) == 'k2s'
 
         if has_per_host_storage or is_k2s_family:
             storage_bar = QProgressBar()
@@ -239,14 +222,9 @@ class FileHostsSettingsWidget(QWidget):
         status_label = QLabel()
         status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-        # Set initial semantic status based on kind
-        if kind == 'image':
-            self._update_image_status_label(host_id)
-        else:
-            status_text = self._get_status_text(host_id, host_config)
-            status_label.setText(status_text)
-            self._update_status_label_style(host_id, host_config, status_label)
+        status_text = self._get_status_text(host_id, host_config)
+        status_label.setText(status_text)
+        self._update_status_label_style(host_id, host_config, status_label)
         frame_layout.addWidget(status_label)
 
         # Store widgets for later access
@@ -258,24 +236,117 @@ class FileHostsSettingsWidget(QWidget):
             "unlimited_label": unlimited_label,
             "logo_label": logo_label,  # Store logo for theme updates
             "configure_btn": configure_btn,
-            "kind": kind,
+            "kind": 'file',
             "enable_btn": None  # Removed - redundant with status icon
         }
 
-        # Load cached storage immediately for file hosts
-        if kind == 'file':
-            self.refresh_storage_display(host_id)
-            # Update status icon to reflect current enabled state
-            self._update_status_icon(host_id)
-        else:
-            # For image hosts, update the status icon
-            self._update_image_status_icon(host_id)
+        # Load cached storage immediately and update status icon
+        self.refresh_storage_display(host_id)
+        self._update_status_icon(host_id)
 
-        # Add to layout based on kind
-        if kind == 'image':
-            self.image_hosts_layout_inner.addWidget(host_frame)
+        self.hosts_container_layout.addWidget(host_frame)
+
+    def _create_image_host_row(self, host_id: str, config) -> None:
+        """Create UI row for a single image host.
+
+        Ported from the pre-merge image_hosts_tab.py: status icon + logo + Configure
+        + right-aligned status label. The Enable checkbox and Cover radio that used
+        to sit here moved into the right-click context menu.
+        """
+        from PyQt6.QtWidgets import QSizePolicy
+
+        frame = QFrame()
+        frame.setFrameShape(QFrame.Shape.StyledPanel)
+        frame.setProperty("class", "host-panel")
+        frame.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        frame.customContextMenuRequested.connect(
+            lambda pos, hid=host_id, f=frame: self._build_host_menu(hid).exec(
+                f.mapToGlobal(pos)
+            )
+        )
+        row_layout = QHBoxLayout(frame)
+        row_layout.setContentsMargins(8, 4, 8, 4)
+        row_layout.setSpacing(8)
+
+        # Status icon (20×20)
+        status_icon = QLabel()
+        status_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_icon.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        row_layout.addWidget(status_icon)
+
+        # Logo (150px fixed)
+        logo_container = QWidget()
+        logo_container.setFixedWidth(150)
+        logo_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        logo_layout = QHBoxLayout(logo_container)
+        logo_layout.setContentsMargins(0, 0, 0, 0)
+        logo_layout.setSpacing(0)
+
+        logo_label = self._load_image_host_logo(host_id, config, height=22)
+        if logo_label:
+            logo_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            logo_layout.addWidget(logo_label)
         else:
-            self.hosts_container_layout.addWidget(host_frame)
+            logo_layout.addWidget(QLabel(f"<b>{config.name}</b>"))
+        row_layout.addWidget(logo_container)
+
+        # Configure button (80px)
+        configure_btn = QPushButton("Configure")
+        configure_btn.setFixedWidth(80)
+        configure_btn.setToolTip(f"Configure settings for {config.name}")
+        configure_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        configure_btn.clicked.connect(
+            lambda: self._open_image_host_dialog(host_id, config)
+        )
+        row_layout.addWidget(configure_btn)
+
+        # Status label (expanding, right-aligned)
+        status_label = QLabel()
+        status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addWidget(status_label)
+
+        self.host_widgets[host_id] = {
+            "frame": frame,
+            "status_icon": status_icon,
+            "status_label": status_label,
+            "logo_label": logo_label,
+            "configure_btn": configure_btn,
+            "kind": 'image',
+        }
+
+        self._update_image_status_label(host_id)
+        self._update_image_status_icon(host_id)
+
+        self.image_hosts_layout_inner.addWidget(frame)
+
+    def _load_image_host_logo(self, host_id: str, config, height: int = 22) -> Optional[QLabel]:
+        """Load image-host logo from assets/image_hosts/<config.logo>.
+
+        Ported verbatim from the pre-merge image_hosts_tab.py.
+        """
+        from src.utils.paths import get_project_root
+        import os
+
+        if not getattr(config, 'logo', None):
+            return None
+
+        logo_path = os.path.join(get_project_root(), "assets", "image_hosts", config.logo)
+        if not os.path.exists(logo_path):
+            return None
+
+        try:
+            pixmap = QPixmap(logo_path)
+            if pixmap.isNull():
+                return None
+
+            scaled = pixmap.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
+            logo_label = QLabel()
+            logo_label.setPixmap(scaled)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            return logo_label
+        except Exception:
+            return None
 
     def _load_host_logo(self, host_id: str, host_config: HostConfig, height: int = 40) -> Optional[QLabel]:
         """Load and create a clickable QLabel with the host's logo.
