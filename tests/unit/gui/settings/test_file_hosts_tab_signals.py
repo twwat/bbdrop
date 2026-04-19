@@ -14,6 +14,11 @@ from src.gui.settings.file_hosts_tab import FileHostsSettingsWidget
 @pytest.fixture(scope="module")
 def qapp():
     app = QApplication.instance() or QApplication([])
+    # Icon manager is normally initialized by the main window; tests need it too.
+    from src.gui.icon_manager import get_icon_manager, init_icon_manager
+    from src.utils.paths import get_project_root
+    if get_icon_manager() is None:
+        init_icon_manager(os.path.join(get_project_root(), "assets"))
     yield app
 
 
