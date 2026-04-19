@@ -506,6 +506,8 @@ class FileHostWorker(QThread):
                                     self.storage_updated.emit(self.host_id, total, left)
                                 except (ValueError, TypeError) as e:
                                     self._log(f"Failed to parse storage: {e}", level="debug")
+                            if get_host_family(self.host_id) == 'k2s':
+                                self._update_traffic_cache_from_user_info(user_info)
 
                         spinup_success = True
                         self.status_updated.emit(self.host_id, "idle")
@@ -1648,6 +1650,8 @@ class FileHostWorker(QThread):
                         f"Storage data missing in test response (total={storage_total}, left={storage_left})",
                         level="debug"
                     )
+                if get_host_family(self.host_id) == 'k2s':
+                    self._update_traffic_cache_from_user_info(user_info)
             else:
                 self._log("No user_info in test credentials response", level="debug")
 
@@ -1743,6 +1747,45 @@ class FileHostWorker(QThread):
         self.settings.setValue(f"FileHosts/{self.host_id}/storage_total", str(total))
         self.settings.setValue(f"FileHosts/{self.host_id}/storage_left", str(left))
         pass  # Storage cache saved
+        self.settings.sync()
+
+    def _update_traffic_cache_from_user_info(self, user_info: Dict[str, Any]) -> None:
+        """Persist K2S-family daily traffic info from user_info response.
+
+        Reads ``available_traffic`` (bytes) and ``quota_reset_at`` (ISO8601)
+        from the raw API payload. Ceiling is (re)seeded whenever the reset
+        timestamp changes — i.e. on rollover or plan change — so downgrades
+        are captured at the next reset instead of being stuck at max-seen.
+        """
+        raw = user_info.get("raw_response") if user_info else None
+        if not isinstance(raw, dict):
+            return
+        available = raw.get("available_traffic")
+        reset_at = raw.get("quota_reset_at")
+        if available is None or not reset_at:
+            return
+        try:
+            available_int = int(available)
+        except (ValueError, TypeError):
+            return
+
+        prefix = f"FileHosts/{self.host_id}"
+        last_reset = self.settings.value(f"{prefix}/traffic_reset_at", "", type=str)
+        ceiling_str = self.settings.value(f"{prefix}/traffic_ceiling", "0", type=str)
+        try:
+            ceiling = int(ceiling_str) if ceiling_str else 0
+        except (ValueError, TypeError):
+            ceiling = 0
+
+        # Seed ceiling on first observation; reseed whenever the quota
+        # window rolls over (new reset_at) so plan changes are reflected.
+        if ceiling <= 0 or reset_at != last_reset:
+            ceiling = available_int
+
+        self.settings.setValue(f"{prefix}/traffic_available", str(available_int))
+        self.settings.setValue(f"{prefix}/traffic_ceiling", str(ceiling))
+        self.settings.setValue(f"{prefix}/traffic_reset_at", str(reset_at))
+        self.settings.setValue(f"{prefix}/traffic_ts", int(time.time()))
         self.settings.sync()
 
     def _save_test_results(self, results: Dict[str, Any]) -> None:
