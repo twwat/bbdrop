@@ -114,7 +114,7 @@ class TestGetAllFiles:
         calls = []
         def mock_post(endpoint, body):
             calls.append(endpoint)
-            if endpoint == 'getFoldersList' and body.get('parent') == '/':
+            if endpoint == 'getFoldersList' and not body.get('parent_id'):
                 return {'status': 'success', 'foldersList': ['/test'], 'foldersIds': ['abc123']}
             elif endpoint == 'getFoldersList':
                 return {'status': 'success', 'foldersList': [], 'foldersIds': []}
@@ -136,15 +136,22 @@ class TestGetAllFiles:
         assert files[1]['is_available'] is False
 
     def test_nested_folders_recursed(self):
-        """Subfolders are recursed."""
+        """Subfolders are recursed. Uses parent_id (not parent) for getFoldersList.
+
+        The live K2S API silently ignores the 'parent' param and returns the
+        root listing, causing infinite recursion. The walker must use
+        'parent_id' for subfolder lookups.
+        """
         checker = self._make_checker()
         def mock_post(endpoint, body):
-            parent = body.get('parent', body.get('id', '/'))
-            if endpoint == 'getFoldersList' and parent == '/':
-                return {'status': 'success', 'foldersList': ['/top'], 'foldersIds': ['top1']}
-            elif endpoint == 'getFoldersList' and parent == 'top1':
-                return {'status': 'success', 'foldersList': ['/top/sub'], 'foldersIds': ['sub1']}
-            elif endpoint == 'getFoldersList':
+            if endpoint == 'getFoldersList':
+                parent_id = body.get('parent_id')
+                # Reject wrong param name — the real API would return root.
+                assert 'parent' not in body, "must use parent_id, not parent"
+                if parent_id is None:
+                    return {'status': 'success', 'foldersList': ['/top'], 'foldersIds': ['top1']}
+                elif parent_id == 'top1':
+                    return {'status': 'success', 'foldersList': ['/top/sub'], 'foldersIds': ['sub1']}
                 return {'status': 'success', 'foldersList': [], 'foldersIds': []}
             elif endpoint == 'getFilesList':
                 folder_id = body.get('parent', '/')

@@ -87,9 +87,12 @@ class K2SFileChecker:
             folder_id: Folder ID to walk ('/') for root.
             all_files: Accumulator list to append file dicts into.
         """
-        # Enumerate subfolders
+        # Enumerate subfolders. The API expects 'parent_id' here (NOT 'parent' —
+        # that gets silently ignored and returns the root listing, which causes
+        # infinite recursion). Root is expressed as an empty body.
+        body = {} if folder_id == '/' else {'parent_id': folder_id}
         try:
-            resp = self._api_post('getFoldersList', {'parent': folder_id})
+            resp = self._api_post('getFoldersList', body)
             subfolder_ids: list[str] = resp.get('foldersIds', [])
         except Exception as e:
             log(f"K2S getFoldersList failed for folder '{folder_id}': {e}", level="error", category="scanner")
