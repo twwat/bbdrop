@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSettings
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -90,15 +91,18 @@ class FileListWidget(QWidget):
         self._table.setSortingEnabled(False)  # We handle sorting via API
 
         header = self._table.horizontalHeader()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(COL_NAME, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(COL_SIZE, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(COL_DATE, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(COL_ACCESS, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(COL_GALLERY, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(COL_DOWNLOADS, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(COL_LAST_DL, QHeaderView.ResizeMode.ResizeToContents)
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setDefaultSectionSize(100)
+        self._table.setColumnWidth(COL_NAME, 280)
+        self._table.setColumnWidth(COL_SIZE, 80)
+        self._table.setColumnWidth(COL_DATE, 130)
+        self._table.setColumnWidth(COL_ACCESS, 70)
+        self._table.setColumnWidth(COL_STATUS, 90)
+        self._table.setColumnWidth(COL_GALLERY, 160)
+        self._table.setColumnWidth(COL_DOWNLOADS, 90)
+        self._table.setColumnWidth(COL_LAST_DL, 130)
+        header.setMinimumSectionSize(40)
         header.sectionClicked.connect(self._on_header_clicked)
 
         self._table.doubleClicked.connect(self._on_double_click)
@@ -136,6 +140,22 @@ class FileListWidget(QWidget):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def save_column_widths(self, settings: QSettings) -> None:
+        header = self._table.horizontalHeader()
+        widths = [header.sectionSize(i) for i in range(_NUM_COLUMNS)]
+        settings.setValue("file_list_col_widths", widths)
+
+    def restore_column_widths(self, settings: QSettings) -> None:
+        widths = settings.value("file_list_col_widths")
+        if not widths:
+            return
+        try:
+            for i, w in enumerate(widths):
+                if i < _NUM_COLUMNS:
+                    self._table.setColumnWidth(i, int(w))
+        except (TypeError, ValueError):
+            pass
 
     def set_gallery_map(self, mapping: dict) -> None:
         """Set the file_id -> gallery_name lookup used by the Gallery column.

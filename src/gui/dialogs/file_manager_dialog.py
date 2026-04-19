@@ -419,6 +419,7 @@ class FileManagerDialog(QDialog):
             splitter = self.findChild(QSplitter)
             if splitter:
                 splitter.restoreState(splitter_state)
+        self.file_list.restore_column_widths(self._settings)
         last_host = self._settings.value("last_host")
         if last_host:
             idx = self._host_combo.findData(last_host)
@@ -432,6 +433,7 @@ class FileManagerDialog(QDialog):
         splitter = self.findChild(QSplitter)
         if splitter:
             self._settings.setValue("splitter", splitter.saveState())
+        self.file_list.save_column_widths(self._settings)
         host_id = self._host_combo.currentData()
         if host_id:
             self._settings.setValue("last_host", host_id)
