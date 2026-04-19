@@ -183,10 +183,11 @@ class FileHostsSettingsWidget(QWidget):
         )
         frame_layout.addWidget(configure_btn)
 
-        # 4. Storage Bar — same StorageTrafficBar used in the worker table.
-        #    Hosts without a per-host quota render the bar in unlimited mode.
+        # 4. Storage Bar (unchanged from pre-merge file-host behavior) or an
+        #    Unlimited label for file hosts without quota endpoints.
+        storage_bar = None
+        unlimited_label = None
         from src.core.file_host_config import get_host_family
-        from src.gui.widgets.custom_widgets import StorageTrafficBar
 
         has_per_host_storage = (
             hasattr(host_config, 'user_info_url')
@@ -196,14 +197,27 @@ class FileHostsSettingsWidget(QWidget):
         )
         is_k2s_family = get_host_family(host_id) == 'k2s'
 
-        storage_bar = StorageTrafficBar()
-        storage_bar.setMinimumWidth(180)
-        storage_bar.setMaximumHeight(20)
-        storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        if not (has_per_host_storage or is_k2s_family):
-            storage_bar.set_unlimited()
-        frame_layout.addWidget(storage_bar)
-        unlimited_label = None  # retained key for back-compat with existing code paths
+        if has_per_host_storage or is_k2s_family:
+            storage_bar = QProgressBar()
+            storage_bar.setMinimumWidth(180)
+            storage_bar.setMaximumHeight(20)
+            storage_bar.setMaximum(100)
+            storage_bar.setValue(0)
+            storage_bar.setTextVisible(True)
+            storage_bar.setFormat("")
+            storage_bar.setProperty("class", "storage-bar")
+            storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            frame_layout.addWidget(storage_bar)
+        else:
+            unlimited_label = QLabel("Unlimited")
+            unlimited_label.setProperty("class", "status-muted")
+            unlimited_label.setAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            unlimited_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            )
+            frame_layout.addWidget(unlimited_label)
 
         # 5. Status Display (expanding, shows Ready/Disabled status)
         status_label = QLabel()
@@ -288,19 +302,24 @@ class FileHostsSettingsWidget(QWidget):
         )
         row_layout.addWidget(configure_btn)
 
-        # Storage bar — image hosts have no quota, so display the unlimited state
-        # via the same StorageTrafficBar used in the worker table.
-        from src.gui.widgets.custom_widgets import StorageTrafficBar
-        storage_bar = StorageTrafficBar()
+        # Storage bar — identical QProgressBar widget/sizing as file-host rows.
+        # Image hosts have no quota, so the bar is filled and labelled "∞".
+        storage_bar = QProgressBar()
         storage_bar.setMinimumWidth(180)
         storage_bar.setMaximumHeight(20)
+        storage_bar.setMaximum(100)
+        storage_bar.setValue(100)
+        storage_bar.setTextVisible(True)
+        storage_bar.setFormat("∞")
+        storage_bar.setProperty("class", "storage-bar")
+        storage_bar.setProperty("storage_status", "plenty")
         storage_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        storage_bar.set_unlimited()
+        storage_bar.setToolTip("Unlimited storage — no quota")
         row_layout.addWidget(storage_bar)
 
-        # Status label (right-aligned, same fixed styling as file-host column).
+        # Status label — identical sizing / alignment to file-host row.
         status_label = QLabel()
-        status_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         row_layout.addWidget(status_label)
 
@@ -308,6 +327,8 @@ class FileHostsSettingsWidget(QWidget):
             "frame": frame,
             "status_icon": status_icon,
             "status_label": status_label,
+            "storage_bar": storage_bar,
+            "unlimited_label": None,
             "logo_label": logo_label,
             "configure_btn": configure_btn,
             "kind": 'image',
@@ -668,8 +689,36 @@ class FileHostsSettingsWidget(QWidget):
         if total <= 0 or left < 0 or left > total:
             return
 
-        # StorageTrafficBar handles formatting, colors and tooltip internally.
-        storage_bar.update_storage(total, left, host_id)
+        # Calculate percentages
+        used = total - left
+        percent_used = int((used / total) * 100) if total > 0 else 0
+        percent_free = 100 - percent_used
+
+        # Format strings for compact display and tooltip
+        from src.utils.format_utils import format_host_storage_size
+        left_formatted = format_host_storage_size(host_id, left)
+        total_formatted = format_host_storage_size(host_id, total)
+        used_formatted = format_host_storage_size(host_id, used)
+
+        # Compact format: show amount free (e.g., "15.2 GiB free")
+        compact_format = self._format_storage_compact(left, total, host_id)
+
+        # Update progress bar with compact format
+        storage_bar.setValue(percent_free)
+        storage_bar.setFormat(compact_format)
+
+        tooltip = f"Storage: {left_formatted} free / {total_formatted} total\nUsed: {used_formatted} ({percent_used}%)"
+        storage_bar.setToolTip(tooltip)
+
+        # Color coding based on usage
+        if percent_used >= 90:
+            storage_bar.setProperty("storage_status", "low")
+        elif percent_used >= 75:
+            storage_bar.setProperty("storage_status", "medium")
+        else:
+            storage_bar.setProperty("storage_status", "plenty")
+        storage_bar.style().unpolish(storage_bar)
+        storage_bar.style().polish(storage_bar)
 
 
     def refresh_test_results(self, host_id: str):
@@ -850,14 +899,14 @@ class FileHostsSettingsWidget(QWidget):
             text, css = "Disabled", "status-disabled"
         elif config and not config.requires_auth:
             username = get_credential('username', host_id)
-            text = "Credentials: Set" if username else "Ready (no auth required)"
-            css = "status-success-light"
+            text = "Ready" if username else "Ready (no auth required)"
+            css = "status-success"
         else:
             api_key = get_credential('api_key', host_id)
             if api_key:
-                text, css = "API Key: Set", "status-success-light"
+                text, css = "Ready", "status-success"
             else:
-                text, css = "API Key: Not Set", "status-warning-light"
+                text, css = "Credentials Required", "status-warning"
 
         label.setText(text)
         label.setProperty("class", css)
