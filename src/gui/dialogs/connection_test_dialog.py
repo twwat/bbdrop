@@ -38,6 +38,8 @@ class ConnectionTestDialog(QDialog):
         results = QFormLayout()
 
         self.test_timestamp_label = QLabel("Not tested yet")
+        self.test_network_ip_label = QLabel("—")
+        self.test_network_rtt_label = QLabel("—")
         self.test_credentials_label = QLabel("○ Not tested")
         self.test_userinfo_label = QLabel("○ Not tested")
         self.test_upload_label = QLabel("○ Not tested")
@@ -47,6 +49,8 @@ class ConnectionTestDialog(QDialog):
         self.test_error_label.setProperty("class", "error-small")
 
         results.addRow("Last tested:", self.test_timestamp_label)
+        results.addRow("Host IP:", self.test_network_ip_label)
+        results.addRow("Response time:", self.test_network_rtt_label)
         results.addRow("Credentials:", self.test_credentials_label)
         results.addRow("User info:", self.test_userinfo_label)
         results.addRow("Upload test:", self.test_upload_label)
@@ -68,8 +72,15 @@ class ConnectionTestDialog(QDialog):
         """Update the last tested timestamp."""
         self.test_timestamp_label.setText(ts)
 
+    def set_network_info(self, ip: str, rtt_ms):
+        """Update the network diagnostic rows."""
+        self.test_network_ip_label.setText(ip or "—")
+        self.test_network_rtt_label.setText(f"{rtt_ms:.0f} ms" if rtt_ms is not None else "—")
+
     def set_all_running(self):
         """Set all steps to running state."""
+        self.test_network_ip_label.setText("⏳ Checking...")
+        self.test_network_rtt_label.setText("⏳ Checking...")
         for label in [self.test_credentials_label, self.test_userinfo_label,
                       self.test_upload_label, self.test_delete_label]:
             label.setText("⏳ Running...")

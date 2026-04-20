@@ -20,6 +20,7 @@ from src.gui.widgets.simple_proxy_dropdown import SimpleProxyDropdown
 from src.gui.widgets.info_button import InfoButton
 from src.gui.dialogs.connection_test_dialog import ConnectionTestDialog
 from src.gui.dialogs.bbcode_link_format_dialog import PlaceholderEditorDialog, LINK_PLACEHOLDERS
+from src.gui.dialogs.credential_test_dialog import CredentialTestDialog
 
 
 class AsteriskPasswordEdit(QLineEdit):
@@ -203,18 +204,6 @@ class FileHostConfigDialog(QDialog):
             # Determine which fields to show based on auth_type
             if self.host_config.auth_type in ["api_key", "bearer"]:
                 # API Key only
-                header = QHBoxLayout()
-                header.addWidget(QLabel("<b>API Key</b>"))
-                desc = QLabel(" \u2013 <i>required for uploads</i>")
-                desc.setProperty("class", "label-muted")
-                header.addWidget(desc)
-                header.addWidget(InfoButton(
-                    f"Your {self.host_config.name} API key authenticates your uploads. "
-                    "Find it in your account settings on the host's website."
-                ))
-                header.addStretch()
-                creds_layout.addRow("", header)
-
                 self.creds_api_key_input = AsteriskPasswordEdit()
                 self.creds_api_key_input.setFont(QFont("Consolas", 10))
                 self.creds_api_key_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -236,22 +225,18 @@ class FileHostConfigDialog(QDialog):
                 )
                 api_key_row.addWidget(show_api_btn)
 
-                creds_layout.addRow("API Key:", api_key_row)
+                api_key_label = QWidget()
+                _l = QHBoxLayout(api_key_label)
+                _l.setContentsMargins(0, 0, 0, 0)
+                _l.addWidget(QLabel("API Key"))
+                _l.addWidget(InfoButton(
+                    f"Your {self.host_config.name} API key authenticates your uploads. "
+                    "Find it in your account settings on the host's website."
+                ))
+                creds_layout.addRow(api_key_label, api_key_row)
 
             elif self.host_config.auth_type == "mixed":
                 # Both API key and username/password
-                header = QHBoxLayout()
-                header.addWidget(QLabel("<b>API Key</b>"))
-                desc = QLabel(" \u2013 <i>required for uploads</i>")
-                desc.setProperty("class", "label-muted")
-                header.addWidget(desc)
-                header.addWidget(InfoButton(
-                    f"Your {self.host_config.name} API key authenticates your uploads. "
-                    "Find it in your account settings on the host's website."
-                ))
-                header.addStretch()
-                creds_layout.addRow("", header)
-
                 self.creds_api_key_input = AsteriskPasswordEdit()
                 self.creds_api_key_input.setFont(QFont("Consolas", 10))
                 self.creds_api_key_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -273,19 +258,15 @@ class FileHostConfigDialog(QDialog):
                 )
                 api_key_row.addWidget(show_api_btn)
 
-                creds_layout.addRow("API Key:", api_key_row)
-
-                login_header = QHBoxLayout()
-                login_header.addWidget(QLabel("<b>Login</b>"))
-                desc = QLabel(" \u2013 <i>for account info and storage tracking</i>")
-                desc.setProperty("class", "label-muted")
-                login_header.addWidget(desc)
-                login_header.addWidget(InfoButton(
-                    f"Your {self.host_config.name} login credentials are used to "
-                    "authenticate uploads and track your account storage usage."
+                api_key_label = QWidget()
+                _l = QHBoxLayout(api_key_label)
+                _l.setContentsMargins(0, 0, 0, 0)
+                _l.addWidget(QLabel("API Key"))
+                _l.addWidget(InfoButton(
+                    f"Your {self.host_config.name} API key authenticates your uploads. "
+                    "Find it in your account settings on the host's website."
                 ))
-                login_header.addStretch()
-                creds_layout.addRow("", login_header)
+                creds_layout.addRow(api_key_label, api_key_row)
 
                 self.creds_username_input = AsteriskPasswordEdit()
                 self.creds_username_input.setFont(QFont("Consolas", 10))
@@ -308,7 +289,15 @@ class FileHostConfigDialog(QDialog):
                 )
                 username_row.addWidget(show_user_btn)
 
-                creds_layout.addRow("Username:", username_row)
+                username_label = QWidget()
+                _l = QHBoxLayout(username_label)
+                _l.setContentsMargins(0, 0, 0, 0)
+                _l.addWidget(QLabel("Username"))
+                _l.addWidget(InfoButton(
+                    f"Your {self.host_config.name} login credentials are used to "
+                    "authenticate uploads and track your account storage usage."
+                ))
+                creds_layout.addRow(username_label, username_row)
 
                 self.creds_password_input = AsteriskPasswordEdit()
                 self.creds_password_input.setFont(QFont("Consolas", 10))
@@ -335,18 +324,6 @@ class FileHostConfigDialog(QDialog):
 
             else:
                 # Username and password only (token_login, session, etc.)
-                header = QHBoxLayout()
-                header.addWidget(QLabel("<b>Login</b>"))
-                desc = QLabel(" \u2013 <i>for authentication and storage tracking</i>")
-                desc.setProperty("class", "label-muted")
-                header.addWidget(desc)
-                header.addWidget(InfoButton(
-                    f"Your {self.host_config.name} login credentials are used to authenticate "
-                    "uploads and track your account storage usage."
-                ))
-                header.addStretch()
-                creds_layout.addRow("", header)
-
                 self.creds_username_input = AsteriskPasswordEdit()
                 self.creds_username_input.setFont(QFont("Consolas", 10))
                 self.creds_username_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -368,7 +345,15 @@ class FileHostConfigDialog(QDialog):
                 )
                 username_row.addWidget(show_user_btn)
 
-                creds_layout.addRow("Username:", username_row)
+                username_label = QWidget()
+                _l = QHBoxLayout(username_label)
+                _l.setContentsMargins(0, 0, 0, 0)
+                _l.addWidget(QLabel("Username"))
+                _l.addWidget(InfoButton(
+                    f"Your {self.host_config.name} login credentials are used to authenticate "
+                    "uploads and track your account storage usage."
+                ))
+                creds_layout.addRow(username_label, username_row)
 
                 self.creds_password_input = AsteriskPasswordEdit()
                 self.creds_password_input.setFont(QFont("Consolas", 10))
@@ -398,6 +383,7 @@ class FileHostConfigDialog(QDialog):
             security_row = QHBoxLayout()
             security_label = QLabel("<small>Credentials are securely stored and encrypted</small>")
             security_label.setProperty("class", "label-muted")
+            security_label.setStyleSheet("opacity: 0.55;")
             security_row.addWidget(security_label)
             security_row.addWidget(InfoButton(
                 "Your credentials are protected with multiple layers of security:<br><br>"
@@ -415,6 +401,10 @@ class FileHostConfigDialog(QDialog):
                 "read by other users on the same machine."
             ))
             security_row.addStretch()
+            test_creds_btn = QPushButton("Test Credentials")
+            test_creds_btn.setToolTip("Test credentials — opens diagnostic dialog with live output")
+            test_creds_btn.clicked.connect(self._open_cred_test_modal)
+            security_row.addWidget(test_creds_btn)
             creds_group.layout().addRow("", security_row)
 
             content_layout.addWidget(creds_group)
@@ -889,10 +879,12 @@ class FileHostConfigDialog(QDialog):
         added directly. When it's a QVBoxLayout (no-auth hosts), it's wrapped
         in a group box.
         """
-        # Compact row: button + inline status
+        # Compact row: full test button (quick cred test is inline per-field)
+        self.test_status_label = QLabel("")  # internal sink — not shown in layout
         self.test_connection_btn = QPushButton("Test Connection...")
-        self.test_connection_btn.setToolTip("Open connection test dialog")
+        self.test_connection_btn.setToolTip("Open connection test dialog (full test: credentials, upload, delete)")
         self.test_connection_btn.setEnabled(True)
+        self.test_connection_btn.setVisible(False)
 
         self.test_status_label = QLabel("Not tested")
 
@@ -900,7 +892,6 @@ class FileHostConfigDialog(QDialog):
         test_row_layout = QHBoxLayout(test_row_widget)
         test_row_layout.setContentsMargins(0, 0, 0, 0)
         test_row_layout.addWidget(self.test_connection_btn)
-        test_row_layout.addWidget(self.test_status_label)
         test_row_layout.addStretch()
 
         if isinstance(parent_layout, QFormLayout):
@@ -914,7 +905,7 @@ class FileHostConfigDialog(QDialog):
         # Load cached results into the inline status label
         self._load_inline_test_status()
 
-        # Connect button to open the ConnectionTestDialog
+        # Connect button
         self.test_connection_btn.clicked.connect(self._open_test_dialog)
 
     def _open_test_dialog(self):
@@ -1333,6 +1324,65 @@ class FileHostConfigDialog(QDialog):
         # Update dialog labels if open
         self._load_dialog_test_results()
 
+    def _run_network_check(self, host_config) -> dict:
+        """DNS resolve and TCP connect timing for the host.
+
+        Returns dict with keys: hostname, ip, rtt_ms, error.
+        """
+        import socket
+        import time as _time
+        from urllib.parse import urlparse
+
+        result = {'hostname': None, 'ip': None, 'rtt_ms': None, 'error': None}
+
+        url = (getattr(host_config, 'user_info_url', None) or
+               getattr(host_config, 'login_url', None) or
+               getattr(host_config, 'upload_endpoint', None) or "")
+        if not url:
+            result['error'] = "No URL available"
+            return result
+
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        result['hostname'] = hostname
+        if not hostname:
+            result['error'] = "Could not extract hostname"
+            return result
+
+        port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+
+        try:
+            result['ip'] = socket.gethostbyname(hostname)
+        except socket.gaierror as e:
+            result['error'] = f"DNS: {e}"
+            return result
+
+        try:
+            t0 = _time.monotonic()
+            sock = socket.create_connection((hostname, port), timeout=5)
+            result['rtt_ms'] = (_time.monotonic() - t0) * 1000
+            sock.close()
+        except Exception as e:
+            result['error'] = f"Connect: {e}"
+
+        return result
+
+    def _open_cred_test_modal(self):
+        """Open the credential test modal with live diagnostic output."""
+        credentials = self.get_credentials()
+        if not credentials:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "No Credentials", "Enter credentials before testing.")
+            return
+
+        from src.core.file_host_config import get_config_manager
+        host_config = get_config_manager().get_host(self.host_id)
+        if not host_config:
+            return
+
+        dlg = CredentialTestDialog(host_config, self.host_id, credentials, parent=self)
+        dlg.exec()
+
     def _run_standalone_test(self, credentials: str):
         """Run standalone test without worker (for disabled hosts).
 
@@ -1360,6 +1410,14 @@ class FileHostConfigDialog(QDialog):
             host_config = config_manager.get_host(self.host_id)
             if not host_config:
                 raise Exception(f"Host config not found: {self.host_id}")
+
+            # Network diagnostics before credential test
+            net = self._run_network_check(host_config)
+            if self._test_dialog:
+                if net['error'] and not net['ip']:
+                    self._test_dialog.set_network_info(f"Error: {net['error']}", None)
+                else:
+                    self._test_dialog.set_network_info(net['ip'] or "—", net['rtt_ms'])
 
             # Create standalone client with credentials
             client = FileHostClient(
@@ -1447,11 +1505,7 @@ class FileHostConfigDialog(QDialog):
 
     def run_full_test(self):
         """Run complete test sequence via worker: credentials, user info, upload, delete"""
-        # Warn about unsaved changes
-        if not self._check_unsaved_changes("Testing connection"):
-            return
-
-        # Get credentials from multi-field layout
+        # Get credentials from live field values (no save required)
         credentials = self.get_credentials()
         if not credentials:
             self.test_status_label.setText("✗ No credentials entered")
@@ -1480,12 +1534,21 @@ class FileHostConfigDialog(QDialog):
             return
 
         # Update UI to show testing
+        self.creds_test_btn.setEnabled(False)
         self.test_connection_btn.setEnabled(False)
         self.test_status_label.setText("Testing...")
         if self._test_dialog:
             self._test_dialog.test_btn.setEnabled(False)
             self._test_dialog.set_timestamp("Testing...")
             self._test_dialog.set_all_running()
+
+        # Network diagnostics (fast, runs on calling thread before worker picks up)
+        if self._test_dialog and self.host_config:
+            net = self._run_network_check(self.host_config)
+            if net['error'] and not net['ip']:
+                self._test_dialog.set_network_info(f"Error: {net['error']}", None)
+            else:
+                self._test_dialog.set_network_info(net['ip'] or "—", net['rtt_ms'])
 
         # Queue test request to be processed in worker's run() loop (non-blocking)
         # This ensures test executes in worker thread context where it belongs
