@@ -156,6 +156,10 @@ class ForumController(QObject):
         if ref is None or not ref.post_id:
             raise ValueError("Could not extract a post ID from input")
 
+        self._auto_remember_target(
+            forum_fk=forum_id, cfg_kind="reply",
+            target_id=str(ref.thread_id or "0"),
+        )
         post_row_id = fp.insert_forum_post(
             self._conn,
             gallery_fk=gallery_id, forum_fk=forum_id,
@@ -270,6 +274,38 @@ class ForumController(QObject):
             pass
         return body, title
 
+    def _auto_remember_target(
+        self, *, forum_fk: int, cfg_kind: str, target_id: str,
+    ) -> None:
+        """Best-effort: upsert this (forum, target) into the forum_targets
+        library so future pickers have it without re-typing the id.
+
+        Silent on failure — the post path must not break because of a
+        target-cache write. ``cfg_kind`` is the tab_posting_config kind
+        ("reply" / "new_thread"), mapped to the target-library kind
+        ("thread" / "subforum")."""
+        if not target_id or target_id == "0":
+            return
+        target_kind = "subforum" if cfg_kind == "new_thread" else "thread"
+        try:
+            existing = self._conn.execute(
+                "SELECT 1 FROM forum_targets "
+                "WHERE forum_fk=? AND kind=? AND target_id=?",
+                (forum_fk, target_kind, target_id),
+            ).fetchone()
+            if existing:
+                return
+            fp.upsert_target(
+                self._conn, forum_fk=forum_fk,
+                name=f"{target_kind} {target_id}",
+                kind=target_kind, target_id=target_id,
+            )
+        except Exception as e:
+            log(
+                f"forum: auto-remember target failed: {e}",
+                level="warning", category="forum",
+            )
+
     def _enqueue_post(self, gallery_id: int, cfg: dict) -> int:
         # Composer can short-circuit rendering by passing _body_override /
         # _title_override on the cfg dict — these are the user's edited text.
@@ -293,6 +329,10 @@ class ForumController(QObject):
             )
         body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
         link_map = extract_link_map(body)
+        self._auto_remember_target(
+            forum_fk=cfg["forum_fk"], cfg_kind=cfg["kind"],
+            target_id=str(cfg["target_id"]),
+        )
         post_row_id = fp.insert_forum_post(
             self._conn,
             gallery_fk=gallery_id, forum_fk=cfg["forum_fk"],

@@ -211,3 +211,60 @@ def test_post_completed_failure_marks_failed(app, conn):
     row = fp.get_forum_post(conn, pid)
     assert row["status"] == "failed"
     assert row["last_error"] == "NETWORK:boom"
+
+
+# ---------------------------------------------------------------------------
+# Auto-remember target into forum_targets library
+# ---------------------------------------------------------------------------
+
+def test_auto_post_auto_remembers_target_in_library(app, conn):
+    _, fid, gid = _setup_tab_with_config(conn)
+    assert fp.list_targets(conn, fid) == []
+    worker = MagicMock()
+    ctrl = ForumController(
+        conn=conn, worker=worker,
+        template_renderer=lambda *a, **kw: ("body", ""),
+    )
+    ctrl.handle_gallery_uploaded(gid)
+    targets = fp.list_targets(conn, fid)
+    # cfg.kind = "reply" maps to target.kind = "thread"; target_id = 999.
+    assert any(
+        t["kind"] == "thread" and str(t["target_id"]) == "999"
+        for t in targets
+    ), targets
+
+
+def test_auto_remember_does_not_duplicate_existing_target(app, conn):
+    _, fid, gid = _setup_tab_with_config(conn)
+    fp.insert_target(
+        conn, forum_fk=fid, name="Daily Dump", kind="thread",
+        target_id="999",
+    )
+    worker = MagicMock()
+    ctrl = ForumController(
+        conn=conn, worker=worker,
+        template_renderer=lambda *a, **kw: ("body", ""),
+    )
+    ctrl.handle_gallery_uploaded(gid)
+    targets = fp.list_targets(conn, fid)
+    # Existing name preserved — no duplicate created.
+    names = [t["name"] for t in targets]
+    assert names == ["Daily Dump"]
+
+
+def test_auto_remember_failure_does_not_break_post(app, conn, monkeypatch):
+    """A DB error in the auto-remember helper must be swallowed so the
+    post enqueue still reaches the worker."""
+    _, fid, gid = _setup_tab_with_config(conn)
+    worker = MagicMock()
+    ctrl = ForumController(
+        conn=conn, worker=worker,
+        template_renderer=lambda *a, **kw: ("body", ""),
+    )
+    import src.gui.forum_controller as fc_mod
+    monkeypatch.setattr(
+        fc_mod.fp, "upsert_target",
+        MagicMock(side_effect=RuntimeError("boom")),
+    )
+    ctrl.handle_gallery_uploaded(gid)
+    assert worker.enqueue.called
