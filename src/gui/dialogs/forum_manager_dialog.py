@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.network.forum.factory import (
-    create_forum_client, supported_software_ids,
+    create_forum_client, display_name_for, supported_software_ids,
 )
 from src.network.forum.session_store import SessionStore
 from src.storage import forum_posting as fp
@@ -56,7 +56,7 @@ class ForumManagerDialog(QDialog):
         self.name_input = QLineEdit()
         self.software_combo = QComboBox()
         for sid in supported_software_ids():
-            self.software_combo.addItem(sid, sid)
+            self.software_combo.addItem(display_name_for(sid), sid)
         self.base_url_input = QLineEdit()
         self.username_input = QLineEdit()
         self.password_input = QLineEdit()

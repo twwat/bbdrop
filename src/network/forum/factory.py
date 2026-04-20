@@ -15,12 +15,14 @@ from src.network.forum.session_store import SessionStore
 
 
 _REGISTRY: dict[str, type[ForumClient]] = {}
+_DISPLAY_NAMES: dict[str, str] = {}
 
 
-def register(software_id: str):
+def register(software_id: str, display_name: Optional[str] = None):
     def deco(cls: type[ForumClient]):
         cls.software_id = software_id
         _REGISTRY[software_id] = cls
+        _DISPLAY_NAMES[software_id] = display_name or software_id
         return cls
     return deco
 
@@ -38,3 +40,10 @@ def supported_software_ids() -> list[str]:
     # Force import of bundled clients so they self-register.
     from src.network.forum import vbulletin_client  # noqa: F401
     return sorted(_REGISTRY.keys())
+
+
+def display_name_for(software_id: str) -> str:
+    """Friendly label for a software_id (falls back to the id itself)."""
+    # Trigger client imports so the registry is populated.
+    supported_software_ids()
+    return _DISPLAY_NAMES.get(software_id, software_id)
