@@ -75,6 +75,98 @@ def list_forums(conn, *, enabled_only: bool = False) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# forum_targets
+# ---------------------------------------------------------------------------
+
+_TARGET_KINDS = ("subforum", "thread")
+
+
+def insert_target(
+    conn, *, forum_fk: int, name: str, kind: str, target_id: str,
+) -> int:
+    """Insert a new forum target. Raises sqlite3.IntegrityError on duplicate
+    (forum_fk, kind, target_id). Callers that want upsert-on-duplicate
+    behaviour should use ``upsert_target``."""
+    if kind not in _TARGET_KINDS:
+        raise ValueError(f"Invalid target kind: {kind!r}")
+    cur = conn.execute(
+        "INSERT INTO forum_targets(forum_fk, name, kind, target_id) "
+        "VALUES (?,?,?,?)",
+        (forum_fk, name, kind, str(target_id)),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def upsert_target(
+    conn, *, forum_fk: int, name: str, kind: str, target_id: str,
+) -> int:
+    """Insert-or-touch a target. If the (forum, kind, target_id) tuple
+    already exists, updates its name + updated_ts and returns the existing
+    row id. Otherwise inserts a new row and returns its id."""
+    if kind not in _TARGET_KINDS:
+        raise ValueError(f"Invalid target kind: {kind!r}")
+    row = conn.execute(
+        "SELECT id FROM forum_targets "
+        "WHERE forum_fk=? AND kind=? AND target_id=?",
+        (forum_fk, kind, str(target_id)),
+    ).fetchone()
+    if row:
+        target_pk = row[0]
+        conn.execute(
+            "UPDATE forum_targets SET name=?, updated_ts=? WHERE id=?",
+            (name, int(time.time()), target_pk),
+        )
+        conn.commit()
+        return target_pk
+    return insert_target(
+        conn, forum_fk=forum_fk, name=name, kind=kind, target_id=target_id,
+    )
+
+
+def update_target(conn, target_pk: int, **fields: Any) -> None:
+    if not fields:
+        return
+    allowed = {"name", "kind", "target_id"}
+    bad = set(fields) - allowed
+    if bad:
+        raise ValueError(f"Unknown target field(s): {sorted(bad)}")
+    if "kind" in fields and fields["kind"] not in _TARGET_KINDS:
+        raise ValueError(f"Invalid target kind: {fields['kind']!r}")
+    if "target_id" in fields:
+        fields["target_id"] = str(fields["target_id"])
+    fields["updated_ts"] = int(time.time())
+    cols = ", ".join(f"{k}=?" for k in fields)
+    conn.execute(
+        f"UPDATE forum_targets SET {cols} WHERE id=?",
+        (*fields.values(), target_pk),
+    )
+    conn.commit()
+
+
+def delete_target(conn, target_pk: int) -> None:
+    conn.execute("DELETE FROM forum_targets WHERE id=?", (target_pk,))
+    conn.commit()
+
+
+def get_target(conn, target_pk: int) -> Optional[dict]:
+    row = conn.execute(
+        "SELECT * FROM forum_targets WHERE id=?", (target_pk,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_targets(conn, forum_fk: int) -> list[dict]:
+    return [
+        dict(r) for r in conn.execute(
+            "SELECT * FROM forum_targets WHERE forum_fk=? "
+            "ORDER BY kind, name COLLATE NOCASE",
+            (forum_fk,),
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
 # tab_posting_config
 # ---------------------------------------------------------------------------
 

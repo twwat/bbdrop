@@ -84,7 +84,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 15  # Bump this when adding new migrations
+_SCHEMA_VERSION = 16  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -628,6 +628,26 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                 ON forum_posts(status, last_attempt_ts);
         """)
         log("Migration 15: forum-posting tables created",
+            level="info", category="database")
+
+        # Migration 16: per-forum library of named subforum / thread
+        # targets so users don't re-type numeric IDs when configuring
+        # where to post. Paste-URL flow upserts by (forum, kind, target_id).
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS forum_targets (
+                id INTEGER PRIMARY KEY,
+                forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK(kind IN ('subforum','thread')),
+                target_id TEXT NOT NULL,
+                created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                UNIQUE(forum_fk, kind, target_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_forum_targets_forum
+                ON forum_targets(forum_fk);
+        """)
+        log("Migration 16: forum_targets table created",
             level="info", category="database")
 
     except Exception as e:

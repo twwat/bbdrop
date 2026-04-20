@@ -370,3 +370,107 @@ def test_mark_posts_stale_for_gallery_only_marks_posted(conn):
 def test_mark_posts_stale_for_gallery_returns_empty_when_none_posted(conn):
     _, _, gid = _setup_tab_with_config(conn)
     assert fp.mark_posts_stale_for_gallery(conn, gid) == []
+
+
+# ---------------------------------------------------------------------------
+# forum_targets
+# ---------------------------------------------------------------------------
+
+def test_insert_target_and_list(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0",
+        base_url="https://x", default_cooldown_s=30,
+    )
+    t1 = fp.insert_target(
+        conn, forum_fk=fid, name="Celebs", kind="subforum", target_id="12",
+    )
+    t2 = fp.insert_target(
+        conn, forum_fk=fid, name="Daily", kind="thread", target_id="9001",
+    )
+    rows = fp.list_targets(conn, fid)
+    assert {r["id"] for r in rows} == {t1, t2}
+    # Ordered by kind, then name COLLATE NOCASE — subforum before thread.
+    assert [r["kind"] for r in rows] == ["subforum", "thread"]
+
+
+def test_insert_target_rejects_bad_kind(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0", base_url="x",
+    )
+    with pytest.raises(ValueError):
+        fp.insert_target(
+            conn, forum_fk=fid, name="Bad", kind="forum", target_id="1",
+        )
+
+
+def test_insert_target_rejects_duplicate_kind_and_target_id(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0", base_url="x",
+    )
+    fp.insert_target(
+        conn, forum_fk=fid, name="Celebs", kind="subforum", target_id="12",
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        fp.insert_target(
+            conn, forum_fk=fid, name="Dupe", kind="subforum", target_id="12",
+        )
+
+
+def test_upsert_target_returns_existing_id_and_updates_name(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0", base_url="x",
+    )
+    t1 = fp.upsert_target(
+        conn, forum_fk=fid, name="Celebs", kind="subforum", target_id="12",
+    )
+    t2 = fp.upsert_target(
+        conn, forum_fk=fid, name="Celeb Photos", kind="subforum",
+        target_id="12",
+    )
+    assert t1 == t2
+    row = fp.get_target(conn, t1)
+    assert row["name"] == "Celeb Photos"
+
+
+def test_update_target_changes_name(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0", base_url="x",
+    )
+    t = fp.insert_target(
+        conn, forum_fk=fid, name="Old", kind="thread", target_id="1",
+    )
+    fp.update_target(conn, t, name="New")
+    assert fp.get_target(conn, t)["name"] == "New"
+
+
+def test_update_target_rejects_unknown_field(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0", base_url="x",
+    )
+    t = fp.insert_target(
+        conn, forum_fk=fid, name="X", kind="thread", target_id="1",
+    )
+    with pytest.raises(ValueError):
+        fp.update_target(conn, t, forum_fk=99)
+
+
+def test_delete_target_removes_row(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0", base_url="x",
+    )
+    t = fp.insert_target(
+        conn, forum_fk=fid, name="X", kind="thread", target_id="1",
+    )
+    fp.delete_target(conn, t)
+    assert fp.get_target(conn, t) is None
+
+
+def test_delete_forum_cascades_to_targets(conn):
+    fid = fp.insert_forum(
+        conn, name="VIP", software_id="vbulletin_4_2_0", base_url="x",
+    )
+    fp.insert_target(
+        conn, forum_fk=fid, name="X", kind="thread", target_id="1",
+    )
+    fp.delete_forum(conn, fid)
+    assert fp.list_targets(conn, fid) == []
