@@ -428,6 +428,9 @@ class FileHostConfigDialog(QDialog):
             total_str = self.settings.value(f"FileHosts/{self.host_id}/storage_total", "0")
             has_cached_data = bool(total_str) and total_str != "0"
 
+        self._traffic_reset_label = None
+        self._reset_timer = None
+
         if has_storage_support and has_cached_data:
             storage_group = QGroupBox("Storage")
             storage_layout = QVBoxLayout(storage_group)
@@ -441,24 +444,39 @@ class FileHostConfigDialog(QDialog):
                 self.storage_bar.mousePressEvent = self._on_storage_bar_clicked
 
             storage_layout.addWidget(self.storage_bar)
+            content_layout.addWidget(storage_group)
 
-            # K2S family: add separate traffic bar below storage bar
             if is_k2s_family:
                 from src.gui.widgets.custom_widgets import TrafficBar
 
-                traffic_label = QLabel("Traffic")
-                traffic_label.setStyleSheet("color: #4a90e2; font-weight: bold; margin-top: 8px;")
-                storage_layout.addWidget(traffic_label)
+                traffic_group = QGroupBox("Traffic")
+                traffic_layout = QVBoxLayout(traffic_group)
 
                 self.traffic_bar = TrafficBar()
-                storage_layout.addWidget(self.traffic_bar)
+                self.traffic_bar.setCursor(Qt.CursorShape.PointingHandCursor)
+                self.traffic_bar.setToolTip("Click to edit daily traffic ceiling")
+                self.traffic_bar.mousePressEvent = self._on_traffic_bar_clicked
+                traffic_layout.addWidget(self.traffic_bar)
+
+                reset_row = QHBoxLayout()
+                reset_row.addStretch()
+                self._traffic_reset_label = QLabel("")
+                self._traffic_reset_label.setProperty("class", "label-muted")
+                self._traffic_reset_label.setStyleSheet("font-size: 8pt; font-style: italic;")
+                reset_row.addWidget(self._traffic_reset_label)
+                traffic_layout.addLayout(reset_row)
+
+                content_layout.addWidget(traffic_group)
+
+                self._reset_timer = QTimer(self)
+                self._reset_timer.timeout.connect(self._update_traffic_reset_label)
+                self._reset_timer.start(1000)
             else:
                 self.traffic_bar = None
 
-            content_layout.addWidget(storage_group)
-
             # Load storage from cache immediately if available
             self._load_storage_from_cache()
+            self._update_traffic_reset_label()
 
         # Trigger settings - SINGLE DROPDOWN (not checkboxes)
         triggers_group = QGroupBox("Auto-Upload Trigger")
@@ -1651,6 +1669,56 @@ class FileHostConfigDialog(QDialog):
                 if mgr is not None:
                     for host_id in get_family_members('k2s'):
                         mgr.storage_updated.emit(host_id, new_total, left)
+
+    def _on_traffic_bar_clicked(self, event):
+        """Open dialog to edit per-host daily traffic ceiling."""
+        from PyQt6.QtWidgets import QInputDialog
+        from PyQt6.QtCore import QSettings
+
+        s = QSettings("BBDropUploader", "BBDropGUI")
+        prefix = f"FileHosts/{self.host_id}"
+        try:
+            ceiling = int(s.value(f"{prefix}/traffic_ceiling", "0") or 0)
+        except (ValueError, TypeError):
+            ceiling = 0
+        current_gib = ceiling // (1024 * 1024 * 1024) if ceiling > 0 else 0
+
+        new_gib, ok = QInputDialog.getInt(
+            self, "Daily Traffic Ceiling",
+            "Daily traffic limit (GiB):",
+            value=int(current_gib),
+            min=1,
+            max=1000000,
+        )
+        if ok and new_gib > 0:
+            s.setValue(f"{prefix}/traffic_ceiling", str(new_gib * 1024 * 1024 * 1024))
+            s.sync()
+            self._load_storage_from_cache()
+            self._update_traffic_reset_label()
+
+    def _update_traffic_reset_label(self):
+        """Update the 'Resets in H:MM:SS' countdown label."""
+        if not self._traffic_reset_label:
+            return
+        reset_at = getattr(self.traffic_bar, '_traffic_reset_at', "") if self.traffic_bar else ""
+        if not reset_at:
+            self._traffic_reset_label.setText("")
+            return
+        try:
+            from datetime import datetime, timezone
+            reset_dt = datetime.fromisoformat(reset_at)
+            secs = int((reset_dt - datetime.now(timezone.utc)).total_seconds())
+            if secs <= 0:
+                self._traffic_reset_label.setText("Resetting...")
+            else:
+                h, rem = divmod(secs, 3600)
+                m, s = divmod(rem, 60)
+                if h > 0:
+                    self._traffic_reset_label.setText(f"Resets in {h}:{m:02d}:{s:02d}")
+                else:
+                    self._traffic_reset_label.setText(f"Resets in {m}:{s:02d}")
+        except (ValueError, TypeError):
+            self._traffic_reset_label.setText("")
 
     def _update_metrics_display(self):
         """Update metrics grid labels from MetricsStore."""

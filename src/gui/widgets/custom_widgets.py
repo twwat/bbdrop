@@ -1112,14 +1112,14 @@ class StorageTrafficBar(QWidget):
         """Initialize the UI with main bar and thin traffic strip."""
         from PyQt6.QtWidgets import QSizePolicy
 
-        self.setFixedHeight(24)
+        self.setFixedHeight(26)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 1, 2, 2)
         layout.setSpacing(0)
 
         self.main_bar = QProgressBar()
-        self.main_bar.setFixedHeight(14)
+        self.main_bar.setFixedHeight(16)
         self.main_bar.setMaximum(100)
         self.main_bar.setValue(0)
         self.main_bar.setTextVisible(True)
@@ -1422,14 +1422,14 @@ class TrafficBar(QWidget):
 
     def _setup_ui(self):
         """Create traffic progress bar."""
-        self.setFixedHeight(16)
+        self.setFixedHeight(18)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(1, 1, 1, 1)
         layout.setSpacing(0)
 
         self.bar = QProgressBar()
-        self.bar.setFixedHeight(14)
+        self.bar.setFixedHeight(16)
         self.bar.setMaximum(100)
         self.bar.setValue(0)
         self.bar.setTextVisible(True)
