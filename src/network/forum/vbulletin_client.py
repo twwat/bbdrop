@@ -46,6 +46,7 @@ class VBulletinClient(ForumClient):
         self._session.headers["User-Agent"] = USER_AGENT
         self._username: Optional[str] = None
         self._cached_creds: Optional[tuple[str, str]] = None
+        self._authenticated: bool = False
 
     # ----- helpers -----
 
@@ -111,13 +112,17 @@ class VBulletinClient(ForumClient):
     # ----- ForumClient interface -----
 
     def authenticate(self, username: str, password: str) -> AuthResult:
+        # Mirrors the working scraper at /mnt/g/scrape/vip/vip/spiders/vipspider.py:
+        # GET a page first to seed the session cookie vBulletin requires, then
+        # POST the navbar login form. Success is detected by the "Thank you for
+        # logging in" text or by a userid cookie under any name.
+        md5pw = hashlib.md5(password.encode("utf-8")).hexdigest()
         try:
-            md5pw = hashlib.md5(password.encode("utf-8")).hexdigest()
+            self._session.get(
+                f"{self.base_url}/", timeout=30, allow_redirects=True,
+            )
             data = {
                 "vb_login_username": username,
-                # vBulletin uses md5password / md5password_utf (set client-side
-                # by JS); plaintext is sent only as a legacy fallback. Sites
-                # like vipergirls.to reject logins missing the md5 fields.
                 "vb_login_password": password,
                 "vb_login_md5password": md5pw,
                 "vb_login_md5password_utf": md5pw,
@@ -129,23 +134,35 @@ class VBulletinClient(ForumClient):
             r = self._session.post(
                 f"{self.base_url}/login.php?do=login",
                 data=data, timeout=30, allow_redirects=True,
+                headers={"Referer": f"{self.base_url}/"},
             )
         except requests.RequestException as e:
             return AuthResult(
                 False, error_kind=ForumErrorKind.NETWORK,
                 error_message=str(e),
             )
-        bb_userid = (
-            r.cookies.get("bb_userid")
-            or self._session.cookies.get("bb_userid")
+
+        body = (getattr(r, "text", "") or "")
+        body_lc = body.lower()
+        success = (
+            "thank you for logging in" in body_lc
+            or f"welcome, {username.lower()}" in body_lc
+            or self._has_userid_cookie()
         )
-        if not bb_userid or bb_userid == "0":
+        if not success:
+            snippet = body.strip()[:300].replace("\n", " ")
             return AuthResult(
                 False, error_kind=ForumErrorKind.LOGIN_REQUIRED,
-                error_message="login_failed",
+                error_message=(
+                    f"login_failed (HTTP {getattr(r, 'status_code', '?')}, "
+                    f"final url: {getattr(r, 'url', '?')}); "
+                    f"body starts: {snippet!r}"
+                ),
             )
+
         self._username = username
         self._cached_creds = (username, password)
+        self._authenticated = True
         if self._sessions is not None:
             self._sessions.set(0, ForumSession(
                 cookies=dict(self._session.cookies),
@@ -155,13 +172,21 @@ class VBulletinClient(ForumClient):
             ))
         return AuthResult(True, username=username)
 
+    def _has_userid_cookie(self) -> bool:
+        # vBulletin installs may use a custom cookie prefix (vipergirls included).
+        # Treat any cookie ending in 'userid' with a non-zero value as the signal.
+        for c in self._session.cookies:
+            if c.name.lower().endswith("userid") and c.value and c.value != "0":
+                return True
+        return False
+
     def is_logged_in(self) -> bool:
-        v = self._session.cookies.get("bb_userid")
-        return bool(v and v != "0")
+        return bool(self._authenticated) or self._has_userid_cookie()
 
     def logout(self) -> None:
         self._session.cookies.clear()
         self._username = None
+        self._authenticated = False
 
     def post_reply(self, thread_id: str, body: str) -> PostResult:
         get_url = f"{self.base_url}/newreply.php?do=newreply&t={thread_id}"

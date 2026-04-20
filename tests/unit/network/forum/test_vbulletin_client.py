@@ -2,10 +2,18 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests.cookies import RequestsCookieJar
 
 from src.network.forum.client import ForumErrorKind
 from src.network.forum.session_store import SessionStore
 from src.network.forum.vbulletin_client import VBulletinClient
+
+
+def _jar(**cookies) -> RequestsCookieJar:
+    j = RequestsCookieJar()
+    for k, v in cookies.items():
+        j.set(k, v)
+    return j
 
 
 FIX = Path(__file__).parents[3] / "fixtures"
@@ -33,33 +41,43 @@ def client():
     )
 
 
-def test_authenticate_success_via_bb_userid_cookie(client):
+def test_authenticate_success_via_thank_you_text(client):
     with patch.object(client, "_session") as sess:
+        sess.get.return_value = _resp(200, "<html>home</html>")
         sess.post.return_value = _resp(
-            200, _fixture("vb_login_form.html"),
-            cookies={"bb_userid": "42", "bb_password": "abc"},
+            200, "<html>Thank you for logging in, testuser</html>",
         )
-        sess.cookies.get.return_value = "42"
+        sess.cookies = _jar()  # no userid cookie present
         result = client.authenticate("testuser", "secret")
     assert result.success
     assert result.error_kind == ForumErrorKind.OK
 
 
-def test_authenticate_failure_when_userid_missing(client):
+def test_authenticate_success_via_userid_cookie(client):
     with patch.object(client, "_session") as sess:
-        sess.post.return_value = _resp(
-            200, "<html>Wrong password</html>", cookies={},
-        )
-        sess.cookies.get.return_value = None
+        sess.get.return_value = _resp(200, "<html>home</html>")
+        sess.post.return_value = _resp(200, "<html>welcome page</html>")
+        sess.cookies = _jar(bb_userid="42")
+        result = client.authenticate("testuser", "secret")
+    assert result.success
+
+
+def test_authenticate_failure_when_no_signal(client):
+    with patch.object(client, "_session") as sess:
+        sess.get.return_value = _resp(200, "<html>home</html>")
+        sess.post.return_value = _resp(200, "<html>Wrong password</html>")
+        sess.cookies = _jar()
         result = client.authenticate("testuser", "wrong")
     assert not result.success
     assert result.error_kind == ForumErrorKind.LOGIN_REQUIRED
+    assert "login_failed" in result.error_message
 
 
 def test_authenticate_failure_when_userid_zero(client):
     with patch.object(client, "_session") as sess:
-        sess.post.return_value = _resp(200, "", cookies={"bb_userid": "0"})
-        sess.cookies.get.return_value = "0"
+        sess.get.return_value = _resp(200, "<html>home</html>")
+        sess.post.return_value = _resp(200, "<html>nothing</html>")
+        sess.cookies = _jar(bb_userid="0")
         result = client.authenticate("testuser", "wrong")
     assert not result.success
     assert result.error_kind == ForumErrorKind.LOGIN_REQUIRED
@@ -68,7 +86,7 @@ def test_authenticate_failure_when_userid_zero(client):
 def test_authenticate_network_error(client):
     import requests as rq
     with patch.object(client, "_session") as sess:
-        sess.post.side_effect = rq.ConnectionError("boom")
+        sess.get.side_effect = rq.ConnectionError("boom")
         result = client.authenticate("u", "p")
     assert not result.success
     assert result.error_kind == ForumErrorKind.NETWORK
@@ -118,16 +136,19 @@ def test_post_reply_relogins_on_redirect_to_login(client):
                 200, "<html>You are not logged in</html>",
                 url="https://vipergirls.to/login.php?do=login",
             ),
+            _resp(200, "<html>home</html>"),  # pre-flight GET inside re-login
             _resp(200, _fixture("vb_newreply_form.html")),
         ]
         sess.post.side_effect = [
-            _resp(200, "OK", cookies={"bb_userid": "42"}),
+            _resp(
+                200, "<html>Thank you for logging in, testuser</html>",
+            ),
             _resp(
                 200, '<a href="showthread.php?p=1#post1">v</a>',
                 url="https://vipergirls.to/showthread.php?p=1",
             ),
         ]
-        sess.cookies.get.return_value = "42"
+        sess.cookies = _jar()
         client._cached_creds = ("testuser", "secret")
         result = client.post_reply("12345", "x")
     assert result.success
@@ -248,7 +269,12 @@ def test_parse_post_reference_empty(client):
     assert client.parse_post_reference("   ") is None
 
 
-def test_is_logged_in_true_when_userid_set(client):
+def test_is_logged_in_true_when_authenticated_flag_set(client):
+    client._authenticated = True
+    assert client.is_logged_in()
+
+
+def test_is_logged_in_true_when_userid_cookie_present(client):
     client._session.cookies.set("bb_userid", "42")
     assert client.is_logged_in()
 
@@ -261,6 +287,8 @@ def test_is_logged_in_false_when_zero(client):
 def test_logout_clears_session(client):
     client._session.cookies.set("bb_userid", "42")
     client._username = "u"
+    client._authenticated = True
     client.logout()
     assert not client.is_logged_in()
     assert client._username is None
+    assert client._authenticated is False
