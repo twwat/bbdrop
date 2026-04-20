@@ -50,6 +50,7 @@ import sys
 import os
 import json
 import logging
+import sqlite3
 import re
 import socket
 import time
@@ -576,6 +577,14 @@ class BBDropGUI(QMainWindow):
         self.file_host_controller = FileHostController(self)
         self.gallery_table_controller = GalleryTableController(self)
         self._update_checker = None  # Initialize update checker reference
+
+        # Forum posting controller — dedicated sqlite connection, owns posting worker.
+        from src.gui.forum_controller import ForumController
+        from src.storage.database import _connect
+        self._forum_db_conn = _connect(self.queue_manager.store.db_path)
+        self._forum_db_conn.row_factory = sqlite3.Row
+        self._forum_controller = ForumController(conn=self._forum_db_conn)
+        self._forum_controller.start()
 
         # Now connect queue status changes (after worker_signal_handler is ready)
         self.queue_manager.status_changed.connect(self.worker_signal_handler.on_queue_item_status_changed)
@@ -2687,6 +2696,18 @@ class BBDropGUI(QMainWindow):
         dialog = IconManagerDialog(self)
         dialog.exec()
 
+    def open_forum_manager(self):
+        from src.gui.dialogs.forum_manager_dialog import ForumManagerDialog
+        ForumManagerDialog(conn=self._forum_db_conn, parent=self).exec()
+
+    def open_tab_posting_config(self, tab_id: int):
+        from src.gui.widgets.tab_posting_config_panel import (
+            TabPostingConfigDialog,
+        )
+        TabPostingConfigDialog(
+            conn=self._forum_db_conn, tab_id=tab_id, parent=self,
+        ).exec()
+
     def open_unrenamed_galleries_dialog(self):
         """Open dialog to manage unrenamed galleries"""
         from src.gui.dialogs.unrenamed_galleries import UnrenamedGalleriesDialog
@@ -3356,6 +3377,16 @@ class BBDropGUI(QMainWindow):
 
         # Save session time before shutdown
         self._save_session_time()
+
+        # Stop the forum posting worker before the shutdown dialog drains workers.
+        try:
+            if hasattr(self, "_forum_controller") and self._forum_controller is not None:
+                self._forum_controller.stop()
+            if hasattr(self, "_forum_db_conn") and self._forum_db_conn is not None:
+                self._forum_db_conn.close()
+        except Exception as e:
+            log(f"forum controller shutdown error: {e}",
+                level="warning", category="forum")
 
         # Step 3: Show shutdown progress dialog
         shutdown_dialog = ShutdownDialog(self)

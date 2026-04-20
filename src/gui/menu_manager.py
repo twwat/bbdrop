@@ -211,6 +211,9 @@ class MenuManager(QObject):
             action_unrenamed = tools_menu.addAction("Unnamed Galleries")
             action_unrenamed.triggered.connect(mw.open_unrenamed_galleries_dialog)
 
+            action_forum_mgr = tools_menu.addAction("Forum Manager…")
+            action_forum_mgr.triggered.connect(mw.open_forum_manager)
+
             # Authentication submenu
             auth_menu = tools_menu.addMenu("Authentication")
             action_retry_login = auth_menu.addAction("Reattempt Login")

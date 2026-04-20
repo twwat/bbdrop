@@ -1025,9 +1025,28 @@ class TabbedGalleryWidget(QWidget):
         elif base_tab_name == "All Tabs":
             # All Tabs has no special operations
             pass
-        
+
+        # Forum posting config (any real tab, including Main; not for All Tabs)
+        if base_tab_name != "All Tabs" and self.tab_manager is not None:
+            menu.addSeparator()
+            tab_info = self.tab_manager.get_tab_by_name(base_tab_name)
+            if tab_info is not None:
+                posting_action = menu.addAction("Posting…")
+                posting_action.triggered.connect(
+                    lambda checked, tid=tab_info.id:
+                        self._open_tab_posting_config(tid)
+                )
+
         global_pos = self.tab_bar.mapToGlobal(position)
         menu.exec(global_pos)
+
+    def _open_tab_posting_config(self, tab_id: int):
+        """Walk up to the main window and trigger its posting-config dispatcher."""
+        widget = self.parent()
+        while widget is not None and not hasattr(widget, "open_tab_posting_config"):
+            widget = widget.parent()
+        if widget is not None:
+            widget.open_tab_posting_config(tab_id)
     
     def _delete_tab(self, index, tab_name):
         """Delete a tab (legacy method - use _delete_tab_with_confirmation)"""
