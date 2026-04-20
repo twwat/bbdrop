@@ -744,12 +744,15 @@ class FileHostConfigDialog(QDialog):
         ))
 
         self.bbcode_format_edit = QPlainTextEdit()
+        self.bbcode_format_edit.setReadOnly(True)
         self.bbcode_format_edit.setPlainText(bbcode_format if bbcode_format else "")
         self.bbcode_format_edit.setPlaceholderText("[url=#link#]#hostName#[/url]")
         self.bbcode_format_edit.setToolTip(
             "Format for download links in BBCode. Click to open the full editor. "
             "Leave empty for raw URL."
         )
+        self.bbcode_format_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.bbcode_format_edit.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         self.bbcode_format_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.bbcode_format_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.bbcode_format_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -760,7 +763,7 @@ class FileHostConfigDialog(QDialog):
         self.bbcode_format_edit.textChanged.connect(self._adjust_bbcode_height)
         self._adjust_bbcode_height()
         upload_layout.addRow(bbcode_label_widget, self.bbcode_format_edit)
-        self.bbcode_format_edit.installEventFilter(self)
+        self.bbcode_format_edit.viewport().installEventFilter(self)
 
         content_layout.addWidget(upload_group)
 
@@ -2049,11 +2052,18 @@ class FileHostConfigDialog(QDialog):
         self.bbcode_format_edit.setFixedHeight(new_height)
 
     def eventFilter(self, obj, event):
-        """Open BBCode link format editor when the bbcode field gains focus."""
-        if obj is self.bbcode_format_edit and event.type() == event.Type.FocusIn:
-            # Defer to avoid processing the focus event further
-            QTimer.singleShot(0, self._open_bbcode_link_format_editor)
-            return True  # Consume the focus event
+        """Open the BBCode link format editor when the field is clicked.
+
+        Filter is installed on the QPlainTextEdit's viewport rather than the
+        widget itself so FocusIn doesn't trigger a reopen loop after the
+        dialog closes and focus returns to the field.
+        """
+        if (
+            obj is self.bbcode_format_edit.viewport()
+            and event.type() == event.Type.MouseButtonPress
+        ):
+            self._open_bbcode_link_format_editor()
+            return True
         return super().eventFilter(obj, event)
 
     def _open_bbcode_link_format_editor(self):
