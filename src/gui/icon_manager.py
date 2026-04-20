@@ -93,12 +93,12 @@ class IconManager:
         'main_window':          'bbdrop-main-icon.png',
         'app_icon':             'bbdrop.ico',
 
-        # Monochrome SVG icons (tinted to current theme text color at load)
-        'drag_handle':          'drag_handle.svg',
-        'close':                'close.svg',
-        'open_in_new':          'open_in_new.svg',
-        'close_fullscreen':     'close_fullscreen.svg',
-        'filter':               'filter.svg',
+        # Pre-colored light/dark SVG pairs (loaded directly, no tinting)
+        'drag_handle':          ['svg/drag_handle-light.svg',     'svg/drag_handle-dark.svg'],
+        'close':                ['svg/close-light.svg',           'svg/close-dark.svg'],
+        'open_in_new':          ['svg/open_in_new-light.svg',     'svg/open_in_new-dark.svg'],
+        'close_fullscreen':     ['svg/close_fullscreen-light.svg','svg/close_fullscreen-dark.svg'],
+        'filter':               ['svg/filter-light.svg',          'svg/filter-dark.svg'],
 
         # Media type icons
         'media_photo':          'photo.png',
@@ -206,15 +206,10 @@ class IconManager:
 
         # Auto-detect theme if not provided
         if theme_mode is None:
-            from PyQt6.QtWidgets import QApplication
-            from typing import cast
-            app_instance = QApplication.instance()
-            if app_instance:
-                app = cast(QApplication, app_instance)
-                palette = app.palette()
-                window_color = palette.color(palette.ColorRole.Window)
-                theme_mode = 'dark' if window_color.lightness() < 128 else 'light'
-            else:
+            try:
+                from src.gui.theme_manager import is_dark_mode
+                theme_mode = 'dark' if is_dark_mode() else 'light'
+            except Exception:
                 theme_mode = 'dark'
 
         # Create cache key - skip theme_mode for single-file icons (string config)
@@ -262,7 +257,8 @@ class IconManager:
         # Try to load the icon
         if os.path.exists(icon_path):
             self._disk_loads += 1
-            if filename.lower().endswith('.svg'):
+            # Tint only single-string SVGs (monochrome); paired SVGs have colours baked in
+            if filename.lower().endswith('.svg') and isinstance(config, str):
                 icon = self._render_tinted_svg(icon_path, theme_mode, requested_size)
             else:
                 icon = QIcon(icon_path)
