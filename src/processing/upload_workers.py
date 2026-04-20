@@ -871,6 +871,18 @@ class UploadWorker(QThread):
 
         # Notify GUI
         self.gallery_completed.emit(item.path, results)
+        # Forum-posting hub: lets ForumController auto-post or stale-mark
+        if item.db_id is not None:
+            try:
+                from src.utils.forum_signals import bbcode_regenerated_signal_hub
+                bbcode_regenerated_signal_hub.bbcode_regenerated.emit(
+                    item.db_id, "upload",
+                )
+            except Exception as e:
+                log(
+                    f"forum: bbcode_regenerated emit failed: {e}",
+                    level="warning", category="forum",
+                )
         self._emit_queue_stats(force=True)
 
     def _save_artifacts_for_result(self, item: GalleryQueueItem, results: dict):
