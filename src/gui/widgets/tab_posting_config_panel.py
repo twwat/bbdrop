@@ -17,22 +17,45 @@ from src.storage import forum_posting as fp
 
 
 class TabPostingConfigPanel(QWidget):
-    """Embeddable panel. Use TabPostingConfigDialog for the modal wrapper."""
+    """Embeddable panel. Use TabPostingConfigDialog for the modal wrapper.
 
-    def __init__(self, conn: sqlite3.Connection, tab_id: int, parent=None):
+    Two modes:
+    - tab mode (pass tab_id): edits the tab's posting config row.
+    - override mode (pass gallery_id): edits the per-gallery override row.
+      Empty/(Inherit) fields fall back to the tab config.
+    """
+
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        tab_id: int | None = None,
+        parent=None,
+        *,
+        gallery_id: int | None = None,
+    ):
         super().__init__(parent)
+        if (tab_id is None) == (gallery_id is None):
+            raise ValueError("Pass exactly one of tab_id or gallery_id")
         self._conn = conn
         self._tab_id = tab_id
+        self._gallery_id = gallery_id
+        self._override_mode = gallery_id is not None
         self._build_ui()
         self._populate_forums()
         self._load_existing()
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
-        outer.addWidget(QLabel(
-            "Configure posting for this tab. "
-            "Leave Enabled unchecked to disable.",
-        ))
+        if self._override_mode:
+            outer.addWidget(QLabel(
+                "Override per-gallery posting settings. "
+                "Empty / '(Inherit)' fields fall back to the tab's config.",
+            ))
+        else:
+            outer.addWidget(QLabel(
+                "Configure posting for this tab. "
+                "Leave Enabled unchecked to disable.",
+            ))
         form = QFormLayout()
         self.forum_combo = QComboBox()
         self.kind_combo = QComboBox()
@@ -89,21 +112,40 @@ class TabPostingConfigPanel(QWidget):
         )
         outer.addWidget(self.enabled_check)
         outer.addStretch()
+        if self._override_mode:
+            # 'enabled' is intentionally not overrideable in v1 — too easy to
+            # accidentally disable a whole tab from a single gallery.
+            self.enabled_check.hide()
+            for combo in (
+                self.kind_combo, self.trigger_combo,
+                self.update_mode_combo, self.manual_edit_combo,
+            ):
+                combo.insertItem(0, "(Inherit from tab)", None)
+                combo.setCurrentIndex(0)
         self._update_kind_visibility()
 
     def _populate_forums(self):
         self.forum_combo.clear()
+        if self._override_mode:
+            self.forum_combo.addItem("(Inherit from tab)", None)
         for f in fp.list_forums(self._conn, enabled_only=False):
             self.forum_combo.addItem(f["name"], f["id"])
 
     def _update_kind_visibility(self):
-        is_reply = self.kind_combo.currentData() == "reply"
-        self.target_label.setText(
-            "Thread ID" if is_reply else "Forum (subforum) ID",
-        )
-        self.title_template_input.setEnabled(not is_reply)
+        kind = self.kind_combo.currentData()
+        # In override mode, kind may be None (inherit) — keep prior label text
+        # rather than mislabeling. Default to Reply behaviour.
+        if kind == "new_thread":
+            self.target_label.setText("Forum (subforum) ID")
+            self.title_template_input.setEnabled(True)
+        else:
+            self.target_label.setText("Thread ID")
+            self.title_template_input.setEnabled(False)
 
     def _load_existing(self):
+        if self._override_mode:
+            self._load_existing_override()
+            return
         cfg = fp.get_tab_posting_config(self._conn, self._tab_id)
         if not cfg:
             self.enabled_check.setChecked(False)
@@ -134,7 +176,52 @@ class TabPostingConfigPanel(QWidget):
         self.enabled_check.setChecked(bool(cfg.get("enabled")))
         self._update_kind_visibility()
 
+    def _load_existing_override(self):
+        import json
+        row = self._conn.execute(
+            "SELECT * FROM gallery_posting_override WHERE gallery_fk=?",
+            (self._gallery_id,),
+        ).fetchone()
+        if not row:
+            return
+        d = dict(row)
+        if d.get("forum_fk") is not None:
+            idx = self.forum_combo.findData(d["forum_fk"])
+            if idx >= 0:
+                self.forum_combo.setCurrentIndex(idx)
+        if d.get("kind"):
+            idx = self.kind_combo.findData(d["kind"])
+            if idx >= 0:
+                self.kind_combo.setCurrentIndex(idx)
+        if d.get("target_id"):
+            self.target_id_input.setText(d["target_id"])
+        if d.get("body_template_name"):
+            self.body_template_input.setText(d["body_template_name"])
+        if d.get("title_template_name"):
+            self.title_template_input.setText(d["title_template_name"])
+        if d.get("trigger_mode"):
+            idx = self.trigger_combo.findData(d["trigger_mode"])
+            if idx >= 0:
+                self.trigger_combo.setCurrentIndex(idx)
+        if d.get("update_mode"):
+            idx = self.update_mode_combo.findData(d["update_mode"])
+            if idx >= 0:
+                self.update_mode_combo.setCurrentIndex(idx)
+        if d.get("manual_edit_handling"):
+            idx = self.manual_edit_combo.findData(d["manual_edit_handling"])
+            if idx >= 0:
+                self.manual_edit_combo.setCurrentIndex(idx)
+        if d.get("stale_triggers_json"):
+            st = set(json.loads(d["stale_triggers_json"]))
+            self.st_upload.setChecked("upload" in st)
+            self.st_template.setChecked("template_edit" in st)
+            self.st_link_format.setChecked("link_format" in st)
+            self.st_manual.setChecked("manual_rerender" in st)
+        self._update_kind_visibility()
+
     def save(self) -> bool:
+        if self._override_mode:
+            return self._save_override()
         forum_fk = self.forum_combo.currentData()
         if forum_fk is None:
             QMessageBox.warning(self, "Save", "Select a forum first.")
@@ -168,6 +255,46 @@ class TabPostingConfigPanel(QWidget):
             stale_triggers=triggers,
             enabled=self.enabled_check.isChecked(),
         )
+        return True
+
+    def _save_override(self) -> bool:
+        fields: dict = {}
+        if self.forum_combo.currentData() is not None:
+            fields["forum_fk"] = self.forum_combo.currentData()
+        if self.kind_combo.currentData() is not None:
+            fields["kind"] = self.kind_combo.currentData()
+        target = self.target_id_input.text().strip()
+        if target:
+            fields["target_id"] = target
+        body_tpl = self.body_template_input.text().strip()
+        if body_tpl:
+            fields["body_template_name"] = body_tpl
+        title_tpl = self.title_template_input.text().strip()
+        if title_tpl:
+            fields["title_template_name"] = title_tpl
+        if self.trigger_combo.currentData() is not None:
+            fields["trigger_mode"] = self.trigger_combo.currentData()
+        if self.update_mode_combo.currentData() is not None:
+            fields["update_mode"] = self.update_mode_combo.currentData()
+        if self.manual_edit_combo.currentData() is not None:
+            fields["manual_edit_handling"] = self.manual_edit_combo.currentData()
+        triggers: list = []
+        if self.st_upload.isChecked():
+            triggers.append("upload")
+        if self.st_template.isChecked():
+            triggers.append("template_edit")
+        if self.st_link_format.isChecked():
+            triggers.append("link_format")
+        if self.st_manual.isChecked():
+            triggers.append("manual_rerender")
+        if triggers:
+            fields["stale_triggers"] = triggers
+        if not fields:
+            fp.clear_gallery_override(self._conn, gallery_fk=self._gallery_id)
+        else:
+            fp.set_gallery_override(
+                self._conn, gallery_fk=self._gallery_id, **fields,
+            )
         return True
 
 
