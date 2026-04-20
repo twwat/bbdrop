@@ -113,6 +113,20 @@ class ForumController(QObject):
             raise ValueError("No effective posting config for gallery")
         return self._enqueue_post(gallery_id, cfg)
 
+    def preview_render(self, gallery_id: int) -> tuple[str, str]:
+        """Render (body, title) for the composer without enqueueing.
+
+        Raises ValueError if no effective config exists for the gallery.
+        """
+        cfg = fp.get_effective_posting_config(self._conn, gallery_id)
+        if not cfg:
+            raise ValueError("No effective posting config for gallery")
+        return self._template_renderer(
+            gallery_id,
+            cfg["body_template_name"],
+            cfg.get("title_template_name"),
+        )
+
     # ----- internals -----
 
     def _make_client(self, forum_id: int):
@@ -197,11 +211,26 @@ class ForumController(QObject):
         return body, title
 
     def _enqueue_post(self, gallery_id: int, cfg: dict) -> int:
-        body, title = self._template_renderer(
-            gallery_id,
-            cfg["body_template_name"],
-            cfg.get("title_template_name"),
-        )
+        # Composer can short-circuit rendering by passing _body_override /
+        # _title_override on the cfg dict — these are the user's edited text.
+        body_override = cfg.get("_body_override")
+        title_override = cfg.get("_title_override")
+        if body_override is not None:
+            body = body_override
+            if title_override is not None:
+                title = title_override
+            else:
+                _, title = self._template_renderer(
+                    gallery_id,
+                    cfg["body_template_name"],
+                    cfg.get("title_template_name"),
+                )
+        else:
+            body, title = self._template_renderer(
+                gallery_id,
+                cfg["body_template_name"],
+                cfg.get("title_template_name"),
+            )
         body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
         link_map = extract_link_map(body)
         post_row_id = fp.insert_forum_post(
