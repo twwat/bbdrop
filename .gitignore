@@ -64,6 +64,7 @@ nul
 /debug/
 *.zip
 *.html
+!tests/fixtures/*.html
 bak/
 temp/
 
