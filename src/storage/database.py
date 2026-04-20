@@ -84,7 +84,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 14  # Bump this when adding new migrations
+_SCHEMA_VERSION = 15  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -547,6 +547,88 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         except Exception as e:
             log(f"Migration 14 (file_host_uploads CHECK rebuild) failed: {e}",
                 level="warning", category="database")
+
+        # Migration to version 15: forum-posting subsystem (spec
+        # docs/superpowers/specs/2026-04-20-forum-posting-design.md §2 / §14).
+        # Adds four tables for registered forums, per-tab posting config, optional
+        # per-gallery override, and the post-tracking ledger. Idempotent via
+        # IF NOT EXISTS; each FK uses ON DELETE CASCADE so removing a forum,
+        # tab, or gallery cleans up dependent rows.
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS forums (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                software_id TEXT NOT NULL,
+                base_url TEXT NOT NULL,
+                default_cooldown_s INTEGER NOT NULL DEFAULT 30,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS tab_posting_config (
+                tab_id INTEGER PRIMARY KEY REFERENCES tabs(id) ON DELETE CASCADE,
+                forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL CHECK(kind IN ('reply','new_thread')),
+                target_id TEXT NOT NULL,
+                body_template_name TEXT NOT NULL,
+                title_template_name TEXT,
+                trigger_mode TEXT NOT NULL DEFAULT 'manual',
+                update_mode TEXT NOT NULL DEFAULT 'whole',
+                manual_edit_handling TEXT NOT NULL DEFAULT 'skip_alert',
+                stale_triggers_json TEXT NOT NULL DEFAULT '["upload"]',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS gallery_posting_override (
+                gallery_fk INTEGER PRIMARY KEY REFERENCES galleries(id) ON DELETE CASCADE,
+                forum_fk INTEGER REFERENCES forums(id) ON DELETE CASCADE,
+                kind TEXT,
+                target_id TEXT,
+                body_template_name TEXT,
+                title_template_name TEXT,
+                trigger_mode TEXT,
+                update_mode TEXT,
+                manual_edit_handling TEXT,
+                stale_triggers_json TEXT,
+                enabled INTEGER,
+                created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS forum_posts (
+                id INTEGER PRIMARY KEY,
+                gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+                forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                posted_post_id TEXT,
+                posted_thread_id TEXT,
+                posted_url TEXT,
+                posted_ts INTEGER,
+                status TEXT NOT NULL DEFAULT 'queued',
+                source TEXT NOT NULL DEFAULT 'app',
+                update_mode_at_post TEXT,
+                body_hash TEXT,
+                link_map_json TEXT,
+                last_attempt_ts INTEGER,
+                last_error TEXT,
+                raw_response TEXT,
+                created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_forum_posts_gallery
+                ON forum_posts(gallery_fk);
+            CREATE INDEX IF NOT EXISTS idx_forum_posts_forum_status
+                ON forum_posts(forum_fk, status);
+            CREATE INDEX IF NOT EXISTS idx_forum_posts_status_attempt
+                ON forum_posts(status, last_attempt_ts);
+        """)
+        log("Migration 15: forum-posting tables created",
+            level="info", category="database")
 
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
