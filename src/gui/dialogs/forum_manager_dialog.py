@@ -15,10 +15,8 @@ from PyQt6.QtWidgets import (
     QSpinBox, QVBoxLayout,
 )
 
-from src.network.forum.factory import (
-    create_forum_client, display_name_for, supported_software_ids,
-)
-from src.network.forum.session_store import SessionStore
+from src.gui.dialogs.forum_credential_test_dialog import ForumCredentialTestDialog
+from src.network.forum.factory import display_name_for, supported_software_ids
 from src.storage import forum_posting as fp
 from src.utils.credentials import (
     decrypt_password, encrypt_password, get_credential,
@@ -201,21 +199,16 @@ class ForumManagerDialog(QDialog):
                 "Enter username and password first.",
             )
             return
-        software_id = self.software_combo.currentData()
         base_url = self.base_url_input.text().strip()
         if not base_url:
             QMessageBox.warning(self, "Test login", "Enter Base URL first.")
             return
-        client = create_forum_client(
-            software_id, base_url=base_url, session_store=SessionStore(),
+        dlg = ForumCredentialTestDialog(
+            forum_name=self.name_input.text().strip() or "Forum",
+            software_id=self.software_combo.currentData(),
+            base_url=base_url,
+            username=self.username_input.text(),
+            password=self.password_input.text(),
+            parent=self,
         )
-        result = client.authenticate(
-            self.username_input.text(), self.password_input.text(),
-        )
-        if result.success:
-            QMessageBox.information(self, "Test login", "Login successful.")
-        else:
-            QMessageBox.warning(
-                self, "Test login",
-                f"Login failed: {result.error_kind} — {result.error_message}",
-            )
+        dlg.exec()
