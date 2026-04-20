@@ -9,6 +9,7 @@ Spec: docs/superpowers/specs/2026-04-20-forum-posting-design.md §4.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from typing import Optional
@@ -35,7 +36,7 @@ _STALE_TOKEN_MARKERS = ("your security token is invalid",)
 _LOGIN_REDIRECT_MARKERS = ("you are not logged in", '<form action="login.php"')
 
 
-@register("vbulletin_4_2_0")
+@register("vbulletin_4_2_0", display_name="vBulletin 4.2.0")
 class VBulletinClient(ForumClient):
     """vBulletin 4.2.0 / 4.2.5."""
 
@@ -111,9 +112,15 @@ class VBulletinClient(ForumClient):
 
     def authenticate(self, username: str, password: str) -> AuthResult:
         try:
+            md5pw = hashlib.md5(password.encode("utf-8")).hexdigest()
             data = {
                 "vb_login_username": username,
+                # vBulletin uses md5password / md5password_utf (set client-side
+                # by JS); plaintext is sent only as a legacy fallback. Sites
+                # like vipergirls.to reject logins missing the md5 fields.
                 "vb_login_password": password,
+                "vb_login_md5password": md5pw,
+                "vb_login_md5password_utf": md5pw,
                 "s": "",
                 "securitytoken": "guest",
                 "do": "login",
