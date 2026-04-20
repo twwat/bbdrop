@@ -140,6 +140,7 @@ class ComprehensiveSettingsDialog(QDialog):
         # Create tabs
         self.setup_general_tab()
         self.setup_file_hosts_tab()
+        self.setup_forums_tab()
         self.setup_templates_tab()
         self.setup_tabs_tab()  # Create widgets but don't add tab
         self.setup_icons_tab()  # Create widgets but don't add tab
@@ -307,6 +308,21 @@ class ComprehensiveSettingsDialog(QDialog):
 
         # Add tab
         self._add_settings_page(self.file_hosts_widget, "Hosts")
+
+    def setup_forums_tab(self):
+        """Setup the Forums page — embeds the same panel as the Forum
+        Manager dialog opened from the Forums menu.
+
+        Skipped if the parent window has no forum DB connection
+        (e.g. tests, or a window constructed without Forums wiring).
+        """
+        conn = getattr(self.parent_window, "_forum_db_conn", None)
+        if conn is None:
+            return
+        from src.gui.settings.forums_tab import ForumsPanel
+        self.forums_panel = ForumsPanel(conn, self)
+        # Panel saves per-item on its own Save button — no dirty tracking.
+        self._add_settings_page(self.forums_panel, "Forums")
 
     def setup_proxy_tab(self):
         """Setup the Proxy settings tab."""
