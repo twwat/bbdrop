@@ -32,6 +32,7 @@ class GalleryContextMenuHelper(QObject):
             self._add_action_items(menu, selected_paths)
             self._add_file_operations(menu, selected_paths)
             self._add_status_operations(menu, selected_paths)
+            self._add_forum_posting_items(menu, selected_paths)
             self._add_template_submenu(menu, selected_paths)
             self._add_image_host_submenu(menu, selected_paths)
             self._add_cover_submenu(menu, selected_paths)
@@ -196,6 +197,39 @@ class GalleryContextMenuHelper(QObject):
                 lambda: self._delegate_to_main_window('check_image_status_via_menu', completed_paths)
             )
     
+    def _add_forum_posting_items(self, menu, selected_paths):
+        """Add 'Post to forum…' and 'Posting override…' items.
+
+        Both items resolve gallery paths to DB ids via the queue manager and
+        delegate to main_window dispatchers; nothing forum-specific lives here.
+        """
+        if not self.main_window or not selected_paths:
+            return
+        qm = getattr(self.main_window, 'queue_manager', None)
+        if qm is None:
+            return
+        gallery_ids = []
+        for path in selected_paths:
+            item = qm.get_item(path)
+            if item is not None and getattr(item, 'db_id', None):
+                gallery_ids.append(item.db_id)
+        if not gallery_ids:
+            return
+        menu.addSeparator()
+        post_action = menu.addAction("Post to forum…")
+        post_action.triggered.connect(
+            lambda checked, ids=gallery_ids:
+            self.main_window.open_forum_composer(ids),
+        )
+        override_action = menu.addAction("Posting override…")
+        override_action.setEnabled(len(gallery_ids) == 1)
+        if len(gallery_ids) == 1:
+            single_id = gallery_ids[0]
+            override_action.triggered.connect(
+                lambda checked, gid=single_id:
+                self.main_window.open_gallery_posting_override(gid),
+            )
+
     def _add_move_to_submenu(self, menu, selected_paths):
         """Add Move to... submenu"""
         if not self.main_window or not hasattr(self.main_window, 'tab_manager'):

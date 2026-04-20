@@ -2708,6 +2708,23 @@ class BBDropGUI(QMainWindow):
             conn=self._forum_db_conn, tab_id=tab_id, parent=self,
         ).exec()
 
+    def open_forum_composer(self, gallery_ids: list[int]):
+        if not gallery_ids:
+            return
+        from src.gui.dialogs.forum_composer_dialog import ForumComposerDialog
+        ForumComposerDialog(
+            conn=self._forum_db_conn, controller=self._forum_controller,
+            gallery_ids=gallery_ids, parent=self,
+        ).exec()
+
+    def open_gallery_posting_override(self, gallery_id: int):
+        from src.gui.dialogs.gallery_posting_override_dialog import (
+            GalleryPostingOverrideDialog,
+        )
+        GalleryPostingOverrideDialog(
+            conn=self._forum_db_conn, gallery_id=gallery_id, parent=self,
+        ).exec()
+
     def open_unrenamed_galleries_dialog(self):
         """Open dialog to manage unrenamed galleries"""
         from src.gui.dialogs.unrenamed_galleries import UnrenamedGalleriesDialog
