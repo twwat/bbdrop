@@ -68,6 +68,7 @@ class _Col:
     HOSTS_ACTION = 25
     ONLINE_IMX = 26
     MEDIA_TYPE = 27
+    FORUM_POST = 28
 
 
 def format_timestamp_for_display(timestamp_value, include_seconds=False):
@@ -418,6 +419,58 @@ class TableRowManager(QObject):
                     scan_status[host_name] = status_data
         hosts_item.setData(Qt.ItemDataRole.UserRole + 2, scan_status)
         mw.gallery_table.setItem(row, _Col.HOSTS_STATUS, hosts_item)
+
+        # Forum Post column - editable, skip when hidden (default).
+        if not mw.gallery_table.isColumnHidden(_Col.FORUM_POST):
+            self._set_forum_post_cell(row, item)
+
+    def _set_forum_post_cell(
+        self, row: int, item: GalleryQueueItem,
+    ) -> None:
+        """Render the Forum Post cell for a row from the latest forum_posts row."""
+        from src.gui.delegates.forum_post_delegate import format_cell_text
+        from src.storage import forum_posting as fp
+
+        mw = self._main_window
+        text = ""
+        if (
+            getattr(item, "db_id", None)
+            and getattr(mw, "_forum_db_conn", None) is not None
+        ):
+            try:
+                posts = fp.list_forum_posts_for_gallery(
+                    mw._forum_db_conn, item.db_id,
+                )
+                top = posts[0] if posts else None
+                text = format_cell_text(top)
+            except Exception as e:
+                log(
+                    f"forum-post cell load failed for {item.path}: {e}",
+                    level="warning", category="ui",
+                )
+        cell = QTableWidgetItem(text)
+        cell.setFlags(cell.flags() | Qt.ItemFlag.ItemIsEditable)
+        cell.setTextAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
+        mw.gallery_table.setItem(row, _Col.FORUM_POST, cell)
+
+    def refresh_forum_post_cell(self, gallery_id: int) -> None:
+        """Re-render the Forum Post cell for a gallery (called after status change)."""
+        mw = self._main_window
+        qm = getattr(mw, "queue_manager", None)
+        if qm is None:
+            return
+        target_item = next(
+            (it for it in qm.items.values() if it.db_id == gallery_id),
+            None,
+        )
+        if target_item is None:
+            return
+        row = mw._get_row_for_path(target_item.path)
+        if row is None:
+            return
+        self._set_forum_post_cell(row, target_item)
 
     def _populate_table_row_detailed(self, row: int, item: GalleryQueueItem):
         """Complete row formatting in background - TRULY NON-BLOCKING.

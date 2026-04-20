@@ -127,6 +127,35 @@ class GalleryTableController(QObject):
         with QMutexLocker(mw._path_mapping_mutex):
             return mw.path_to_row.get(path)
 
+    def wire_forum_post_delegate(self) -> None:
+        """Connect the Forum Post delegate's commit signal to onboard_post."""
+        mw = self._main_window
+        table = getattr(mw.gallery_table, "table", mw.gallery_table)
+        delegate = table.itemDelegateForColumn(GalleryTableWidget.COL_FORUM_POST)
+        if delegate is None or not hasattr(delegate, "commit_text"):
+            log("forum-post delegate not present on gallery table",
+                level="warning", category="ui")
+            return
+        delegate.commit_text.connect(self._on_forum_post_commit)
+
+    def _on_forum_post_commit(self, row: int, text: str) -> None:
+        """Delegate commit handler: resolve row → gallery, kick off onboarding."""
+        mw = self._main_window
+        path = mw.row_to_path.get(row)
+        if not path:
+            return
+        item = mw.queue_manager.get_item(path)
+        if not item or not getattr(item, "db_id", None):
+            return
+        try:
+            mw._forum_controller.onboard_post(item.db_id, text)
+        except ValueError as e:
+            try:
+                mw.statusBar().showMessage(f"Onboarding rejected: {e}", 5000)
+            except Exception:
+                pass
+            mw.table_row_manager.refresh_forum_post_cell(item.db_id)
+
     def _set_path_row_mapping(self, path: str, row: int):
         """Thread-safe setter for path-to-row mapping"""
         mw = self._main_window
@@ -300,6 +329,9 @@ class GalleryTableController(QObject):
                         actual_table.setItem(row, column_index, ext_item)
                     finally:
                         actual_table.blockSignals(signals_blocked)
+
+            elif column_index == GalleryTableWidget.COL_FORUM_POST:
+                mw.table_row_manager._set_forum_post_cell(row, item)
 
     def on_gallery_cell_clicked(self, row, column):
         """Handle clicks on gallery table cells for template editing and custom/ext column editing."""

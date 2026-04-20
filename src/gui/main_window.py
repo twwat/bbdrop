@@ -1527,6 +1527,13 @@ class BBDropGUI(QMainWindow):
         self.layout_manager = LayoutManager(self)
         self.layout_manager.build()
 
+        # Forum-post inline column wiring (needs gallery_table to exist).
+        self.gallery_table_controller.wire_forum_post_delegate()
+        self._forum_controller.forum_post_changed.connect(
+            self._on_forum_post_changed,
+            Qt.ConnectionType.QueuedConnection,
+        )
+
         # Setup memory status update timer (extracted from old hosts panel build)
         self.memory_status_timer = QTimer()
         self.memory_status_timer.timeout.connect(self._update_memory_status)
@@ -2724,6 +2731,14 @@ class BBDropGUI(QMainWindow):
         GalleryPostingOverrideDialog(
             conn=self._forum_db_conn, gallery_id=gallery_id, parent=self,
         ).exec()
+
+    def _on_forum_post_changed(self, forum_post_id: int):
+        """Refresh the inline Forum Post cell when a post's status changes."""
+        row = self._forum_db_conn.execute(
+            "SELECT gallery_fk FROM forum_posts WHERE id=?", (forum_post_id,),
+        ).fetchone()
+        if row:
+            self.table_row_manager.refresh_forum_post_cell(row[0])
 
     def open_unrenamed_galleries_dialog(self):
         """Open dialog to manage unrenamed galleries"""

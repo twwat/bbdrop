@@ -150,6 +150,7 @@ class GalleryTableWidget(QTableWidget):
     COL_HOSTS_ACTION: int
     COL_ONLINE_IMX: int
     COL_MEDIA_TYPE: int
+    COL_FORUM_POST: int
 
     # Column definitions - single source of truth for all column metadata
     COLUMNS = [
@@ -182,6 +183,7 @@ class GalleryTableWidget(QTableWidget):
         (25, 'HOSTS_ACTION',  'hosts action', 80,  'Interactive', False, True),
         (26, 'ONLINE_IMX',    'online (imx)', 130, 'Interactive', True,  False),
         (27, 'MEDIA_TYPE',    'type',         40,  'Fixed',       False, False),
+        (28, 'FORUM_POST',    'forum post',   140, 'Interactive', True,  True),
     ]
 
     # Create class attributes dynamically from COLUMNS definition
@@ -265,6 +267,13 @@ class GalleryTableWidget(QTableWidget):
         # Apply StatusColorDelegate to Online IMX column to preserve status colors when selected
         status_delegate = StatusColorDelegate(self)
         self.setItemDelegateForColumn(self.COL_ONLINE_IMX, status_delegate)
+
+        # Inline-edit delegate for the Forum Post column.
+        from src.gui.delegates.forum_post_delegate import ForumPostDelegate
+        self._forum_post_delegate = ForumPostDelegate(self)
+        self.setItemDelegateForColumn(
+            self.COL_FORUM_POST, self._forum_post_delegate,
+        )
 
         # Enable sorting but start with no sorting (insertion order)
         self.setSortingEnabled(True)
@@ -350,9 +359,10 @@ class GalleryTableWidget(QTableWidget):
                 column = current_index.column()
                 row = current_index.row()
 
-                # Handle Enter key for editable columns (custom1-4, ext1-4)
+                # Handle Enter key for editable columns (custom1-4, ext1-4, forum post)
                 if (GalleryTableWidget.COL_CUSTOM1 <= column <= GalleryTableWidget.COL_CUSTOM4) or \
-                   (GalleryTableWidget.COL_EXT1 <= column <= GalleryTableWidget.COL_EXT4):
+                   (GalleryTableWidget.COL_EXT1 <= column <= GalleryTableWidget.COL_EXT4) or \
+                   column == GalleryTableWidget.COL_FORUM_POST:
                     # Let Qt's default behavior commit the data FIRST (closes editor if open)
                     super().keyPressEvent(event)
 
