@@ -113,14 +113,23 @@ class MenuManager(QObject):
             # View menu
             view_menu = menu_bar.addMenu("View")
 
-            # Icon Manager
-            action_icon_manager = view_menu.addAction("Icon Manager")
-            action_icon_manager.triggered.connect(mw.open_icon_manager)
+            reset_layout_action = view_menu.addAction("Reset Layout")
+            reset_layout_action.triggered.connect(mw.layout_manager.reset_layout)
+
+            edit_layout_action = view_menu.addAction("Edit Layout")
+            edit_layout_action.setCheckable(True)
+            edit_layout_action.setChecked(False)
+            edit_layout_action.setShortcut("Ctrl+L")
+            edit_layout_action.toggled.connect(mw.layout_manager.set_edit_mode)
+
+            # TEMPORARY — remove once Task 6 captures all preset payloads.
+            dev_capture_action = view_menu.addAction("Capture Layout State (dev)")
+            dev_capture_action.setShortcut("Ctrl+Shift+D")
+            dev_capture_action.triggered.connect(mw.layout_manager._dev_print_layout_state)
 
             view_menu.addSeparator()
 
-            # Panels submenu: one toggle per dock, auto-synced via dock.toggleViewAction()
-            panels_menu = view_menu.addMenu("Panels")
+            # Panel toggles (flattened — no submenu)
             for dock in (
                 mw.layout_manager.dock_quick_settings,
                 mw.layout_manager.dock_hosts,
@@ -130,31 +139,12 @@ class MenuManager(QObject):
                 mw.layout_manager.dock_speed,
             ):
                 action = dock.toggleViewAction()
-                # Default title is the dock objectName; use the window title for clarity
                 action.setText(dock.windowTitle())
-                panels_menu.addAction(action)
-
-            reset_layout_action = view_menu.addAction("Reset Layout")
-            reset_layout_action.triggered.connect(mw.layout_manager.reset_layout)
-
-            # Edit Layout: toggles dock title bars, drag handles, and
-            # close/float buttons. Locked by default so the UI is clean;
-            # users opt in when they want to rearrange.
-            edit_layout_action = view_menu.addAction("Edit Layout")
-            edit_layout_action.setCheckable(True)
-            edit_layout_action.setChecked(False)
-            edit_layout_action.setShortcut("Ctrl+L")
-            edit_layout_action.toggled.connect(mw.layout_manager.set_edit_mode)
-
-            # TEMPORARY — remove once Task 6 captures all preset payloads.
-            # Press Ctrl+Shift+D to print the current saveState() as base64.
-            dev_capture_action = view_menu.addAction("Capture Layout State (dev)")
-            dev_capture_action.setShortcut("Ctrl+Shift+D")
-            dev_capture_action.triggered.connect(mw.layout_manager._dev_print_layout_state)
+                view_menu.addAction(action)
 
             view_menu.addSeparator()
 
-            # Theme submenu: System / Light / Dark
+            # Theme submenu: Light / Dark
             theme_menu = view_menu.addMenu("Theme")
             theme_group = QActionGroup(mw)
             theme_group.setExclusive(True)
@@ -207,9 +197,12 @@ class MenuManager(QObject):
             action_log_viewer = tools_menu.addAction("Log Viewer")
             action_log_viewer.triggered.connect(mw.open_log_viewer_popup)
 
-            # Statistics
             action_statistics = tools_menu.addAction("Statistics")
             action_statistics.triggered.connect(mw.open_statistics_dialog)
+
+            action_icon_manager = tools_menu.addAction("Icon Manager")
+            action_icon_manager.triggered.connect(mw.open_icon_manager)
+
             tools_menu.addSeparator()
 
             action_file_manager = tools_menu.addAction("File Manager...")
