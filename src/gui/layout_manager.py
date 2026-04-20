@@ -970,6 +970,20 @@ class LayoutManager(QObject):
         layout.addWidget(close_btn)
         return bar
 
+    def refresh_edit_icons(self) -> None:
+        """Rebuild edit-mode title bars so icons pick up the current theme."""
+        if not self._edit_mode:
+            return
+        for dock in (
+            self.dock_quick_settings,
+            self.dock_hosts,
+            self.dock_log,
+            self.dock_progress,
+            self.dock_info,
+            self.dock_speed,
+        ):
+            dock.setTitleBarWidget(self._make_edit_title_bar(dock))
+
     def _dev_print_layout_state(self) -> None:
         """TEMPORARY — remove once Task 6 captures all preset payloads.
 

@@ -2417,6 +2417,15 @@ class BBDropGUI(QMainWindow):
             # Set flag so scrolling will refresh newly visible renamed icons
             if hasattr(table, '_needs_full_icon_refresh'):
                 table._needs_full_icon_refresh = True
+
+            # Refresh layout edit-mode title bar icons
+            if hasattr(self, 'layout_manager'):
+                self.layout_manager.refresh_edit_icons()
+
+            # Refresh worker status filter button icon
+            if hasattr(self, 'worker_status_widget') and self.worker_status_widget:
+                self.worker_status_widget.refresh_filter_icon()
+
         except Exception as e:
             log(f"ERROR: Exception refreshing button icons: {e}", level="warning", category="ui")
 

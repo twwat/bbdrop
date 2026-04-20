@@ -663,6 +663,17 @@ class WorkerStatusWidget(QWidget):
         self._filter_btn.clicked.connect(self._show_filter_menu_from_button)
         self._position_filter_button()
 
+    def refresh_filter_icon(self) -> None:
+        """Reload the filter button icon for the current theme."""
+        icon_mgr = get_icon_manager()
+        if icon_mgr is None:
+            return
+        filter_icon = icon_mgr.get_icon('filter')
+        if filter_icon and not filter_icon.isNull():
+            self._filter_btn.setIcon(filter_icon)
+        else:
+            self._filter_btn.setText("\u2261")
+
     def _position_filter_button(self):
         """Position filter button centered in the first column header."""
         header = self.status_table.horizontalHeader()
