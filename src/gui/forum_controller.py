@@ -257,13 +257,17 @@ class ForumController(QObject):
                     level="warning", category="forum",
                 )
         title = ""
-        if title_template:
-            try:
-                from src.utils.templates import load_post_titles
-                titles = load_post_titles() or {}
-                title = titles.get(title_template, "") or ""
-            except Exception:
-                pass
+        try:
+            from src.utils.templates import load_post_titles
+            titles = load_post_titles() or {}
+            # Prefer an explicit title_template; otherwise fall back to
+            # the body template's #POSTTITLE: directive so the single
+            # "Template" dropdown in the tab config is sufficient.
+            lookup_key = title_template or body_template
+            if lookup_key:
+                title = titles.get(lookup_key, "") or ""
+        except Exception:
+            pass
         return body, title
 
     def _enqueue_post(self, gallery_id: int, cfg: dict) -> int:

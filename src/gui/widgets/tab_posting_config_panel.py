@@ -1,29 +1,53 @@
 """Tab Posting Config panel + dialog wrapper.
 
+Supports two modes:
+* Tab mode (``tab_id``): edits the row in ``tab_posting_config`` that
+  says "posts generated from this BBDrop tab go to forum X, target Y".
+* Override mode (``gallery_id``): edits the per-gallery override row.
+  "(Inherit from tab)" picks keep the tab value; leaving a target empty
+  means inherit.
+
+The panel uses a Template dropdown sourced from ``load_templates()``
+(the same list as the main window's quick-settings combo). Template
+files may contain an optional ``#POSTTITLE:`` directive which becomes
+the post title — no separate Title template field is needed.
+
+Target selection goes through a library of ``forum_targets`` rows. A
+``+`` button next to the Target combo prompts for a pasted URL, which
+the forum client parses into ``(kind, target_id)`` before upserting
+into the library. The CRUD UI for targets lives in Settings → Forums.
+
 Spec: docs/superpowers/specs/2026-04-20-forum-posting-design.md §7.2.
 """
 
 from __future__ import annotations
 
 import sqlite3
+from typing import Optional
 
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QVBoxLayout, QWidget,
+    QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QToolButton, QVBoxLayout, QWidget,
 )
 
+from src.gui.widgets.info_button import InfoButton
+from src.network.forum.factory import create_forum_client
+from src.network.forum.session_store import SessionStore
 from src.storage import forum_posting as fp
+from src.utils.templates import load_templates
+
+
+# Sentinels used as combo itemData. ``None`` = "(Add new…)" action,
+# ``_INHERIT`` = "(Inherit from tab)" in override mode. Real target rows
+# carry a dict.
+_ADD_NEW = "__add_new__"
+_INHERIT = "__inherit__"
 
 
 class TabPostingConfigPanel(QWidget):
-    """Embeddable panel. Use TabPostingConfigDialog for the modal wrapper.
-
-    Two modes:
-    - tab mode (pass tab_id): edits the tab's posting config row.
-    - override mode (pass gallery_id): edits the per-gallery override row.
-      Empty/(Inherit) fields fall back to the tab config.
-    """
+    """Embeddable panel used by both the tab-level config dialog and
+    the per-gallery override dialog."""
 
     def __init__(
         self,
@@ -42,35 +66,98 @@ class TabPostingConfigPanel(QWidget):
         self._override_mode = gallery_id is not None
         self._build_ui()
         self._populate_forums()
+        self._populate_templates()
+        self._reload_targets_for_selected_forum()
         self._load_existing()
+
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
+        outer.setSpacing(8)
         if self._override_mode:
             outer.addWidget(QLabel(
                 "Override per-gallery posting settings. "
-                "Empty / '(Inherit)' fields fall back to the tab's config.",
+                "'(Inherit from tab)' picks fall back to the tab's config.",
             ))
         else:
             outer.addWidget(QLabel(
                 "Configure posting for this tab. "
                 "Leave Enabled unchecked to disable.",
             ))
+
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+
+        # Forum
         self.forum_combo = QComboBox()
-        self.kind_combo = QComboBox()
-        self.kind_combo.addItem("Reply to thread", "reply")
-        self.kind_combo.addItem("Create new thread", "new_thread")
-        self.kind_combo.currentIndexChanged.connect(
-            self._update_kind_visibility,
+        self.forum_combo.currentIndexChanged.connect(
+            self._on_forum_changed,
         )
-        self.target_id_input = QLineEdit()
-        self.target_label = QLabel("Thread ID")
-        self.body_template_input = QLineEdit()
-        self.title_template_input = QLineEdit()
+        form.addRow("Forum", self.forum_combo)
+
+        # Target (combo + "+" button for paste-URL)
+        self.target_combo = QComboBox()
+        self.target_combo.currentIndexChanged.connect(
+            self._on_target_changed,
+        )
+        self._target_add_btn = QToolButton()
+        self._target_add_btn.setText("+")
+        self._target_add_btn.setToolTip(
+            "Add a subforum or thread from a URL"
+        )
+        self._target_add_btn.clicked.connect(self._on_add_target)
+        target_row = QWidget()
+        trl = QHBoxLayout(target_row)
+        trl.setContentsMargins(0, 0, 0, 0)
+        trl.setSpacing(4)
+        trl.addWidget(self.target_combo, 1)
+        trl.addWidget(self._target_add_btn)
+        form.addRow(
+            self._label_with_info(
+                "Target",
+                "Subforum or thread to post to. The picker is sourced "
+                "from the forum's target library (Settings → Forums). "
+                "Click <b>+</b> to add a new one by pasting its URL.",
+            ),
+            target_row,
+        )
+
+        # Template (single dropdown)
+        self.template_combo = QComboBox()
+        form.addRow(
+            self._label_with_info(
+                "Template",
+                "BBCode template used to render the post body. Templates "
+                "live in your central store's <code>templates/</code> "
+                "folder. If the template's first line is "
+                "<code>#POSTTITLE: …</code>, that line becomes the post "
+                "title when creating a new thread — no separate title "
+                "template is needed.",
+            ),
+            self.template_combo,
+        )
+
+        # Trigger
         self.trigger_combo = QComboBox()
         self.trigger_combo.addItem("Manual only", "manual")
         self.trigger_combo.addItem("Auto when upload completes", "auto_on_upload")
+        form.addRow(
+            self._label_with_info(
+                "Trigger",
+                "When BBDrop should post automatically. "
+                "<b>Manual only</b>: nothing happens until you click "
+                "Post manually. "
+                "<b>Auto when upload completes</b>: every gallery under "
+                "this tab is queued for posting as soon as its upload "
+                "finishes.",
+            ),
+            self.trigger_combo,
+        )
+
+        # Update mode
         self.update_mode_combo = QComboBox()
         for v, label in (
             ("whole", "Whole-body replace"),
@@ -78,6 +165,25 @@ class TabPostingConfigPanel(QWidget):
             ("whole_then_surgical", "Whole, fall back to surgical"),
         ):
             self.update_mode_combo.addItem(label, v)
+        form.addRow(
+            self._label_with_info(
+                "Update mode",
+                "How BBDrop edits an existing post when it's marked "
+                "stale.<br>"
+                "<b>Whole-body replace</b>: re-renders the entire body "
+                "from the template. Safest when you haven't edited the "
+                "post on the site.<br>"
+                "<b>Surgical link swap</b>: finds and replaces just the "
+                "changed links, leaving the surrounding text untouched. "
+                "Use when you've manually edited the post on the forum.<br>"
+                "<b>Whole, fall back to surgical</b>: try whole-body "
+                "replace; if BBDrop detects manual edits it can't "
+                "preserve, downgrade to surgical.",
+            ),
+            self.update_mode_combo,
+        )
+
+        # Manual edit handling
         self.manual_edit_combo = QComboBox()
         for v, label in (
             ("skip_alert", "Skip and alert"),
@@ -85,15 +191,23 @@ class TabPostingConfigPanel(QWidget):
             ("surgical", "Surgical only"),
         ):
             self.manual_edit_combo.addItem(label, v)
-        form.addRow("Forum", self.forum_combo)
-        form.addRow("Kind", self.kind_combo)
-        form.addRow(self.target_label, self.target_id_input)
-        form.addRow("Body template", self.body_template_input)
-        form.addRow("Title template (new threads only)", self.title_template_input)
-        form.addRow("Trigger", self.trigger_combo)
-        form.addRow("Update mode", self.update_mode_combo)
-        form.addRow("On manual edits", self.manual_edit_combo)
+        form.addRow(
+            self._label_with_info(
+                "On manual edits",
+                "What to do when BBDrop detects the post was edited on "
+                "the site since its last sync.<br>"
+                "<b>Skip and alert</b>: don't update; show a warning.<br>"
+                "<b>Overwrite anyway</b>: force the new body in, "
+                "discarding your edits.<br>"
+                "<b>Surgical only</b>: only swap the changed links, "
+                "leaving your text in place.",
+            ),
+            self.manual_edit_combo,
+        )
+
         outer.addLayout(form)
+
+        # Stale triggers
         st_box = QGroupBox("Mark posts stale when:")
         st_layout = QHBoxLayout()
         self.st_upload = QCheckBox("Upload finishes")
@@ -105,42 +219,258 @@ class TabPostingConfigPanel(QWidget):
             self.st_link_format, self.st_manual,
         ):
             st_layout.addWidget(w)
+        st_layout.addWidget(InfoButton(
+            "<b>Stale triggers</b><br>"
+            "Events that flip existing posts to <i>stale</i>, which "
+            "queues them for re-posting according to the update mode. "
+            "Check only the changes that should propagate to the forum."
+        ))
         st_box.setLayout(st_layout)
         outer.addWidget(st_box)
+
+        # Enabled
+        enabled_row = QHBoxLayout()
         self.enabled_check = QCheckBox(
             "Enabled (posting active for this tab)",
         )
-        outer.addWidget(self.enabled_check)
+        enabled_row.addWidget(self.enabled_check)
+        enabled_row.addWidget(InfoButton(
+            "<b>Enabled</b><br>"
+            "Master switch. Unchecking stops BBDrop from queuing any "
+            "new posts for this tab — existing posts are untouched."
+        ))
+        enabled_row.addStretch()
+        outer.addLayout(enabled_row)
         outer.addStretch()
+
         if self._override_mode:
-            # 'enabled' is intentionally not overrideable in v1 — too easy to
-            # accidentally disable a whole tab from a single gallery.
+            # 'enabled' is intentionally not overrideable in v1 — too
+            # easy to accidentally disable a whole tab from a single
+            # gallery.
             self.enabled_check.hide()
             for combo in (
-                self.kind_combo, self.trigger_combo,
-                self.update_mode_combo, self.manual_edit_combo,
+                self.trigger_combo, self.update_mode_combo,
+                self.manual_edit_combo,
             ):
                 combo.insertItem(0, "(Inherit from tab)", None)
                 combo.setCurrentIndex(0)
-        self._update_kind_visibility()
+
+    @staticmethod
+    def _label_with_info(text: str, html: str) -> QWidget:
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        lay.addWidget(QLabel(text))
+        lay.addWidget(InfoButton(html))
+        lay.addStretch()
+        return w
+
+    # ------------------------------------------------------------------
+    # Populate combos
+    # ------------------------------------------------------------------
 
     def _populate_forums(self):
+        self.forum_combo.blockSignals(True)
         self.forum_combo.clear()
         if self._override_mode:
-            self.forum_combo.addItem("(Inherit from tab)", None)
+            self.forum_combo.addItem("(Inherit from tab)", _INHERIT)
         for f in fp.list_forums(self._conn, enabled_only=False):
             self.forum_combo.addItem(f["name"], f["id"])
+        self.forum_combo.blockSignals(False)
 
-    def _update_kind_visibility(self):
-        kind = self.kind_combo.currentData()
-        # In override mode, kind may be None (inherit) — keep prior label text
-        # rather than mislabeling. Default to Reply behaviour.
-        if kind == "new_thread":
-            self.target_label.setText("Forum (subforum) ID")
-            self.title_template_input.setEnabled(True)
-        else:
-            self.target_label.setText("Thread ID")
-            self.title_template_input.setEnabled(False)
+    def _populate_templates(self):
+        self.template_combo.blockSignals(True)
+        self.template_combo.clear()
+        if self._override_mode:
+            self.template_combo.addItem("(Inherit from tab)", _INHERIT)
+        for name in load_templates().keys():
+            self.template_combo.addItem(name, name)
+        self.template_combo.blockSignals(False)
+
+    def _current_forum_fk(self) -> Optional[int]:
+        data = self.forum_combo.currentData()
+        return data if isinstance(data, int) else None
+
+    def _populate_target_combo_from_forum(
+        self, *, forum_fk: int,
+        preserve_target_id: str | None = None,
+        preserve_kind: str | None = None,
+    ):
+        """Fill the target combo from ``forum_fk``'s target library
+        without touching the forum combo. Used when override mode
+        inherits the forum but pins a target."""
+        self.target_combo.blockSignals(True)
+        self.target_combo.clear()
+        if self._override_mode:
+            self.target_combo.addItem("(Inherit from tab)", _INHERIT)
+        selected_index = 0 if self._override_mode else -1
+        rows = fp.list_targets(self._conn, forum_fk)
+        for t in rows:
+            label = f"{t['name']} ({t['kind']} #{t['target_id']})"
+            data = {
+                "kind": t["kind"], "target_id": t["target_id"],
+                "pk": t["id"], "name": t["name"],
+            }
+            self.target_combo.addItem(label, data)
+            if (preserve_target_id is not None
+                    and str(t["target_id"]) == str(preserve_target_id)
+                    and (preserve_kind is None or t["kind"] == preserve_kind)):
+                selected_index = self.target_combo.count() - 1
+        self.target_combo.addItem("+ Add new target from URL…", _ADD_NEW)
+        if (preserve_target_id and selected_index <= 0
+                and not self._override_mode):
+            # Orphan entry so we don't silently switch targets.
+            kind = preserve_kind or "thread"
+            label = f"(unknown) {kind} #{preserve_target_id}"
+            data = {
+                "kind": kind, "target_id": str(preserve_target_id),
+                "pk": None, "name": label,
+            }
+            idx = self.target_combo.count() - 1
+            self.target_combo.insertItem(idx, label, data)
+            selected_index = idx
+        if selected_index >= 0:
+            self.target_combo.setCurrentIndex(selected_index)
+        self.target_combo.blockSignals(False)
+
+    def _reload_targets_for_selected_forum(self, preserve_target_id: str | None = None,
+                                            preserve_kind: str | None = None):
+        """Rebuild the target combo for the currently-selected forum.
+
+        If ``preserve_target_id`` is provided, we try to reselect it
+        after rebuilding (used on initial load so the combo lands on
+        the existing config's target)."""
+        self.target_combo.blockSignals(True)
+        self.target_combo.clear()
+        if self._override_mode:
+            self.target_combo.addItem("(Inherit from tab)", _INHERIT)
+        fid = self._current_forum_fk()
+        selected_index = 0 if self._override_mode else -1
+        if fid is not None:
+            rows = fp.list_targets(self._conn, fid)
+            for t in rows:
+                label = f"{t['name']} ({t['kind']} #{t['target_id']})"
+                data = {
+                    "kind": t["kind"], "target_id": t["target_id"],
+                    "pk": t["id"], "name": t["name"],
+                }
+                self.target_combo.addItem(label, data)
+                if (preserve_target_id is not None
+                        and str(t["target_id"]) == str(preserve_target_id)
+                        and (preserve_kind is None or t["kind"] == preserve_kind)):
+                    selected_index = self.target_combo.count() - 1
+        # Always offer the "Add new…" action at the end.
+        self.target_combo.addItem("+ Add new target from URL…", _ADD_NEW)
+
+        # If we couldn't find the preserve_target_id but it was
+        # supplied, synthesize an orphan entry so existing configs
+        # don't silently switch target on load.
+        if (preserve_target_id and selected_index < 0
+                and fid is not None):
+            kind = preserve_kind or "thread"
+            label = f"(unknown) {kind} #{preserve_target_id}"
+            data = {
+                "kind": kind, "target_id": str(preserve_target_id),
+                "pk": None, "name": label,
+            }
+            # Insert before the Add-new sentinel.
+            idx = self.target_combo.count() - 1
+            self.target_combo.insertItem(idx, label, data)
+            selected_index = idx
+
+        if selected_index >= 0:
+            self.target_combo.setCurrentIndex(selected_index)
+        self.target_combo.blockSignals(False)
+
+    # ------------------------------------------------------------------
+    # Signals
+    # ------------------------------------------------------------------
+
+    def _on_forum_changed(self):
+        self._reload_targets_for_selected_forum()
+
+    def _on_target_changed(self):
+        if self.target_combo.currentData() == _ADD_NEW:
+            # Defer so the dropdown closes first; otherwise Qt may
+            # reopen it when we pop the input dialog.
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self._on_add_target)
+
+    def _on_add_target(self):
+        fid = self._current_forum_fk()
+        if fid is None:
+            QMessageBox.warning(
+                self, "Add target",
+                "Select a forum first (or save it in Forums settings).",
+            )
+            self._restore_target_to_valid()
+            return
+        forum = fp.get_forum(self._conn, fid)
+        if not forum:
+            self._restore_target_to_valid()
+            return
+        url, ok = QInputDialog.getText(
+            self, "Add target",
+            "Paste a subforum or thread URL:",
+            QLineEdit.EchoMode.Normal, "",
+        )
+        if not ok or not (url or "").strip():
+            self._restore_target_to_valid()
+            return
+        try:
+            client = create_forum_client(
+                forum["software_id"], base_url=forum["base_url"],
+                session_store=SessionStore(),
+            )
+            ref = client.parse_target_url(url.strip())
+        except Exception as e:
+            QMessageBox.warning(self, "Add target", f"Error: {e}")
+            self._restore_target_to_valid()
+            return
+        if ref is None:
+            QMessageBox.warning(
+                self, "Add target",
+                "Couldn't recognise that URL. Paste a subforum link "
+                "(e.g. /forumdisplay.php?f=…) or a thread link "
+                "(e.g. /showthread.php?t=…).",
+            )
+            self._restore_target_to_valid()
+            return
+        name, ok = QInputDialog.getText(
+            self, "Name this target",
+            f"Name for this {ref.kind} (#{ref.target_id}):",
+            QLineEdit.EchoMode.Normal,
+            ref.name or f"{ref.kind} {ref.target_id}",
+        )
+        if not ok:
+            self._restore_target_to_valid()
+            return
+        name = (name or "").strip() or ref.name or f"{ref.kind} {ref.target_id}"
+        fp.upsert_target(
+            self._conn, forum_fk=fid, name=name,
+            kind=ref.kind, target_id=ref.target_id,
+        )
+        self._reload_targets_for_selected_forum(
+            preserve_target_id=ref.target_id, preserve_kind=ref.kind,
+        )
+
+    def _restore_target_to_valid(self):
+        """Move the target combo off the '+ Add new…' sentinel back to
+        whatever concrete (or inherit) entry came before it."""
+        count = self.target_combo.count()
+        # Find the first non-sentinel entry.
+        for i in range(count):
+            data = self.target_combo.itemData(i)
+            if data != _ADD_NEW:
+                self.target_combo.blockSignals(True)
+                self.target_combo.setCurrentIndex(i)
+                self.target_combo.blockSignals(False)
+                return
+
+    # ------------------------------------------------------------------
+    # Load existing config
+    # ------------------------------------------------------------------
 
     def _load_existing(self):
         if self._override_mode:
@@ -153,12 +483,23 @@ class TabPostingConfigPanel(QWidget):
         idx = self.forum_combo.findData(cfg["forum_fk"])
         if idx >= 0:
             self.forum_combo.setCurrentIndex(idx)
-        kidx = self.kind_combo.findData(cfg["kind"])
-        if kidx >= 0:
-            self.kind_combo.setCurrentIndex(kidx)
-        self.target_id_input.setText(cfg["target_id"] or "")
-        self.body_template_input.setText(cfg["body_template_name"] or "")
-        self.title_template_input.setText(cfg.get("title_template_name") or "")
+        # After forum selection, populate targets and reselect the saved
+        # target id (map cfg.kind reply/new_thread → target.kind thread/subforum).
+        target_kind = "subforum" if cfg["kind"] == "new_thread" else "thread"
+        self._reload_targets_for_selected_forum(
+            preserve_target_id=str(cfg["target_id"]),
+            preserve_kind=target_kind,
+        )
+        # Template
+        tpl_name = cfg["body_template_name"] or ""
+        if tpl_name:
+            tidx = self.template_combo.findData(tpl_name)
+            if tidx < 0:
+                # Template removed since last save — show it anyway so
+                # the user notices; they can pick another.
+                self.template_combo.addItem(f"{tpl_name} (missing)", tpl_name)
+                tidx = self.template_combo.count() - 1
+            self.template_combo.setCurrentIndex(tidx)
         tidx = self.trigger_combo.findData(cfg["trigger_mode"])
         if tidx >= 0:
             self.trigger_combo.setCurrentIndex(tidx)
@@ -174,7 +515,6 @@ class TabPostingConfigPanel(QWidget):
         self.st_link_format.setChecked("link_format" in st)
         self.st_manual.setChecked("manual_rerender" in st)
         self.enabled_check.setChecked(bool(cfg.get("enabled")))
-        self._update_kind_visibility()
 
     def _load_existing_override(self):
         import json
@@ -189,16 +529,46 @@ class TabPostingConfigPanel(QWidget):
             idx = self.forum_combo.findData(d["forum_fk"])
             if idx >= 0:
                 self.forum_combo.setCurrentIndex(idx)
-        if d.get("kind"):
-            idx = self.kind_combo.findData(d["kind"])
-            if idx >= 0:
-                self.kind_combo.setCurrentIndex(idx)
         if d.get("target_id"):
-            self.target_id_input.setText(d["target_id"])
+            kind = d.get("kind")
+            target_kind = (
+                "subforum" if kind == "new_thread" else "thread"
+            ) if kind else None
+            # If the override didn't also override forum_fk, the forum
+            # combo is still on "(Inherit)" and targets won't populate.
+            # Reload targets using the tab's forum_fk so the saved
+            # target_id can still be found and highlighted — the combo
+            # selection remains "(Inherit)" at the forum level, but the
+            # target combo now contains concrete entries to match.
+            if d.get("forum_fk") is None:
+                tab_row = self._conn.execute(
+                    "SELECT t.forum_fk FROM galleries g "
+                    "JOIN tab_posting_config t ON t.tab_id = g.tab_id "
+                    "WHERE g.id=?",
+                    (self._gallery_id,),
+                ).fetchone()
+                if tab_row and tab_row[0]:
+                    # Pull targets directly from DB so the forum combo
+                    # stays on "(Inherit)" while the list is populated.
+                    self._populate_target_combo_from_forum(
+                        forum_fk=tab_row[0],
+                        preserve_target_id=str(d["target_id"]),
+                        preserve_kind=target_kind,
+                    )
+                    return
+            self._reload_targets_for_selected_forum(
+                preserve_target_id=str(d["target_id"]),
+                preserve_kind=target_kind,
+            )
         if d.get("body_template_name"):
-            self.body_template_input.setText(d["body_template_name"])
-        if d.get("title_template_name"):
-            self.title_template_input.setText(d["title_template_name"])
+            idx = self.template_combo.findData(d["body_template_name"])
+            if idx < 0:
+                self.template_combo.addItem(
+                    f"{d['body_template_name']} (missing)",
+                    d["body_template_name"],
+                )
+                idx = self.template_combo.count() - 1
+            self.template_combo.setCurrentIndex(idx)
         if d.get("trigger_mode"):
             idx = self.trigger_combo.findData(d["trigger_mode"])
             if idx >= 0:
@@ -217,21 +587,41 @@ class TabPostingConfigPanel(QWidget):
             self.st_template.setChecked("template_edit" in st)
             self.st_link_format.setChecked("link_format" in st)
             self.st_manual.setChecked("manual_rerender" in st)
-        self._update_kind_visibility()
+
+    # ------------------------------------------------------------------
+    # Save
+    # ------------------------------------------------------------------
+
+    def _selected_target(self) -> Optional[dict]:
+        """Return {'kind', 'target_id'} for the current target selection,
+        or None for "(Inherit)" / "+ Add new…"."""
+        data = self.target_combo.currentData()
+        if data in (None, _INHERIT, _ADD_NEW):
+            return None
+        if isinstance(data, dict):
+            return {"kind": data["kind"], "target_id": data["target_id"]}
+        return None
 
     def save(self) -> bool:
         if self._override_mode:
             return self._save_override()
         forum_fk = self.forum_combo.currentData()
-        if forum_fk is None:
+        if not isinstance(forum_fk, int):
             QMessageBox.warning(self, "Save", "Select a forum first.")
             return False
-        if not self.target_id_input.text().strip():
-            QMessageBox.warning(self, "Save", "Target ID is required.")
+        target = self._selected_target()
+        if not target:
+            QMessageBox.warning(
+                self, "Save",
+                "Select a target (subforum or thread). Use + to add a "
+                "new one.",
+            )
             return False
-        if not self.body_template_input.text().strip():
-            QMessageBox.warning(self, "Save", "Body template name is required.")
+        tpl = self.template_combo.currentData()
+        if not isinstance(tpl, str) or not tpl:
+            QMessageBox.warning(self, "Save", "Select a template.")
             return False
+        kind = "new_thread" if target["kind"] == "subforum" else "reply"
         triggers = []
         if self.st_upload.isChecked():
             triggers.append("upload")
@@ -243,12 +633,12 @@ class TabPostingConfigPanel(QWidget):
             triggers.append("manual_rerender")
         fp.set_tab_posting_config(
             self._conn, tab_id=self._tab_id, forum_fk=forum_fk,
-            kind=self.kind_combo.currentData(),
-            target_id=self.target_id_input.text().strip(),
-            body_template_name=self.body_template_input.text().strip(),
-            title_template_name=(
-                self.title_template_input.text().strip() or None
-            ),
+            kind=kind, target_id=str(target["target_id"]),
+            body_template_name=tpl,
+            # Single-template model: the body template may carry a
+            # #POSTTITLE: directive; the renderer resolves it when the
+            # title_template_name field is left unset.
+            title_template_name=None,
             trigger_mode=self.trigger_combo.currentData(),
             update_mode=self.update_mode_combo.currentData(),
             manual_edit_handling=self.manual_edit_combo.currentData(),
@@ -259,19 +649,18 @@ class TabPostingConfigPanel(QWidget):
 
     def _save_override(self) -> bool:
         fields: dict = {}
-        if self.forum_combo.currentData() is not None:
-            fields["forum_fk"] = self.forum_combo.currentData()
-        if self.kind_combo.currentData() is not None:
-            fields["kind"] = self.kind_combo.currentData()
-        target = self.target_id_input.text().strip()
+        forum_data = self.forum_combo.currentData()
+        if isinstance(forum_data, int):
+            fields["forum_fk"] = forum_data
+        target = self._selected_target()
         if target:
-            fields["target_id"] = target
-        body_tpl = self.body_template_input.text().strip()
-        if body_tpl:
-            fields["body_template_name"] = body_tpl
-        title_tpl = self.title_template_input.text().strip()
-        if title_tpl:
-            fields["title_template_name"] = title_tpl
+            fields["kind"] = (
+                "new_thread" if target["kind"] == "subforum" else "reply"
+            )
+            fields["target_id"] = str(target["target_id"])
+        tpl_data = self.template_combo.currentData()
+        if isinstance(tpl_data, str) and tpl_data and tpl_data != _INHERIT:
+            fields["body_template_name"] = tpl_data
         if self.trigger_combo.currentData() is not None:
             fields["trigger_mode"] = self.trigger_combo.currentData()
         if self.update_mode_combo.currentData() is not None:
@@ -302,7 +691,7 @@ class TabPostingConfigDialog(QDialog):
     def __init__(self, conn, tab_id, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Tab Posting Configuration")
-        self.resize(560, 540)
+        self.resize(560, 560)
         self.panel = TabPostingConfigPanel(conn, tab_id, self)
         layout = QVBoxLayout(self)
         layout.addWidget(self.panel)
