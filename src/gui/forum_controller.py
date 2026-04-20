@@ -17,6 +17,7 @@ import os
 import sqlite3
 import time
 from typing import Callable, Optional
+from urllib.parse import urlparse
 
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
 
@@ -24,7 +25,7 @@ from src.network.forum.factory import create_forum_client
 from src.network.forum.link_extractor import extract_link_map
 from src.network.forum.session_store import SessionStore
 from src.processing.forum_posting_worker import (
-    ForumPostingWorker, PostJob,
+    FetchJob, ForumPostingWorker, PostJob,
 )
 from src.storage import forum_posting as fp
 from src.utils.forum_signals import bbcode_regenerated_signal_hub
@@ -112,6 +113,61 @@ class ForumController(QObject):
         if not cfg:
             raise ValueError("No effective posting config for gallery")
         return self._enqueue_post(gallery_id, cfg)
+
+    def onboard_post(
+        self, gallery_id: int, text_or_url: str,
+        forum_hint: Optional[int] = None,
+    ) -> int:
+        """Onboard an existing forum post for an already-created gallery.
+
+        Returns the new forum_posts row id. Raises ValueError if the input
+        can't be resolved to a (forum, post_id) pair.
+        """
+        s = (text_or_url or "").strip()
+        if not s:
+            raise ValueError("Empty input")
+
+        forum_id: Optional[int] = None
+        if s.startswith("http://") or s.startswith("https://"):
+            host = urlparse(s).netloc.lower()
+            for f in fp.list_forums(self._conn):
+                if urlparse(f["base_url"]).netloc.lower() == host:
+                    forum_id = f["id"]
+                    break
+            if forum_id is None:
+                raise ValueError(
+                    f"No registered forum matches host '{host}'. "
+                    "Add this forum in Forum Manager first."
+                )
+        else:
+            if forum_hint is not None:
+                forum_id = forum_hint
+            else:
+                cfg = fp.get_effective_posting_config(self._conn, gallery_id)
+                if not cfg:
+                    raise ValueError(
+                        "No tab posting config for this gallery. "
+                        "Configure tab posting first or paste a full URL."
+                    )
+                forum_id = cfg["forum_fk"]
+
+        client = self._make_client(forum_id)
+        ref = client.parse_post_reference(s)
+        if ref is None or not ref.post_id:
+            raise ValueError("Could not extract a post ID from input")
+
+        post_row_id = fp.insert_forum_post(
+            self._conn,
+            gallery_fk=gallery_id, forum_fk=forum_id,
+            kind="reply", target_id=(ref.thread_id or "0"),
+            body_hash="", link_map={}, source="onboarded",
+        )
+        self._worker.enqueue(FetchJob(
+            forum_post_id=post_row_id,
+            forum_id=forum_id,
+            post_id=ref.post_id,
+        ))
+        return post_row_id
 
     def preview_render(self, gallery_id: int) -> tuple[str, str]:
         """Render (body, title) for the composer without enqueueing.

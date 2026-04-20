@@ -31,6 +31,8 @@ def create_forum_client(
     software_id: str, *, base_url: str,
     session_store: Optional[SessionStore] = None,
 ) -> ForumClient:
+    # Trigger client imports so the registry is populated before lookup.
+    supported_software_ids()
     if software_id not in _REGISTRY:
         raise ValueError(f"Unknown forum software_id: {software_id}")
     return _REGISTRY[software_id](base_url=base_url, session_store=session_store)
