@@ -67,6 +67,20 @@ class PostRef:
     forum_base_url: Optional[str]
 
 
+@dataclass
+class TargetRef:
+    """A subforum or thread identified from a pasted URL.
+
+    ``kind`` is one of ``"subforum"`` or ``"thread"``. ``name`` is a
+    best-effort label extracted from the URL (e.g. slug or numeric id);
+    callers that want the real forum/thread title should fetch it.
+    """
+    kind: str
+    target_id: str
+    name: str = ""
+    forum_base_url: Optional[str] = None
+
+
 # LinkMap is a dict of category -> list[{url, host_kind?, role?}]
 LinkMap = dict
 
@@ -95,3 +109,5 @@ class ForumClient(ABC):
     def edit_post(self, post_id: str, new_body: str) -> EditResult: ...
     @abstractmethod
     def parse_post_reference(self, text_or_url: str) -> Optional[PostRef]: ...
+    @abstractmethod
+    def parse_target_url(self, text_or_url: str) -> Optional[TargetRef]: ...

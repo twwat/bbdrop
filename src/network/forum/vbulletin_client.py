@@ -13,14 +13,14 @@ import hashlib
 import re
 import time
 from typing import Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 
 from src.network.forum.client import (
     AuthResult, EditResult, ForumClient, ForumErrorKind,
-    PostBody, PostRef, PostResult,
+    PostBody, PostRef, PostResult, TargetRef,
 )
 from src.network.forum.factory import register
 from src.network.forum.session_store import ForumSession
@@ -346,6 +346,67 @@ class VBulletinClient(ForumClient):
                 post_id=post_id, thread_id=thread_id,
                 forum_base_url=f"{u.scheme}://{u.netloc}",
             )
+        except Exception:
+            return None
+
+    def parse_target_url(self, text_or_url: str) -> Optional[TargetRef]:
+        """Parse a vBulletin URL to a subforum or thread target.
+
+        Handles both classic and friendly-URL forms:
+          * ``.../forumdisplay.php?f=12[&...]`` → subforum 12
+          * ``.../forums/12-Celebrity-Photos`` → subforum 12 (name from slug)
+          * ``.../showthread.php?t=9001[&p=...#post...]`` → thread 9001
+          * ``.../threads/9001-Daily-Dump-Thread`` → thread 9001
+          * ``.../showthread.php?p=12345#post12345`` (no t=) — returns
+            ``None`` because the thread id isn't in the URL.
+        """
+        s = (text_or_url or "").strip()
+        if not s:
+            return None
+        try:
+            u = urlparse(s)
+            if not u.scheme or not u.netloc:
+                return None
+            path_lc = (u.path or "").lower()
+            qs = parse_qs(u.query)
+            forum_base = f"{u.scheme}://{u.netloc}"
+
+            if path_lc.endswith("forumdisplay.php"):
+                f = (qs.get("f", [""])[0]) or ""
+                if not f:
+                    return None
+                return TargetRef(
+                    kind="subforum", target_id=f, name=f"subforum {f}",
+                    forum_base_url=forum_base,
+                )
+
+            if path_lc.endswith("showthread.php"):
+                t = (qs.get("t", [""])[0]) or ""
+                if not t:
+                    return None
+                return TargetRef(
+                    kind="thread", target_id=t, name=f"thread {t}",
+                    forum_base_url=forum_base,
+                )
+
+            # Friendly-URL forms: /forums/<id>[-<slug>], /threads/<id>[-<slug>]
+            m = re.match(
+                r"^/(forums|threads)/(\d+)(?:-([^/?#]+))?/?$",
+                u.path or "", re.IGNORECASE,
+            )
+            if m:
+                section, ident, slug = m.group(1).lower(), m.group(2), m.group(3) or ""
+                kind = "subforum" if section == "forums" else "thread"
+                pretty = (
+                    unquote(slug).replace("-", " ").replace("_", " ").strip()
+                )
+                return TargetRef(
+                    kind=kind, target_id=ident,
+                    name=pretty or f"{kind} {ident}",
+                    forum_base_url=forum_base,
+                )
+
+            return None
         except Exception:
             return None
 

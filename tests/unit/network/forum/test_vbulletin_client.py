@@ -292,3 +292,61 @@ def test_logout_clears_session(client):
     assert not client.is_logged_in()
     assert client._username is None
     assert client._authenticated is False
+
+
+# ---------------------------------------------------------------------------
+# parse_target_url
+# ---------------------------------------------------------------------------
+
+def test_parse_target_url_classic_forumdisplay(client):
+    r = client.parse_target_url("https://vipergirls.to/forumdisplay.php?f=12")
+    assert r.kind == "subforum" and r.target_id == "12"
+    assert r.forum_base_url == "https://vipergirls.to"
+
+
+def test_parse_target_url_classic_showthread(client):
+    r = client.parse_target_url("https://vipergirls.to/showthread.php?t=9001")
+    assert r.kind == "thread" and r.target_id == "9001"
+
+
+def test_parse_target_url_showthread_with_post_fragment(client):
+    r = client.parse_target_url(
+        "https://vipergirls.to/showthread.php?t=9001&p=12345#post12345",
+    )
+    assert r.kind == "thread" and r.target_id == "9001"
+
+
+def test_parse_target_url_post_only_returns_none(client):
+    # Post URL without t= can't reliably give a thread id without fetching.
+    assert client.parse_target_url(
+        "https://vipergirls.to/showthread.php?p=12345#post12345",
+    ) is None
+
+
+def test_parse_target_url_friendly_forums(client):
+    r = client.parse_target_url(
+        "https://vipergirls.to/forums/12-Celebrity-Photos",
+    )
+    assert r.kind == "subforum" and r.target_id == "12"
+    assert r.name == "Celebrity Photos"
+
+
+def test_parse_target_url_friendly_threads(client):
+    r = client.parse_target_url(
+        "https://vipergirls.to/threads/9001-Daily-Dump-Thread",
+    )
+    assert r.kind == "thread" and r.target_id == "9001"
+    assert r.name == "Daily Dump Thread"
+
+
+def test_parse_target_url_friendly_without_slug(client):
+    r = client.parse_target_url("https://vipergirls.to/threads/9001")
+    assert r.kind == "thread" and r.target_id == "9001"
+    assert r.name == "thread 9001"
+
+
+def test_parse_target_url_rejects_empty_and_non_url(client):
+    assert client.parse_target_url("") is None
+    assert client.parse_target_url("   ") is None
+    assert client.parse_target_url("not a url") is None
+    assert client.parse_target_url("12345") is None
