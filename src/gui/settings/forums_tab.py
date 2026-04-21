@@ -13,14 +13,20 @@ Spec: docs/superpowers/specs/2026-04-20-forum-posting-design.md §7.1.
 
 from __future__ import annotations
 
+import os
+import re
 import sqlite3
+import threading
 from typing import Optional
+from urllib.parse import urlparse
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QObject, QRect, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QIcon
 from PyQt6.QtWidgets import (
-    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QInputDialog,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QApplication, QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+    QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMessageBox, QPushButton, QSpinBox, QStyle,
+    QStyledItemDelegate, QVBoxLayout, QWidget,
 )
 
 from src.gui.dialogs.forum_credential_test_dialog import ForumCredentialTestDialog
@@ -36,8 +42,182 @@ from src.utils.credentials import (
 )
 
 
-_FORUM_LIST_VISIBLE_ROWS = 11
-_TARGET_LIST_VISIBLE_ROWS = 8
+_FORUMS_MIN_ROWS = 2
+_FORUMS_MAX_ROWS = 10
+_TARGETS_MIN_ROWS = 3
+_TARGETS_MAX_ROWS = 20
+
+# Delegate reads each target's kind + numeric id via these custom roles.
+_TARGET_KIND_ROLE = Qt.ItemDataRole.UserRole + 1
+_TARGET_TID_ROLE = Qt.ItemDataRole.UserRole + 2
+
+# Matches any http(s) URL inside pasted text, regardless of delimiters.
+_URL_RE = re.compile(r"https?://\S+")
+
+
+class _FaviconFetcher(QObject):
+    """Fetches a forum's ``/favicon.ico`` in a background thread and emits
+    ``favicon_ready(forum_id, path)`` when the file lands in the on-disk
+    cache. Failures are swallowed — the icon just stays blank."""
+
+    favicon_ready = pyqtSignal(int, str)
+
+    def __init__(self):
+        super().__init__()
+        self._cache_dir = os.path.join(
+            os.path.expanduser("~"), ".bbdrop", "favicons",
+        )
+        try:
+            os.makedirs(self._cache_dir, exist_ok=True)
+        except OSError:
+            pass
+        self._in_flight: set[int] = set()
+        self._lock = threading.Lock()
+
+    def cached_path(self, forum_id: int) -> Optional[str]:
+        path = os.path.join(self._cache_dir, f"forum_{forum_id}.ico")
+        return path if os.path.isfile(path) else None
+
+    def fetch(self, forum_id: int, base_url: str) -> None:
+        """Kick off a background download if not cached and not already
+        in flight. No-op on empty URLs / thread-lock contention."""
+        if not base_url:
+            return
+        if self.cached_path(forum_id):
+            return
+        with self._lock:
+            if forum_id in self._in_flight:
+                return
+            self._in_flight.add(forum_id)
+        threading.Thread(
+            target=self._worker, args=(forum_id, base_url), daemon=True,
+        ).start()
+
+    def _worker(self, forum_id: int, base_url: str):
+        try:
+            import urllib.request
+            parsed = urlparse(base_url)
+            if not parsed.scheme or not parsed.netloc:
+                return
+            url = f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "BBDrop/favicon-fetcher"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = resp.read()
+            if not data or len(data) < 20:
+                return
+            dest = os.path.join(
+                self._cache_dir, f"forum_{forum_id}.ico",
+            )
+            tmp = dest + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, dest)
+            self.favicon_ready.emit(forum_id, dest)
+        except Exception:
+            # Silent — favicon download is best-effort.
+            pass
+        finally:
+            with self._lock:
+                self._in_flight.discard(forum_id)
+
+
+# Shared per-process fetcher — favicons are forum-identity data, not
+# panel-scoped, so a single cache keeps the state tidy across reopens.
+_favicon_fetcher: Optional[_FaviconFetcher] = None
+
+
+def _get_favicon_fetcher() -> _FaviconFetcher:
+    global _favicon_fetcher
+    if _favicon_fetcher is None:
+        _favicon_fetcher = _FaviconFetcher()
+    return _favicon_fetcher
+
+
+class _TargetKindDelegate(QStyledItemDelegate):
+    """Paints a small colored pill at the row's right edge showing
+    ``Subforum #304`` or ``Thread #12345``. Slimmer than the row so the
+    row height doesn't grow; color alone tells kinds apart at a glance."""
+
+    _PILL_BG = {
+        "subforum": "#2f6aa1",   # blue
+        "thread":   "#3d874a",   # green
+    }
+    _PILL_LABEL = {"subforum": "Subforum", "thread": "Thread"}
+    _PAD_H = 6
+    _GAP = 8
+    _RADIUS = 3
+
+    def paint(self, painter, option, index):
+        self.initStyleOption(option, index)
+        widget = option.widget
+        style = widget.style() if widget else QApplication.style()
+
+        # Let the style paint selection/hover background; suppress the
+        # default text so we can draw the name + trailing pill ourselves.
+        option.text = ""
+        style.drawControl(
+            QStyle.ControlElement.CE_ItemViewItem, option, painter, widget,
+        )
+
+        kind = index.data(_TARGET_KIND_ROLE) or ""
+        tid = index.data(_TARGET_TID_ROLE)
+        kind_label = self._PILL_LABEL.get(kind, "")
+        pill_text = (
+            f"{kind_label} #{tid}" if kind_label and tid else kind_label
+        )
+
+        painter.save()
+        rect = option.rect.adjusted(6, 0, -6, 0)
+        name_right = rect.right()
+
+        if pill_text:
+            pill_font = QFont(option.font)
+            pt = pill_font.pointSizeF()
+            if pt > 0:
+                pill_font.setPointSizeF(pt * 0.85)
+            painter.setFont(pill_font)
+            fm = painter.fontMetrics()
+            pill_w = fm.horizontalAdvance(pill_text) + 2 * self._PAD_H
+            pill_h = fm.height()
+            # Keep the pill shorter than the row so it can't push row
+            # height up; clamp to row height just in case.
+            pill_h = min(pill_h, rect.height() - 4)
+            pill_y = rect.y() + (rect.height() - pill_h) // 2
+            pill_rect = QRect(
+                rect.right() - pill_w, pill_y, pill_w, pill_h,
+            )
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(self._PILL_BG.get(kind, "#666")))
+            painter.drawRoundedRect(pill_rect, self._RADIUS, self._RADIUS)
+            painter.setPen(QColor("white"))
+            painter.drawText(
+                pill_rect, Qt.AlignmentFlag.AlignCenter, pill_text,
+            )
+            name_right = pill_rect.left() - self._GAP
+
+        painter.setFont(option.font)
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.setPen(option.palette.highlightedText().color())
+        else:
+            painter.setPen(option.palette.text().color())
+        text_rect = QRect(
+            rect.x(), rect.y(),
+            max(0, name_right - rect.x()), rect.height(),
+        )
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        fm = painter.fontMetrics()
+        elided = fm.elidedText(text, Qt.TextElideMode.ElideRight, text_rect.width())
+        painter.drawText(
+            text_rect,
+            int(
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+            ),
+            elided,
+        )
+        painter.restore()
 
 
 class ForumsPanel(QWidget):
@@ -51,9 +231,73 @@ class ForumsPanel(QWidget):
     def __init__(self, conn: sqlite3.Connection, parent=None):
         super().__init__(parent)
         self._conn = conn
+        self._creating_new = False
+        self._favicons = _get_favicon_fetcher()
+        self._favicons.favicon_ready.connect(
+            self._on_favicon_ready, Qt.ConnectionType.QueuedConnection,
+        )
         self._build_ui()
         self._reload_list()
+        self._restore_last_selection()
         self._update_enabled_state()
+
+    def _main_window(self):
+        """Walk up to the main window so we can read/write the
+        session-only ``_last_forum_id`` attribute."""
+        p = self.parent()
+        while p is not None:
+            if hasattr(p, '_forum_db_conn'):
+                return p
+            parent_fn = getattr(p, 'parent', None)
+            p = parent_fn() if callable(parent_fn) else None
+        return None
+
+    def _restore_last_selection(self):
+        mw = self._main_window()
+        last_id = getattr(mw, '_last_forum_id', None) if mw else None
+        if last_id is not None:
+            for i in range(self.forum_list.count()):
+                item = self.forum_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) == last_id:
+                    self.forum_list.setCurrentRow(i)
+                    return
+        # No remembered pick — default to the first row so Details and
+        # Targets are visible immediately. Otherwise the first click on
+        # the only forum pops both groups in and the layout jumps.
+        if self.forum_list.count() > 0:
+            self.forum_list.setCurrentRow(0)
+
+    def _remember_current_selection(self, fid):
+        mw = self._main_window()
+        if mw is not None:
+            mw._last_forum_id = fid
+
+    @staticmethod
+    def _fit_list_to_content(
+        lw: QListWidget, min_rows: int, max_rows: int,
+    ) -> None:
+        """Size ``lw`` so it shows exactly ``count`` rows when small and
+        caps at ``max_rows`` when long (scrollbar kicks in past that).
+        A ``min_rows`` floor keeps buttons from overlapping when a list
+        is empty or near-empty."""
+        row_h = lw.sizeHintForRow(0) if lw.count() > 0 else 0
+        if row_h <= 0:
+            row_h = lw.fontMetrics().height() + 6
+        frame = 2 * lw.frameWidth()
+        rows = max(min_rows, min(lw.count(), max_rows))
+        lw.setFixedHeight(row_h * rows + frame + 2)
+
+    def _on_favicon_ready(self, forum_id: int, path: str):
+        """Delegate-level repaint isn't enough — set the item icon so
+        the list's own style renders it."""
+        if not os.path.isfile(path):
+            return
+        icon = QIcon(path)
+        for i in range(self.forum_list.count()):
+            item = self.forum_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == forum_id:
+                item.setIcon(icon)
+                break
 
     # ------------------------------------------------------------------
     # UI construction
@@ -63,11 +307,19 @@ class ForumsPanel(QWidget):
         root = QHBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
-        root.addWidget(self._build_forums_group(), 1)
 
+        # Left column: Forums list on top, Forum Details under it.
+        left = QVBoxLayout()
+        left.setSpacing(10)
+        left.addWidget(self._build_forums_group())
+        left.addWidget(self._build_details_group())
+        left.addStretch()
+        root.addLayout(left, 3)
+
+        # Right column: Targets runs full height (it's the tallest
+        # content and benefits from room to grow).
         right = QVBoxLayout()
         right.setSpacing(10)
-        right.addWidget(self._build_details_group())
         right.addWidget(self._build_targets_group())
         right.addStretch()
         root.addLayout(right, 2)
@@ -80,12 +332,9 @@ class ForumsPanel(QWidget):
 
         self.forum_list = QListWidget()
         self.forum_list.currentItemChanged.connect(self._on_select)
-        # Cap visible height to ~11 rows so the list doesn't stretch to
-        # the window. Actual row height depends on the font; sample one.
-        row_h = self.forum_list.fontMetrics().height() + 6
-        self.forum_list.setFixedHeight(
-            row_h * _FORUM_LIST_VISIBLE_ROWS + 2 * self.forum_list.frameWidth()
-        )
+        # Height is fit-to-content (2..10 rows); applied after each reload
+        # so the groupbox never shows empty space below a short list or
+        # squeezes the buttons on top of a long one.
         layout.addWidget(self.forum_list)
 
         btn_row = QHBoxLayout()
@@ -193,16 +442,14 @@ class ForumsPanel(QWidget):
         layout.addLayout(hint_row)
 
         self.target_list = QListWidget()
-        row_h = self.target_list.fontMetrics().height() + 6
-        self.target_list.setFixedHeight(
-            row_h * _TARGET_LIST_VISIBLE_ROWS + 2 * self.target_list.frameWidth()
-        )
+        self.target_list.setItemDelegate(_TargetKindDelegate(self.target_list))
+        # Height fit-to-content (3..20 rows); applied on reload.
         layout.addWidget(self.target_list)
 
         paste_row = QHBoxLayout()
         self.target_url_input = QLineEdit()
         self.target_url_input.setPlaceholderText(
-            "Paste a forum or thread URL..."
+            "Paste one URL, or several at once (any separator) to add in bulk."
         )
         self.target_url_input.returnPressed.connect(self._on_add_target_from_url)
         add_btn = QPushButton("Add")
@@ -244,7 +491,15 @@ class ForumsPanel(QWidget):
         for f in fp.list_forums(self._conn):
             item = QListWidgetItem(f["name"])
             item.setData(Qt.ItemDataRole.UserRole, f["id"])
+            cached = self._favicons.cached_path(f["id"])
+            if cached:
+                item.setIcon(QIcon(cached))
+            else:
+                self._favicons.fetch(f["id"], f["base_url"])
             self.forum_list.addItem(item)
+        self._fit_list_to_content(
+            self.forum_list, _FORUMS_MIN_ROWS, _FORUMS_MAX_ROWS,
+        )
 
     def _selected_id(self) -> Optional[int]:
         item = self.forum_list.currentItem()
@@ -252,11 +507,14 @@ class ForumsPanel(QWidget):
 
     def _on_select(self):
         fid = self._selected_id()
+        self._remember_current_selection(fid)
         if fid is None:
             self._clear_form()
             self._reload_targets()
             self._update_enabled_state()
             return
+        # Picking an existing forum cancels any in-progress "new" flow.
+        self._creating_new = False
         f = fp.get_forum(self._conn, fid)
         if not f:
             # Forum row disappeared (e.g. deleted by another panel or a
@@ -293,15 +551,23 @@ class ForumsPanel(QWidget):
         self.username_input.clear()
         self.password_input.clear()
         self.cooldown_spin.setValue(30)
+        if self.software_combo.count() > 0:
+            self.software_combo.setCurrentIndex(0)
 
     def _update_enabled_state(self):
         has_forum = self._selected_id() is not None
-        # Targets group only makes sense once a forum exists so its
-        # base_url / software_id can parse pasted URLs.
-        self._targets_group.setEnabled(has_forum)
+        # Hide the edit form until the user either picks an existing forum
+        # or hits "Add" — editing nothing is confusing.
+        show_form = has_forum or self._creating_new
+        self._details_group.setVisible(show_form)
+        self._targets_group.setVisible(has_forum)
 
     def _on_add(self):
-        self.forum_list.clearSelection()
+        self._creating_new = True
+        # setCurrentRow(-1) actually clears currentItem (unlike
+        # clearSelection, which leaves currentItem stale and suppresses
+        # currentItemChanged on a follow-up click to the same forum).
+        self.forum_list.setCurrentRow(-1)
         self._clear_form()
         self.name_input.setFocus()
         self._reload_targets()
@@ -321,10 +587,17 @@ class ForumsPanel(QWidget):
             remove_credential(f"forum_{fid}_credentials")
         except Exception:
             pass
+        self._creating_new = False
         self._reload_list()
-        self._clear_form()
-        self._reload_targets()
-        self._update_enabled_state()
+        # If any forums remain, auto-select the first so Details/Targets
+        # stay visible — keeps the panel from collapsing and re-expanding
+        # on the next click.
+        if self.forum_list.count() > 0:
+            self.forum_list.setCurrentRow(0)
+        else:
+            self._clear_form()
+            self._reload_targets()
+            self._update_enabled_state()
 
     def _on_save(self):
         fid = self._save_forum(
@@ -336,6 +609,7 @@ class ForumsPanel(QWidget):
             password=self.password_input.text(),
         )
         if fid is not None:
+            self._creating_new = False
             self._reload_list()
             for i in range(self.forum_list.count()):
                 if self.forum_list.item(i).data(Qt.ItemDataRole.UserRole) == fid:
@@ -398,13 +672,18 @@ class ForumsPanel(QWidget):
     def _reload_targets(self):
         self.target_list.clear()
         fid = self._selected_id()
-        if fid is None:
-            return
-        for t in fp.list_targets(self._conn, fid):
-            label = f"{t['name']} ({t['kind']} #{t['target_id']})"
-            item = QListWidgetItem(label)
-            item.setData(Qt.ItemDataRole.UserRole, t["id"])
-            self.target_list.addItem(item)
+        if fid is not None:
+            for t in fp.list_targets(self._conn, fid):
+                # Pill delegate renders "Subforum #id" / "Thread #id" at
+                # the right edge; display text is just the friendly name.
+                item = QListWidgetItem(t["name"])
+                item.setData(Qt.ItemDataRole.UserRole, t["id"])
+                item.setData(_TARGET_KIND_ROLE, t["kind"])
+                item.setData(_TARGET_TID_ROLE, t["target_id"])
+                self.target_list.addItem(item)
+        self._fit_list_to_content(
+            self.target_list, _TARGETS_MIN_ROWS, _TARGETS_MAX_ROWS,
+        )
 
     def _selected_target_id(self) -> Optional[int]:
         item = self.target_list.currentItem()
@@ -418,8 +697,14 @@ class ForumsPanel(QWidget):
                 "Save the forum first, then add targets for it.",
             )
             return
-        url = self.target_url_input.text().strip()
-        if not url:
+        raw = self.target_url_input.text().strip()
+        if not raw:
+            return
+        # Extract every http(s) URL from the pasted text regardless of
+        # delimiters (whitespace, commas, quotes, etc.). Trim any trailing
+        # punctuation the regex greedily caught.
+        urls = [u.rstrip(",.;'\"") for u in _URL_RE.findall(raw)]
+        if not urls:
             return
         forum = fp.get_forum(self._conn, fid)
         if not forum:
@@ -432,6 +717,31 @@ class ForumsPanel(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Add target", f"Forum client error: {e}")
             return
+
+        if len(urls) == 1:
+            # Single URL — keep the confirm-name-before-save flow.
+            if not self._add_single_target(fid, client, urls[0]):
+                return
+        else:
+            # Bulk — auto-name each, show a summary at the end.
+            added, skipped = self._add_bulk_targets(fid, client, urls)
+            msg = f"Added {added} target(s)."
+            if skipped:
+                preview = "\n".join(skipped[:10])
+                extra = (
+                    f"\n… and {len(skipped) - 10} more"
+                    if len(skipped) > 10 else ""
+                )
+                msg += (
+                    f"\nSkipped {len(skipped)} unrecognised URL(s):\n"
+                    f"{preview}{extra}"
+                )
+            QMessageBox.information(self, "Add targets", msg)
+
+        self.target_url_input.clear()
+        self._reload_targets()
+
+    def _add_single_target(self, fid: int, client, url: str) -> bool:
         ref = client.parse_target_url(url)
         if ref is None:
             QMessageBox.warning(
@@ -440,22 +750,39 @@ class ForumsPanel(QWidget):
                 "(e.g. /forumdisplay.php?f=…) or a thread link "
                 "(e.g. /showthread.php?t=…).",
             )
-            return
-        # Let the user confirm / edit the name before saving.
+            return False
         name, ok = QInputDialog.getText(
             self, "Name this target",
             f"Name for this {ref.kind} (#{ref.target_id}):",
-            QLineEdit.EchoMode.Normal, ref.name or f"{ref.kind} {ref.target_id}",
+            QLineEdit.EchoMode.Normal,
+            ref.name or f"{ref.kind} {ref.target_id}",
         )
         if not ok:
-            return
+            return False
         name = (name or "").strip() or ref.name or f"{ref.kind} {ref.target_id}"
         fp.upsert_target(
             self._conn, forum_fk=fid, name=name,
             kind=ref.kind, target_id=ref.target_id,
         )
-        self.target_url_input.clear()
-        self._reload_targets()
+        return True
+
+    def _add_bulk_targets(
+        self, fid: int, client, urls: list[str],
+    ) -> tuple[int, list[str]]:
+        added = 0
+        skipped: list[str] = []
+        for url in urls:
+            ref = client.parse_target_url(url)
+            if ref is None:
+                skipped.append(url)
+                continue
+            name = (ref.name or f"{ref.kind} {ref.target_id}").strip()
+            fp.upsert_target(
+                self._conn, forum_fk=fid, name=name,
+                kind=ref.kind, target_id=ref.target_id,
+            )
+            added += 1
+        return added, skipped
 
     def _on_remove_target(self):
         tid = self._selected_target_id()
