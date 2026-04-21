@@ -1,0 +1,5216 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Batch-upload image galleries to multiple image and file hosts">
+      
+      
+      
+        <link rel="canonical" href="https://bbdrop.net/reference/features/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>BBDrop Features Documentation - BBDrop</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#bbdrop-features-documentation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="BBDrop" class="md-header__button md-logo" aria-label="BBDrop" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BBDrop
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              BBDrop Features Documentation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/twwat/bbdrop" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    twwat/bbdrop
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../explanation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Explanation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../troubleshooting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Troubleshooting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../decisions/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Decisions
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="BBDrop" class="md-nav__button md-logo" aria-label="BBDrop" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BBDrop
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/twwat/bbdrop" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    twwat/bbdrop
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Key Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../tutorials/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/imx-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setting Up IMX.to
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/custom-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Creating a Custom Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/file-host-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding File Host Downloads
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../guides/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/gui-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GUI Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/layout-customization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customize the Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/image-hosts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Image Hosts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/multi-host-upload/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-Host Upload
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/queue-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/scanning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scanning & Link Checking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/bbcode-templates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BBCode Templates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/proxies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proxies & Tor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/archive-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Archive Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/duplicate-detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Duplicate Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks & Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/file-manager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File Manager
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/credential-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Credential Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/theme-customization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Theme Customization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/upload-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upload Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/security-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/queue-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue & Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../settings-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../keyboard-shortcuts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keyboard Shortcuts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../template-placeholders/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template Placeholders
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external-apps-parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    External App Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../troubleshooting/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Troubleshooting
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/common-issues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common Issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/silent-failures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Silent Failures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/log-diagnosis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log Diagnosis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/wsl2-drag-drop-fix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WSL2 Drag & Drop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../architecture/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/system-context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/containers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../decisions/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/001-pycurl-over-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    001: pycurl Over requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/002-single-instance-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    002: Single-Instance Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/003-credential-storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    003: Credential Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gallery-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gallery Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Gallery Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#drag-drop-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drag &amp; Drop Interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queue-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Queue Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tab-based-organization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tab-Based Organization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gallery-renaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gallery Renaming
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#image-hosts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image Hosts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Image Hosts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#imxto" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IMX.to
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#turboimagehost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TurboImageHost
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pixhost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pixhost
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-host-upload-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Host Upload System
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-Host Upload System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-file-hosts-7-total" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported File Hosts (7 Total)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Supported File Hosts (7 Total)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-fileboom-fboomme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Fileboom (fboom.me)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-filedot-filedotto" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Filedot (filedot.to)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-filespace-filespacecom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Filespace (filespace.com)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-keep2share-k2scc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Keep2Share (k2s.cc)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-rapidgator-rapidgatornet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Rapidgator (rapidgator.net)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-tezfiles-tezfilescom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Tezfiles (tezfiles.com)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-katfile-katfilecom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Katfile (katfile.com)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authentication-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authentication Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authentication Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#method-1-api-key-permanent-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 1: API Key (Permanent Token)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#method-2-token-login-usernamepassword-temporary-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 2: Token Login (Username/Password -&gt; Temporary Token)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#method-3-session-based-usernamepassword-cookies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 3: Session-Based (Username/Password -&gt; Cookies)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connection-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bandwidth-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bandwidth Tracking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-host-download-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Host Download Links
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#archive-compression" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archive &amp; Compression
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Archive &amp; Compression">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#zip-creation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ZIP Creation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#zip-extraction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ZIP Extraction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archive-coordinator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archive Coordinator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bbcode-generation-templates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BBCode Generation &amp; Templates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BBCode Generation &amp; Templates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#18-available-placeholders-gallery-info-file-hosts-custom-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        18 Available Placeholders (Gallery Info + File Hosts + Custom Fields)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="18 Available Placeholders (Gallery Info + File Hosts + Custom Fields)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gallery-information-9-placeholders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gallery Information (9 placeholders)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-host-links-1-placeholder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Host Links (1 placeholder)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-fields-8-placeholders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Fields (8 placeholders)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conditional-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conditional Logic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#template-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template Manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bbcode-viewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BBCode Viewer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-host-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Host Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File Host Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#credential-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-host-configuration-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Host Configuration Dialog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#token-cache-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Token Cache System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-host-clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Host Clients
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#template-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template System
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Template System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#template-storage-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template Storage Format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#template-syntax-highlighting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template Syntax Highlighting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#template-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#automation-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automation &amp; Hooks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Automation &amp; Hooks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hook-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#external-apps-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External Apps Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameter-substitution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter Substitution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-host-uploader-muhpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Host Uploader (muh.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-zip-creation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auto-ZIP Creation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration &amp; Settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration &amp; Settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#settings-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings Dialog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adaptive-settings-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adaptive Settings Panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#settings-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings Storage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User Interface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="User Interface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#main-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Main Window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#customizable-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Customizable Layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keyboard-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard Shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Themes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icon-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Icon Manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#progress-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Progress Tracking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log-viewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Log Viewer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Manager
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Features
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#duplicate-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Duplicate Detection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gallery-file-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gallery File Manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#help-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Help Dialog
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#database-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Database &amp; Storage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Database &amp; Storage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#queue-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Queue Database
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queue-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Queue Manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#database-maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Database Maintenance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#artifact-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Artifact Storage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network &amp; Performance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network &amp; Performance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#http-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTP Client
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pycurl-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pycurl Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parallel-upload-workers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parallel Upload Workers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-optimizations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Optimizations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="bbdrop-features-documentation">BBDrop Features Documentation<a class="headerlink" href="#bbdrop-features-documentation" title="Permanent link">&para;</a></h1>
+<p><strong>Platform:</strong> Windows 10+ | Linux (Ubuntu 20.04+)</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="#gallery-management">Gallery Management</a></li>
+<li><a href="#image-hosts">Image Hosts</a></li>
+<li><a href="#multi-host-upload-system">Multi-Host Upload System</a></li>
+<li><a href="#file-manager">File Manager</a></li>
+<li><a href="#archive--compression">Archive &amp; Compression</a></li>
+<li><a href="#bbcode-generation--templates">BBCode Generation &amp; Templates</a></li>
+<li><a href="#file-host-integration">File Host Integration</a></li>
+<li><a href="#template-system">Template System</a></li>
+<li><a href="#automation--hooks">Automation &amp; Hooks</a></li>
+<li><a href="#configuration--settings">Configuration &amp; Settings</a></li>
+<li><a href="#user-interface">User Interface</a></li>
+<li><a href="#advanced-features">Advanced Features</a></li>
+<li><a href="#database--storage">Database &amp; Storage</a></li>
+<li><a href="#network--performance">Network &amp; Performance</a></li>
+</ol>
+<hr />
+<h2 id="gallery-management">Gallery Management<a class="headerlink" href="#gallery-management" title="Permanent link">&para;</a></h2>
+<h3 id="drag-drop-interface">Drag &amp; Drop Interface<a class="headerlink" href="#drag-drop-interface" title="Permanent link">&para;</a></h3>
+<p><strong>Description:</strong> Intuitive drag-and-drop functionality for adding galleries to the upload queue.</p>
+<p><strong>Features:</strong>
+- Drag image folders directly into the GUI
+- Automatic folder validation (checks for image content)
+- Multiple folder selection support
+- Visual feedback during drag operations
+- Single-instance integration (adds to existing GUI window)</p>
+<p><strong>Supported Image Formats:</strong>
+- <code>.jpg</code>, <code>.jpeg</code> - JPEG images
+- <code>.png</code> - PNG images
+- <code>.gif</code> - GIF animations</p>
+<hr />
+<h3 id="queue-management">Queue Management<a class="headerlink" href="#queue-management" title="Permanent link">&para;</a></h3>
+<p><strong>Description:</strong> Comprehensive queue system for managing multiple gallery uploads.</p>
+<p><strong>Queue States (11 Total):</strong>
+- <strong>Validating</strong> - Initial gallery validation phase
+- <strong>Scanning</strong> - Analyzing gallery folder for images
+- <strong>Ready</strong> - Gallery prepared, waiting for upload
+- <strong>Queued</strong> - In queue, waiting for available upload slot
+- <strong>Uploading</strong> - Currently uploading
+- <strong>Paused</strong> - Upload manually paused by user
+- <strong>Completed</strong> - Successfully finished upload
+- <strong>Failed</strong> - Upload failed (single attempt)
+- <strong>Upload Failed</strong> - Failed after all retry attempts
+- <strong>Scan Failed</strong> - Gallery scanning failed
+- <strong>Incomplete</strong> - Partial upload with some images missing</p>
+<p><strong>Batch Operations:</strong>
+- <strong>Start All</strong>: Begin uploading all queued galleries
+- <strong>Pause All</strong>: Pause active uploads
+- <strong>Clear Completed</strong>: Remove finished uploads
+- <strong>Remove Selected</strong>: Delete galleries from queue (Delete key)
+- <strong>Copy BBCode</strong>: Copy BBCode for selected completed galleries (Ctrl+C)</p>
+<p><strong>Features:</strong>
+- Priority scheduling (galleries upload in queue order)
+- Individual and overall progress tracking
+- Automatic retry logic (configurable 1-10 attempts)
+- Status persistence across application restarts
+- Real-time status updates via PyQt signals</p>
+<p><strong>Database Schema:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">galleries</span><span class="w"> </span><span class="p">(</span>
+<span class="w">  </span><span class="n">id</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="n">AUTOINCREMENT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">name</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">path</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">UNIQUE</span><span class="p">,</span>
+<span class="w">  </span><span class="n">status</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">tab</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;Main&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="k">template</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;Default Template&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="n">custom1</span><span class="o">-</span><span class="mi">4</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">  </span><span class="c1">-- User-defined fields</span>
+<span class="w">  </span><span class="n">ext1</span><span class="o">-</span><span class="mi">4</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">     </span><span class="c1">-- External app outputs</span>
+<span class="w">  </span><span class="n">created_at</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">completed_at</span><span class="w"> </span><span class="nb">INTEGER</span><span class="p">,</span>
+<span class="w">  </span><span class="n">gallery_id</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">bbcode_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">artifact_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">retry_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="n">error_message</span><span class="w"> </span><span class="nb">TEXT</span>
+<span class="p">);</span>
+</code></pre></div></p>
+<hr />
+<h3 id="tab-based-organization">Tab-Based Organization<a class="headerlink" href="#tab-based-organization" title="Permanent link">&para;</a></h3>
+<p><strong>Description:</strong> Organize galleries across multiple tabs for better workflow management.</p>
+<p><strong>Features:</strong>
+- <strong>Create tabs</strong>: Ctrl+T
+- <strong>Close tabs</strong>: Ctrl+W (except Main tab)
+- <strong>Switch tabs</strong>: Ctrl+Tab (next), Ctrl+Shift+Tab (previous)
+- <strong>Rename tabs</strong>: Double-click tab name
+- <strong>Move galleries</strong>: Drag-and-drop or context menu "Move to..."
+- <strong>Per-tab counts</strong>: Shows gallery count in each tab
+- <strong>Tab persistence</strong>: State saved across sessions</p>
+<p><strong>Default Tabs:</strong>
+- <strong>Main</strong>: Primary upload queue
+- <strong>Archive</strong>: Archive extraction and processing (optional)
+- <strong>File Hosts</strong>: Multi-host uploads (optional)
+- <strong>Completed</strong>: Finished uploads (optional)</p>
+<hr />
+<h3 id="gallery-renaming">Gallery Renaming<a class="headerlink" href="#gallery-renaming" title="Permanent link">&para;</a></h3>
+<p><strong>Description:</strong> Flexible gallery naming with conflict detection.</p>
+<p><strong>Features:</strong>
+- <strong>F2 Shortcut</strong>: Quick rename selected gallery
+- <strong>Unrenamed Tracking</strong>: Dialog for galleries without custom names
+- <strong>Duplicate Detection</strong>: Warns if gallery name already exists
+- <strong>Bulk Rename</strong>: Rename multiple galleries with patterns
+- <strong>Auto-sanitization</strong>: Remove invalid characters for URLs</p>
+<p><strong>Unrenamed Gallery Dialog:</strong>
+- Lists all galleries using default folder names
+- Batch rename with pattern matching
+- Preview new names before applying
+- Persistent tracking in <code>~/.bbdrop/unnamed_galleries.json</code></p>
+<hr />
+<h2 id="image-hosts">Image Hosts<a class="headerlink" href="#image-hosts" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> Upload gallery images to image hosting services. BBDrop supports three image hosts.</p>
+<h3 id="imxto">IMX.to<a class="headerlink" href="#imxto" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Authentication:</strong> API key or username/password session</li>
+<li><strong>Max File Size:</strong> Unlimited</li>
+<li><strong>Thumbnail Sizes:</strong> 100×100, 150×150, 180×180, 250×250, 300×300 px</li>
+<li><strong>Thumbnail Formats:</strong> JPEG 70%, JPEG 90%, PNG, WebP</li>
+<li><strong>Gallery Visibility:</strong> Public or private</li>
+<li><strong>Gallery Rename:</strong> Automatic background renaming via RenameWorker after upload</li>
+<li><strong>Unnamed Gallery Tracking:</strong> Lists galleries pending rename under <strong>Tools &gt; Unnamed Galleries</strong></li>
+</ul>
+<h3 id="turboimagehost">TurboImageHost<a class="headerlink" href="#turboimagehost" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Authentication:</strong> Optional (anonymous upload supported)</li>
+<li><strong>Max File Size:</strong> 35 MB</li>
+<li><strong>Max Gallery Size:</strong> 500 images</li>
+<li><strong>Thumbnail Sizes:</strong> Variable 150–600 px slider</li>
+<li><strong>Thumbnail Formats:</strong> Proportional or square crop</li>
+<li><strong>Content Type:</strong> Family Safe or Adult</li>
+</ul>
+<h3 id="pixhost">Pixhost<a class="headerlink" href="#pixhost" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Authentication:</strong> None — fully anonymous</li>
+<li><strong>Max File Size:</strong> 10 MB</li>
+<li><strong>Thumbnail Sizes:</strong> Variable 150–500 px slider</li>
+<li><strong>Content Type:</strong> Family Safe or Adult</li>
+<li><strong>Batch Finalisation:</strong> Gallery results are returned together on completion rather than per-image</li>
+</ul>
+<hr />
+<h2 id="multi-host-upload-system">Multi-Host Upload System<a class="headerlink" href="#multi-host-upload-system" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> Upload galleries to 7 file hosting services simultaneously.</p>
+<h3 id="supported-file-hosts-7-total">Supported File Hosts (7 Total)<a class="headerlink" href="#supported-file-hosts-7-total" title="Permanent link">&para;</a></h3>
+<h4 id="1-fileboom-fboomme">1. <strong>Fileboom</strong> (fboom.me)<a class="headerlink" href="#1-fileboom-fboomme" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Authentication:</strong> API Key (permanent token)</li>
+<li><strong>Max File Size:</strong> 10 GB</li>
+<li><strong>Storage:</strong> 10 TB (premium accounts)</li>
+<li><strong>Upload Method:</strong> Multi-step (init -&gt; upload -&gt; verify)</li>
+<li><strong>Connections:</strong> Up to 2 simultaneous uploads</li>
+<li><strong>Features:</strong></li>
+<li>File deduplication (skip if already exists)</li>
+<li>Automatic MD5 hash verification</li>
+<li>Resume support</li>
+<li>Multi-step upload protocol</li>
+</ul>
+<p><strong>Configuration:</strong>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Fileboom&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;auth_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bearer&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;upload_init_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://fboom.me/api/upload/getinfo?api_key={token}&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;response_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;json&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;link_prefix&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://fboom.me/file/&quot;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h4 id="2-filedot-filedotto">2. <strong>Filedot</strong> (filedot.to)<a class="headerlink" href="#2-filedot-filedotto" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Authentication:</strong> Session-based (username/password)</li>
+<li><strong>Session Management:</strong> Automatic CAPTCHA solving</li>
+<li><strong>Features:</strong></li>
+<li>CSRF protection handling</li>
+<li>Session persistence</li>
+<li>Cookie-based authentication</li>
+<li>Visual CAPTCHA parsing via CSS position</li>
+</ul>
+<p><strong>CAPTCHA Solving Example:</strong>
+<div class="highlight"><pre><span></span><code><span class="cm">&lt;!-- Visual CAPTCHA with CSS positioning --&gt;</span>
+<span class="p">&lt;</span><span class="nt">span</span> <span class="na">style</span><span class="o">=</span><span class="s">&quot;padding-left:26px&quot;</span><span class="p">&gt;</span>2<span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">span</span> <span class="na">style</span><span class="o">=</span><span class="s">&quot;padding-left:45px&quot;</span><span class="p">&gt;</span>8<span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">span</span> <span class="na">style</span><span class="o">=</span><span class="s">&quot;padding-left:67px&quot;</span><span class="p">&gt;</span>1<span class="p">&lt;/</span><span class="nt">span</span><span class="p">&gt;</span>
+
+<span class="cm">&lt;!-- Parsed as: [(26, &#39;2&#39;), (45, &#39;8&#39;), (67, &#39;1&#39;)] --&gt;</span>
+<span class="cm">&lt;!-- Sorted by position: &quot;281&quot; --&gt;</span>
+</code></pre></div></p>
+<p><strong>Workflow:</strong>
+1. Visit login page (GET request)
+2. Extract CSRF tokens from hidden fields
+3. Parse CAPTCHA via CSS <code>padding-left</code> positions
+4. Submit login form (POST request)
+5. Store session cookies for future requests</p>
+<hr />
+<h4 id="3-filespace-filespacecom">3. <strong>Filespace</strong> (filespace.com)<a class="headerlink" href="#3-filespace-filespacecom" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Authentication:</strong> Cookie-based sessions (<code>xfss</code> cookie)</li>
+<li><strong>Features:</strong></li>
+<li>Simple session management</li>
+<li>Automatic retry on transient failures</li>
+<li>No CAPTCHA required</li>
+<li>Cookie persistence across uploads</li>
+</ul>
+<hr />
+<h4 id="4-keep2share-k2scc">4. <strong>Keep2Share</strong> (k2s.cc)<a class="headerlink" href="#4-keep2share-k2scc" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Authentication:</strong> API Key (same structure as Fileboom)</li>
+<li><strong>Max File Size:</strong> 10 GB</li>
+<li><strong>Storage:</strong> 10 TB (premium accounts)</li>
+<li><strong>Connections:</strong> Up to 2 simultaneous uploads</li>
+<li><strong>Features:</strong> Identical API to Fileboom</li>
+</ul>
+<hr />
+<h4 id="5-rapidgator-rapidgatornet">5. <strong>Rapidgator</strong> (rapidgator.net)<a class="headerlink" href="#5-rapidgator-rapidgatornet" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Authentication:</strong> Token login (temporary token with 24h TTL)</li>
+<li><strong>Max File Size:</strong> 5 GB</li>
+<li><strong>Upload Method:</strong> Multi-step with polling</li>
+<li><strong>Step 1</strong>: Init upload session -&gt; Get upload URL</li>
+<li><strong>Step 2</strong>: Upload file to dedicated server</li>
+<li><strong>Step 3</strong>: Poll for completion (10 retries @ 1s intervals)</li>
+<li><strong>Features:</strong></li>
+<li>MD5 hash verification</li>
+<li>Token caching (24-hour expiry)</li>
+<li>State-based upload tracking</li>
+<li>Automatic token refresh</li>
+</ul>
+<p><strong>Token Management:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Token cached in .bbdrop/token_cache.db</span>
+<span class="p">{</span>
+  <span class="s2">&quot;host&quot;</span><span class="p">:</span> <span class="s2">&quot;rapidgator&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;token&quot;</span><span class="p">:</span> <span class="s2">&quot;abc123xyz789&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;expiry&quot;</span><span class="p">:</span> <span class="mi">1700000000</span><span class="p">,</span>  <span class="c1"># Unix timestamp</span>
+  <span class="s2">&quot;ttl&quot;</span><span class="p">:</span> <span class="mi">86400</span><span class="p">,</span>  <span class="c1"># 24 hours in seconds</span>
+  <span class="s2">&quot;created_at&quot;</span><span class="p">:</span> <span class="mi">1699913600</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h4 id="6-tezfiles-tezfilescom">6. <strong>Tezfiles</strong> (tezfiles.com)<a class="headerlink" href="#6-tezfiles-tezfilescom" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Authentication:</strong> API Key</li>
+<li><strong>Features:</strong></li>
+<li>API key extraction from account settings</li>
+<li>Simple upload protocol</li>
+<li>Automatic token refresh on expiry</li>
+</ul>
+<hr />
+<h4 id="7-katfile-katfilecom">7. <strong>Katfile</strong> (katfile.com)<a class="headerlink" href="#7-katfile-katfilecom" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Authentication:</strong> API Key</li>
+<li><strong>Status:</strong> In development</li>
+<li><strong>Features:</strong></li>
+<li>API key-based authentication</li>
+<li>Integration with upload pipeline</li>
+</ul>
+<hr />
+<h3 id="authentication-methods">Authentication Methods<a class="headerlink" href="#authentication-methods" title="Permanent link">&para;</a></h3>
+<h4 id="method-1-api-key-permanent-token">Method 1: API Key (Permanent Token)<a class="headerlink" href="#method-1-api-key-permanent-token" title="Permanent link">&para;</a></h4>
+<p><strong>Hosts:</strong> Fileboom, Keep2Share, Tezfiles, Katfile</p>
+<p><strong>Advantages:</strong>
+- No login required per session
+- Permanent (doesn't expire)
+- Simple one-time setup
+- High security</p>
+<p><strong>Setup:</strong>
+1. Log into file host account
+2. Navigate to Account -&gt; API Settings
+3. Generate or copy your API key
+4. Paste into BBDrop Settings -&gt; File Hosts -&gt; Configure
+5. Click <strong>Test Connection</strong> to verify</p>
+<p><strong>Security:</strong>
+- API keys stored in system keyring
+- Encrypted at rest using Fernet symmetric encryption
+- Never logged or exposed in error messages
+- User-only read/write permissions</p>
+<hr />
+<h4 id="method-2-token-login-usernamepassword-temporary-token">Method 2: Token Login (Username/Password -&gt; Temporary Token)<a class="headerlink" href="#method-2-token-login-usernamepassword-temporary-token" title="Permanent link">&para;</a></h4>
+<p><strong>Hosts:</strong> Rapidgator</p>
+<p><strong>Workflow:</strong>
+1. User provides credentials in format: <code>username:password</code>
+2. BBDrop performs login request to obtain token
+3. Extracts authentication token from JSON response
+4. Caches token with TTL (24 hours for Rapidgator)
+5. Automatically refreshes token on expiration or 401/403 errors</p>
+<p><strong>Token Cache:</strong>
+- <strong>Location</strong>: <code>~/.bbdrop/token_cache.db</code> (SQLite)
+- <strong>Schema</strong>:
+<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">tokens</span><span class="w"> </span><span class="p">(</span>
+<span class="w">  </span><span class="k">host</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">  </span><span class="n">token</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">expiry</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">ttl</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">created_at</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
+<span class="p">);</span>
+</code></pre></div></p>
+<p><strong>Auto-Refresh Logic:</strong>
+- Check token expiry before each upload
+- Refresh if expiry &lt; 5 minutes
+- Retry upload once if 401/403 received
+- Re-authenticate on refresh failure</p>
+<hr />
+<h4 id="method-3-session-based-usernamepassword-cookies">Method 3: Session-Based (Username/Password -&gt; Cookies)<a class="headerlink" href="#method-3-session-based-usernamepassword-cookies" title="Permanent link">&para;</a></h4>
+<p><strong>Hosts:</strong> Filedot, Filespace</p>
+<p><strong>Features:</strong>
+- <strong>Cookie Persistence</strong>: Cookies reused across uploads
+- <strong>CAPTCHA Solving</strong>: Visual CAPTCHAs solved using CSS position parsing
+- <strong>Token Extraction</strong>: Session IDs extracted from upload page HTML
+- <strong>Automatic Refresh</strong>: Expired sessions re-authenticated transparently
+- <strong>CSRF Protection</strong>: Automatic CSRF token extraction and submission</p>
+<p><strong>Login Flow:</strong>
+1. GET request to login page
+2. Extract hidden fields (CSRF tokens, session IDs)
+3. Parse CAPTCHA (if present) via CSS positioning
+4. POST login form with credentials + CAPTCHA
+5. Store session cookies (<code>Set-Cookie</code> headers)
+6. Validate login success (check for error messages)
+7. Extract upload session tokens from page HTML</p>
+<hr />
+<h3 id="connection-management">Connection Management<a class="headerlink" href="#connection-management" title="Permanent link">&para;</a></h3>
+<p><strong>Features:</strong>
+- <strong>Global Limit</strong>: Maximum total concurrent file host uploads (default: 3)
+- <strong>Per-Host Limit</strong>: Maximum concurrent uploads per host (default: 2)
+- <strong>Connection Pooling</strong>: Reuse HTTP connections across uploads
+- <strong>Semaphore-Based</strong>: Thread-safe connection slot management
+- <strong>Dynamic Adjustment</strong>: Update limits without restarting</p>
+<p><strong>Configuration:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">CONNECTION_LIMITS</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;global_max&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>        <span class="c1"># Total across all hosts</span>
+  <span class="s2">&quot;per_host_max&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>      <span class="c1"># Per individual host</span>
+  <span class="s2">&quot;timeout&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>          <span class="c1"># Request timeout (seconds)</span>
+  <span class="s2">&quot;retry_attempts&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>    <span class="c1"># Auto-retry count</span>
+  <span class="s2">&quot;retry_delay&quot;</span><span class="p">:</span> <span class="mi">5</span>        <span class="c1"># Delay between retries (seconds)</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<p><strong>Semaphore Implementation:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Global semaphore limits total concurrent uploads</span>
+<span class="n">global_semaphore</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
+<span class="c1"># Per-host semaphores limit per-host concurrency</span>
+<span class="n">host_semaphores</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;rapidgator&quot;</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+  <span class="s2">&quot;fileboom&quot;</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+  <span class="c1"># ...</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="bandwidth-tracking">Bandwidth Tracking<a class="headerlink" href="#bandwidth-tracking" title="Permanent link">&para;</a></h3>
+<p><strong>Features:</strong>
+- <strong>Real-time Speed</strong>: Upload speed in MB/s shown in status bar
+- <strong>Total Uploaded</strong>: Session-wide bytes uploaded across all hosts
+- <strong>Per-Host Breakdown</strong>: Individual host bandwidth in logs
+- <strong>Thread-Safe Counter</strong>: Atomic counter for accurate multi-threaded aggregation
+- <strong>Historical Data</strong>: Track upload statistics over time</p>
+<p><strong>Display:</strong>
+<div class="highlight"><pre><span></span><code>Status Bar: Upload 2.5 MB/s | Total: 127.3 MB / 245.8 MB | ETA: 3m 24s
+</code></pre></div></p>
+<hr />
+<h3 id="multi-host-download-links">Multi-Host Download Links<a class="headerlink" href="#multi-host-download-links" title="Permanent link">&para;</a></h3>
+<p><strong>Placeholder:</strong> <code>#hostLinks#</code></p>
+<p><strong>Description:</strong> Automatically generate BBCode download links for all enabled file hosts.</p>
+<p><strong>Example Output:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[b]</span>Download:<span class="k">[/b]</span>
+<span class="k">[url</span><span class="o">=</span><span class="s">https://fboom.me/file/abc123</span><span class="k">]</span>Fileboom<span class="k">[/url]</span> | <span class="k">[url</span><span class="o">=</span><span class="s">https://rapidgator.net/file/xyz789</span><span class="k">]</span>Rapidgator<span class="k">[/url]</span> | <span class="k">[url</span><span class="o">=</span><span class="s">https://k2s.cc/file/def456</span><span class="k">]</span>Keep2Share<span class="k">[/url]</span>
+</code></pre></div></p>
+<p><strong>Template Usage:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[if</span> <span class="err">hostLinks</span><span class="k">]</span>
+<span class="k">[b]</span>Download Links:<span class="k">[/b]</span>
+#hostLinks#
+<span class="k">[else]</span>
+<span class="k">[i]</span>No file host uploads configured<span class="k">[/i]</span>
+<span class="k">[/if]</span>
+</code></pre></div></p>
+<hr />
+<h2 id="archive-compression">Archive &amp; Compression<a class="headerlink" href="#archive-compression" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> Advanced ZIP archive handling for gallery compression and extraction.</p>
+<h3 id="zip-creation">ZIP Creation<a class="headerlink" href="#zip-creation" title="Permanent link">&para;</a></h3>
+<p><strong>Features:</strong>
+- <strong>Auto-compression</strong>: Automatically create ZIP archives for upload
+- <strong>Compression Modes</strong>:
+  - <strong>STORE</strong> (0): No compression (0.5-2x faster, recommended for images)
+  - <strong>DEFLATE</strong> (8): Standard compression
+  - <strong>BZIP2</strong> (12): High compression
+  - <strong>LZMA</strong> (14): Maximum compression
+- <strong>Temporary Files</strong>: Auto-cleanup after upload
+- <strong>Unique Prefixes</strong>: Prevent collisions with <code>bbdrop_&lt;gallery_id&gt;_</code> prefix
+- <strong>Progress Tracking</strong>: Real-time compression progress</p>
+<p><strong>Usage Example:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># External app parameter: %z</span>
+<span class="c1"># Automatically creates temporary ZIP, uploads, then deletes</span>
+python<span class="w"> </span>hooks/muh.py<span class="w"> </span>rapidgator<span class="w"> </span><span class="s2">&quot;%z&quot;</span>
+</code></pre></div></p>
+<hr />
+<h3 id="zip-extraction">ZIP Extraction<a class="headerlink" href="#zip-extraction" title="Permanent link">&para;</a></h3>
+<p><strong>Features:</strong>
+- <strong>Supported Formats</strong>: ZIP, RAR, 7Z, TAR, TAR.GZ, TAR.BZ2
+- <strong>Auto-detect</strong>: Automatic format detection from file extension
+- <strong>Folder Scanning</strong>: Scan extracted archive for image-containing folders
+- <strong>Multi-Folder Selection</strong>: Select which folders to upload from archive
+- <strong>Validation</strong>: Verify archive integrity before extraction
+- <strong>Progress Updates</strong>: Track extraction progress
+- <strong>Error Handling</strong>: Graceful handling of corrupted archives
+- <strong>Cleanup</strong>: Automatic deletion of temporary extraction directory</p>
+<p><strong>Archive Folder Selector Dialog:</strong>
+<div class="highlight"><pre><span></span><code>+-- Select Folders to Upload ---------------+
+| Archive: vacation_photos.zip              |
+| Extracted to: /tmp/bbdrop_extract          |
+|                                           |
+| Found 3 image folders:                    |
+| [x] Day1_Beach (127 images)               |
+| [x] Day2_City (84 images)                 |
+| [x] Day3_Mountain (95 images)             |
+|                                           |
+|      [Select All] [Upload] [Cancel]       |
++-------------------------------------------+
+</code></pre></div></p>
+<hr />
+<h3 id="archive-coordinator">Archive Coordinator<a class="headerlink" href="#archive-coordinator" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/processing/archive_coordinator.py</code></p>
+<p><strong>Features:</strong>
+- <strong>Parallel Processing</strong>: Handle multiple archives simultaneously
+- <strong>Worker Pool</strong>: Spawn workers for compression/extraction
+- <strong>Queue Integration</strong>: Seamless integration with upload queue
+- <strong>Status Tracking</strong>: Real-time progress for archive operations
+- <strong>Thread-Safe</strong>: Safe concurrent operations</p>
+<p><strong>Worker Architecture:</strong>
+<div class="highlight"><pre><span></span><code> ArchiveCoordinator
+ +-- ArchiveWorker #1 (compression thread)
+ +-- ArchiveWorker #2 (extraction thread)
+ +-- ArchiveWorker #3 (validation thread)
+</code></pre></div></p>
+<hr />
+<h2 id="bbcode-generation-templates">BBCode Generation &amp; Templates<a class="headerlink" href="#bbcode-generation-templates" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> Powerful template system for generating formatted forum posts.</p>
+<h3 id="18-available-placeholders-gallery-info-file-hosts-custom-fields">18 Available Placeholders (Gallery Info + File Hosts + Custom Fields)<a class="headerlink" href="#18-available-placeholders-gallery-info-file-hosts-custom-fields" title="Permanent link">&para;</a></h3>
+<h4 id="gallery-information-9-placeholders">Gallery Information (9 placeholders)<a class="headerlink" href="#gallery-information-9-placeholders" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Placeholder</th>
+<th>Description</th>
+<th>Example Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#folderName#</code></td>
+<td>Gallery name</td>
+<td><code>Summer Vacation 2024</code></td>
+</tr>
+<tr>
+<td><code>#pictureCount#</code></td>
+<td>Number of images</td>
+<td><code>127</code></td>
+</tr>
+<tr>
+<td><code>#width#</code></td>
+<td>Average width (px)</td>
+<td><code>4000</code></td>
+</tr>
+<tr>
+<td><code>#height#</code></td>
+<td>Average height (px)</td>
+<td><code>3000</code></td>
+</tr>
+<tr>
+<td><code>#longest#</code></td>
+<td>Longest dimension (px)</td>
+<td><code>4000</code></td>
+</tr>
+<tr>
+<td><code>#extension#</code></td>
+<td>File format (uppercase)</td>
+<td><code>JPG</code></td>
+</tr>
+<tr>
+<td><code>#folderSize#</code></td>
+<td>Total size</td>
+<td><code>245.8 MB</code></td>
+</tr>
+<tr>
+<td><code>#galleryLink#</code></td>
+<td>imx.to gallery URL</td>
+<td><code>https://imx.to/g/abc123</code></td>
+</tr>
+<tr>
+<td><code>#allImages#</code></td>
+<td>BBCode for all images</td>
+<td><code>[img]...[/img]</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="file-host-links-1-placeholder">File Host Links (1 placeholder)<a class="headerlink" href="#file-host-links-1-placeholder" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Placeholder</th>
+<th>Description</th>
+<th>Example Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#hostLinks#</code></td>
+<td>Download links</td>
+<td><code>[url=...]Fileboom[/url] \| [url=...]Rapidgator[/url]</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="custom-fields-8-placeholders">Custom Fields (8 placeholders)<a class="headerlink" href="#custom-fields-8-placeholders" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Placeholder</th>
+<th>Description</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#custom1#</code> - <code>#custom4#</code></td>
+<td>User-defined fields</td>
+<td>Photographer, camera, location, license</td>
+</tr>
+<tr>
+<td><code>#ext1#</code> - <code>#ext4#</code></td>
+<td>External app outputs</td>
+<td>Upload links, processing results, ratings</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example Usage:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[center][b]</span>#folderName#<span class="k">[/b][/center]</span>
+
+<span class="k">[b]</span>Gallery Stats:<span class="k">[/b]</span>
+- Images: #pictureCount# (#extension# format)
+- Resolution: #width#x#height# (longest: #longest#px)
+- Size: #folderSize#
+
+<span class="k">[if</span> <span class="err">galleryLink</span><span class="k">]</span>
+<span class="k">[b]</span>Gallery:<span class="k">[/b]</span> <span class="k">[url</span><span class="o">=</span><span class="s">#galleryLink#</span><span class="k">]</span>View on imx.to<span class="k">[/url]</span>
+<span class="k">[/if]</span>
+
+<span class="k">[if</span> <span class="err">hostLinks</span><span class="k">]</span>
+<span class="k">[b]</span>Download:<span class="k">[/b]</span>
+#hostLinks#
+<span class="k">[/if]</span>
+
+#allImages#
+</code></pre></div></p>
+<hr />
+<h3 id="conditional-logic">Conditional Logic<a class="headerlink" href="#conditional-logic" title="Permanent link">&para;</a></h3>
+<p><strong>Syntax:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[if</span> <span class="err">placeholder</span><span class="k">]</span>Content<span class="k">[/if]</span>
+<span class="k">[if</span> <span class="na">placeholder</span><span class="o">=</span><span class="s">value</span><span class="k">]</span>Content<span class="k">[/if]</span>
+<span class="k">[if</span> <span class="err">placeholder</span><span class="k">]</span>True<span class="k">[else]</span>False<span class="k">[/if]</span>
+</code></pre></div></p>
+<p><strong>Examples:</strong></p>
+<p><strong>Simple Conditional:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[if</span> <span class="err">galleryLink</span><span class="k">]</span>
+<span class="k">[b]</span>Source:<span class="k">[/b]</span> <span class="k">[url</span><span class="o">=</span><span class="s">#galleryLink#</span><span class="k">]</span>View Original Gallery<span class="k">[/url]</span>
+<span class="k">[/if]</span>
+</code></pre></div></p>
+<p><strong>Value Comparison:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[if</span> <span class="na">extension</span><span class="o">=</span><span class="s">PNG</span><span class="k">]</span>
+  <span class="k">[i]</span>Lossless PNG format - high quality!<span class="k">[/i]</span>
+<span class="k">[else]</span>
+  <span class="k">[i]</span>Standard JPG format<span class="k">[/i]</span>
+<span class="k">[/if]</span>
+</code></pre></div></p>
+<p><strong>Nested Conditionals:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[if</span> <span class="err">pictureCount</span><span class="k">]</span>
+  <span class="k">[b]</span>Gallery contains #pictureCount# images<span class="k">[/b]</span>
+  <span class="k">[if</span> <span class="err">pictureCount&gt;100</span><span class="k">]</span>
+    <span class="k">[i]</span>Large gallery - may take time to load!<span class="k">[/i]</span>
+  <span class="k">[/if]</span>
+<span class="k">[else]</span>
+  <span class="k">[b]</span>Empty gallery<span class="k">[/b]</span>
+<span class="k">[/if]</span>
+</code></pre></div></p>
+<p><strong>File Host Links:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[if</span> <span class="err">hostLinks</span><span class="k">]</span>
+<span class="k">[b]</span>Alternative Downloads:<span class="k">[/b]</span>
+#hostLinks#
+<span class="k">[else]</span>
+<span class="k">[i]</span>Direct download only (no file hosts configured)<span class="k">[/i]</span>
+<span class="k">[/if]</span>
+</code></pre></div></p>
+<p><strong>Custom Fields:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[if</span> <span class="err">custom1</span><span class="k">]</span>
+<span class="k">[b]</span>Photographer:<span class="k">[/b]</span> #custom1#
+<span class="k">[/if]</span>
+
+<span class="k">[if</span> <span class="err">ext1</span><span class="k">]</span>
+<span class="k">[b]</span>External Link:<span class="k">[/b]</span> <span class="k">[url</span><span class="o">=</span><span class="s">#ext1#</span><span class="k">]</span>Download ZIP<span class="k">[/url]</span>
+<span class="k">[/if]</span>
+</code></pre></div></p>
+<hr />
+<h3 id="template-manager">Template Manager<a class="headerlink" href="#template-manager" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/template_manager.py</code>
+<strong>Access:</strong> Settings -&gt; BBCode -&gt; <strong>Manage Templates</strong></p>
+<p><strong>Features:</strong>
+- <strong>CRUD Operations</strong>:
+  - Create new templates
+  - Edit existing templates
+  - Delete templates (except default)
+  - Rename templates
+- <strong>Syntax Highlighting</strong>:
+  - Placeholders: Yellow background
+  - Conditionals: Blue background
+  - BBCode tags: Green text
+  - Real-time highlighting as you type
+- <strong>Placeholder Buttons</strong>: Click to insert at cursor position
+- <strong>Conditional Helper</strong>: Dialog-based conditional tag builder
+- <strong>Validation</strong>:
+  - Check for invalid placeholders
+  - Verify matched <code>[if]</code>/<code>[/if]</code> pairs
+  - Detect orphaned <code>[else]</code> tags
+  - Validate BBCode tag matching
+- <strong>Import/Export</strong>: Share templates between installations</p>
+<p><strong>Template Storage:</strong>
+<div class="highlight"><pre><span></span><code>~/.bbdrop/templates/
++-- Default Template.template.txt
++-- Detailed Example.template.txt
++-- Compact Template.template.txt
++-- My Custom Template.template.txt
+</code></pre></div></p>
+<p><strong>Built-in Templates:</strong>
+- <strong>Default Template</strong>: Simple gallery info with images
+- <strong>Detailed Example</strong>: All placeholders with conditionals
+- <strong>Compact Template</strong>: Minimal info, images only</p>
+<p><strong>Keyboard Shortcuts:</strong>
+- <strong>Ctrl+N</strong>: New template
+- <strong>Ctrl+S</strong>: Save template
+- <strong>Ctrl+P</strong>: Preview BBCode
+- <strong>F5</strong>: Refresh template list
+- <strong>Ctrl+I</strong>: Insert placeholder dialog</p>
+<hr />
+<h3 id="bbcode-viewer">BBCode Viewer<a class="headerlink" href="#bbcode-viewer" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/bbcode_viewer.py</code>
+<strong>Access:</strong> Right-click gallery -&gt; <strong>View BBCode</strong></p>
+<p><strong>Features:</strong>
+- <strong>Syntax Highlighting</strong>: Color-coded BBCode display
+  - BBCode tags: Green (<code>#008000</code>)
+  - URLs: Blue (<code>#0066cc</code>)
+  - Bold text: Red (<code>#cc0000</code>)
+- <strong>One-Click Copy</strong>: Copy entire BBCode to clipboard
+- <strong>Multi-Select</strong>: View BBCode for multiple galleries combined
+- <strong>Template Switching</strong>: Change template and regenerate
+- <strong>Export</strong>: Save BBCode to text file
+- <strong>Regenerate</strong>: Update BBCode with current template settings</p>
+<p><strong>Theme Support:</strong>
+- <strong>Dark theme</strong>: <code>#1e1e1e</code> background, <code>#d4d4d4</code> text
+- <strong>Light theme</strong>: <code>#f0f0f0</code> background, <code>#333333</code> text
+- High contrast for readability
+- Adaptive color schemes</p>
+<hr />
+<h2 id="file-host-integration">File Host Integration<a class="headerlink" href="#file-host-integration" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> Comprehensive integration with 7 file hosting services.</p>
+<h3 id="credential-management">Credential Management<a class="headerlink" href="#credential-management" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/credential_setup.py</code></p>
+<p><strong>Features:</strong>
+- <strong>System Keyring</strong>: Secure storage using OS keyring
+  - Windows: Credential Manager
+  - macOS: Keychain
+  - Linux: Secret Service (libsecret)
+- <strong>Encryption</strong>: Passwords encrypted at rest using Fernet
+- <strong>Test Connection</strong>: Validate credentials before saving
+- <strong>Account Info Display</strong>:
+  - Storage quota (used/total)
+  - Premium status
+  - Expiry date
+  - Account email
+- <strong>Multiple Accounts</strong>: Support multiple accounts per host</p>
+<p><strong>Storage Methods:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Method 1: System Keyring (preferred)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">keyring</span>
+<span class="n">keyring</span><span class="o">.</span><span class="n">set_password</span><span class="p">(</span><span class="s2">&quot;bbdrop&quot;</span><span class="p">,</span> <span class="s2">&quot;rapidgator&quot;</span><span class="p">,</span> <span class="s2">&quot;username:password&quot;</span><span class="p">)</span>
+
+<span class="c1"># Method 2: Encrypted config file (fallback)</span>
+<span class="c1"># ~/.bbdrop/credentials.enc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cryptography.fernet</span><span class="w"> </span><span class="kn">import</span> <span class="n">Fernet</span>
+<span class="n">cipher</span> <span class="o">=</span> <span class="n">Fernet</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<span class="n">encrypted</span> <span class="o">=</span> <span class="n">cipher</span><span class="o">.</span><span class="n">encrypt</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;username:password&quot;</span><span class="p">)</span>
+</code></pre></div></p>
+<hr />
+<h3 id="file-host-configuration-dialog">File Host Configuration Dialog<a class="headerlink" href="#file-host-configuration-dialog" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/file_host_config_dialog.py</code></p>
+<p><strong>Per-Host Settings:</strong>
+- Enable/disable host
+- Max connections (1-10)
+- Retry attempts (1-10)
+- Timeout (10-120 seconds)
+- Custom API endpoints</p>
+<p><strong>Authentication Setup:</strong>
+- API key input (Fileboom, Keep2Share, Tezfiles, Katfile)
+- Username/password format: <code>username:password</code>
+- Token TTL configuration</p>
+<p><strong>Test Connection:</strong>
+- Uploads small dummy file (1 KB)
+- Verifies authentication
+- Retrieves account information
+- Deletes test file (if host supports it)
+- Displays success/error message</p>
+<p><strong>UI Example:</strong>
+<div class="highlight"><pre><span></span><code>+-- File Host Configuration ----------------+
+| Host: Rapidgator [dropdown]               |
+| [x] Enable this host                      |
+|                                           |
+| Credentials:                              |
+| +---------------------------------------+ |
+| | username:password                     | |
+| +---------------------------------------+ |
+| [Test Connection]                         |
+|                                           |
+| Settings:                                 |
+| Max Connections: [2] [dropdown]           |
+| Retry Attempts:  [3] [dropdown]           |
+| Timeout:         [30] seconds             |
+|                                           |
+| Account Info:                             |
+| Premium until: 2025-12-31                 |
+| Storage: 245.8 GB / 1000 GB               |
+| Email: user@example.com                   |
+|                                           |
+|          [Save]  [Cancel]                 |
++-------------------------------------------+
+</code></pre></div></p>
+<hr />
+<h3 id="token-cache-system">Token Cache System<a class="headerlink" href="#token-cache-system" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/network/token_cache.py</code>
+<strong>Database:</strong> <code>~/.bbdrop/token_cache.db</code> (SQLite)</p>
+<p><strong>Features:</strong>
+- <strong>Persistent Storage</strong>: Tokens survive application restarts
+- <strong>TTL Management</strong>: Automatic expiry tracking
+- <strong>Auto-Refresh</strong>: Refresh tokens before expiration
+- <strong>Thread-Safe</strong>: Concurrent access support with locks
+- <strong>Per-Host Cache</strong>: Separate cache entries for each host
+- <strong>Cleanup</strong>: Remove expired tokens automatically</p>
+<p><strong>Schema:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">tokens</span><span class="w"> </span><span class="p">(</span>
+<span class="w">  </span><span class="k">host</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">  </span><span class="n">token</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">expiry</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">  </span><span class="c1">-- Unix timestamp</span>
+<span class="w">  </span><span class="n">ttl</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">     </span><span class="c1">-- Time To Live in seconds</span>
+<span class="w">  </span><span class="n">created_at</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
+<span class="p">);</span>
+</code></pre></div></p>
+<p><strong>TTL Values:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">TOKEN_TTL</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;rapidgator&quot;</span><span class="p">:</span> <span class="mi">86400</span><span class="p">,</span>   <span class="c1"># 24 hours</span>
+  <span class="s2">&quot;fileboom&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>         <span class="c1"># Permanent (API key)</span>
+  <span class="s2">&quot;keep2share&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>       <span class="c1"># Permanent (API key)</span>
+  <span class="s2">&quot;filedot&quot;</span><span class="p">:</span> <span class="mi">3600</span><span class="p">,</span>       <span class="c1"># 1 hour (session)</span>
+  <span class="s2">&quot;filespace&quot;</span><span class="p">:</span> <span class="mi">3600</span><span class="p">,</span>     <span class="c1"># 1 hour (session)</span>
+  <span class="s2">&quot;tezfiles&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>         <span class="c1"># Permanent (API key)</span>
+  <span class="s2">&quot;katfile&quot;</span><span class="p">:</span> <span class="mi">0</span>           <span class="c1"># Permanent (API key)</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<p><strong>API:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">TokenCache</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">token</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">ttl</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_expired</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">refresh_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cleanup_expired</span><span class="p">()</span>
+</code></pre></div></p>
+<hr />
+<h3 id="file-host-clients">File Host Clients<a class="headerlink" href="#file-host-clients" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/network/file_host_client.py</code></p>
+<p><strong>Architecture:</strong></p>
+<p><code>FileHostClient</code> is a single concrete class that handles all 7 file hosts via configuration.
+Each host's behavior (authentication method, upload protocol, endpoint URLs) is driven by
+per-host config dictionaries rather than separate subclasses.</p>
+<p><strong>Key Methods:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">FileHostClient</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">upload_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filepath</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_account_info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">refresh_token</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_authenticated</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+</code></pre></div></p>
+<p><strong>Upload Flow:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># 1. Authenticate (if needed)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">client</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">():</span>
+    <span class="n">success</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">authenticate</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">success</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">AuthenticationError</span><span class="p">(</span><span class="s2">&quot;Login failed&quot;</span><span class="p">)</span>
+
+<span class="c1"># 2. Initialize upload (multi-step hosts)</span>
+<span class="n">upload_info</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">init_upload</span><span class="p">(</span>
+    <span class="n">filename</span><span class="o">=</span><span class="s2">&quot;vacation.zip&quot;</span><span class="p">,</span>
+    <span class="n">filesize</span><span class="o">=</span><span class="mi">245823412</span>
+<span class="p">)</span>
+
+<span class="c1"># 3. Upload file</span>
+<span class="n">upload_url</span> <span class="o">=</span> <span class="n">upload_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;url&quot;</span><span class="p">)</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">upload_file</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">upload_url</span><span class="p">)</span>
+
+<span class="c1"># 4. Poll for completion (if required)</span>
+<span class="k">if</span> <span class="n">client</span><span class="o">.</span><span class="n">requires_polling</span><span class="p">():</span>
+    <span class="n">upload_id</span> <span class="o">=</span> <span class="n">upload_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;upload_id&quot;</span><span class="p">)</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">poll_upload</span><span class="p">(</span><span class="n">upload_id</span><span class="p">,</span> <span class="n">max_retries</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+<span class="c1"># 5. Extract download link</span>
+<span class="n">download_link</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">extract_link</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+<span class="k">return</span> <span class="n">download_link</span>
+</code></pre></div></p>
+<hr />
+<h2 id="template-system">Template System<a class="headerlink" href="#template-system" title="Permanent link">&para;</a></h2>
+<h3 id="template-storage-format">Template Storage Format<a class="headerlink" href="#template-storage-format" title="Permanent link">&para;</a></h3>
+<p><strong>Location:</strong> <code>~/.bbdrop/templates/*.template.txt</code>
+<strong>Encoding:</strong> UTF-8
+<strong>Format:</strong> Plain text with BBCode and placeholder syntax</p>
+<p><strong>Example Template:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">[center][b]</span>Gallery: #folderName#<span class="k">[/b][/center]</span>
+
+<span class="k">[b]</span>Statistics:<span class="k">[/b]</span>
+- Images: #pictureCount# (#extension# format)
+- Resolution: #width#x#height# (longest side: #longest#px)
+- Total Size: #folderSize#
+
+<span class="k">[if</span> <span class="err">galleryLink</span><span class="k">]</span>
+<span class="k">[b]</span>Gallery Link:<span class="k">[/b]</span> <span class="k">[url</span><span class="o">=</span><span class="s">#galleryLink#</span><span class="k">]</span>View on imx.to<span class="k">[/url]</span>
+<span class="k">[/if]</span>
+
+<span class="k">[if</span> <span class="err">hostLinks</span><span class="k">]</span>
+<span class="k">[b]</span>Download:<span class="k">[/b]</span>
+#hostLinks#
+<span class="k">[/if]</span>
+
+<span class="k">[if</span> <span class="err">custom1</span><span class="k">]</span>
+<span class="k">[b]</span>Photographer:<span class="k">[/b]</span> #custom1#
+<span class="k">[/if]</span>
+
+<span class="k">[if</span> <span class="err">custom2</span><span class="k">]</span>
+<span class="k">[b]</span>Location:<span class="k">[/b]</span> #custom2#
+<span class="k">[/if]</span>
+
+<span class="k">[b]</span>Images:<span class="k">[/b]</span>
+#allImages#
+</code></pre></div></p>
+<hr />
+<h3 id="template-syntax-highlighting">Template Syntax Highlighting<a class="headerlink" href="#template-syntax-highlighting" title="Permanent link">&para;</a></h3>
+<p><strong>Features:</strong>
+- <strong>Placeholders</strong>: Yellow background (<code>#ffff00</code> with 30% opacity)
+- <strong>Conditionals</strong>: Blue background (<code>#0066cc</code> with 20% opacity)
+- <strong>BBCode Tags</strong>: Green text (<code>#008000</code>)
+- <strong>URLs</strong>: Purple text (<code>#9900ff</code>)
+- <strong>Comments</strong>: Gray text (<code>#808080</code>)
+- <strong>Real-time</strong>: Updates as you type
+- <strong>Theme-Aware</strong>: Adapts colors for dark/light themes</p>
+<p><strong>Theme Support:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Dark theme colors</span>
+<span class="n">DARK_THEME</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;placeholder&quot;</span><span class="p">:</span> <span class="s2">&quot;#ffff00&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;conditional&quot;</span><span class="p">:</span> <span class="s2">&quot;#3399ff&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;bbcode&quot;</span><span class="p">:</span> <span class="s2">&quot;#00cc00&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="s2">&quot;#cc99ff&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;#d4d4d4&quot;</span>
+<span class="p">}</span>
+
+<span class="c1"># Light theme colors</span>
+<span class="n">LIGHT_THEME</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;placeholder&quot;</span><span class="p">:</span> <span class="s2">&quot;#ffcc00&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;conditional&quot;</span><span class="p">:</span> <span class="s2">&quot;#0066cc&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;bbcode&quot;</span><span class="p">:</span> <span class="s2">&quot;#008000&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="s2">&quot;#9900ff&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;#333333&quot;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="template-validation">Template Validation<a class="headerlink" href="#template-validation" title="Permanent link">&para;</a></h3>
+<p><strong>Validation Rules:</strong>
+1. <strong>Placeholder Check</strong>: All placeholders must be from the 18 recognized placeholders
+2. <strong>Conditional Syntax</strong>: Matching <code>[if]...[/if]</code> pairs
+3. <strong>Nested Conditionals</strong>: Proper nesting (max 2 levels)
+4. <strong>Else Placement</strong>: <code>[else]</code> only within <code>[if]...[/if]</code>
+5. <strong>BBCode Tags</strong>: Matching opening/closing tags
+6. <strong>URL Syntax</strong>: Valid URL structure in <code>[url]</code> tags</p>
+<p><strong>Error Messages:</strong>
+<div class="highlight"><pre><span></span><code>Error Line 5: Unknown placeholder: #invalidPlaceholder#
+   Valid placeholders: #folderName#, #pictureCount#, ...
+
+Error Line 12: Unclosed conditional tag
+   Found: [if pictureCount]
+   Missing: [/if]
+
+Error Line 18: Orphaned [else] tag without matching [if]
+
+Error Line 23: Unmatched BBCode tag
+   Found: [b]Bold text
+   Missing: [/b]
+
+Error Line 30: Invalid URL syntax
+   Found: [url]Invalid[/url]
+   Expected: [url=http://...]Text[/url]
+</code></pre></div></p>
+<hr />
+<h2 id="automation-hooks">Automation &amp; Hooks<a class="headerlink" href="#automation-hooks" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> External script integration for custom workflows and automation.</p>
+<h3 id="hook-system">Hook System<a class="headerlink" href="#hook-system" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/processing/hooks_executor.py</code></p>
+<p><strong>Hook Types:</strong>
+- <strong>Pre-Upload</strong>: Execute before gallery upload starts
+- <strong>Post-Upload</strong>: Execute after gallery upload completes
+- <strong>On-Complete</strong>: Execute when gallery fully processed
+- <strong>On-Error</strong>: Execute if gallery upload fails</p>
+<p><strong>Features:</strong>
+- Parameter substitution (15+ parameters)
+- JSON output mapping to ext1-4 fields
+- Error handling with detailed logging
+- Timeout control (configurable per app)
+- Async execution (non-blocking)</p>
+<hr />
+<h3 id="external-apps-configuration">External Apps Configuration<a class="headerlink" href="#external-apps-configuration" title="Permanent link">&para;</a></h3>
+<p><strong>Access:</strong> Settings -&gt; External Apps</p>
+<p><strong>Configuration Fields:</strong>
+- <strong>Name</strong>: Display name for the app
+- <strong>Command</strong>: Executable path (python, node, etc.)
+- <strong>Arguments</strong>: Command arguments with parameter substitution
+- <strong>Working Directory</strong>: Execution directory
+- <strong>Capture Output</strong>: Capture stdout/stderr
+- <strong>Execute On</strong>: Event trigger (queued, uploading, completed, failed)
+- <strong>Timeout</strong>: Max execution time (seconds)
+- <strong>Output Mapping</strong>:
+  - Map JSON output to ext1-4 fields
+  - JSONPath syntax supported
+  - Example: <code>$.download_link</code> -&gt; ext1</p>
+<p><strong>Example Configuration:</strong>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Upload to Rapidgator&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;python&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;hooks/muh.py&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rapidgator&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;%z&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;working_directory&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/home/user/bbdrop&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;capture_output&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;execute_on&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completed&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;timeout&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">300</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;output_mapping&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;ext1&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.download_link&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ext2&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.file_id&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ext3&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.file_size&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ext4&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.upload_time&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="parameter-substitution">Parameter Substitution<a class="headerlink" href="#parameter-substitution" title="Permanent link">&para;</a></h3>
+<p><strong>Available Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Description</th>
+<th>Example Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>%N</code></td>
+<td>Gallery name</td>
+<td><code>Summer Vacation</code></td>
+</tr>
+<tr>
+<td><code>%T</code></td>
+<td>Tab name</td>
+<td><code>Main</code></td>
+</tr>
+<tr>
+<td><code>%p</code></td>
+<td>Gallery folder path</td>
+<td><code>/home/user/images/vacation</code></td>
+</tr>
+<tr>
+<td><code>%C</code></td>
+<td>Image count</td>
+<td><code>127</code></td>
+</tr>
+<tr>
+<td><code>%s</code></td>
+<td>Size in bytes</td>
+<td><code>245823412</code></td>
+</tr>
+<tr>
+<td><code>%t</code></td>
+<td>Template name</td>
+<td><code>Detailed Example</code></td>
+</tr>
+<tr>
+<td><code>%g</code></td>
+<td>Gallery ID (completed only)</td>
+<td><code>abc123xyz</code></td>
+</tr>
+<tr>
+<td><code>%j</code></td>
+<td>JSON artifact path</td>
+<td><code>~/.bbdrop/artifacts/abc123.json</code></td>
+</tr>
+<tr>
+<td><code>%b</code></td>
+<td>BBCode file path</td>
+<td><code>~/.bbdrop/bbcode/abc123.txt</code></td>
+</tr>
+<tr>
+<td><code>%z</code></td>
+<td>ZIP path (auto-created)</td>
+<td><code>/tmp/bbdrop_abc123_vacation.zip</code></td>
+</tr>
+<tr>
+<td><code>%c1-%c4</code></td>
+<td>Custom field values</td>
+<td>User-defined</td>
+</tr>
+<tr>
+<td><code>%e1-%e4</code></td>
+<td>Extension field values</td>
+<td>External app outputs</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Usage Example:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Upload ZIP to external host after gallery completes</span>
+python<span class="w"> </span>hooks/muh.py<span class="w"> </span>rapidgator<span class="w"> </span><span class="s2">&quot;%z&quot;</span>
+
+<span class="c1"># Process images with metadata</span>
+python<span class="w"> </span>hooks/process.py<span class="w"> </span>--name<span class="w"> </span><span class="s2">&quot;%N&quot;</span><span class="w"> </span>--count<span class="w"> </span>%C<span class="w"> </span>--path<span class="w"> </span><span class="s2">&quot;%p&quot;</span>
+
+<span class="c1"># Send notification with gallery details</span>
+curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>https://api.example.com/notify<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;gallery&quot;:&quot;%N&quot;,&quot;count&quot;:%C,&quot;link&quot;:&quot;%g&quot;}&#39;</span>
+</code></pre></div></p>
+<hr />
+<h3 id="multi-host-uploader-muhpy">Multi-Host Uploader (muh.py)<a class="headerlink" href="#multi-host-uploader-muhpy" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>hooks/muh.py</code>
+<strong>Description:</strong> Standalone multi-host file uploader inspired by PolyUploader.</p>
+<p><strong>Supported Hosts:</strong>
+- Pixeldrain
+- Litterbox
+- Filedot
+- Rapidgator
+- Catbox
+- (Extensible via JSON config)</p>
+<p><strong>Features:</strong>
+- <strong>Minimal Dependencies</strong>: Only <code>requests</code> required
+- <strong>JSON Output</strong>: Returns structured data for mapping
+- <strong>Auto-Cleanup</strong>: Deletes temporary files
+- <strong>Error Handling</strong>: Detailed error messages
+- <strong>Parameter Mapping</strong>: Maps output to ext1-4 fields</p>
+<p><strong>Usage:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Upload file to Rapidgator</span>
+python<span class="w"> </span>muh.py<span class="w"> </span>rapidgator<span class="w"> </span>/path/to/file.zip
+
+<span class="c1"># Upload with credentials</span>
+python<span class="w"> </span>muh.py<span class="w"> </span>rapidgator<span class="w"> </span>/path/to/file.zip<span class="w"> </span>username:password
+
+<span class="c1"># Upload from BBDrop hook (auto-created ZIP)</span>
+python<span class="w"> </span>muh.py<span class="w"> </span>rapidgator<span class="w"> </span><span class="s2">&quot;%z&quot;</span>
+</code></pre></div></p>
+<p><strong>Example Output:</strong>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;host&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rapidgator&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;download_link&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://rapidgator.net/file/abc123&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;file_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc123&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;file_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vacation.zip&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;file_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">245823412</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;upload_time&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">12.34</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;expires&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<p><strong>Field Mapping in BBDrop:</strong>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;ext1&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.download_link&quot;</span><span class="p">,</span><span class="w">  </span><span class="c1">// https://rapidgator.net/file/abc123</span>
+<span class="w">  </span><span class="nt">&quot;ext2&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.file_id&quot;</span><span class="p">,</span><span class="w">        </span><span class="c1">// abc123</span>
+<span class="w">  </span><span class="nt">&quot;ext3&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.file_size&quot;</span><span class="p">,</span><span class="w">      </span><span class="c1">// 245823412</span>
+<span class="w">  </span><span class="nt">&quot;ext4&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.upload_time&quot;</span><span class="w">     </span><span class="c1">// 12.34</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="auto-zip-creation">Auto-ZIP Creation<a class="headerlink" href="#auto-zip-creation" title="Permanent link">&para;</a></h3>
+<p><strong>Feature:</strong> Automatic temporary ZIP creation for external hooks
+<strong>Parameter:</strong> <code>%z</code></p>
+<p><strong>Behavior:</strong>
+1. User configures external app with <code>%z</code> parameter
+2. Gallery upload completes
+3. BBDrop creates temporary ZIP:
+   - Location: System temp directory
+   - Name: <code>bbdrop_&lt;gallery_id&gt;_&lt;gallery_name&gt;.zip</code>
+   - Compression: STORE mode (no compression, fastest)
+   - Contents: All images from gallery
+4. External app executes with ZIP path
+5. ZIP automatically deleted after execution (success or failure)</p>
+<p><strong>Benefits:</strong>
+- No manual ZIP creation
+- Automatic cleanup
+- Fast STORE mode compression
+- Unique naming prevents collisions</p>
+<hr />
+<h2 id="configuration-settings">Configuration &amp; Settings<a class="headerlink" href="#configuration-settings" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> Comprehensive settings system with persistent storage.</p>
+<h3 id="settings-dialog">Settings Dialog<a class="headerlink" href="#settings-dialog" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/settings_dialog.py</code>
+<strong>Access:</strong> Ctrl+, or File -&gt; Settings</p>
+<p><strong>Sections</strong> (sidebar navigation):
+- <strong>General</strong>: Application-wide settings
+  - Window behavior
+  - Theme selection
+  - Single-instance mode
+  - System tray integration
+- <strong>Upload</strong>: Upload behavior and retries
+  - Max retry attempts (1-10)
+  - Retry delay (1-60 seconds)
+  - Parallel workers (1-10)
+  - Thumbnail size and format
+  - Gallery visibility (public/private)
+- <strong>BBCode</strong>: Template selection and management
+  - Default template
+  - Auto-copy to clipboard
+  - Include host links
+  - Template manager
+- <strong>File Hosts</strong>: Multi-host upload configuration
+  - Enable/disable hosts
+  - Credentials management
+  - Connection limits
+  - Test connections
+- <strong>External Apps</strong>: Hook system configuration
+  - Add/edit/delete apps
+  - Parameter substitution
+  - Output mapping
+  - Event triggers
+- <strong>Logging</strong>: Log level and output settings
+  - Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  - Max log lines (100-10000)
+  - Auto-scroll
+  - Log file location
+- <strong>Advanced</strong>: Database, cache, and performance
+  - Database maintenance
+  - Cache management
+  - Performance tuning
+  - Debug options</p>
+<hr />
+<h3 id="adaptive-settings-panel">Adaptive Settings Panel<a class="headerlink" href="#adaptive-settings-panel" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/widgets/adaptive_settings_panel.py</code></p>
+<p><strong>Features:</strong>
+- <strong>Context-Aware</strong>: Shows/hides options based on selections
+- <strong>Dynamic Validation</strong>: Real-time input validation
+- <strong>Tooltips</strong>: Hover help for all settings
+- <strong>Reset Options</strong>:
+  - Per-section reset
+  - Global reset to defaults
+- <strong>Search/Filter</strong>: Filter settings by keyword
+- <strong>Collapsible Sections</strong>: Minimize sections to save space</p>
+<p><strong>Adaptive Behavior Example:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># File host settings only visible when host enabled</span>
+<span class="k">if</span> <span class="n">fileboom_enabled</span><span class="p">:</span>
+    <span class="n">show</span><span class="p">(</span><span class="n">fileboom_api_key_field</span><span class="p">)</span>
+    <span class="n">show</span><span class="p">(</span><span class="n">fileboom_max_connections</span><span class="p">)</span>
+    <span class="n">show</span><span class="p">(</span><span class="n">fileboom_test_button</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">hide</span><span class="p">(</span><span class="n">fileboom_api_key_field</span><span class="p">)</span>
+    <span class="n">hide</span><span class="p">(</span><span class="n">fileboom_max_connections</span><span class="p">)</span>
+    <span class="n">hide</span><span class="p">(</span><span class="n">fileboom_test_button</span><span class="p">)</span>
+</code></pre></div></p>
+<hr />
+<h3 id="settings-storage">Settings Storage<a class="headerlink" href="#settings-storage" title="Permanent link">&para;</a></h3>
+<p><strong>Locations:</strong></p>
+<p><strong>Windows:</strong>
+<div class="highlight"><pre><span></span><code>Registry: HKEY_CURRENT_USER\Software\BBDropUploader\BBDropGUI
+Files: %APPDATA%\BBDropUploader\
+  +-- settings.ini
+  +-- bbdrop.db
+  +-- token_cache.db
+  +-- templates/
+</code></pre></div></p>
+<p><strong>Linux:</strong>
+<div class="highlight"><pre><span></span><code>Config: ~/.config/BBDropUploader/BBDropGUI.conf
+Files: ~/.bbdrop/
+  +-- bbdrop.ini
+  +-- bbdrop.db
+  +-- token_cache.db
+  +-- templates/
+  +-- artifacts/
+  +-- bbcode/
+</code></pre></div></p>
+<p><strong>Stored Settings:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">SETTINGS</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="c1"># Window</span>
+  <span class="s2">&quot;window/width&quot;</span><span class="p">:</span> <span class="mi">1200</span><span class="p">,</span>
+  <span class="s2">&quot;window/height&quot;</span><span class="p">:</span> <span class="mi">800</span><span class="p">,</span>
+  <span class="s2">&quot;window/x&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+  <span class="s2">&quot;window/y&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+  <span class="s2">&quot;window/maximized&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+  <span class="s2">&quot;window/theme&quot;</span><span class="p">:</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>  <span class="c1"># auto, dark, light</span>
+
+  <span class="c1"># Upload</span>
+  <span class="s2">&quot;upload/max_retries&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+  <span class="s2">&quot;upload/retry_delay&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+  <span class="s2">&quot;upload/parallel_workers&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+  <span class="s2">&quot;upload/thumbnail_size&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>  <span class="c1"># 250x250</span>
+  <span class="s2">&quot;upload/thumbnail_format&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>  <span class="c1"># JPEG 90%</span>
+  <span class="s2">&quot;upload/public_gallery&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+
+  <span class="c1"># BBCode</span>
+  <span class="s2">&quot;bbcode/template&quot;</span><span class="p">:</span> <span class="s2">&quot;Default Template&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;bbcode/auto_copy&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+  <span class="s2">&quot;bbcode/include_host_links&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+
+  <span class="c1"># File Hosts</span>
+  <span class="s2">&quot;filehosts/global_max&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+  <span class="s2">&quot;filehosts/fileboom/enabled&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+  <span class="s2">&quot;filehosts/fileboom/max_connections&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+  <span class="s2">&quot;filehosts/rapidgator/enabled&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+  <span class="s2">&quot;filehosts/rapidgator/max_connections&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+
+  <span class="c1"># UI</span>
+  <span class="s2">&quot;ui/show_tray_icon&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+  <span class="s2">&quot;ui/minimize_to_tray&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+  <span class="s2">&quot;ui/confirm_delete&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+  <span class="s2">&quot;ui/show_splash&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+
+  <span class="c1"># Logging</span>
+  <span class="s2">&quot;logging/level&quot;</span><span class="p">:</span> <span class="s2">&quot;INFO&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;logging/max_lines&quot;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
+  <span class="s2">&quot;logging/auto_scroll&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+  <span class="s2">&quot;logging/show_prefix&quot;</span><span class="p">:</span> <span class="kc">True</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h2 id="user-interface">User Interface<a class="headerlink" href="#user-interface" title="Permanent link">&para;</a></h2>
+<p><strong>Platform:</strong> PyQt6
+<strong>Description:</strong> Modern, responsive GUI with dark/light theme support.</p>
+<h3 id="main-window">Main Window<a class="headerlink" href="#main-window" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/main_window.py</code></p>
+<p><strong>Layout:</strong>
+<div class="highlight"><pre><span></span><code>+-- BBDrop ----------------------------------------+
+| File  Edit  View  Tools  Help                |
++----------------------------------------------+
+| +-- Tabs ----------------------------------+ |
+| | Main(3) | Archive(0) | File Hosts(1) | + | |
+| +------------------------------------------+ |
+| | Gallery Queue                            | |
+| | +--------------------------------------+ | |
+| | | Name          | Status    | Progress | | |
+| | +---------------+-----------+----------+ | |
+| | | Vacation      | Done      | [#####]  | | |
+| | | Birthday      | Paused    | [###..]  | | |
+| | | Event Photos  | Upload    | [##...]  | | |
+| | +--------------------------------------+ | |
+| +------------------------------------------+ |
+| +-- Quick Settings ------------------------+ |
+| | Template: [Detailed Example v]           | |
+| | Public: [x]  Retries: [3v]  Size: [250v] | |
+| +------------------------------------------+ |
+| +-- Controls ------------------------------+ |
+| | [Start All] [Pause All] [Clear Done]     | |
+| | [Settings]  [View BBCode] [Help]         | |
+| +------------------------------------------+ |
+| Status: Upload 2.5 MB/s | 127.3/245.8 MB    |
++----------------------------------------------+
+</code></pre></div></p>
+<p><strong>Features:</strong>
+- Drag &amp; drop anywhere in window
+- Resizable with minimum 800x600
+- Status bar shows upload speed and progress
+- Menu bar with keyboard shortcuts
+- System tray icon
+- Single-instance mode
+- Theme-aware styling</p>
+<hr />
+<h3 id="customizable-layout">Customizable Layout<a class="headerlink" href="#customizable-layout" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/layout_manager.py</code></p>
+<p><strong>Description:</strong> The Upload Queue is a fixed central widget; the six surrounding panels (Quick Settings, Hosts, Log, Current Tab Progress, Info, Speed) are each wrapped in a <code>QDockWidget</code> and can be shown, hidden, rearranged, floated, or tabbed together.</p>
+<p><strong>Menu actions</strong> (under <strong>View</strong>):
+- <strong>Panels</strong> submenu — toggle visibility of each dock
+- <strong>Edit Layout</strong> — toggle between locked mode (no drag affordances) and edit mode (compact title bar with drag handle, float, and close buttons)
+- <strong>Reset Layout</strong> — restore the Classic default arrangement</p>
+<p><strong>Persistence:</strong> Layout state is saved via <code>QMainWindow.saveState()</code> on close and restored via <code>restoreState()</code> on launch. Falls back to Classic placement silently if restore fails.</p>
+<p><strong>Default placement (Classic):</strong>
+- Center: Upload Queue
+- Right column: Quick Settings, Hosts, Log (stacked vertically)
+- Bottom row: Current Tab Progress, Info, Speed (left to right, bottom corners owned by the bottom dock area)</p>
+<p>See <a href="../../guides/layout-customization/">Customize the Layout</a> for the user-facing guide.</p>
+<hr />
+<h3 id="keyboard-shortcuts">Keyboard Shortcuts<a class="headerlink" href="#keyboard-shortcuts" title="Permanent link">&para;</a></h3>
+<p><strong>Tab Management:</strong>
+- <strong>Ctrl+T</strong>: Create new tab
+- <strong>Ctrl+W</strong>: Close current tab (except Main)
+- <strong>Ctrl+Tab</strong>: Switch to next tab
+- <strong>Ctrl+Shift+Tab</strong>: Switch to previous tab</p>
+<p><strong>Gallery Management:</strong>
+- <strong>Delete</strong>: Remove selected galleries from queue
+- <strong>Ctrl+C</strong>: Copy BBCode for selected galleries
+- <strong>F2</strong>: Rename selected gallery
+- <strong>Ctrl+A</strong>: Select all galleries
+- <strong>Ctrl+Shift+A</strong>: Deselect all</p>
+<p><strong>Application:</strong>
+- <strong>Ctrl+,</strong>: Open settings dialog
+- <strong>Ctrl+.</strong>: Show keyboard shortcuts help
+- <strong>Ctrl+L</strong>: Open log viewer
+- <strong>Ctrl+Q</strong>: Quit application
+- <strong>Ctrl+R</strong>: Refresh queue
+- <strong>F5</strong>: Refresh current view</p>
+<p><strong>Context Menu</strong> (Right-click gallery):
+- Copy BBCode
+- Open gallery link
+- Regenerate BBCode
+- Move to tab
+- View BBCode dialog
+- Remove from queue
+- Retry upload</p>
+<hr />
+<h3 id="themes">Themes<a class="headerlink" href="#themes" title="Permanent link">&para;</a></h3>
+<p><strong>Supported Themes:</strong>
+- <strong>Auto</strong>: System theme detection (Windows 11, modern Linux)
+- <strong>Dark</strong>: Dark mode with <code>#1e1e1e</code> background
+- <strong>Light</strong>: Light mode with <code>#f0f0f0</code> background</p>
+<p><strong>Stylesheets:</strong> Modular QSS system (<code>assets/qss/base.qss</code> + <code>assets/qss/components/*.qss</code> + <code>assets/qss/themes/*.qss</code>)</p>
+<p><strong>Dark Theme:</strong>
+<div class="highlight"><pre><span></span><code><span class="nt">QMainWindow</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">background-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#1e1e1e</span><span class="p">;</span>
+<span class="w">  </span><span class="k">color</span><span class="p">:</span><span class="w"> </span><span class="mh">#d4d4d4</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nt">QPushButton</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">background-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#2d2d30</span><span class="p">;</span>
+<span class="w">  </span><span class="k">color</span><span class="p">:</span><span class="w"> </span><span class="mh">#ffffff</span><span class="p">;</span>
+<span class="w">  </span><span class="k">border</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="kt">px</span><span class="w"> </span><span class="kc">solid</span><span class="w"> </span><span class="mh">#3e3e42</span><span class="p">;</span>
+<span class="w">  </span><span class="k">padding</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="kt">px</span><span class="w"> </span><span class="mi">15</span><span class="kt">px</span><span class="p">;</span>
+<span class="w">  </span><span class="k">border-radius</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="kt">px</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nt">QPushButton</span><span class="p">:</span><span class="nd">hover</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">background-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#3e3e42</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nt">QTableWidget</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">background-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#252526</span><span class="p">;</span>
+<span class="w">  </span><span class="n">alternate-background-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#2d2d30</span><span class="p">;</span>
+<span class="w">  </span><span class="n">gridline-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#3e3e42</span><span class="p">;</span>
+<span class="w">  </span><span class="k">color</span><span class="p">:</span><span class="w"> </span><span class="mh">#d4d4d4</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nt">QTextEdit</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">background-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#222222</span><span class="p">;</span><span class="w">  </span><span class="c">/* Code background */</span>
+<span class="w">  </span><span class="k">color</span><span class="p">:</span><span class="w"> </span><span class="mh">#d4d4d4</span><span class="p">;</span>
+<span class="w">  </span><span class="n">selection-background-color</span><span class="p">:</span><span class="w"> </span><span class="mh">#264f78</span><span class="p">;</span>
+<span class="w">  </span><span class="k">border</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="kt">px</span><span class="w"> </span><span class="kc">solid</span><span class="w"> </span><span class="mh">#3e3e42</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="icon-manager">Icon Manager<a class="headerlink" href="#icon-manager" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/icon_manager.py</code></p>
+<p><strong>Features:</strong>
+- <strong>Theme-Aware</strong>: Automatic icon selection for dark/light themes
+- <strong>SVG Support</strong>: Vector icons scale perfectly
+- <strong>Icon Cache</strong>: In-memory cache for performance
+- <strong>Fallback Icons</strong>: Default icons if custom not found
+- <strong>Dynamic Loading</strong>: Load icons on-demand
+- <strong>High-DPI Support</strong>: Crisp icons on Retina/4K displays</p>
+<p><strong>Icon Categories:</strong>
+- <strong>Status</strong>: queued, uploading, completed, failed, paused
+- <strong>Actions</strong>: start, pause, stop, retry, delete, copy
+- <strong>File Hosts</strong>: Logos for Fileboom, Rapidgator, Keep2Share, etc.
+- <strong>Navigation</strong>: tabs, settings, help, logs</p>
+<p><strong>Icon Locations:</strong></p>
+<p>Since v0.7.4 icons use unified names (no <code>-dark</code>/<code>-light</code> suffix). The icon manager
+handles theme adaptation at runtime.</p>
+<div class="highlight"><pre><span></span><code>assets/
++-- status_queued.png
++-- status_uploading-001.png
++-- status_uploading-002.png
++-- status_uploading-003.png
++-- status_uploading-004.png
++-- status_completed.png
++-- status_failed.png
++-- hosts/
+|   +-- logo/
+|       +-- fileboom-icon.png
+|       +-- rapidgator-icon.png
+|       +-- keep2share-icon.png
+|       +-- tezfiles-icon.png
+|       +-- filedot-icon.png
+|       +-- filespace-icon.png
+|       +-- katfile-icon.png
++-- qss/
+    +-- base.qss
+    +-- components/
+    +-- themes/
+</code></pre></div>
+<p><strong>API:</strong>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">src.gui.icon_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_icon_manager</span>
+
+<span class="n">icon_manager</span> <span class="o">=</span> <span class="n">get_icon_manager</span><span class="p">()</span>
+
+<span class="c1"># Get themed icon</span>
+<span class="n">icon</span> <span class="o">=</span> <span class="n">icon_manager</span><span class="o">.</span><span class="n">get_icon</span><span class="p">(</span><span class="s2">&quot;status_uploading&quot;</span><span class="p">,</span> <span class="n">theme</span><span class="o">=</span><span class="s2">&quot;dark&quot;</span><span class="p">)</span>
+
+<span class="c1"># Get file host icon</span>
+<span class="n">icon</span> <span class="o">=</span> <span class="n">icon_manager</span><span class="o">.</span><span class="n">get_host_icon</span><span class="p">(</span><span class="s2">&quot;rapidgator&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check if icon exists</span>
+<span class="n">exists</span> <span class="o">=</span> <span class="n">icon_manager</span><span class="o">.</span><span class="n">has_icon</span><span class="p">(</span><span class="s2">&quot;custom_icon&quot;</span><span class="p">)</span>
+</code></pre></div></p>
+<hr />
+<h3 id="progress-tracking">Progress Tracking<a class="headerlink" href="#progress-tracking" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/widgets/gallery_table.py</code></p>
+<p><strong>Features:</strong>
+- <strong>Individual Progress</strong>: Per-gallery progress bars
+- <strong>Overall Progress</strong>: Combined progress in status bar
+- <strong>Real-time Updates</strong>: Refresh every 100ms
+- <strong>Upload Speed</strong>: Current MB/s and average
+- <strong>ETA Calculation</strong>: Estimated time remaining
+- <strong>Bandwidth Usage</strong>: Total uploaded and remaining</p>
+<p><strong>Progress Display:</strong>
+<div class="highlight"><pre><span></span><code>+-- Gallery: Summer Vacation ------------------+
+| Status: Uploading                            |
+| Progress: [########........] 42%             |
+| Images: 54 / 127                             |
+| Speed: 2.5 MB/s                              |
+| ETA: 3m 24s                                  |
+| Uploaded: 127.3 MB / 245.8 MB                |
++----------------------------------------------+
+</code></pre></div></p>
+<p><strong>Status Bar:</strong>
+<div class="highlight"><pre><span></span><code>Upload 2.5 MB/s | Total: 127.3 MB / 245.8 MB | ETA: 3m 24s | Active: 2 | Queued: 3
+</code></pre></div></p>
+<hr />
+<h3 id="log-viewer">Log Viewer<a class="headerlink" href="#log-viewer" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/log_viewer.py</code>
+<strong>Access:</strong> Ctrl+L or Help -&gt; View Logs</p>
+<p><strong>Features:</strong>
+- <strong>Real-time Logging</strong>: Live log updates
+- <strong>Log Levels</strong>: Filter by DEBUG, INFO, WARNING, ERROR, CRITICAL
+- <strong>Category Filter</strong>: Filter by component (upload, file_hosts, archive, etc.)
+- <strong>Search</strong>: Find text in logs
+- <strong>Export</strong>: Save logs to file
+- <strong>Auto-scroll</strong>: Automatic scroll to bottom
+- <strong>Line Limit</strong>: Max 1000 lines (configurable)
+- <strong>Syntax Highlighting</strong>: Color-coded log levels</p>
+<p><strong>Log Levels:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">LOG_LEVELS</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;DEBUG&quot;</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span>      <span class="c1"># Detailed diagnostic info</span>
+  <span class="s2">&quot;INFO&quot;</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span>        <span class="c1"># General information</span>
+  <span class="s2">&quot;WARNING&quot;</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span>  <span class="c1"># Warning messages</span>
+  <span class="s2">&quot;ERROR&quot;</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span>      <span class="c1"># Error messages</span>
+  <span class="s2">&quot;CRITICAL&quot;</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">CRITICAL</span> <span class="c1"># Critical failures</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<p><strong>Color Scheme:</strong>
+- <strong>DEBUG</strong>: Gray
+- <strong>INFO</strong>: White/Black (theme-dependent)
+- <strong>WARNING</strong>: Yellow
+- <strong>ERROR</strong>: Orange
+- <strong>CRITICAL</strong>: Red</p>
+<hr />
+<h2 id="file-manager">File Manager<a class="headerlink" href="#file-manager" title="Permanent link">&para;</a></h2>
+<p><strong>Description:</strong> In-app browser for managing files stored on remote file hosts. Accessible via <strong>Tools &gt; File Manager</strong> or the <strong>File Manager</strong> button in the quick settings panel. Non-modal — stays open while uploads run.</p>
+<p><strong>Supported Hosts:</strong> K2S / TezFiles / FileBoom, RapidGator, Katfile, Filespace, Filedot</p>
+<p><strong>Operations by Host:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>K2S / Tez / FBoom</th>
+<th>RapidGator</th>
+<th>Katfile</th>
+<th>Filespace</th>
+<th>Filedot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Browse files</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes (scraping)</td>
+</tr>
+<tr>
+<td>Create folder</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Rename</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Move</td>
+<td>Yes (batch)</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Copy</td>
+<td>—</td>
+<td>Yes</td>
+<td>Clone</td>
+<td>Clone</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Delete</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Trash / restore</td>
+<td>—</td>
+<td>Yes</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Remote URL upload</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>File properties</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Keyboard Shortcuts:</strong>
+- <code>Delete</code> — Remove selected files/folders
+- <code>F2</code> — Rename
+- <code>F5</code> — Refresh
+- <code>Ctrl+C</code> — Copy download link
+- <code>Backspace</code> — Navigate back
+- <code>Alt+Up</code> — Go to parent folder</p>
+<p><strong>Authentication:</strong> Uses the same credentials as the upload workers. No separate login required.</p>
+<hr />
+<h2 id="advanced-features">Advanced Features<a class="headerlink" href="#advanced-features" title="Permanent link">&para;</a></h2>
+<h3 id="duplicate-detection">Duplicate Detection<a class="headerlink" href="#duplicate-detection" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/duplicate_detection_dialogs.py</code></p>
+<p><strong>Detection Methods:</strong>
+- <strong>Path Matching</strong>: Compare gallery folder paths
+- <strong>Name Matching</strong>: Compare gallery names
+- <strong>Hash Comparison</strong>: MD5 hash of gallery contents (optional, slow)</p>
+<p><strong>User Options:</strong>
+- <strong>Skip</strong>: Skip duplicate, don't add to queue
+- <strong>Replace</strong>: Replace existing gallery with new one
+- <strong>Add Anyway</strong>: Add as new entry (ignore duplicate)
+- <strong>Rename</strong>: Automatically rename with suffix (e.g., <code>Gallery_2</code>)</p>
+<p><strong>Configuration:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">DUPLICATE_DETECTION</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;enabled&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+  <span class="s2">&quot;check_path&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>      <span class="c1"># Check folder path</span>
+  <span class="s2">&quot;check_name&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>      <span class="c1"># Check gallery name</span>
+  <span class="s2">&quot;check_hash&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>     <span class="c1"># MD5 hash (slow)</span>
+  <span class="s2">&quot;prompt_user&quot;</span><span class="p">:</span> <span class="kc">True</span>      <span class="c1"># Ask before action</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="gallery-file-manager">Gallery File Manager<a class="headerlink" href="#gallery-file-manager" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/gallery_file_manager.py</code></p>
+<p><strong>Features:</strong>
+- <strong>File Browser</strong>: Browse gallery images before upload
+- <strong>Bulk Selection</strong>: Select/deselect multiple images
+- <strong>Sorting</strong>: Sort by name, size, date, dimensions
+- <strong>Filtering</strong>: Filter by extension, size range, dimensions
+- <strong>Image Preview</strong>: Thumbnail previews
+- <strong>Metadata Display</strong>: Show EXIF data
+- <strong>Delete</strong>: Remove unwanted images before upload
+- <strong>Statistics</strong>: Show total count, size, average dimensions</p>
+<p><strong>UI:</strong>
+<div class="highlight"><pre><span></span><code>+-- Gallery File Manager ----------------------+
+| Gallery: Summer Vacation                     |
+| Path: /home/user/images/vacation             |
+| Total: 127 images | Size: 245.8 MB           |
+|                                              |
+| Filter: [Extension v] [Size v] [Dims v]      |
+|                                              |
+| +-- Files --------------------------------+  |
+| | [x] IMG_0001.jpg  3.2 MB  4000x3000    |  |
+| | [x] IMG_0002.jpg  3.1 MB  4000x3000    |  |
+| | [ ] IMG_0003.jpg  3.3 MB  4000x3000    |  |
+| | [x] IMG_0004.jpg  3.0 MB  4000x3000    |  |
+| +----------------------------------------+  |
+|                                              |
+| Selected: 3 / 127 (9.6 MB)                   |
+| [Select All] [Deselect All] [Delete]         |
+|                      [Upload] [Cancel]       |
++----------------------------------------------+
+</code></pre></div></p>
+<hr />
+<h3 id="help-dialog">Help Dialog<a class="headerlink" href="#help-dialog" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/gui/dialogs/help_dialog.py</code></p>
+<p><strong>Help Tabs:</strong>
+1. <strong>Overview</strong>: Application introduction and quick start
+2. <strong>Keyboard Shortcuts</strong>: All keyboard shortcuts reference
+3. <strong>BBCode Templates</strong>: Template syntax and placeholder guide
+4. <strong>Multi-Host Upload</strong>: File host setup and configuration
+5. <strong>Archive Support</strong>: ZIP extraction and compression
+6. <strong>Troubleshooting</strong>: Common issues and solutions</p>
+<p><strong>Features:</strong>
+- <strong>Markdown Rendering</strong>: Rich text formatting with QTextBrowser
+- <strong>Emoji Support</strong>: Windows emoji font integration
+  - Windows: Segoe UI Emoji
+  - Linux: Noto Color Emoji
+  - macOS: Apple Color Emoji
+- <strong>Searchable</strong>: Find topics quickly (Ctrl+F in dialog)
+- <strong>External Links</strong>: Open documentation URLs
+- <strong>Theme Support</strong>: Dark/light mode rendering</p>
+<p><strong>Emoji Font Stack:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">font</span> <span class="o">=</span> <span class="n">QFont</span><span class="p">()</span>
+<span class="n">font</span><span class="o">.</span><span class="n">setFamilies</span><span class="p">([</span>
+  <span class="s2">&quot;Segoe UI&quot;</span><span class="p">,</span>           <span class="c1"># Base font (Windows)</span>
+  <span class="s2">&quot;Segoe UI Emoji&quot;</span><span class="p">,</span>     <span class="c1"># Emoji font (Windows)</span>
+  <span class="s2">&quot;Noto Color Emoji&quot;</span><span class="p">,</span>   <span class="c1"># Emoji font (Linux)</span>
+  <span class="s2">&quot;Apple Color Emoji&quot;</span>   <span class="c1"># Emoji font (macOS)</span>
+<span class="p">])</span>
+</code></pre></div></p>
+<hr />
+<h2 id="database-storage">Database &amp; Storage<a class="headerlink" href="#database-storage" title="Permanent link">&para;</a></h2>
+<h3 id="queue-database">Queue Database<a class="headerlink" href="#queue-database" title="Permanent link">&para;</a></h3>
+<p><strong>Location:</strong> <code>~/.bbdrop/bbdrop.db</code>
+<strong>Engine:</strong> SQLite 3
+<strong>Component:</strong> <code>src/storage/database.py</code></p>
+<p><strong>Schema:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">galleries</span><span class="w"> </span><span class="p">(</span>
+<span class="w">  </span><span class="n">id</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="n">AUTOINCREMENT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">name</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">path</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">UNIQUE</span><span class="p">,</span>
+<span class="w">  </span><span class="n">status</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">tab</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;Main&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="k">template</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;Default Template&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="n">custom1</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">custom2</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">custom3</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">custom4</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">ext1</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">ext2</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">ext3</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">ext4</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">created_at</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">  </span><span class="n">completed_at</span><span class="w"> </span><span class="nb">INTEGER</span><span class="p">,</span>
+<span class="w">  </span><span class="n">gallery_id</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">bbcode_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">artifact_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">  </span><span class="n">retry_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="n">error_message</span><span class="w"> </span><span class="nb">TEXT</span>
+<span class="p">);</span>
+
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_status</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">galleries</span><span class="p">(</span><span class="n">status</span><span class="p">);</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_tab</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">galleries</span><span class="p">(</span><span class="n">tab</span><span class="p">);</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_created_at</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">galleries</span><span class="p">(</span><span class="n">created_at</span><span class="p">);</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_gallery_id</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">galleries</span><span class="p">(</span><span class="n">gallery_id</span><span class="p">);</span>
+</code></pre></div></p>
+<p><strong>Features:</strong>
+- <strong>ACID Compliance</strong>: Atomic, Consistent, Isolated, Durable
+- <strong>WAL Mode</strong>: Write-Ahead Logging for better concurrency
+- <strong>Indexes</strong>: Fast queries by status, tab, date
+- <strong>Foreign Keys</strong>: Optional referential integrity</p>
+<hr />
+<h3 id="queue-manager">Queue Manager<a class="headerlink" href="#queue-manager" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/storage/queue_manager.py</code></p>
+<p><strong>API:</strong>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">QueueManager</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_gallery</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tab</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Main&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_gallery</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gallery_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gallery_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_custom_field</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gallery_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_galleries_by_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_galleries_by_tab</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tab</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">remove_gallery</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gallery_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear_completed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">count_by_status</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_all_galleries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span>
+</code></pre></div></p>
+<p><strong>Thread Safety:</strong>
+- Connection pooling for concurrent access
+- Row-level locking
+- Transaction isolation</p>
+<hr />
+<h3 id="database-maintenance">Database Maintenance<a class="headerlink" href="#database-maintenance" title="Permanent link">&para;</a></h3>
+<p><strong>Features:</strong>
+- <strong>Auto-Vacuum</strong>: Reclaim space after deletions
+- <strong>Integrity Check</strong>: Verify database consistency
+- <strong>Backup</strong>: Automatic daily backups
+- <strong>Migration</strong>: Version-based schema migrations</p>
+<p><strong>Backup Location:</strong>
+<div class="highlight"><pre><span></span><code>~/.db-backups/
++-- bbdrop-2025-11-17-001.db
++-- bbdrop-2025-11-16-001.db
++-- bbdrop-2025-11-15-001.db
+</code></pre></div></p>
+<p><strong>Vacuum Schedule:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Auto-vacuum on startup if:</span>
+<span class="c1"># - Last vacuum &gt; 7 days ago</span>
+<span class="c1"># - Database size &gt; 100 MB</span>
+<span class="c1"># - Fragmentation &gt; 20%</span>
+</code></pre></div></p>
+<hr />
+<h3 id="artifact-storage">Artifact Storage<a class="headerlink" href="#artifact-storage" title="Permanent link">&para;</a></h3>
+<p><strong>Location:</strong> <code>~/.bbdrop/artifacts/</code>
+<strong>Format:</strong> JSON
+<strong>Purpose:</strong> Store upload metadata and results</p>
+<p><strong>Artifact Structure:</strong>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;gallery_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc123xyz&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Summer Vacation&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/home/user/images/vacation&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;uploaded_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1700000000</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;image_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">127</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;total_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">245823412</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;gallery_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://imx.to/g/abc123xyz&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;images&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;filename&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;IMG_0001.jpg&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://imx.to/i/abc001&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3200000</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;width&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4000</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;height&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3000</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;file_host_links&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;rapidgator&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://rapidgator.net/file/xyz789&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;fileboom&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://fboom.me/file/abc123&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;keep2share&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://k2s.cc/file/def456&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;custom_fields&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;custom1&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Photographer: John Doe&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;custom2&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Location: Hawaii&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;ext_fields&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;ext1&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://pixeldrain.com/u/abc123&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ext2&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;file_id_12345&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ext3&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;245823412&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;ext4&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;12.34&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h2 id="network-performance">Network &amp; Performance<a class="headerlink" href="#network-performance" title="Permanent link">&para;</a></h2>
+<h3 id="http-client">HTTP Client<a class="headerlink" href="#http-client" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/network/client.py</code></p>
+<p><strong>Features:</strong>
+- <strong>Session Management</strong>: Persistent HTTP sessions
+- <strong>Connection Pooling</strong>: Reuse connections
+- <strong>Retry Logic</strong>: Exponential backoff with jitter
+- <strong>Timeout Control</strong>: Per-request timeout
+- <strong>Cookie Handling</strong>: Automatic cookie management
+- <strong>User-Agent</strong>: Configurable user-agent string
+- <strong>SSL/TLS</strong>: Certificate validation</p>
+<p><strong>Configuration:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">SESSION_CONFIG</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;pool_connections&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+  <span class="s2">&quot;pool_maxsize&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+  <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+  <span class="s2">&quot;timeout&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
+  <span class="s2">&quot;keep_alive&quot;</span><span class="p">:</span> <span class="kc">True</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="pycurl-integration">pycurl Integration<a class="headerlink" href="#pycurl-integration" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/network/client.py</code> (pycurl backend)</p>
+<p><strong>Features:</strong>
+- <strong>High Performance</strong>: 2-3x faster than requests library
+- <strong>Progress Callbacks</strong>: Real-time upload progress
+- <strong>Multi-Part Uploads</strong>: Efficient large file handling
+- <strong>SSL/TLS</strong>: Secure connections with certificate validation
+- <strong>Resume Support</strong>: Resume interrupted uploads</p>
+<p><strong>Windows DLL Bundling:</strong>
+- <strong>PyInstaller</strong>: Automatic DLL inclusion
+- <strong>delvewheel</strong>: Pre-built wheels with bundled dependencies
+- <strong>Build Verification</strong>: Post-build checks ensure DLLs present</p>
+<p><strong>DLLs Required:</strong>
+<div class="highlight"><pre><span></span><code>libcurl-*.dll
+libssh2-*.dll
+zlib-*.dll
+openssl-*.dll (libssl, libcrypto)
+nghttp2-*.dll
+</code></pre></div></p>
+<hr />
+<h3 id="parallel-upload-workers">Parallel Upload Workers<a class="headerlink" href="#parallel-upload-workers" title="Permanent link">&para;</a></h3>
+<p><strong>Component:</strong> <code>src/processing/upload_workers.py</code></p>
+<p><strong>Architecture:</strong>
+<div class="highlight"><pre><span></span><code>UploadCoordinator
++-- UploadWorker #1 (thread)
++-- UploadWorker #2 (thread)
++-- UploadWorker #3 (thread)
++-- UploadWorker #4 (thread)
+</code></pre></div></p>
+<p><strong>Features:</strong>
+- <strong>Worker Pool</strong>: Configurable number of workers (1-10)
+- <strong>Load Balancing</strong>: Distribute galleries across workers
+- <strong>Thread Safety</strong>: Thread-safe queue operations
+- <strong>Progress Aggregation</strong>: Combine progress from all workers
+- <strong>Error Isolation</strong>: Worker failure doesn't affect others
+- <strong>Dynamic Scaling</strong>: Add/remove workers on demand</p>
+<p><strong>Configuration:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">WORKER_CONFIG</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;max_workers&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+  <span class="s2">&quot;queue_size&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+  <span class="s2">&quot;thread_timeout&quot;</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+  <span class="s2">&quot;restart_on_error&quot;</span><span class="p">:</span> <span class="kc">True</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<hr />
+<h3 id="performance-optimizations">Performance Optimizations<a class="headerlink" href="#performance-optimizations" title="Permanent link">&para;</a></h3>
+<p><strong>Startup Optimization:</strong>
+- Lazy loading of GUI components
+- Icon caching (pre-load frequently used icons)
+- Database indexing (fast status/tab queries)
+- Viewport rendering (render only visible table rows)</p>
+<p><strong>Upload Optimization:</strong>
+- Batch progress updates (every 50ms, not per-image)
+- Connection pooling (reuse HTTP connections)
+- Token caching (avoid repeated authentication)
+- Parallel processing (multiple galleries simultaneously)</p>
+<p><strong>Memory Optimization:</strong>
+- Log line limit (max 1000 lines in viewer)
+- Image sampling (sample 25 images for dimensions, not all)
+- Database pagination (load galleries in batches)
+- Icon cache limit (max 100 cached icons)</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/twwat/bbdrop" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

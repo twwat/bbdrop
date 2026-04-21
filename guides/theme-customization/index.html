@@ -1,0 +1,3753 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Batch-upload image galleries to multiple image and file hosts">
+      
+      
+      
+        <link rel="canonical" href="https://bbdrop.net/guides/theme-customization/">
+      
+      
+        <link rel="prev" href="../credential-management/">
+      
+      
+        <link rel="next" href="../../explanation/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Theme Customization - BBDrop</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#theme-customization-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="BBDrop" class="md-header__button md-logo" aria-label="BBDrop" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BBDrop
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Theme Customization
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/twwat/bbdrop" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    twwat/bbdrop
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../explanation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Explanation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../troubleshooting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Troubleshooting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../decisions/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Decisions
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="BBDrop" class="md-nav__button md-logo" aria-label="BBDrop" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BBDrop
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/twwat/bbdrop" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    twwat/bbdrop
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Key Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../tutorials/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/imx-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setting Up IMX.to
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/custom-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Creating a Custom Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/file-host-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding File Host Downloads
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gui-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GUI Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../layout-customization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customize the Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../image-hosts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Image Hosts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-host-upload/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-Host Upload
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../queue-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scanning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scanning & Link Checking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../bbcode-templates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BBCode Templates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../proxies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proxies & Tor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../archive-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Archive Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../duplicate-detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Duplicate Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks & Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../file-manager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File Manager
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../credential-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Credential Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Theme Customization
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Theme Customization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-theme-customization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is Theme Customization?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#available-themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Themes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available Themes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dark-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dark Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#light-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Light Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-theme-system-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auto Theme (System Detection)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#switching-themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Switching Themes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Switching Themes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#method-1-view-menu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 1: View Menu
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#method-2-settings-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 2: Settings Dialog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#method-3-theme-toggle-button" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 3: Theme Toggle Button
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#theme-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Components
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Theme Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#window-backgrounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Window &amp; Backgrounds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#text-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text &amp; Labels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interface-elements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interface Elements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icons-graphics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Icons &amp; Graphics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dialogs-menus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialogs &amp; Menus
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#font-size-adjustment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Font Size Adjustment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Font Size Adjustment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#accessing-font-size-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessing Font Size Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#font-size-recommendations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Font Size Recommendations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#theme-persistence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Persistence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform Notes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Platform Notes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#windows-11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows 11
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#windows-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows 10
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#linux-ubuntu-fedora-etc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux (Ubuntu, Fedora, etc.)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#theme-not-applying" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Not Applying
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#theme-looks-different-from-expected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Looks Different from Expected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icons-appear-wrong-in-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Icons Appear Wrong in Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#text-too-small-or-too-large" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text Too Small or Too Large
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#theme-flicker-or-flickering-on-startup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Flicker or Flickering on Startup
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Best Practices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#for-dark-theme-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For Dark Theme Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#for-light-theme-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For Light Theme Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#for-auto-theme-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For Auto Theme Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#keyboard-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard Shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See Also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/upload-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upload Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/security-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/queue-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue & Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/settings-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/keyboard-shortcuts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keyboard Shortcuts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/template-placeholders/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template Placeholders
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/external-apps-parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    External App Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/quick-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../troubleshooting/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Troubleshooting
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/common-issues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common Issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/silent-failures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Silent Failures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/log-diagnosis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log Diagnosis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/wsl2-drag-drop-fix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WSL2 Drag & Drop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../architecture/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/system-context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/containers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application Components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../decisions/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/001-pycurl-over-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    001: pycurl Over requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/002-single-instance-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    002: Single-Instance Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../decisions/003-credential-storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    003: Credential Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-theme-customization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is Theme Customization?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#available-themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Themes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available Themes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dark-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dark Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#light-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Light Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-theme-system-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auto Theme (System Detection)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#switching-themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Switching Themes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Switching Themes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#method-1-view-menu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 1: View Menu
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#method-2-settings-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 2: Settings Dialog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#method-3-theme-toggle-button" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 3: Theme Toggle Button
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#theme-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Components
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Theme Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#window-backgrounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Window &amp; Backgrounds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#text-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text &amp; Labels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interface-elements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interface Elements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icons-graphics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Icons &amp; Graphics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dialogs-menus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialogs &amp; Menus
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#font-size-adjustment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Font Size Adjustment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Font Size Adjustment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#accessing-font-size-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accessing Font Size Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#font-size-recommendations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Font Size Recommendations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#theme-persistence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Persistence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform Notes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Platform Notes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#windows-11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows 11
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#windows-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows 10
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#linux-ubuntu-fedora-etc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux (Ubuntu, Fedora, etc.)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#theme-not-applying" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Not Applying
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#theme-looks-different-from-expected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Looks Different from Expected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icons-appear-wrong-in-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Icons Appear Wrong in Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#text-too-small-or-too-large" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text Too Small or Too Large
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#theme-flicker-or-flickering-on-startup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme Flicker or Flickering on Startup
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Best Practices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#for-dark-theme-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For Dark Theme Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#for-light-theme-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For Light Theme Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#for-auto-theme-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For Auto Theme Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#keyboard-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard Shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See Also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="theme-customization-guide">Theme Customization Guide<a class="headerlink" href="#theme-customization-guide" title="Permanent link">&para;</a></h1>
+<h2 id="quick-reference">Quick Reference<a class="headerlink" href="#quick-reference" title="Permanent link">&para;</a></h2>
+<p><strong>Feature:</strong> Dark/light theme support with system detection
+<strong>Supported Themes:</strong> Dark, Light, Auto (system-aware)
+<strong>Customization:</strong> Font sizes, color schemes, icon themes
+<strong>Use Case:</strong> Adapt BBDrop to your working environment</p>
+<hr />
+<h2 id="what-is-theme-customization">What is Theme Customization?<a class="headerlink" href="#what-is-theme-customization" title="Permanent link">&para;</a></h2>
+<p>BBDrop includes a professional theming system that allows you to customize the application's appearance. This guide covers how to switch themes, adjust font sizes, and troubleshoot display issues.</p>
+<p>The theming system provides:
+- <strong>Dark Mode</strong> - Eye-friendly dark interface (recommended for evening work)
+- <strong>Light Mode</strong> - Traditional light interface (bright environments)
+- <strong>Auto Mode</strong> - Automatic system detection (Windows 11 &amp; modern Linux)
+- <strong>Font Scaling</strong> - Adjust text size throughout the application</p>
+<hr />
+<h2 id="available-themes">Available Themes<a class="headerlink" href="#available-themes" title="Permanent link">&para;</a></h2>
+<h3 id="dark-theme">Dark Theme<a class="headerlink" href="#dark-theme" title="Permanent link">&para;</a></h3>
+<p>Dark theme features a dark background with light text, designed to reduce eye strain during extended use.</p>
+<p><strong>Color Scheme:</strong>
+- Background: <code>#1e1e1e</code> (dark gray)
+- Text: <code>#e6e6e6</code> (light gray)
+- Buttons: <code>#2d2d2d</code> (darker gray)
+- Selection: <code>#2f5f9f</code> (blue highlight)
+- Icons: Optimized for dark backgrounds</p>
+<p><strong>Best For:</strong>
+- Evening and night work
+- Reduced eye strain
+- Low-light environments
+- Professional workflows</p>
+<hr />
+<h3 id="light-theme">Light Theme<a class="headerlink" href="#light-theme" title="Permanent link">&para;</a></h3>
+<p>Light theme uses a traditional white background with dark text for clear visibility in bright environments.</p>
+<p><strong>Color Scheme:</strong>
+- Background: <code>#ffffff</code> (white)
+- Text: <code>#333333</code> (dark gray)
+- Buttons: <code>#f0f0f0</code> (light gray)
+- Selection: <code>#3399ff</code> (blue highlight)
+- Icons: Optimized for light backgrounds</p>
+<p><strong>Best For:</strong>
+- Daytime use
+- Bright office environments
+- Printing documentation
+- Traditional workflows</p>
+<hr />
+<h3 id="auto-theme-system-detection">Auto Theme (System Detection)<a class="headerlink" href="#auto-theme-system-detection" title="Permanent link">&para;</a></h3>
+<p>Auto mode automatically detects your system theme setting and applies the matching theme.</p>
+<p><strong>Platform Support:</strong>
+- <strong>Windows 11</strong> - Reads Registry setting automatically
+- <strong>Windows 10</strong> - May require manual selection
+- <strong>Linux (modern)</strong> - Detects GNOME, KDE, or Xfce theme preference
+- <strong>macOS</strong> - System appearance detection</p>
+<p><strong>How It Works:</strong>
+1. Application starts and checks system settings
+2. Auto-selects dark or light theme accordingly
+3. Follows system theme changes if OS supports it
+4. Falls back to dark theme if detection fails</p>
+<hr />
+<h2 id="switching-themes">Switching Themes<a class="headerlink" href="#switching-themes" title="Permanent link">&para;</a></h2>
+<h3 id="method-1-view-menu">Method 1: View Menu<a class="headerlink" href="#method-1-view-menu" title="Permanent link">&para;</a></h3>
+<p><strong>Steps:</strong>
+1. Click <strong>View</strong> menu in menu bar
+2. Select <strong>Themes</strong>
+3. Choose from:
+   - <strong>Dark Theme</strong>
+   - <strong>Light Theme</strong>
+   - <strong>Auto (System)</strong></p>
+<p><strong>Menu Location:</strong>
+<div class="highlight"><pre><span></span><code>File  Edit  View  Tools  Help
+              +- Themes
+                  +- Dark Theme
+                  +- Light Theme
+                  +- Auto (System)
+</code></pre></div></p>
+<h3 id="method-2-settings-dialog">Method 2: Settings Dialog<a class="headerlink" href="#method-2-settings-dialog" title="Permanent link">&para;</a></h3>
+<p><strong>Steps:</strong>
+1. Press <strong>Ctrl+,</strong> or go to <strong>File -&gt; Settings</strong>
+2. Click <strong>General</strong> section
+3. Under "Appearance," find <strong>Theme</strong>
+4. Select desired theme from dropdown
+5. Click <strong>Save</strong></p>
+<p><strong>Changes apply immediately</strong> - no restart needed.</p>
+<h3 id="method-3-theme-toggle-button">Method 3: Theme Toggle Button<a class="headerlink" href="#method-3-theme-toggle-button" title="Permanent link">&para;</a></h3>
+<p>The theme toggle button in the toolbar provides quick switching:</p>
+<ol>
+<li>Look for the theme icon (usually sun/moon symbol) in the top toolbar</li>
+<li>Click to switch between dark and light</li>
+<li>Tooltip shows next theme when you hover</li>
+</ol>
+<hr />
+<h2 id="theme-components">Theme Components<a class="headerlink" href="#theme-components" title="Permanent link">&para;</a></h2>
+<p>When you switch themes, the following elements update automatically:</p>
+<h3 id="window-backgrounds">Window &amp; Backgrounds<a class="headerlink" href="#window-backgrounds" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Main window background</li>
+<li>Table backgrounds</li>
+<li>Dialog backgrounds</li>
+<li>Menu backgrounds</li>
+</ul>
+<h3 id="text-labels">Text &amp; Labels<a class="headerlink" href="#text-labels" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Gallery names and text</li>
+<li>Status messages</li>
+<li>Button text</li>
+<li>Log viewer text</li>
+</ul>
+<h3 id="interface-elements">Interface Elements<a class="headerlink" href="#interface-elements" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Progress bars (fill colors)</li>
+<li>Table row highlighting</li>
+<li>Button borders and hover states</li>
+<li>Dialog borders and frames</li>
+</ul>
+<h3 id="icons-graphics">Icons &amp; Graphics<a class="headerlink" href="#icons-graphics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Status icons (queued, uploading, completed, failed)</li>
+<li>File host logos</li>
+<li>Action buttons (start, pause, stop)</li>
+<li>Navigation tabs</li>
+</ul>
+<h3 id="dialogs-menus">Dialogs &amp; Menus<a class="headerlink" href="#dialogs-menus" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Settings dialog styling</li>
+<li>Context menus appearance</li>
+<li>Tooltips background/text</li>
+<li>Input fields borders</li>
+</ul>
+<hr />
+<h2 id="font-size-adjustment">Font Size Adjustment<a class="headerlink" href="#font-size-adjustment" title="Permanent link">&para;</a></h2>
+<p>Font sizes can be adjusted independently from theme selection.</p>
+<h3 id="accessing-font-size-settings">Accessing Font Size Settings<a class="headerlink" href="#accessing-font-size-settings" title="Permanent link">&para;</a></h3>
+<p><strong>Via Settings Dialog:</strong>
+1. Press <strong>Ctrl+,</strong> to open Settings
+2. Click <strong>General</strong> section
+3. Find <strong>Font Size</strong> slider or input
+4. Current options: 8pt to 14pt (default: 9pt)
+5. Click <strong>Save</strong></p>
+<p><strong>Changes Apply To:</strong>
+- Gallery table rows
+- Column headers (slightly smaller)
+- Log viewer text
+- Dialog text
+- Labels throughout interface</p>
+<h3 id="font-size-recommendations">Font Size Recommendations<a class="headerlink" href="#font-size-recommendations" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Size</th>
+<th>Best For</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>8pt</strong></td>
+<td>High-resolution displays</td>
+<td>Very compact, requires good eyesight</td>
+</tr>
+<tr>
+<td><strong>9pt</strong></td>
+<td>Standard displays</td>
+<td>Default, balanced</td>
+</tr>
+<tr>
+<td><strong>10pt</strong></td>
+<td>1080p monitors</td>
+<td>Slightly larger, easier to read</td>
+</tr>
+<tr>
+<td><strong>11pt</strong></td>
+<td>1440p+ displays</td>
+<td>Large text, spacious layout</td>
+</tr>
+<tr>
+<td><strong>12pt</strong></td>
+<td>TV/projector display</td>
+<td>Very large, for distance viewing</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tip:</strong> If table rows appear cramped, increase font size to 10pt or 11pt.</p>
+<hr />
+<h2 id="theme-persistence">Theme Persistence<a class="headerlink" href="#theme-persistence" title="Permanent link">&para;</a></h2>
+<p>Theme settings are <strong>automatically saved</strong> in your configuration:</p>
+<p><strong>Windows:</strong>
+<div class="highlight"><pre><span></span><code>Registry: HKEY_CURRENT_USER\Software\BBDrop\BBDropGUI
+Settings: ui/theme (value: &quot;dark&quot;, &quot;light&quot;, or &quot;auto&quot;)
+</code></pre></div></p>
+<p><strong>Linux:</strong>
+<div class="highlight"><pre><span></span><code>File: ~/.config/BBDrop/BBDropGUI.conf
+Settings: ui/theme=dark
+</code></pre></div></p>
+<p><strong>Persistence Features:</strong>
+- Theme preference saved on switch
+- Font size saved with every change
+- Settings restored when application starts
+- Survives application restart and updates</p>
+<hr />
+<h2 id="platform-notes">Platform Notes<a class="headerlink" href="#platform-notes" title="Permanent link">&para;</a></h2>
+<h3 id="windows-11">Windows 11<a class="headerlink" href="#windows-11" title="Permanent link">&para;</a></h3>
+<p><strong>Auto Theme Support:</strong> Full support
+- Application reads Windows Settings
+- Automatically detects dark/light preference
+- Updates when system theme changes (if supported)
+- No manual action needed</p>
+<p><strong>Dark Theme Look:</strong>
+- Matches Windows 11 dark mode
+- Compatible with system taskbar theme
+- Icons refresh for dark backgrounds</p>
+<p><strong>Light Theme Look:</strong>
+- Matches Windows 11 light mode
+- Clean white interface
+- Consistent with system dialogs</p>
+<h3 id="windows-10">Windows 10<a class="headerlink" href="#windows-10" title="Permanent link">&para;</a></h3>
+<p><strong>Auto Theme Support:</strong> Limited
+- May not auto-detect system theme
+- Recommend manual selection (dark/light)
+- No dynamic system theme following</p>
+<p><strong>Workaround:</strong>
+If auto theme shows incorrect theme, manually select dark or light in View &gt; Themes.</p>
+<h3 id="linux-ubuntu-fedora-etc">Linux (Ubuntu, Fedora, etc.)<a class="headerlink" href="#linux-ubuntu-fedora-etc" title="Permanent link">&para;</a></h3>
+<p><strong>Auto Theme Support:</strong> Partial (depends on desktop)
+- <strong>GNOME</strong>: Full support (auto-detects)
+- <strong>KDE</strong>: Full support (auto-detects)
+- <strong>Xfce</strong>: Partial (may need manual selection)
+- <strong>Other DEs</strong>: May default to dark theme</p>
+<p><strong>Manual Override:</strong>
+If auto-detect doesn't match your system theme, manually select dark or light.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="theme-not-applying">Theme Not Applying<a class="headerlink" href="#theme-not-applying" title="Permanent link">&para;</a></h3>
+<p><strong>Problem:</strong> Theme appears not to change when selected</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><strong>Check theme selection</strong></li>
+<li>View &gt; Themes to confirm selection</li>
+<li>
+<p>Look at menu to see checkmark next to active theme</p>
+</li>
+<li>
+<p><strong>Restart application</strong></p>
+</li>
+<li>Close BBDrop completely</li>
+<li>Wait 2 seconds</li>
+<li>Reopen application</li>
+<li>
+<p>Check if theme persisted</p>
+</li>
+<li>
+<p><strong>Verify settings save</strong></p>
+</li>
+<li>Open Settings (Ctrl+,)</li>
+<li>Change theme</li>
+<li>Click "Save" button</li>
+<li>
+<p>Confirm dialog closes successfully</p>
+</li>
+<li>
+<p><strong>Clear settings cache</strong> (if nothing works)</p>
+</li>
+<li>Close application</li>
+<li>Delete: <code>~/.bbdrop/bbdrop.ini</code> (Linux) or Registry keys (Windows)</li>
+<li>Restart application</li>
+<li>Theme will reset to default (dark)</li>
+</ol>
+<h3 id="theme-looks-different-from-expected">Theme Looks Different from Expected<a class="headerlink" href="#theme-looks-different-from-expected" title="Permanent link">&para;</a></h3>
+<p><strong>Problem:</strong> Theme colors don't match screenshots or descriptions</p>
+<p><strong>Possible Causes:</strong></p>
+<ol>
+<li><strong>System settings override</strong></li>
+<li>Windows: Check Windows Settings &gt; Personalization &gt; Colors</li>
+<li>Linux: Check system theme in Settings</li>
+<li>
+<p>May conflict with BBDrop theme</p>
+</li>
+<li>
+<p><strong>High Contrast mode enabled</strong></p>
+</li>
+<li>Windows: Settings &gt; Ease of Access &gt; High Contrast</li>
+<li>Temporarily disable to test</li>
+<li>
+<p>BBDrop themes designed for standard contrast</p>
+</li>
+<li>
+<p><strong>Display color profile</strong></p>
+</li>
+<li>Monitor calibration affects appearance</li>
+<li>Test on another monitor if available</li>
+<li>Check display settings for "color temperature"</li>
+</ol>
+<h3 id="icons-appear-wrong-in-theme">Icons Appear Wrong in Theme<a class="headerlink" href="#icons-appear-wrong-in-theme" title="Permanent link">&para;</a></h3>
+<p><strong>Problem:</strong> Icons are too dark/light for selected theme</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><strong>Verify theme is actually applied</strong></li>
+<li>View &gt; Themes should show checkmark</li>
+<li>
+<p>Window background should match theme (dark/light)</p>
+</li>
+<li>
+<p><strong>Refresh icon cache</strong></p>
+</li>
+<li>Close application</li>
+<li>Delete: <code>~/.bbdrop/.icon_cache/</code> (if exists)</li>
+<li>Restart application</li>
+<li>
+<p>Icons will regenerate with correct theme</p>
+</li>
+<li>
+<p><strong>Check icon files exist</strong></p>
+</li>
+<li>Icons should be in: <code>assets/hosts/logo/</code> and <code>assets/</code> directory</li>
+<li>If files missing, application falls back to placeholder icons</li>
+<li>Try reinstalling BBDrop to restore icon files</li>
+</ol>
+<h3 id="text-too-small-or-too-large">Text Too Small or Too Large<a class="headerlink" href="#text-too-small-or-too-large" title="Permanent link">&para;</a></h3>
+<p><strong>Problem:</strong> Font size doesn't match what you set</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><strong>Check font size in Settings</strong></li>
+<li>Ctrl+, &gt; General section</li>
+<li>Verify font size slider is at desired position</li>
+<li>
+<p>Confirm "Save" was clicked</p>
+</li>
+<li>
+<p><strong>Verify system DPI settings</strong></p>
+</li>
+<li>Windows: Settings &gt; Display &gt; Scale and Layout</li>
+<li>Standard DPI is 100% - if set higher, text appears larger</li>
+<li>
+<p>BBDrop font size + Windows DPI = final size</p>
+</li>
+<li>
+<p><strong>Reset to defaults</strong></p>
+</li>
+<li>In Settings, look for "Reset to Defaults" button</li>
+<li>Will restore default font size (9pt)</li>
+</ol>
+<h3 id="theme-flicker-or-flickering-on-startup">Theme Flicker or Flickering on Startup<a class="headerlink" href="#theme-flicker-or-flickering-on-startup" title="Permanent link">&para;</a></h3>
+<p><strong>Problem:</strong> Theme flickers or shows wrong theme briefly when starting</p>
+<p><strong>Causes:</strong>
+- Normal on slower systems
+- Application loads default theme, then applies saved preference
+- Takes 1-2 seconds on most systems</p>
+<p><strong>Workaround:</strong>
+- Increase startup speed by closing other applications
+- Clear log viewer to reduce memory usage (Ctrl+L &gt; Clear)
+- Try lighter theme (light theme loads faster than dark on some systems)</p>
+<hr />
+<h2 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h2>
+<h3 id="for-dark-theme-users">For Dark Theme Users<a class="headerlink" href="#for-dark-theme-users" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Enable Auto-Scroll in Log Viewer</strong></li>
+<li>Settings &gt; Logging &gt; Auto-scroll</li>
+<li>
+<p>Prevents needing to scroll manually</p>
+</li>
+<li>
+<p><strong>Use 9-10pt Font Size</strong></p>
+</li>
+<li>Default 9pt is optimal for dark theme</li>
+<li>
+<p>Larger fonts (11pt+) may look odd on dark backgrounds</p>
+</li>
+<li>
+<p><strong>Enable Tray Icon</strong></p>
+</li>
+<li>Settings &gt; General &gt; Show system tray icon</li>
+<li>Allows minimizing to tray in dark theme</li>
+</ol>
+<h3 id="for-light-theme-users">For Light Theme Users<a class="headerlink" href="#for-light-theme-users" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Consider Font Size 10pt</strong></li>
+<li>Light theme with 9pt can feel cramped</li>
+<li>
+<p>10pt provides better spacing</p>
+</li>
+<li>
+<p><strong>Use in Bright Environments</strong></p>
+</li>
+<li>Light theme designed for bright daylight</li>
+<li>
+<p>May cause eye strain in dark rooms</p>
+</li>
+<li>
+<p><strong>Monitor Contrast Settings</strong></p>
+</li>
+<li>Light theme relies on contrast</li>
+<li>Ensure monitor brightness is moderate (not too dim)</li>
+</ol>
+<h3 id="for-auto-theme-users">For Auto Theme Users<a class="headerlink" href="#for-auto-theme-users" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Verify System Detection Works</strong></li>
+<li>Switch your system to dark/light theme</li>
+<li>Check if BBDrop follows (requires app restart)</li>
+<li>
+<p>If not, manually select dark or light</p>
+</li>
+<li>
+<p><strong>Consistent Environment</strong></p>
+</li>
+<li>If you switch system themes frequently, use manual selection</li>
+<li>Auto theme only checks on startup</li>
+</ol>
+<hr />
+<h2 id="keyboard-shortcuts">Keyboard Shortcuts<a class="headerlink" href="#keyboard-shortcuts" title="Permanent link">&para;</a></h2>
+<p><strong>Theme Control (when available):</strong>
+- <strong>Ctrl+Shift+T</strong> - Toggle between dark and light theme (if configured)
+- <strong>Ctrl+,</strong> - Open Settings to adjust theme</p>
+<p>No dedicated keyboard shortcut exists for theme toggle by default. If needed, use the View menu or Settings dialog.</p>
+<hr />
+<h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../gui-guide/">GUI Guide</a> - Complete BBDrop interface walkthrough</li>
+<li><a href="../../reference/keyboard-shortcuts/">Keyboard Shortcuts</a> — All keyboard shortcuts</li>
+<li><a href="../../reference/features/">Features</a> - Full feature documentation</li>
+<li><a href="../../troubleshooting/troubleshooting/">Troubleshooting</a> - Common issues and solutions</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/twwat/bbdrop" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
