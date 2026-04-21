@@ -1,16 +1,26 @@
-"""Named constants for settings tab indices to prevent index mismatch bugs."""
+"""Stable string keys for settings tabs.
+
+Tabs used to be referenced by integer indexes, which silently desynced
+whenever a tab was inserted/reordered (e.g. adding Forums bumped every
+subsequent tab by one but the constants kept pointing at the old slots).
+
+These are string keys — the settings dialog registers each page's key as
+it's added and exposes a key→index map. Callers always pass the key;
+the dialog resolves the current index at call time.
+"""
 
 
 class TabIndex:
-    GENERAL = 0
-    HOSTS = 1
-    TEMPLATES = 2
-    IMAGE_SCAN = 3
-    COVERS = 4
-    HOOKS = 5
-    PROXY = 6
-    LOGS = 7
-    NOTIFICATIONS = 8
-    ARCHIVE = 9
-    VIDEO = 10
-    ADVANCED = 11
+    GENERAL = "general"
+    HOSTS = "hosts"
+    FORUMS = "forums"
+    TEMPLATES = "templates"
+    IMAGE_SCAN = "image_scan"
+    COVERS = "covers"
+    HOOKS = "hooks"
+    PROXY = "proxy"
+    LOGS = "logs"
+    NOTIFICATIONS = "notifications"
+    ARCHIVE = "archive"
+    VIDEO = "video"
+    ADVANCED = "advanced"

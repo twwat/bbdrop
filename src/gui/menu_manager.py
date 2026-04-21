@@ -175,6 +175,7 @@ class MenuManager(QObject):
             for label, tab in (
                 ("General", TabIndex.GENERAL),
                 ("Hosts", TabIndex.HOSTS),
+                ("Forums", TabIndex.FORUMS),
                 ("BBCode templates", TabIndex.TEMPLATES),
                 ("Image Scanner", TabIndex.IMAGE_SCAN),
                 ("Cover Photos", TabIndex.COVERS),

@@ -68,6 +68,10 @@ class ComprehensiveSettingsDialog(QDialog):
         # Track dirty state per tab
         self.tab_dirty_states = {}
         self.current_tab_index = 0
+        # Registered by _add_settings_page — key -> stack index. Lets call
+        # sites refer to tabs by stable string keys even when insertion
+        # order shifts (e.g. adding Forums bumped every subsequent slot).
+        self._tab_index_by_key: dict[str, int] = {}
 
         # Initialize QSettings for storing test results and cache
         self.settings = QSettings("BBDropUploader", "BBDropGUI")
@@ -180,33 +184,49 @@ class ComprehensiveSettingsDialog(QDialog):
         
         layout.addLayout(button_layout)
         
-    def _add_settings_page(self, widget, label, icon=None):
+    def _add_settings_page(self, widget, label, key=None, icon=None):
         """Add a settings page to the sidebar navigation.
 
         Args:
             widget: The page widget to display when selected.
             label: Text label for the sidebar item.
+            key: Optional stable string key (``TabIndex.X``) registered
+                against the resulting stack index.
             icon: Optional QIcon for the sidebar item.
         """
         item = QListWidgetItem(label)
         if icon and not icon.isNull():
             item.setIcon(icon)
         self.nav_list.addItem(item)
-        self.stack_widget.addWidget(widget)
+        idx = self.stack_widget.addWidget(widget)
+        if key is not None:
+            self._tab_index_by_key[key] = idx
+
+    def _index_for(self, key: str) -> int:
+        """Resolve a ``TabIndex`` string key to the current stack index.
+        Returns -1 if the key isn't registered."""
+        return self._tab_index_by_key.get(key, -1)
+
+    def _key_for(self, index: int):
+        """Reverse lookup: stack index -> registered key, or None."""
+        for k, i in self._tab_index_by_key.items():
+            if i == index:
+                return k
+        return None
 
     def setup_general_tab(self):
         """Setup the General settings tab (delegated to GeneralTab widget)."""
         from src.gui.settings.general_tab import GeneralTab
         self.general_tab = GeneralTab(parent_window=self.parent_window, settings=self.settings)
         self.general_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.GENERAL))
-        self._add_settings_page(self.general_tab, "General")
+        self._add_settings_page(self.general_tab, "General", key=TabIndex.GENERAL)
 
     def setup_templates_tab(self):
         """Setup the Templates tab (delegated to TemplatesTab widget)."""
         from src.gui.settings.templates_tab import TemplatesTab
         self.templates_tab = TemplatesTab(parent_window=self.parent_window)
         self.templates_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.TEMPLATES))
-        self._add_settings_page(self.templates_tab, "BBCode templates")
+        self._add_settings_page(self.templates_tab, "BBCode templates", key=TabIndex.TEMPLATES)
         
     def setup_tabs_tab(self):
         """Setup the Tabs management tab (delegated to TabsTab widget)."""
@@ -222,7 +242,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.log_settings_widget = LogSettingsWidget(self)
         self.log_settings_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.LOGS))
         self.log_settings_widget.load_settings()  # Load current settings
-        self._add_settings_page(self.log_settings_widget, "Logging")
+        self._add_settings_page(self.log_settings_widget, "Logging", key=TabIndex.LOGS)
         
     def setup_notifications_tab(self):
         """Setup the Notifications settings tab."""
@@ -236,7 +256,7 @@ class ComprehensiveSettingsDialog(QDialog):
         self.notifications_tab.dirty.connect(
             lambda: self.mark_tab_dirty(TabIndex.NOTIFICATIONS)
         )
-        self._add_settings_page(self.notifications_tab, "Notifications")
+        self._add_settings_page(self.notifications_tab, "Notifications", key=TabIndex.NOTIFICATIONS)
 
     def setup_scanning_tab(self):
         """Setup the Image Scanning tab (delegated to ScanningTab widget)."""
@@ -245,14 +265,14 @@ class ComprehensiveSettingsDialog(QDialog):
         self.scanning_tab.dirty.connect(
             lambda: self.mark_tab_dirty(TabIndex.IMAGE_SCAN)
         )
-        self._add_settings_page(self.scanning_tab, "Image Scanner")
+        self._add_settings_page(self.scanning_tab, "Image Scanner", key=TabIndex.IMAGE_SCAN)
 
     def setup_covers_tab(self):
         """Setup the Cover Photos settings tab (delegated to CoversTab widget)."""
         from src.gui.settings.covers_tab import CoversTab
         self.covers_tab = CoversTab(settings=self.settings)
         self.covers_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.COVERS))
-        self._add_settings_page(self.covers_tab, "Cover Photos")
+        self._add_settings_page(self.covers_tab, "Cover Photos", key=TabIndex.COVERS)
 
         # Sync cover changes between Hosts tab and Covers tab
         if hasattr(self, 'file_hosts_widget'):
@@ -271,7 +291,7 @@ class ComprehensiveSettingsDialog(QDialog):
         from src.gui.settings.hooks_tab import HooksTab
         self.hooks_tab = HooksTab()
         self.hooks_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.HOOKS))
-        self._add_settings_page(self.hooks_tab, "App Hooks")
+        self._add_settings_page(self.hooks_tab, "App Hooks", key=TabIndex.HOOKS)
 
     # ===== File Host Settings (Widget-based) =====
 
@@ -288,7 +308,7 @@ class ComprehensiveSettingsDialog(QDialog):
             error_label.setStyleSheet("color: red; font-weight: bold;")
             layout.addWidget(error_label)
             layout.addStretch()
-            self._add_settings_page(error_widget, "Hosts")
+            self._add_settings_page(error_widget, "Hosts", key=TabIndex.HOSTS)
             return
 
         # Create file hosts widget (no signals - reads from QSettings cache)
@@ -307,7 +327,7 @@ class ComprehensiveSettingsDialog(QDialog):
             )
 
         # Add tab
-        self._add_settings_page(self.file_hosts_widget, "Hosts")
+        self._add_settings_page(self.file_hosts_widget, "Hosts", key=TabIndex.HOSTS)
 
     def setup_forums_tab(self):
         """Setup the Forums page — embeds the same panel as the Forum
@@ -322,7 +342,7 @@ class ComprehensiveSettingsDialog(QDialog):
         from src.gui.settings.forums_tab import ForumsPanel
         self.forums_panel = ForumsPanel(conn, self)
         # Panel saves per-item on its own Save button — no dirty tracking.
-        self._add_settings_page(self.forums_panel, "Forums")
+        self._add_settings_page(self.forums_panel, "Forums", key=TabIndex.FORUMS)
 
     def setup_proxy_tab(self):
         """Setup the Proxy settings tab."""
@@ -330,26 +350,26 @@ class ComprehensiveSettingsDialog(QDialog):
 
         self.proxy_widget = ProxySettingsWidget(self)
         self.proxy_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.PROXY))
-        self._add_settings_page(self.proxy_widget, "Proxies & Tor")
+        self._add_settings_page(self.proxy_widget, "Proxies & Tor", key=TabIndex.PROXY)
 
     def setup_advanced_tab(self):
         """Setup the Advanced settings tab."""
         self.advanced_widget = AdvancedSettingsWidget()
         self.advanced_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ADVANCED))
-        self._add_settings_page(self.advanced_widget, "Advanced")
+        self._add_settings_page(self.advanced_widget, "Advanced", key=TabIndex.ADVANCED)
 
     def setup_archive_tab(self):
         """Setup the Archive settings tab."""
         self.archive_widget = ArchiveSettingsWidget()
         self.archive_widget.settings_changed.connect(lambda: self.mark_tab_dirty(TabIndex.ARCHIVE))
-        self._add_settings_page(self.archive_widget, "Zip Archives")
+        self._add_settings_page(self.archive_widget, "Zip Archives", key=TabIndex.ARCHIVE)
 
     def setup_video_tab(self):
         """Setup the Video settings tab."""
         from src.gui.settings.video_tab import VideoSettingsTab
         self.video_tab = VideoSettingsTab(self)
         self.video_tab.dirty.connect(lambda: self.mark_tab_dirty(TabIndex.VIDEO))
-        self._add_settings_page(self.video_tab, "Contact Sheets")
+        self._add_settings_page(self.video_tab, "Contact Sheets", key=TabIndex.VIDEO)
 
     def setup_icons_tab(self):
         """Setup the Icons management tab (delegated to IconsTab widget)."""
@@ -576,27 +596,47 @@ class ComprehensiveSettingsDialog(QDialog):
         self.stack_widget.setCurrentIndex(new_index)
         self._update_apply_button()
     
-    def has_unsaved_changes(self, tab_index=None):
-        """Check if the specified tab (or current tab) has unsaved changes"""
-        if tab_index is None:
-            tab_index = self.stack_widget.currentIndex()
+    def _resolve_tab(self, tab):
+        """Accept a stack index (int), a TabIndex key (str), or None
+        (= current). Returns a valid stack index, or -1 for unknown keys."""
+        if tab is None:
+            return self.stack_widget.currentIndex()
+        if isinstance(tab, str):
+            return self._tab_index_by_key.get(tab, -1)
+        return tab
 
-        return self.tab_dirty_states.get(tab_index, False)
+    def has_unsaved_changes(self, tab_index=None):
+        """Check if the specified tab (or current tab) has unsaved changes.
+
+        ``tab_index`` may be a stack index or a ``TabIndex`` string key.
+        """
+        idx = self._resolve_tab(tab_index)
+        if idx < 0:
+            return False
+        return self.tab_dirty_states.get(idx, False)
 
     def mark_tab_dirty(self, tab_index=None):
-        """Mark a tab as having unsaved changes"""
-        if tab_index is None:
-            tab_index = self.stack_widget.currentIndex()
+        """Mark a tab as having unsaved changes.
 
-        self.tab_dirty_states[tab_index] = True
+        ``tab_index`` may be a stack index or a ``TabIndex`` string key.
+        Unknown keys are silently ignored — this prevents mis-targeted
+        dirty flags when a signal fires for a tab that wasn't registered.
+        """
+        idx = self._resolve_tab(tab_index)
+        if idx < 0:
+            return
+        self.tab_dirty_states[idx] = True
         self._update_apply_button()
 
     def mark_tab_clean(self, tab_index=None):
-        """Mark a tab as having no unsaved changes"""
-        if tab_index is None:
-            tab_index = self.stack_widget.currentIndex()
+        """Mark a tab as having no unsaved changes.
 
-        self.tab_dirty_states[tab_index] = False
+        ``tab_index`` may be a stack index or a ``TabIndex`` string key.
+        """
+        idx = self._resolve_tab(tab_index)
+        if idx < 0:
+            return
+        self.tab_dirty_states[idx] = False
         self._update_apply_button()
     
     def _update_apply_button(self):
@@ -617,36 +657,33 @@ class ComprehensiveSettingsDialog(QDialog):
         current_index = self.stack_widget.currentIndex()
 
         try:
-            # NOTE: Tabs and Icons tabs are created but not added to tab widget
-            # Actual tab order: General(0), Hosts(1), Templates(2),
-            #                   Image Scan(3), Covers(4), Hooks(5), Proxy(6), Logs(7),
-            #                   Notifications(8), Archive(9), Video(10), Advanced(11)
-            if current_index == TabIndex.GENERAL:
+            key = self._key_for(current_index)
+            if key == TabIndex.GENERAL:
                 return self.general_tab.save_settings()
-            elif current_index == TabIndex.HOSTS:
+            elif key == TabIndex.HOSTS:
                 if hasattr(self, 'file_hosts_widget') and self.file_hosts_widget:
                     self.file_hosts_widget.save_to_config()
                 return True
-            elif current_index == TabIndex.TEMPLATES:
+            elif key == TabIndex.TEMPLATES:
                 return self.templates_tab.save_settings()
-            elif current_index == TabIndex.LOGS:
+            elif key == TabIndex.LOGS:
                 return self.log_settings_widget.save_to_config()
-            elif current_index == TabIndex.IMAGE_SCAN:
+            elif key == TabIndex.IMAGE_SCAN:
                 return self.scanning_tab.save_settings()
-            elif current_index == TabIndex.COVERS:
+            elif key == TabIndex.COVERS:
                 return self.covers_tab.save_settings()
-            elif current_index == TabIndex.HOOKS:
+            elif key == TabIndex.HOOKS:
                 return self.hooks_tab.save_settings()
-            elif current_index == TabIndex.NOTIFICATIONS:
+            elif key == TabIndex.NOTIFICATIONS:
                 return self.notifications_tab.save_settings()
-            elif current_index == TabIndex.PROXY:
+            elif key == TabIndex.PROXY:
                 # ProxySettingsWidget handles its own persistence via ProxyStorage
                 return True
-            elif current_index == TabIndex.ADVANCED:
+            elif key == TabIndex.ADVANCED:
                 return self.advanced_widget.save_to_config(parent_window=self.parent_window)
-            elif current_index == TabIndex.ARCHIVE:
+            elif key == TabIndex.ARCHIVE:
                 return self.archive_widget.save_to_config()
-            elif current_index == TabIndex.VIDEO:
+            elif key == TabIndex.VIDEO:
                 return self.video_tab.save_settings(self.settings)
             else:
                 return True
@@ -804,19 +841,19 @@ class ComprehensiveSettingsDialog(QDialog):
     
     def _reload_current_tab(self):
         """Reload current tab's form values from saved settings (discard changes)"""
-        current_index = self.stack_widget.currentIndex()
-        
-        if current_index == TabIndex.GENERAL:
+        key = self._key_for(self.stack_widget.currentIndex())
+
+        if key == TabIndex.GENERAL:
             self.general_tab.reload_settings()
-        elif current_index == TabIndex.IMAGE_SCAN:
+        elif key == TabIndex.IMAGE_SCAN:
             self.scanning_tab.reload_settings()
-        elif current_index == TabIndex.COVERS:
+        elif key == TabIndex.COVERS:
             self.covers_tab.reload_settings()
-        elif current_index == TabIndex.HOOKS:
+        elif key == TabIndex.HOOKS:
             self.hooks_tab.reload_settings()
-        elif current_index == TabIndex.TEMPLATES:
+        elif key == TabIndex.TEMPLATES:
             self.templates_tab.reload_settings()
-        elif current_index == TabIndex.NOTIFICATIONS:
+        elif key == TabIndex.NOTIFICATIONS:
             self.notifications_tab.reload_settings()
         # Other tabs don't have form controls that need reloading
 

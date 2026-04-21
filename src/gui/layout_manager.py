@@ -382,7 +382,11 @@ class LayoutManager(QObject):
         mw.comprehensive_settings_btn = QPushButton(" Settings") # ⚙️
         if not mw.comprehensive_settings_btn.text().startswith(" "):
             mw.comprehensive_settings_btn.setText(" " + mw.comprehensive_settings_btn.text())
-        mw.comprehensive_settings_btn.clicked.connect(mw.open_comprehensive_settings)
+        # Lambda drops the QPushButton.clicked `checked` bool so the handler
+        # sees a true no-arg call (= restore the last-visited tab).
+        mw.comprehensive_settings_btn.clicked.connect(
+            lambda: mw.open_comprehensive_settings()
+        )
         mw.comprehensive_settings_btn.setMinimumHeight(30)
         mw.comprehensive_settings_btn.setMaximumHeight(34)
         mw.comprehensive_settings_btn.setProperty("class", "comprehensive-settings")

@@ -1735,13 +1735,39 @@ class BBDropGUI(QMainWindow):
         from src.gui.settings import TabIndex
         self.open_comprehensive_settings(tab_index=TabIndex.HOSTS)
 
-    def open_comprehensive_settings(self, tab_index=0):
-        """Open comprehensive settings dialog to specific tab"""
+    def open_comprehensive_settings(self, tab_index=None):
+        """Open comprehensive settings dialog.
+
+        ``tab_index`` may be a stack index, a ``TabIndex`` string key, or
+        ``None``. When ``None``, restores the tab the user was on the last
+        time they closed the dialog this session (default: General).
+        """
         # Pass file_host_manager to settings dialog
         file_host_manager = getattr(self, 'file_host_manager', None)
         dialog = ComprehensiveSettingsDialog(self, file_host_manager=file_host_manager)
+        # A QPushButton.clicked connection passes `checked` (bool) as the
+        # arg — treat that as "no explicit tab" and fall through to the
+        # remembered one.
+        if tab_index is None or isinstance(tab_index, bool):
+            tab_index = getattr(self, '_last_settings_tab_key', None)
+        if isinstance(tab_index, str):
+            tab_index = dialog._tab_index_by_key.get(tab_index, 0)
+        if not isinstance(tab_index, int) or isinstance(tab_index, bool) or tab_index < 0:
+            tab_index = 0
         if 0 <= tab_index < dialog.stack_widget.count():
             dialog.nav_list.setCurrentRow(tab_index)
+
+        # Remember whichever tab the user ends on, so the next open lands
+        # there automatically. Session-only (attribute lives on this
+        # instance, not QSettings).
+        def _remember_last_tab(_result, dlg=dialog):
+            try:
+                key = dlg._key_for(dlg.stack_widget.currentIndex())
+                if key is not None:
+                    self._last_settings_tab_key = key
+            except Exception:
+                pass
+        dialog.finished.connect(_remember_last_tab)
 
         # Use non-blocking show() to prevent GUI freezing
         dialog.show()
