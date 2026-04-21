@@ -198,10 +198,13 @@ class GalleryContextMenuHelper(QObject):
             )
     
     def _add_forum_posting_items(self, menu, selected_paths):
-        """Add 'Post to forum…' and 'Posting override…' items.
+        """Add 'Post to forum…', 'Posting override…', and (when applicable)
+        'Update post' items.
 
-        Both items resolve gallery paths to DB ids via the queue manager and
-        delegate to main_window dispatchers; nothing forum-specific lives here.
+        'Update post' only appears when a single-row selection has a stale
+        forum_post. Resolves gallery paths to DB ids via the queue manager
+        and delegates to main_window dispatchers; nothing forum-specific
+        lives here.
         """
         if not self.main_window or not selected_paths:
             return
@@ -229,6 +232,30 @@ class GalleryContextMenuHelper(QObject):
                 lambda checked, gid=single_id:
                 self.main_window.open_gallery_posting_override(gid),
             )
+            stale_post_id = self._stale_forum_post_id_for_gallery(single_id)
+            if stale_post_id is not None:
+                update_action = menu.addAction("Update post")
+                update_action.triggered.connect(
+                    lambda checked, pid=stale_post_id:
+                    self.main_window.update_forum_post_from_ui(pid),
+                )
+
+    def _stale_forum_post_id_for_gallery(self, gallery_id: int):
+        """Return the most recent 'stale' forum_post id for this gallery,
+        or None if there isn't one. Defensive — returns None on any error."""
+        conn = getattr(self.main_window, '_forum_db_conn', None)
+        if conn is None:
+            return None
+        try:
+            row = conn.execute(
+                "SELECT id FROM forum_posts "
+                "WHERE gallery_fk=? AND status='stale' "
+                "ORDER BY updated_ts DESC, id DESC LIMIT 1",
+                (gallery_id,),
+            ).fetchone()
+            return int(row[0]) if row else None
+        except Exception:
+            return None
 
     def _add_move_to_submenu(self, menu, selected_paths):
         """Add Move to... submenu"""
