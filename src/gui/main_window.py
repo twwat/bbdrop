@@ -2750,6 +2750,27 @@ class BBDropGUI(QMainWindow):
             gallery_ids=gallery_ids, parent=self,
         ).exec()
 
+    def open_stale_posts(self):
+        from src.gui.dialogs.stale_posts_dialog import StalePostsDialog
+        StalePostsDialog(
+            conn=self._forum_db_conn, controller=self._forum_controller,
+            parent=self,
+        ).exec()
+
+    def update_forum_post_from_ui(self, forum_post_id: int):
+        """Thin dispatcher used by gallery table right-click 'Update post'.
+
+        Runs on the GUI thread — update_post enqueues the edit; completion
+        fans out via existing forum_post_changed wiring."""
+        try:
+            result = self._forum_controller.update_post(forum_post_id)
+        except ValueError as e:
+            self.statusBar().showMessage(f"Update failed: {e}", 5000)
+            return
+        action = result.get("action") or ""
+        reason = result.get("reason") or ""
+        self.statusBar().showMessage(f"{action}: {reason}", 5000)
+
     def open_gallery_posting_override(self, gallery_id: int):
         from src.gui.dialogs.gallery_posting_override_dialog import (
             GalleryPostingOverrideDialog,

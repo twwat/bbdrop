@@ -215,6 +215,9 @@ class MenuManager(QObject):
             action_forum_mgr = tools_menu.addAction("Forum Manager…")
             action_forum_mgr.triggered.connect(mw.open_forum_manager)
 
+            action_stale_posts = tools_menu.addAction("Stale Posts…")
+            action_stale_posts.triggered.connect(mw.open_stale_posts)
+
             # Authentication submenu
             auth_menu = tools_menu.addMenu("Authentication")
             action_retry_login = auth_menu.addAction("Reattempt Login")
