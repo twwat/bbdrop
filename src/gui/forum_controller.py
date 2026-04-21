@@ -24,8 +24,9 @@ from PyQt6.QtCore import Qt, QObject, pyqtSignal
 from src.network.forum.factory import create_forum_client
 from src.network.forum.link_extractor import extract_link_map
 from src.network.forum.session_store import SessionStore
+from src.network.forum.update_planner import UpdateAction, plan_update
 from src.processing.forum_posting_worker import (
-    FetchJob, ForumPostingWorker, PostJob,
+    EditJob, FetchJob, ForumPostingWorker, PostJob,
 )
 from src.storage import forum_posting as fp
 from src.utils.forum_signals import bbcode_regenerated_signal_hub
@@ -172,6 +173,161 @@ class ForumController(QObject):
             post_id=ref.post_id,
         ))
         return post_row_id
+
+    def update_post(
+        self, forum_post_id: int,
+        override_mode: Optional[str] = None,
+    ) -> dict:
+        """Plan and (if applicable) enqueue an update for a single forum_post.
+
+        Returns a dict ``{"action": <str>, "reason": <str>, "enqueued": bool}``.
+        Does not block — when enqueued, results arrive via worker signals.
+        Raises ValueError if the post/config is missing or in a bad state.
+        """
+        post = fp.get_forum_post(self._conn, forum_post_id)
+        if not post:
+            raise ValueError(f"forum_post {forum_post_id} not found")
+        if post["status"] not in ("stale", "posted", "failed"):
+            raise ValueError(
+                f"Cannot update post in status {post['status']}"
+            )
+        cfg = fp.get_effective_posting_config(self._conn, post["gallery_fk"])
+        if not cfg:
+            raise ValueError("No effective posting config for gallery")
+
+        update_mode = (
+            override_mode
+            or post.get("update_mode_at_post")
+            or cfg["update_mode"]
+        )
+        manual_edit_handling = cfg["manual_edit_handling"]
+
+        new_body, _new_title = self._template_renderer(
+            post["gallery_fk"],
+            cfg["body_template_name"],
+            cfg.get("title_template_name"),
+        )
+        new_link_map = extract_link_map(new_body)
+
+        client = (
+            getattr(self, "_client_for_test", None)
+            or self._make_client(post["forum_fk"])
+        )
+        live = client.get_post(post["posted_post_id"])
+        if not live.success:
+            reason = f"fetch failed: {live.error_message}"
+            fp.update_forum_post(
+                self._conn, forum_post_id,
+                status="stale",
+                last_attempt_ts=int(time.time()),
+                last_error=reason,
+            )
+            self.forum_post_changed.emit(forum_post_id)
+            return {
+                "action": UpdateAction.SKIP_AND_ALERT.value,
+                "reason": reason,
+                "enqueued": False,
+            }
+
+        live_body_hash = hashlib.sha256(
+            live.body.encode("utf-8")
+        ).hexdigest()
+
+        old_link_map = {}
+        if post.get("link_map_json"):
+            try:
+                old_link_map = json.loads(post["link_map_json"]) or {}
+            except (TypeError, ValueError):
+                old_link_map = {}
+
+        plan = plan_update(
+            update_mode=update_mode,
+            manual_edit_handling=manual_edit_handling,
+            stored_body_hash=post.get("body_hash") or "",
+            live_body=live.body,
+            live_body_hash=live_body_hash,
+            old_link_map=old_link_map,
+            new_body=new_body,
+            new_link_map=new_link_map,
+        )
+
+        if plan.action == UpdateAction.NOOP:
+            fp.update_forum_post(
+                self._conn, forum_post_id,
+                status="posted",
+                last_attempt_ts=int(time.time()),
+                last_error=None,
+            )
+            self.forum_post_changed.emit(forum_post_id)
+            return {
+                "action": UpdateAction.NOOP.value,
+                "reason": plan.reason,
+                "enqueued": False,
+            }
+
+        if plan.action == UpdateAction.SKIP_AND_ALERT:
+            fp.update_forum_post(
+                self._conn, forum_post_id,
+                status="stale",
+                last_attempt_ts=int(time.time()),
+                last_error=f"skipped: {plan.reason}",
+            )
+            self.forum_post_changed.emit(forum_post_id)
+            return {
+                "action": UpdateAction.SKIP_AND_ALERT.value,
+                "reason": plan.reason,
+                "enqueued": False,
+            }
+
+        # WHOLE_BODY or SURGICAL — pre-update DB state so edit_completed
+        # signal doesn't need to rebuild hash/link_map.
+        new_body_hash = hashlib.sha256(
+            plan.body_to_post.encode("utf-8")
+        ).hexdigest()
+        fp.update_forum_post(
+            self._conn, forum_post_id,
+            status="updating",
+            body_hash=new_body_hash,
+            link_map_json=json.dumps(extract_link_map(plan.body_to_post)),
+            update_mode_at_post=update_mode,
+        )
+        self.forum_post_changed.emit(forum_post_id)
+        self._worker.enqueue(EditJob(
+            forum_post_id=forum_post_id,
+            forum_id=post["forum_fk"],
+            post_id=post["posted_post_id"],
+            new_body=plan.body_to_post,
+            mode=plan.action.value,
+        ))
+        return {
+            "action": plan.action.value,
+            "reason": plan.reason,
+            "enqueued": True,
+        }
+
+    def update_posts(
+        self, forum_post_ids: list[int],
+        override_mode: Optional[str] = None,
+    ) -> list[dict]:
+        """Batch entry point used by the Stale Posts dialog.
+
+        Continues past per-post errors — each result dict reports its own
+        outcome. A failure captures ``action="skip_and_alert"`` and the
+        exception message as ``reason``.
+        """
+        results: list[dict] = []
+        for pid in forum_post_ids:
+            try:
+                results.append(
+                    self.update_post(pid, override_mode=override_mode)
+                )
+            except Exception as e:
+                results.append({
+                    "action": UpdateAction.SKIP_AND_ALERT.value,
+                    "reason": str(e),
+                    "enqueued": False,
+                })
+        return results
 
     def preview_render(self, gallery_id: int) -> tuple[str, str]:
         """Render (body, title) for the composer without enqueueing.
