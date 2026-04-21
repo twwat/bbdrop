@@ -18,7 +18,7 @@ BBDrop checks for updates on startup (configurable in Settings > General). When 
 
 **What image formats are supported?**
 
-JPG, JPEG, PNG, and GIF.
+JPG/JPEG, PNG, and GIF.
 
 **How many images can I upload per gallery?**
 
@@ -34,13 +34,13 @@ Failed uploads are marked with an error status. Right-click and select **Retry U
 
 **Can I upload to multiple image hosts at once?**
 
-Each gallery uploads to one image host at a time. However, you can have galleries assigned to different hosts in the queue and they'll upload to their respective hosts.
+Each gallery uploads to one primary image host + optional separate cover host at a time. However, you can have galleries assigned to different hosts in the queue and they'll upload to their respective hosts simultaneously. 
 
 ## Templates
 
 **Can I change the template after uploading?**
 
-Yes. Change the template via the dropdown in the gallery table or right-click > Set template to. If auto-regeneration is enabled, the BBCode updates immediately. Otherwise, right-click and select **Regenerate BBCode**.
+Yes! Change the template via the dropdown in the gallery table or right-click > Set template to. If auto-regeneration is enabled, the BBCode updates immediately. Otherwise, right-click on one or more galleries and select **Regenerate BBCode**.
 
 **Where are my custom templates stored?**
 
@@ -59,8 +59,9 @@ Yes. When file hosts are enabled, BBDrop automatically creates a ZIP or 7Z archi
 ## Credentials
 
 **How are my credentials stored?**
+Credentials are encrypted using Fernet, which combines AES-128-CBC encryption (the same standard used by banks) with HMAC-SHA256 to detect any tampering. The encryption key is generated using a cryptographically secure random number generator (CSPRNG).
 
-Credentials are encrypted using Fernet (AES-128-CBC + HMAC-SHA256) and stored in your operating system's keyring — Windows Credential Manager, macOS Keychain, or Linux Secret Service. They are never stored in plain text.
+The encrypted credentials are stored in your operating system's secure keyring (_Windows Credential Manager_, _macOS Keychain_, _Linux Secret Service_) which encrypts them again (dual-layer encryption) and is tied to your user account, protected by your OS login. Credentials won't transfer to other computers and can't be read by other users on the same machine.
 
 **I can't log in to a host. What should I do?**
 
