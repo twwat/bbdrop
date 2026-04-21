@@ -4,6 +4,24 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.9] - 2026-04-21 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.8...v0.9.9))
+
+### Added
+- **Forum posting system**: Post gallery BBCode to vBulletin forums with per-forum authentication, templating, and cooldown enforcement
+  - Forum Manager to add/edit forums, manage targets (subforums/threads) by pasting URLs
+  - Per-gallery posting config with template selection and optional title override
+  - Per-gallery posting override to post to different forums/targets on demand
+  - Manual post composer for custom body/title edits before posting
+  - Automatic post updates when BBCode regenerates (stale-post detection with configurable modes)
+  - Stale Posts dialog for batch reviewing and updating posts whose BBCode has changed
+  - Right-click context menu: "Post to forum…", "Posting override…", and "Update post" (when applicable)
+- **Forums settings tab**: Dedicated settings page with favicon caching, fit-to-content lists, bulk URL paste for targets
+- **Settings tab stability**: String keys for settings tabs prevent misalignment when tabs are reordered or inserted
+- **BBCode regeneration hooks**: Manual BBCode saves, template edits, and link format changes now automatically stale-flag affected forum posts
+
+### Fixed
+- **BBCode link format editor**: No longer reopens after closing
+
 ## [0.9.8] - 2026-04-19 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.7...v0.9.8))
 
 ### Added

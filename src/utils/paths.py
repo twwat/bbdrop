@@ -12,7 +12,7 @@ import configparser
 
 from src.utils.logger import log
 
-__version__ = "0.9.8"  # Application version number
+__version__ = "0.9.9"  # Application version number
 
 # Lazy User-Agent string builder to avoid platform.system() hang during module import
 # (platform.system() can hang on some Windows systems, breaking splash screen initialization)
