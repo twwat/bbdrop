@@ -160,21 +160,40 @@ class BBCodeViewerDialog(QDialog):
         """Save content to both central and folder locations"""
         content = self.text_edit.toPlainText()
         file_paths = self.get_file_paths()
-        
+
         try:
             # Save to central location
             with open(file_paths['central_bbcode'], 'w', encoding='utf-8') as f:
                 f.write(content)
-            
+
             # Save to folder location if it exists
             if file_paths['folder_bbcode']:
                 with open(file_paths['folder_bbcode'], 'w', encoding='utf-8') as f:
                     f.write(content)
-            
+
+            # Notify forum-posting hub so tracked forum_posts can stale-flag.
+            db_id = self._find_gallery_db_id()
+            if db_id:
+                try:
+                    from src.utils.forum_signals import emit_manual_rerender
+                    emit_manual_rerender(int(db_id))
+                except Exception:
+                    pass
+
             self.accept()
-            
+
         except Exception as e:
             QMessageBox.warning(self, "Save Error", f"Error saving files: {str(e)}")
+
+    def _find_gallery_db_id(self):
+        """Walk parents to find queue_manager, then return this folder's db_id."""
+        widget = self.parent()
+        while widget:
+            if hasattr(widget, 'queue_manager'):
+                item = widget.queue_manager.get_item(self.folder_path)
+                return getattr(item, 'db_id', None) if item else None
+            widget = widget.parent()
+        return None
     def _center_on_parent(self):
         """Center dialog on parent window or screen"""
         if self.parent():

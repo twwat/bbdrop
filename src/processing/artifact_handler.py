@@ -406,6 +406,16 @@ class ArtifactHandler(QObject):
             custom_fields=custom_fields
         )
 
+        # Notify forum-posting hub so any tracked forum_post can be stale-flagged
+        db_id = getattr(item, 'db_id', None)
+        if db_id:
+            try:
+                from src.utils.forum_signals import emit_manual_rerender
+                emit_manual_rerender(int(db_id))
+            except Exception as e:
+                log(f"forum: manual_rerender emit failed: {e}",
+                    level="warning", category="forum")
+
     def should_auto_regenerate_bbcode(self, path: str) -> bool:
         """Check if BBCode should be auto-regenerated for a gallery.
 

@@ -976,6 +976,16 @@ class TemplateManagerDialog(QDialog):
             QMessageBox.warning(self, "Save Errors", "\n".join(errors))
             return False
 
+        # Stale-mark forum posts for galleries using any of the touched
+        # templates. Coarse broadcast — forum_controller only acts when the
+        # tab config lists 'template_edit' in stale_triggers.
+        try:
+            from src.utils.forum_signals import emit_template_edit
+            for tname in names_to_write:
+                emit_template_edit(tname)
+        except Exception:
+            pass
+
         # Clear pending state
         self.pending_changes.clear()
         self.pending_post_titles.clear()

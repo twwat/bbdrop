@@ -2174,8 +2174,13 @@ class FileHostConfigDialog(QDialog):
             save_file_host_setting(self.host_id, "upload_timeout", upload_timeout_value if upload_timeout_value > 0 else None)
 
             # Save BBCode format (empty string if not set)
+            from src.core.file_host_config import get_file_host_setting
+            old_bbcode_format = get_file_host_setting(self.host_id, "bbcode_format", "str") or ""
             bbcode_format_value = self.bbcode_format_edit.toPlainText().strip()
             save_file_host_setting(self.host_id, "bbcode_format", bbcode_format_value if bbcode_format_value else "")
+            if bbcode_format_value != old_bbcode_format:
+                from src.utils.forum_signals import emit_link_format_changed
+                emit_link_format_changed()
 
         except IOError as e:
             errors.append(f"Host settings file I/O failed: {str(e)}")
