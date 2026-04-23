@@ -2,6 +2,7 @@
 
 import os
 import json
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -1011,13 +1012,78 @@ FLAG_CODES = {
     "zmb": "zm",
     "zw": "zw",
     "zwe": "zw",
+    # Additional common English country names (complement existing entries)
+    "china": "cn",
+    "russia": "ru",
+    # No-space variants for multi-word country names (since normalize_country_input removes spaces)
+    "alandislands": "ax",
+    "americansamoa": "as",
+    "antiguaandbarbuda": "ag",
+    "bosniaandherzegovina": "ba",
+    "bouvetisland": "bv",
+    "britishindianocceanterritory": "io",
+    "cabo verde": "cv",
+    "caymanislands": "ky",
+    "centralafricanrepublic": "cf",
+    "christmasisland": "cx",
+    "cocoskeeilingislands": "cc",
+    "cookislands": "ck",
+    "costarica": "cr",
+    "cote d'ivoire": "ci",
+    "dominicana": "dm",
+    "domincanrepublic": "do",
+    "elsalvador": "sv",
+    "equatorialguinea": "gq",
+    "falklandislandsmalvinas": "fk",
+    "faroeislands": "fo",
+    "frenchguiana": "gf",
+    "frenchpolynesia": "pf",
+    "frenchsouthernterritories": "tf",
+    "heardislandandmcdonaldislands": "hm",
+    "holyseevaticanstateholyseevaticanstate": "va",
+    "hongkong": "hk",
+    "Iceland": "is",
+    "lao peoples democratic republic": "la",
+    "marshall islands": "mh",
+    "micronesia federated states of": "fm",
+    "newcaledonia": "nc",
+    "newzealand": "nz",
+    "northkorea": "kp",
+    "northmacedonia": "mk",
+    "northernmaianaislands": "mp",
+    "norfolkisland": "nf",
+    "puertorico": "pr",
+    "saintbarthelemy": "bl",
+    "sainthelenaasensioncandtristan da cunha": "sh",
+    "saintkittsandnevis": "kn",
+    "saintlucia": "lc",
+    "saintmartinfrenfrench part": "mf",
+    "saintpierreandmiquelon": "pm",
+    "saintvincent and the grenadines": "vc",
+    "sanmarino": "sm",
+    "saotomeandprincipe": "st",
+    "southafrika": "za",
+    "southgeorgiaandthesouthsandwichislands": "gs",
+    "southkorea": "kr",
+    "southsudan": "ss",
+    "saintbarthelemy": "bl",
+    "svalbardandjanmayen": "sj",
+    "trinidadandtobago": "tt",
+    "turksandcaicosislands": "tc",
+    "unitedarabemirates": "ae",
+    "unitedkingdomofgreatbritainandnorthernireland": "gb",
+    "unitedstatesminoroutlyingislands": "um",
+    "unitedstatesofamerica": "us",
+    "virginislandsbritish": "vg",
+    "virginislands us": "vi",
+    "wallisandfutuna": "wf",
+    "westernsahara": "eh",
 }
 
 
 def normalize_country_input(text: str) -> str:
     """Normalize country code input for matching: strip diacritics, punctuation, whitespace."""
     import unicodedata
-    import re
 
     if not text:
         return ""
@@ -1035,6 +1101,34 @@ def normalize_country_input(text: str) -> str:
     text = text.lower()
 
     return text
+
+
+def process_flag_tags(content: str) -> str:
+    """Process [flag]...[/flag] BBCode tags, replacing them with flag image URLs.
+
+    Supports case-insensitive matching of:
+    - Alpha-2 codes (e.g., "US", "ca")
+    - Alpha-3 codes (e.g., "USA", "can")
+    - Numeric codes (padded to 3 digits, e.g., "8" -> "008", "44" -> "044")
+    - English country names (e.g., "Canada", "CHINA")
+
+    Replaces matched tags with [IMG]https://flagcdn.com/43x36/{alpha2}.png[/IMG]
+    Returns empty string for unmatched tags.
+    """
+    def replace_flag(match):
+        inner = match.group(1).strip()
+        if not inner:
+            return ""
+        if inner.isdigit():
+            inner = inner.zfill(3)
+        normalized = normalize_country_input(inner)
+        if normalized in FLAG_CODES:
+            alpha2 = FLAG_CODES[normalized]
+            return f"[IMG]https://flagcdn.com/43x36/{alpha2}.png[/IMG]"
+        return ""
+
+    pattern = r'\[flag\](.*?)\[/flag\]'
+    return re.sub(pattern, replace_flag, content, flags=re.IGNORECASE | re.DOTALL)
 
 
 def get_template_path():

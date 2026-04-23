@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.utils.templates import apply_template, process_conditionals, _camel_to_snake
+from src.utils.templates import apply_template, process_conditionals, _camel_to_snake, process_flag_tags
 
 
 class TestCamelToSnake:
@@ -158,3 +158,77 @@ class TestVideoPlaceholders:
         assert '[img]thumb.jpg[/img]' in result
         assert 'Codec: H.264' in result
         assert '[img]sheet.jpg[/img]' in result
+
+
+class TestProcessFlagTags:
+
+    def test_alpha2_uppercase(self):
+        result = process_flag_tags("[flag]US[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/us.png[/IMG]"
+
+    def test_alpha2_lowercase(self):
+        result = process_flag_tags("[flag]us[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/us.png[/IMG]"
+
+    def test_alpha3_uppercase(self):
+        result = process_flag_tags("[FLAG]USA[/FLAG]")
+        assert result == "[IMG]https://flagcdn.com/43x36/us.png[/IMG]"
+
+    def test_alpha3_lowercase(self):
+        result = process_flag_tags("[flag]can[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/ca.png[/IMG]"
+
+    def test_numeric_code(self):
+        result = process_flag_tags("[flag]666[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/pm.png[/IMG]"
+
+    def test_numeric_code_padding_1_digit(self):
+        result = process_flag_tags("[flag]8[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/al.png[/IMG]"
+
+    def test_numeric_code_padding_2_digits(self):
+        result = process_flag_tags("[flag]44[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/bs.png[/IMG]"
+
+    def test_english_name_exact(self):
+        result = process_flag_tags("[FLAG]canada[/FLAG]")
+        assert result == "[IMG]https://flagcdn.com/43x36/ca.png[/IMG]"
+
+    def test_english_name_mixed_case(self):
+        result = process_flag_tags("[flag]CHINA[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/cn.png[/IMG]"
+
+    def test_whitespace_trimmed(self):
+        result = process_flag_tags("[FLAG] HU [/FLAG]")
+        assert result == "[IMG]https://flagcdn.com/43x36/hu.png[/IMG]"
+
+    def test_no_match_empty(self):
+        result = process_flag_tags("[flag][/flag]")
+        assert result == ""
+
+    def test_no_match_invalid_name(self):
+        result = process_flag_tags("[FLAG]hello[/FLAG]")
+        assert result == ""
+
+    def test_no_match_invalid_code(self):
+        result = process_flag_tags("[flag]ZZ[/flag]")
+        assert result == ""
+
+    def test_no_match_partial_name(self):
+        result = process_flag_tags("[FLAG]America[/FLAG]")
+        assert result == ""
+
+    def test_multiple_tags(self):
+        result = process_flag_tags("[flag]us[/flag] and [flag]ca[/flag]")
+        assert "[IMG]https://flagcdn.com/43x36/us.png[/IMG]" in result
+        assert "[IMG]https://flagcdn.com/43x36/ca.png[/IMG]" in result
+
+    def test_case_insensitive_tags(self):
+        r1 = process_flag_tags("[flag]us[/flag]")
+        r2 = process_flag_tags("[FLAG]us[/FLAG]")
+        r3 = process_flag_tags("[FlaG]us[/FlAg]")
+        assert r1 == r2 == r3
+
+    def test_diacritics_stripped(self):
+        result = process_flag_tags("[flag]Aland Islands[/flag]")
+        assert result == "[IMG]https://flagcdn.com/43x36/ax.png[/IMG]"
