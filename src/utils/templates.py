@@ -1095,9 +1095,9 @@ def normalize_country_input(text: str) -> str:
     text = unicodedata.normalize('NFD', text)
     text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
 
-    # Remove punctuation, collapse whitespace, lowercase
+    # Remove punctuation, normalize whitespace, lowercase
     text = re.sub(r'[^\w\s]', '', text)
-    text = re.sub(r'\s+', '', text)  # Remove all whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
     text = text.lower()
 
     return text
