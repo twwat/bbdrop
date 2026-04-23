@@ -1014,6 +1014,29 @@ FLAG_CODES = {
 }
 
 
+def normalize_country_input(text: str) -> str:
+    """Normalize country code input for matching: strip diacritics, punctuation, whitespace."""
+    import unicodedata
+    import re
+
+    if not text:
+        return ""
+
+    # Strip leading/trailing whitespace
+    text = text.strip()
+
+    # Remove diacritics via NFD decomposition
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+
+    # Remove punctuation, collapse whitespace, lowercase
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', '', text)  # Remove all whitespace
+    text = text.lower()
+
+    return text
+
+
 def get_template_path():
     """Get the template directory path (uses configured central store location)."""
     base_path = get_central_store_base_path()  # Use configured path, not hardcoded
