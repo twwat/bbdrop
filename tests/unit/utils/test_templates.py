@@ -232,3 +232,25 @@ class TestProcessFlagTags:
     def test_diacritics_stripped(self):
         result = process_flag_tags("[flag]Aland Islands[/flag]")
         assert result == "[IMG]https://flagcdn.com/43x36/ax.png[/IMG]"
+
+
+def test_flag_tag_in_template_pipeline():
+    template_content = "[b]Gallery[/b]\n[flag]us[/flag]\nCountry: [flag]ca[/flag]"
+    data = {}
+
+    result = apply_template(template_content, data)
+
+    assert "[IMG]https://flagcdn.com/43x36/us.png[/IMG]" in result
+    assert "[IMG]https://flagcdn.com/43x36/ca.png[/IMG]" in result
+    assert "[flag]" not in result
+
+
+def test_flag_tag_invalid_in_template_pipeline():
+    template_content = "Gallery [flag]ZZ[/flag] done"
+    data = {}
+
+    result = apply_template(template_content, data)
+
+    assert "[flag]" not in result
+    assert "Gallery" in result
+    assert "done" in result
