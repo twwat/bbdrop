@@ -1379,6 +1379,9 @@ def apply_template(template_content, data):
     # Process conditional logic first (before placeholder replacement)
     result = process_conditionals(template_content, data)
 
+    # Process flag tags (before placeholder replacement)
+    result = process_flag_tags(result)
+
     # Replace placeholders with actual data
     # hostLinks and allImages are expanded FIRST so that any main placeholders
     # embedded inside them (e.g. #folderSize# in a filehost bbcode_format)
