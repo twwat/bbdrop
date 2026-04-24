@@ -30,13 +30,13 @@ from src.utils.templates import load_templates
 class _DestSlot(QFrame):
     """One destination slot within a gallery row."""
 
-    def __init__(self, conn, dest: Optional[dict] = None, parent=None):
+    def __init__(self, conn, dest: Optional[dict] = None, rendered_body: str = "", parent=None):
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.Box)
         self._conn = conn
-        self._build(dest or {})
+        self._build(dest or {}, rendered_body)
 
-    def _build(self, dest: dict):
+    def _build(self, dest: dict, rendered_body: str = ""):
         layout = QVBoxLayout(self)
         layout.setSpacing(4)
 
@@ -71,7 +71,10 @@ class _DestSlot(QFrame):
 
         self._body_edit = QPlainTextEdit()
         self._body_edit.setMaximumHeight(100)
-        self._body_edit.setPlaceholderText("Post body (edit before posting)…")
+        if rendered_body:
+            self._body_edit.setPlainText(rendered_body)
+        else:
+            self._body_edit.setPlaceholderText("Post body — no BBCode found yet")
         layout.addWidget(self._body_edit)
 
     def _request_remove(self):
@@ -149,7 +152,16 @@ class _GalleryRow(QFrame):
             self._add_slot(None)
 
     def _add_slot(self, dest: Optional[dict]):
-        slot = _DestSlot(self._conn, dest, parent=self._slots_container)
+        rendered_body = ""
+        if dest:
+            try:
+                body_template = dest.get("body_template_name") or ""
+                rendered_body, _ = self._controller._template_renderer(
+                    self.gallery_id, body_template, None
+                )
+            except Exception:
+                pass
+        slot = _DestSlot(self._conn, dest, rendered_body=rendered_body, parent=self._slots_container)
         self._slots.append(slot)
         self._slots_layout.addWidget(slot)
 
