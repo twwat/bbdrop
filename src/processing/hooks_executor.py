@@ -312,7 +312,6 @@ class HooksExecutor:
         enabled_hooks = [h for h in hook_types if config.get(h, {}).get('enabled')]
 
         if not enabled_hooks:
-            log(f"No enabled hooks to execute from {hook_types}", level="debug", category="hooks")
             return {}
 
         # Execute hooks based on parallel/sequential setting
