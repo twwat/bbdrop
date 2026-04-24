@@ -118,6 +118,7 @@ def test_clears_hash_created_after_hold_expires(tmp_path):
 def test_emits_creating_from_hash_before_mirror_loop(tmp_path):
     """_try_family_mirror emits creating_from_hash when sibling parts are present."""
     from src.processing.file_host_workers import FileHostWorker
+    import src.processing.file_host_workers as fhw_mod
 
     worker, store = _make_worker(tmp_path)
     # Bind _try_family_mirror onto the stub
@@ -127,7 +128,8 @@ def test_emits_creating_from_hash_before_mirror_loop(tmp_path):
 
     sibling_parts = [{"host_name": "keep2share", "md5_hash": "abc123", "file_name": "a.zip", "part_number": 0}]
 
-    with patch.object(store, "get_family_completed_parts", return_value=sibling_parts):
+    with patch.object(store, "get_family_completed_parts", return_value=sibling_parts), \
+         patch.object(fhw_mod.time, "sleep"):
         worker.queue_store = store
         mock_client = MagicMock()
         mock_client.try_create_by_hash.return_value = None  # mirror fails

@@ -1358,6 +1358,9 @@ class FileHostWorker(QThread):
 
         self._family_status = "creating_from_hash"
         self.status_updated.emit(self.host_id, "creating_from_hash")
+        # Brief hold so the GUI has time to render the status before the fast
+        # createFileByHash calls complete and hash_created overwrites it.
+        time.sleep(0.8)
 
         # Probe every sibling part. Any miss aborts immediately — we only
         # commit if the whole set lands.
