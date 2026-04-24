@@ -268,9 +268,9 @@ class GalleryTableWidget(QTableWidget):
         status_delegate = StatusColorDelegate(self)
         self.setItemDelegateForColumn(self.COL_ONLINE_IMX, status_delegate)
 
-        # Inline-edit delegate for the Forum Post column.
-        from src.gui.delegates.forum_post_delegate import ForumPostDelegate
-        self._forum_post_delegate = ForumPostDelegate(self)
+        # Pill-based status delegate for the Forum Post column.
+        from src.gui.delegates.forum_posts_status_delegate import ForumPostsStatusDelegate
+        self._forum_post_delegate = ForumPostsStatusDelegate(self)
         self.setItemDelegateForColumn(
             self.COL_FORUM_POST, self._forum_post_delegate,
         )

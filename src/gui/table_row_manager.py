@@ -427,12 +427,11 @@ class TableRowManager(QObject):
     def _set_forum_post_cell(
         self, row: int, item: GalleryQueueItem,
     ) -> None:
-        """Render the Forum Post cell for a row from the latest forum_posts row."""
-        from src.gui.delegates.forum_post_delegate import format_cell_text
+        """Render the Forum Post cell using pill-based ForumPostsStatusDelegate."""
         from src.storage import forum_posting as fp
 
         mw = self._main_window
-        text = ""
+        posts: list[dict] = []
         if (
             getattr(item, "db_id", None)
             and getattr(mw, "_forum_db_conn", None) is not None
@@ -441,18 +440,15 @@ class TableRowManager(QObject):
                 posts = fp.list_forum_posts_for_gallery(
                     mw._forum_db_conn, item.db_id,
                 )
-                top = posts[0] if posts else None
-                text = format_cell_text(top)
             except Exception as e:
                 log(
                     f"forum-post cell load failed for {item.path}: {e}",
                     level="warning", category="ui",
                 )
-        cell = QTableWidgetItem(text)
-        cell.setFlags(cell.flags() | Qt.ItemFlag.ItemIsEditable)
-        cell.setTextAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-        )
+        cell = QTableWidgetItem()
+        cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        cell.setData(Qt.ItemDataRole.UserRole, item.path)
+        cell.setData(Qt.ItemDataRole.UserRole + 1, posts)
         mw.gallery_table.setItem(row, _Col.FORUM_POST, cell)
 
     def refresh_forum_post_cell(self, gallery_id: int) -> None:

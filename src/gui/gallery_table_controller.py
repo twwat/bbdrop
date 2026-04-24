@@ -128,33 +128,27 @@ class GalleryTableController(QObject):
             return mw.path_to_row.get(path)
 
     def wire_forum_post_delegate(self) -> None:
-        """Connect the Forum Post delegate's commit signal to onboard_post."""
+        """Connect the Forum Post delegate's post_clicked signal to open composer."""
         mw = self._main_window
         table = getattr(mw.gallery_table, "table", mw.gallery_table)
         delegate = table.itemDelegateForColumn(GalleryTableWidget.COL_FORUM_POST)
-        if delegate is None or not hasattr(delegate, "commit_text"):
-            log("forum-post delegate not present on gallery table",
+        if delegate is None or not hasattr(delegate, "post_clicked"):
+            log("forum-posts-status delegate not present on gallery table",
                 level="warning", category="ui")
             return
-        delegate.commit_text.connect(self._on_forum_post_commit)
+        delegate.post_clicked.connect(self._on_forum_post_pill_clicked)
 
-    def _on_forum_post_commit(self, row: int, text: str) -> None:
-        """Delegate commit handler: resolve row → gallery, kick off onboarding."""
+    def _on_forum_post_pill_clicked(self, gallery_path: str, forum_fk: int) -> None:
+        """Pill click handler: open the forum composer for the gallery."""
         mw = self._main_window
-        path = mw.row_to_path.get(row)
-        if not path:
-            return
-        item = mw.queue_manager.get_item(path)
+        item = mw.queue_manager.get_item(gallery_path)
         if not item or not getattr(item, "db_id", None):
             return
         try:
-            mw._forum_controller.onboard_post(item.db_id, text)
-        except ValueError as e:
-            try:
-                mw.statusBar().showMessage(f"Onboarding rejected: {e}", 5000)
-            except Exception:
-                pass
-            mw.table_row_manager.refresh_forum_post_cell(item.db_id)
+            mw.open_forum_composer([item.db_id])
+        except Exception as e:
+            log(f"open_forum_composer failed for {gallery_path}: {e}",
+                level="warning", category="ui")
 
     def _set_path_row_mapping(self, path: str, row: int):
         """Thread-safe setter for path-to-row mapping"""
