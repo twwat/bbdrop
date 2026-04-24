@@ -494,7 +494,12 @@ class ForumController(QObject):
         for dest in destinations:
             try:
                 body_template = dest.get("body_template_name") or ""
-                body, title = self._template_renderer(gallery_id, body_template, None)
+                body_override = dest.get("_body_override")
+                if body_override is not None:
+                    body = body_override
+                    _, title = self._template_renderer(gallery_id, body_template, None)
+                else:
+                    body, title = self._template_renderer(gallery_id, body_template, None)
                 body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
                 link_map = extract_link_map(body)
                 self._auto_remember_target(
@@ -527,50 +532,6 @@ class ForumController(QObject):
                     level="warning", category="forum",
                 )
         return post_ids
-
-    def _enqueue_post(self, gallery_id: int, cfg: dict) -> int:
-        # Composer can short-circuit rendering by passing _body_override /
-        # _title_override on the cfg dict — these are the user's edited text.
-        body_override = cfg.get("_body_override")
-        title_override = cfg.get("_title_override")
-        if body_override is not None:
-            body = body_override
-            if title_override is not None:
-                title = title_override
-            else:
-                _, title = self._template_renderer(
-                    gallery_id,
-                    cfg["body_template_name"],
-                    cfg.get("title_template_name"),
-                )
-        else:
-            body, title = self._template_renderer(
-                gallery_id,
-                cfg["body_template_name"],
-                cfg.get("title_template_name"),
-            )
-        body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
-        link_map = extract_link_map(body)
-        self._auto_remember_target(
-            forum_fk=cfg["forum_fk"], cfg_kind=cfg["kind"],
-            target_id=str(cfg["target_id"]),
-        )
-        post_row_id = fp.insert_forum_post(
-            self._get_conn(),
-            gallery_fk=gallery_id, forum_fk=cfg["forum_fk"],
-            kind=cfg["kind"], target_id=cfg["target_id"],
-            body_hash=body_hash, link_map=link_map,
-            update_mode_at_post=cfg["update_mode"],
-        )
-        self._worker.enqueue(PostJob(
-            forum_post_id=post_row_id,
-            forum_id=cfg["forum_fk"],
-            kind=cfg["kind"],
-            target_id=cfg["target_id"],
-            title=title,
-            body=body,
-        ))
-        return post_row_id
 
     # ----- signal handlers -----
 
