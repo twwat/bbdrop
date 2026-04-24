@@ -240,6 +240,13 @@ class LayoutManager(QObject):
         mw.clear_completed_btn.setProperty("class", "main-action-btn")
         controls_layout.addWidget(mw.clear_completed_btn)
 
+        mw.post_forum_btn = QPushButton(" Post ")
+        mw.post_forum_btn.setToolTip("Post selected completed galleries to forum")
+        mw.post_forum_btn.setEnabled(False)
+        mw.post_forum_btn.setProperty("class", "main-action-btn")
+        mw.post_forum_btn.clicked.connect(mw.quick_post_selected)
+        controls_layout.addWidget(mw.post_forum_btn)
+
         # Browse button (moved here to be to the right of Clear Completed)
         mw.browse_btn = QPushButton(" Browse ")
         mw.browse_btn.clicked.connect(mw.browse_for_folders)

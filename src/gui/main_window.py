@@ -2784,13 +2784,44 @@ class BBDropGUI(QMainWindow):
         reason = result.get("reason") or ""
         self.statusBar().showMessage(f"{action}: {reason}", 5000)
 
-    def open_gallery_posting_override(self, gallery_id: int):
-        from src.gui.dialogs.gallery_posting_override_dialog import (
-            GalleryPostingOverrideDialog,
-        )
-        GalleryPostingOverrideDialog(
-            conn=self._forum_db_conn, gallery_id=gallery_id, parent=self,
-        ).exec()
+    def quick_post_selected(self):
+        """Post all configured destinations for selected completed galleries."""
+        from src.gui.widgets.gallery_table import GalleryTableWidget
+        table = self.gallery_table.table if hasattr(self.gallery_table, 'table') else self.gallery_table
+        selected_paths = []
+        for index in table.selectedIndexes():
+            if index.column() == GalleryTableWidget.COL_NAME:
+                path = table.item(index.row(), GalleryTableWidget.COL_NAME)
+                if path:
+                    path = path.data(Qt.ItemDataRole.UserRole)
+                    if path:
+                        selected_paths.append(path)
+
+        if not selected_paths:
+            return
+
+        gallery_ids = []
+        for path in selected_paths:
+            item = self.queue_manager.get_item(path)
+            if item and getattr(item, 'db_id', None) and item.status == 'completed':
+                gallery_ids.append(item.db_id)
+
+        if not gallery_ids:
+            # No completed galleries selected — open composer instead
+            all_ids = []
+            for path in selected_paths:
+                item = self.queue_manager.get_item(path)
+                if item and getattr(item, 'db_id', None):
+                    all_ids.append(item.db_id)
+            if all_ids:
+                self.open_forum_composer(all_ids)
+            return
+
+        results = self._forum_controller.quick_post(gallery_ids)
+        # If any gallery had no configured destinations, open composer for those
+        no_config = [gid for gid, posts in results.items() if not posts]
+        if no_config:
+            self.open_forum_composer(no_config)
 
     def _on_forum_post_changed(self, forum_post_id: int):
         """Refresh the inline Forum Post cell when a post's status changes."""

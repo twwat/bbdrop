@@ -305,6 +305,9 @@ class ProgressTracker(QObject):
             self._main_window.start_all_btn.setEnabled(count_startable > 0)
             self._main_window.pause_all_btn.setEnabled(count_pausable > 0)
             self._main_window.clear_completed_btn.setEnabled(count_completed > 0)
+            # Enable "Post" button when any completed gallery exists
+            if hasattr(self._main_window, 'post_forum_btn'):
+                self._main_window.post_forum_btn.setEnabled(count_completed > 0)
         except Exception:
             pass
 

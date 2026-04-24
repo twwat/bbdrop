@@ -198,14 +198,7 @@ class GalleryContextMenuHelper(QObject):
             )
     
     def _add_forum_posting_items(self, menu, selected_paths):
-        """Add 'Post to forum…', 'Posting override…', and (when applicable)
-        'Update post' items.
-
-        'Update post' only appears when a single-row selection has a stale
-        forum_post. Resolves gallery paths to DB ids via the queue manager
-        and delegates to main_window dispatchers; nothing forum-specific
-        lives here.
-        """
+        """Add 'Post to forum…' and (when stale) 'Update stale post' items."""
         if not self.main_window or not selected_paths:
             return
         qm = getattr(self.main_window, 'queue_manager', None)
@@ -224,17 +217,10 @@ class GalleryContextMenuHelper(QObject):
             lambda checked, ids=gallery_ids:
             self.main_window.open_forum_composer(ids),
         )
-        override_action = menu.addAction("Posting override…")
-        override_action.setEnabled(len(gallery_ids) == 1)
         if len(gallery_ids) == 1:
-            single_id = gallery_ids[0]
-            override_action.triggered.connect(
-                lambda checked, gid=single_id:
-                self.main_window.open_gallery_posting_override(gid),
-            )
-            stale_post_id = self._stale_forum_post_id_for_gallery(single_id)
+            stale_post_id = self._stale_forum_post_id_for_gallery(gallery_ids[0])
             if stale_post_id is not None:
-                update_action = menu.addAction("Update post")
+                update_action = menu.addAction("Update stale post")
                 update_action.triggered.connect(
                     lambda checked, pid=stale_post_id:
                     self.main_window.update_forum_post_from_ui(pid),
