@@ -1405,7 +1405,6 @@ class FileHostClient:
 
         # Step 4: Poll for completion
         if self.config.upload_poll_url:
-            if self._log_callback: self._log_callback("Waiting for upload processing for {file_path.name}...", "debug")
             time.sleep(self.config.upload_poll_delay)
 
             poll_url = self.config.upload_poll_url.replace("{upload_id}", upload_id).replace("{token}", self.auth_token or "")
@@ -1425,18 +1424,9 @@ class FileHostClient:
 
                     poll_data = json.loads(response_buffer.getvalue().decode('utf-8'))
 
-                    if self._log_callback:
-                        self._log_callback(
-                            f"{file_path.name}: Poll attempt "
-                            f"{attempt + 1}/{self.config.upload_poll_retries}"
-                            f", response: {json.dumps(poll_data)[:200]}",
-                            "debug",
-                        )
-
                     # Check for final URL
                     final_url = self._extract_from_json(poll_data, self.config.link_path)
                     if final_url:
-                        if self._log_callback: self._log_callback(f"{file_path.name}: Upload complete!", "debug")
                         # Extract file_id from poll response
                         file_id = self._extract_from_json(poll_data, self.config.file_id_path) or upload_id
                         return {

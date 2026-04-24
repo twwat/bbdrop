@@ -1177,12 +1177,6 @@ class FileHostWorker(QThread):
                         f" in {upload_elapsed_time:.1f}s ({avg_speed_mbs:.1f} MiB/s): {download_url}",
                         level="info")
 
-                    # Log raw server response for debugging
-                    raw_resp = result.get('raw_response', {})
-                    if raw_resp:
-                        resp_str = json.dumps(raw_resp, ensure_ascii=False).replace('\n', '\\n')
-                        self._log(f"Server response: {resp_str}", level="debug")
-
                     # Update session after successful upload (in case tokens refreshed)
                     self._update_session_from_client(client)
 
