@@ -167,6 +167,194 @@ def list_targets(conn, forum_fk: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# tab_posting_destinations  (v2 multi-destination model)
+# ---------------------------------------------------------------------------
+
+
+def add_tab_destination(
+    conn, *,
+    tab_id: int,
+    forum_fk: int,
+    target_id: str,
+    kind: str,
+    body_template_name: Optional[str] = None,
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO tab_posting_destinations
+            (tab_id, forum_fk, target_id, kind, body_template_name)
+        VALUES (?,?,?,?,?)
+        """,
+        (tab_id, forum_fk, str(target_id), kind, body_template_name),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def remove_tab_destination(conn, destination_id: int) -> None:
+    conn.execute(
+        "DELETE FROM tab_posting_destinations WHERE id=?", (destination_id,)
+    )
+    conn.commit()
+
+
+def list_tab_destinations(conn, tab_id: int) -> list[dict]:
+    return [
+        dict(r) for r in conn.execute(
+            "SELECT d.*, f.name AS forum_name, t.name AS target_name "
+            "FROM tab_posting_destinations d "
+            "JOIN forums f ON f.id = d.forum_fk "
+            "LEFT JOIN forum_targets t "
+            "  ON t.forum_fk = d.forum_fk AND t.target_id = d.target_id "
+            "WHERE d.tab_id=? ORDER BY d.id",
+            (tab_id,),
+        )
+    ]
+
+
+def clear_tab_destinations(conn, tab_id: int) -> None:
+    conn.execute(
+        "DELETE FROM tab_posting_destinations WHERE tab_id=?", (tab_id,)
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# tab_posting_settings  (v2 behavioral: trigger_mode, enabled)
+# ---------------------------------------------------------------------------
+
+
+def get_tab_posting_settings_for_tab(conn, tab_id: int) -> Optional[dict]:
+    row = conn.execute(
+        "SELECT * FROM tab_posting_settings WHERE tab_id=?", (tab_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_tab_posting_settings_for_gallery(conn, gallery_fk: int) -> Optional[dict]:
+    row = conn.execute(
+        "SELECT s.* FROM tab_posting_settings s "
+        "JOIN galleries g ON g.tab_id = s.tab_id "
+        "WHERE g.id=?",
+        (gallery_fk,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def set_tab_posting_settings(
+    conn, *,
+    tab_id: int,
+    trigger_mode: str = "manual",
+    enabled: bool = True,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO tab_posting_settings(tab_id, trigger_mode, enabled, updated_ts)
+        VALUES (?,?,?,?)
+        ON CONFLICT(tab_id) DO UPDATE SET
+            trigger_mode=excluded.trigger_mode,
+            enabled=excluded.enabled,
+            updated_ts=excluded.updated_ts
+        """,
+        (tab_id, trigger_mode, 1 if enabled else 0, int(time.time())),
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# gallery_posting_destinations  (v2 per-gallery overrides)
+# ---------------------------------------------------------------------------
+
+
+def upsert_gallery_destination(
+    conn, *,
+    gallery_fk: int,
+    forum_fk: int,
+    target_id: str,
+    kind: str,
+    body_template_name: Optional[str] = None,
+    action: str = "add",
+) -> int:
+    cur = conn.execute(
+        """
+        INSERT INTO gallery_posting_destinations
+            (gallery_fk, forum_fk, target_id, kind, body_template_name, action, updated_ts)
+        VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(gallery_fk, forum_fk, target_id) DO UPDATE SET
+            kind=excluded.kind,
+            body_template_name=excluded.body_template_name,
+            action=excluded.action,
+            updated_ts=excluded.updated_ts
+        """,
+        (gallery_fk, forum_fk, str(target_id), kind,
+         body_template_name, action, int(time.time())),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def remove_gallery_destination(conn, destination_id: int) -> None:
+    conn.execute(
+        "DELETE FROM gallery_posting_destinations WHERE id=?", (destination_id,)
+    )
+    conn.commit()
+
+
+def list_gallery_destination_overrides(conn, gallery_fk: int) -> list[dict]:
+    return [
+        dict(r) for r in conn.execute(
+            "SELECT * FROM gallery_posting_destinations WHERE gallery_fk=? ORDER BY id",
+            (gallery_fk,),
+        )
+    ]
+
+
+def get_effective_destinations(conn, gallery_fk: int) -> list[dict]:
+    """Return the resolved posting destinations for a gallery.
+
+    Merges tab defaults with gallery-level add/replace/remove overrides.
+    Returns [] when no destinations are configured anywhere.
+    """
+    row = conn.execute(
+        "SELECT tab_id FROM galleries WHERE id=?", (gallery_fk,)
+    ).fetchone()
+    if not row or not row[0]:
+        return []
+    tab_id = row[0]
+
+    result: dict[tuple, dict] = {}
+    for d in list_tab_destinations(conn, tab_id):
+        key = (d["forum_fk"], d["target_id"])
+        result[key] = {
+            "forum_fk": d["forum_fk"],
+            "forum_name": d.get("forum_name", ""),
+            "target_id": d["target_id"],
+            "kind": d["kind"],
+            "body_template_name": d.get("body_template_name"),
+            "target_name": d.get("target_name"),
+        }
+
+    for o in list_gallery_destination_overrides(conn, gallery_fk):
+        key = (o["forum_fk"], o["target_id"])
+        if o["action"] == "remove":
+            result.pop(key, None)
+        elif o["action"] in ("add", "replace"):
+            f_row = conn.execute(
+                "SELECT name FROM forums WHERE id=?", (o["forum_fk"],)
+            ).fetchone()
+            result[key] = {
+                "forum_fk": o["forum_fk"],
+                "forum_name": f_row[0] if f_row else "",
+                "target_id": o["target_id"],
+                "kind": o["kind"],
+                "body_template_name": o.get("body_template_name"),
+                "target_name": None,
+            }
+
+    return list(result.values())
+
+
+# ---------------------------------------------------------------------------
 # tab_posting_config
 # ---------------------------------------------------------------------------
 

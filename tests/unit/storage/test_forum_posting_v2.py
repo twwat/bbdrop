@@ -119,3 +119,135 @@ def test_gallery_posting_destinations_kind_constraint(conn):
             (gallery_id, forum_id)
         )
         conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Task 2: CRUD tests for v2 multi-destination model
+# ---------------------------------------------------------------------------
+
+import src.storage.forum_posting as fp
+
+
+def _seed(conn):
+    """Insert minimal tab + forum + gallery rows for CRUD tests."""
+    conn.execute("INSERT INTO tabs(id,name,tab_type) VALUES(2,'T2','user')")
+    conn.execute(
+        "INSERT INTO forums(id,name,software_id,base_url)"
+        " VALUES(2,'Forum2','vb','http://b.com')"
+    )
+    conn.execute(
+        "INSERT INTO forum_targets(forum_fk,name,kind,target_id)"
+        " VALUES(2,'Thread1','thread','42')"
+    )
+    conn.execute(
+        "INSERT INTO galleries(id,path,tab_id,status,added_ts)"
+        " VALUES(2,'/gal',2,'completed',0)"
+    )
+    conn.commit()
+
+
+@pytest.mark.unit
+def test_add_and_list_tab_destinations(conn):
+    _seed(conn)
+    pk = fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
+                                target_id="42", kind="reply",
+                                body_template_name="default")
+    assert isinstance(pk, int) and pk > 0
+    dests = fp.list_tab_destinations(conn, tab_id=2)
+    assert len(dests) == 1
+    assert dests[0]["target_id"] == "42"
+    assert dests[0]["kind"] == "reply"
+
+
+@pytest.mark.unit
+def test_remove_tab_destination(conn):
+    _seed(conn)
+    pk = fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
+                                target_id="42", kind="reply",
+                                body_template_name="default")
+    fp.remove_tab_destination(conn, pk)
+    assert fp.list_tab_destinations(conn, tab_id=2) == []
+
+
+@pytest.mark.unit
+def test_clear_tab_destinations(conn):
+    _seed(conn)
+    fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
+                           target_id="42", kind="reply")
+    fp.clear_tab_destinations(conn, tab_id=2)
+    assert fp.list_tab_destinations(conn, tab_id=2) == []
+
+
+@pytest.mark.unit
+def test_tab_posting_settings_roundtrip(conn):
+    _seed(conn)
+    fp.set_tab_posting_settings(conn, tab_id=2,
+                                trigger_mode="auto_on_upload", enabled=True)
+    s = fp.get_tab_posting_settings_for_tab(conn, tab_id=2)
+    assert s is not None
+    assert s["trigger_mode"] == "auto_on_upload"
+    assert s["enabled"] == 1
+
+
+@pytest.mark.unit
+def test_tab_posting_settings_defaults_to_none_when_unset(conn):
+    _seed(conn)
+    assert fp.get_tab_posting_settings_for_tab(conn, tab_id=2) is None
+
+
+@pytest.mark.unit
+def test_get_effective_destinations_tab_only(conn):
+    _seed(conn)
+    fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
+                           target_id="42", kind="reply",
+                           body_template_name="default")
+    dests = fp.get_effective_destinations(conn, gallery_fk=2)
+    assert len(dests) == 1
+    assert dests[0]["target_id"] == "42"
+
+
+@pytest.mark.unit
+def test_get_effective_destinations_no_config_returns_empty(conn):
+    _seed(conn)
+    assert fp.get_effective_destinations(conn, gallery_fk=2) == []
+
+
+@pytest.mark.unit
+def test_get_effective_destinations_add_override(conn):
+    _seed(conn)
+    conn.execute(
+        "INSERT INTO forum_targets(forum_fk,name,kind,target_id)"
+        " VALUES(2,'Sub1','subforum','99')"
+    )
+    conn.commit()
+    fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
+                           target_id="42", kind="reply",
+                           body_template_name="default")
+    fp.upsert_gallery_destination(conn, gallery_fk=2, forum_fk=2,
+                                  target_id="99", kind="new_thread",
+                                  body_template_name="default", action="add")
+    dests = fp.get_effective_destinations(conn, gallery_fk=2)
+    assert len(dests) == 2
+    assert {d["target_id"] for d in dests} == {"42", "99"}
+
+
+@pytest.mark.unit
+def test_get_effective_destinations_remove_override(conn):
+    _seed(conn)
+    fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
+                           target_id="42", kind="reply",
+                           body_template_name="default")
+    fp.upsert_gallery_destination(conn, gallery_fk=2, forum_fk=2,
+                                  target_id="42", kind="reply",
+                                  body_template_name="default", action="remove")
+    assert fp.get_effective_destinations(conn, gallery_fk=2) == []
+
+
+@pytest.mark.unit
+def test_get_tab_posting_settings_for_gallery(conn):
+    _seed(conn)
+    fp.set_tab_posting_settings(conn, tab_id=2,
+                                trigger_mode="auto_on_upload", enabled=True)
+    s = fp.get_tab_posting_settings_for_gallery(conn, gallery_fk=2)
+    assert s is not None
+    assert s["trigger_mode"] == "auto_on_upload"
