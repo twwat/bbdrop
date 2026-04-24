@@ -96,7 +96,11 @@ class ForumController(QObject):
     # ----- public entry points -----
 
     def handle_gallery_uploaded(self, gallery_id: int) -> list[int]:
-        """Auto-post to all configured destinations when trigger=auto_on_upload."""
+        """Auto-post to all configured destinations when trigger=auto_on_upload.
+
+        Skips destinations that already have an active (non-failed/non-stale)
+        forum_post so a re-upload or double-signal doesn't create duplicate posts.
+        """
         conn = self._get_conn()
         settings = fp.get_tab_posting_settings_for_gallery(conn, gallery_id)
         if (not settings
@@ -104,7 +108,22 @@ class ForumController(QObject):
                 or not settings.get("enabled")):
             return []
         destinations = fp.get_effective_destinations(conn, gallery_id)
-        return self._enqueue_posts_for_destinations(gallery_id, destinations)
+        if not destinations:
+            return []
+        # Skip if any destination already has a successfully posted/queued row.
+        existing = fp.list_forum_posts_for_gallery(conn, gallery_id)
+        active_keys = {
+            (r["forum_fk"], r["target_id"])
+            for r in existing
+            if r["status"] in ("posted", "queued", "updating")
+        }
+        pending = [
+            d for d in destinations
+            if (d["forum_fk"], str(d["target_id"])) not in active_keys
+        ]
+        if not pending:
+            return []
+        return self._enqueue_posts_for_destinations(gallery_id, pending)
 
     def post_now(self, gallery_id: int, destinations: list[dict]) -> list[int]:
         """Post to an explicit list of destinations (used by the composer)."""
@@ -150,13 +169,13 @@ class ForumController(QObject):
             if forum_hint is not None:
                 forum_id = forum_hint
             else:
-                cfg = fp.get_effective_posting_config(self._get_conn(), gallery_id)
-                if not cfg:
+                dests = fp.get_effective_destinations(self._get_conn(), gallery_id)
+                if not dests:
                     raise ValueError(
-                        "No tab posting config for this gallery. "
+                        "No posting destinations for this gallery. "
                         "Configure tab posting first or paste a full URL."
                     )
-                forum_id = cfg["forum_fk"]
+                forum_id = dests[0]["forum_fk"]
 
         client = self._make_client(forum_id)
         ref = client.parse_post_reference(s)
@@ -197,21 +216,31 @@ class ForumController(QObject):
             raise ValueError(
                 f"Cannot update post in status {post['status']}"
             )
-        cfg = fp.get_effective_posting_config(self._get_conn(), post["gallery_fk"])
-        if not cfg:
-            raise ValueError("No effective posting config for gallery")
+        dests = fp.get_effective_destinations(self._get_conn(), post["gallery_fk"])
+        if not dests:
+            raise ValueError("No posting destinations for gallery")
 
+        # update_mode and manual_edit_handling are not stored in the new
+        # multi-destination schema; fall back to the value recorded at post time,
+        # then sensible defaults.
         update_mode = (
             override_mode
             or post.get("update_mode_at_post")
-            or cfg["update_mode"]
+            or "whole"
         )
-        manual_edit_handling = cfg["manual_edit_handling"]
+        manual_edit_handling = "skip_alert"
+
+        # Use the body template from the matching destination, or the first one.
+        dest = next(
+            (d for d in dests if d["forum_fk"] == post["forum_fk"]),
+            dests[0],
+        )
+        body_template = dest.get("body_template_name") or ""
 
         new_body, _new_title = self._template_renderer(
             post["gallery_fk"],
-            cfg["body_template_name"],
-            cfg.get("title_template_name"),
+            body_template,
+            None,
         )
         new_link_map = extract_link_map(new_body)
 
@@ -338,16 +367,13 @@ class ForumController(QObject):
     def preview_render(self, gallery_id: int) -> tuple[str, str]:
         """Render (body, title) for the composer without enqueueing.
 
-        Raises ValueError if no effective config exists for the gallery.
+        Raises ValueError if no destinations are configured for the gallery.
         """
-        cfg = fp.get_effective_posting_config(self._get_conn(), gallery_id)
-        if not cfg:
-            raise ValueError("No effective posting config for gallery")
-        return self._template_renderer(
-            gallery_id,
-            cfg["body_template_name"],
-            cfg.get("title_template_name"),
-        )
+        dests = fp.get_effective_destinations(self._get_conn(), gallery_id)
+        if not dests:
+            raise ValueError("No posting destinations for gallery")
+        body_template = dests[0].get("body_template_name") or ""
+        return self._template_renderer(gallery_id, body_template, None)
 
     # ----- internals -----
 
@@ -622,12 +648,12 @@ class ForumController(QObject):
         )
 
     def _on_bbcode_regenerated(self, gallery_id: int, cause: str):
-        cfg = fp.get_effective_posting_config(self._get_conn(), gallery_id)
-        if not cfg:
+        settings = fp.get_tab_posting_settings_for_gallery(self._get_conn(), gallery_id)
+        if not settings or not settings.get("enabled"):
             return
-        # Stale-mark: existing posted rows whose config lists this cause
-        triggers = cfg.get("stale_triggers", []) or []
-        if cause in triggers:
+        # stale_triggers is not stored in the new tab_posting_settings table;
+        # default to marking stale on upload (the historical default).
+        if cause == "upload":
             ids = fp.mark_posts_stale_for_gallery(self._get_conn(), gallery_id)
             for pid in ids:
                 self.forum_post_changed.emit(pid)

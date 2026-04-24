@@ -47,6 +47,7 @@ def _setup(conn):
     tab_id = conn.execute(
         "SELECT id FROM tabs WHERE name='T'"
     ).fetchone()[0]
+    # Populate legacy table for backward compat
     fp.set_tab_posting_config(
         conn, tab_id=tab_id, forum_fk=fid, kind="reply",
         target_id="111", body_template_name="Default",
@@ -54,6 +55,12 @@ def _setup(conn):
         update_mode="whole", manual_edit_handling="skip_alert",
         stale_triggers=["upload"], enabled=True,
     )
+    # Populate new v2 tables used by the current controller
+    fp.add_tab_destination(
+        conn, tab_id=tab_id, forum_fk=fid,
+        target_id="111", kind="reply", body_template_name="Default",
+    )
+    fp.set_tab_posting_settings(conn, tab_id=tab_id, trigger_mode="manual", enabled=True)
     conn.execute(
         "INSERT INTO galleries(path, status, added_ts, tab_id) "
         "VALUES('/x','completed',0,?)", (tab_id,),

@@ -35,7 +35,7 @@ def conn():
 
 
 def _setup_tab_with_config(conn, *, trigger_mode="auto_on_upload",
-                           stale_triggers=None):
+                           stale_triggers=None, enabled=True):
     conn.execute(
         "INSERT INTO tabs(name, tab_type, display_order) "
         "VALUES('T','user',?)", (time.time_ns(),),
@@ -47,12 +47,21 @@ def _setup_tab_with_config(conn, *, trigger_mode="auto_on_upload",
         conn, name="VIP", software_id="vbulletin_4_2_0",
         base_url="https://x", default_cooldown_s=0,
     )
+    # Populate legacy table for backward compat
     fp.set_tab_posting_config(
         conn, tab_id=tab_id, forum_fk=fid, kind="reply",
         target_id="999", body_template_name="Default",
         title_template_name=None, trigger_mode=trigger_mode,
         update_mode="whole", manual_edit_handling="skip_alert",
-        stale_triggers=stale_triggers or ["upload"], enabled=True,
+        stale_triggers=stale_triggers or ["upload"], enabled=enabled,
+    )
+    # Populate new v2 tables used by the current controller
+    fp.add_tab_destination(
+        conn, tab_id=tab_id, forum_fk=fid,
+        target_id="999", kind="reply", body_template_name="Default",
+    )
+    fp.set_tab_posting_settings(
+        conn, tab_id=tab_id, trigger_mode=trigger_mode, enabled=enabled,
     )
     conn.execute(
         "INSERT INTO galleries(path, status, added_ts, tab_id) "
@@ -93,14 +102,7 @@ def test_auto_post_skipped_when_trigger_is_manual(app, conn):
 
 
 def test_auto_post_skipped_when_disabled(app, conn):
-    tab_id, fid, gid = _setup_tab_with_config(conn)
-    fp.set_tab_posting_config(
-        conn, tab_id=tab_id, forum_fk=fid, kind="reply",
-        target_id="999", body_template_name="Default",
-        title_template_name=None, trigger_mode="auto_on_upload",
-        update_mode="whole", manual_edit_handling="skip_alert",
-        stale_triggers=["upload"], enabled=False,
-    )
+    tab_id, fid, gid = _setup_tab_with_config(conn, enabled=False)
     worker = MagicMock()
     ctrl = ForumController(
         worker=worker, db_connection_factory=lambda: conn,
@@ -127,22 +129,23 @@ def test_auto_post_skipped_if_already_posted(app, conn):
 
 
 def test_post_now_enqueues_regardless_of_trigger_mode(app, conn):
-    _setup_tab_with_config(conn, trigger_mode="manual")
-    gid = conn.execute("SELECT id FROM galleries").fetchone()[0]
+    _, fid, gid = _setup_tab_with_config(conn, trigger_mode="manual")
     worker = MagicMock()
     ctrl = ForumController(
         worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("body", ""),
     )
-    pid = ctrl.post_now(gid)
+    destinations = fp.get_effective_destinations(conn, gid)
+    pids = ctrl.post_now(gid, destinations)
     assert worker.enqueue.called
-    assert fp.get_forum_post(conn, pid)["status"] == "queued"
+    assert pids
+    assert fp.get_forum_post(conn, pids[0])["status"] == "queued"
 
 
 def test_bbcode_regenerated_marks_posts_stale(app, conn):
-    _, fid, gid = _setup_tab_with_config(
-        conn, stale_triggers=["upload", "template_edit"],
-    )
+    # New schema: stale_triggers not stored; controller always marks stale on
+    # "upload" cause (the historical default) when tab posting is enabled.
+    _, fid, gid = _setup_tab_with_config(conn)
     pid = fp.insert_forum_post(
         conn, gallery_fk=gid, forum_fk=fid, kind="reply",
         target_id="999", body_hash="h", link_map={},
@@ -153,7 +156,7 @@ def test_bbcode_regenerated_marks_posts_stale(app, conn):
         worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("", ""),
     )
-    bbcode_regenerated_signal_hub.bbcode_regenerated.emit(gid, "template_edit")
+    bbcode_regenerated_signal_hub.bbcode_regenerated.emit(gid, "upload")
     app.processEvents()
     assert fp.get_forum_post(conn, pid)["status"] == "stale"
 
