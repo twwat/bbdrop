@@ -689,7 +689,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                     gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
                     forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
                     target_id TEXT NOT NULL,
-                    kind TEXT NOT NULL,
+                    kind TEXT NOT NULL CHECK(kind IN ('reply','new_thread')),
                     body_template_name TEXT,
                     action TEXT NOT NULL DEFAULT 'add'
                         CHECK(action IN ('add','replace','remove')),

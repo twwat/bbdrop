@@ -96,3 +96,26 @@ def test_gallery_posting_destinations_action_constraint(conn):
             (gallery_id, forum_id)
         )
         conn.commit()
+
+
+@pytest.mark.unit
+def test_gallery_posting_destinations_kind_constraint(conn):
+    tab_id = _make_tab(conn, "Tab3")
+    forum_id = _make_forum(conn, "Forum3")
+    conn.execute(
+        "INSERT INTO galleries(path, tab_id, status, added_ts)"
+        " VALUES(?, ?, ?, ?)",
+        ("/g", tab_id, "completed", 0)
+    )
+    gallery_id = conn.execute(
+        "SELECT id FROM galleries WHERE path=?", ("/g",)
+    ).fetchone()[0]
+    conn.commit()
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO gallery_posting_destinations"
+            "(gallery_fk,forum_fk,target_id,kind,action)"
+            " VALUES(?,?,'10','invalid_kind','add')",
+            (gallery_id, forum_id)
+        )
+        conn.commit()
