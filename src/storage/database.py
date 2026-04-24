@@ -2244,6 +2244,16 @@ class QueueStore:
             for r in rows
         ]
 
+    def has_blocked_uploads_for_host(self, host_name: str) -> bool:
+        """Return True if any upload for this host is in 'blocked' state."""
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            row = conn.execute(
+                "SELECT 1 FROM file_host_uploads WHERE host_name = ? AND status = 'blocked' LIMIT 1",
+                (host_name,),
+            ).fetchone()
+        return row is not None
+
     def get_file_host_pending_stats(self, host_name: str) -> dict:
         """Get queue statistics for a specific file host.
 
