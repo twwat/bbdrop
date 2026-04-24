@@ -444,7 +444,7 @@ class ForumController(QObject):
             return ("", "")
         path = row["path"] if isinstance(row, sqlite3.Row) else row[0]
         name = (row["name"] if isinstance(row, sqlite3.Row) else row[1]) or os.path.basename(path)
-        gid = (row["gallery_id"] if isinstance(row, sqlite3.Row) else row[2]) or ""
+        gid = (row["gallery_id"] if isinstance(row, sqlite3.Row) else row[2]) or os.path.splitext(os.path.basename(path))[0]
 
         body = find_gallery_bbcode(name, gid, path) or ""
 
