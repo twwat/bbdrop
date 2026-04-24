@@ -95,33 +95,31 @@ class ForumController(QObject):
 
     # ----- public entry points -----
 
-    def handle_gallery_uploaded(self, gallery_id: int) -> Optional[int]:
-        cfg = fp.get_effective_posting_config(self._get_conn(), gallery_id)
-        if (
-            not cfg
-            or not cfg.get("enabled")
-            or cfg.get("trigger_mode") != "auto_on_upload"
-        ):
-            return None
-        # Skip if a non-failed post already exists for this gallery — re-uploads
-        # of already-posted galleries should update via stale flow, not duplicate.
-        existing = [
-            p for p in fp.list_forum_posts_for_gallery(self._get_conn(), gallery_id)
-            if p["status"] in ("queued", "posted", "stale")
-        ]
-        if existing:
-            return None
-        return self._enqueue_post(gallery_id, cfg)
+    def handle_gallery_uploaded(self, gallery_id: int) -> list[int]:
+        """Auto-post to all configured destinations when trigger=auto_on_upload."""
+        conn = self._get_conn()
+        settings = fp.get_tab_posting_settings_for_gallery(conn, gallery_id)
+        if (not settings
+                or settings.get("trigger_mode") != "auto_on_upload"
+                or not settings.get("enabled")):
+            return []
+        destinations = fp.get_effective_destinations(conn, gallery_id)
+        return self._enqueue_posts_for_destinations(gallery_id, destinations)
 
-    def post_now(
-        self, gallery_id: int, override_cfg: Optional[dict] = None,
-    ) -> int:
-        cfg = override_cfg or fp.get_effective_posting_config(
-            self._get_conn(), gallery_id,
-        )
-        if not cfg:
-            raise ValueError("No effective posting config for gallery")
-        return self._enqueue_post(gallery_id, cfg)
+    def post_now(self, gallery_id: int, destinations: list[dict]) -> list[int]:
+        """Post to an explicit list of destinations (used by the composer)."""
+        return self._enqueue_posts_for_destinations(gallery_id, destinations)
+
+    def quick_post(self, gallery_ids: list[int]) -> dict[int, list[int]]:
+        """Post all configured destinations for each gallery without the composer."""
+        conn = self._get_conn()
+        results: dict[int, list[int]] = {}
+        for gid in gallery_ids:
+            dests = fp.get_effective_destinations(conn, gid)
+            results[gid] = (
+                self._enqueue_posts_for_destinations(gid, dests) if dests else []
+            )
+        return results
 
     def onboard_post(
         self, gallery_id: int, text_or_url: str,
@@ -460,6 +458,49 @@ class ForumController(QObject):
                 f"forum: auto-remember target failed: {e}",
                 level="warning", category="forum",
             )
+
+    def _enqueue_posts_for_destinations(
+        self, gallery_id: int, destinations: list[dict]
+    ) -> list[int]:
+        """Insert a forum_post row and enqueue a PostJob for each destination."""
+        conn = self._get_conn()
+        post_ids: list[int] = []
+        for dest in destinations:
+            try:
+                body_template = dest.get("body_template_name") or ""
+                body, title = self._template_renderer(gallery_id, body_template, None)
+                body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
+                link_map = extract_link_map(body)
+                self._auto_remember_target(
+                    forum_fk=dest["forum_fk"],
+                    cfg_kind=dest["kind"],
+                    target_id=str(dest["target_id"]),
+                )
+                post_id = fp.insert_forum_post(
+                    conn,
+                    gallery_fk=gallery_id,
+                    forum_fk=dest["forum_fk"],
+                    kind=dest["kind"],
+                    target_id=dest["target_id"],
+                    body_hash=body_hash,
+                    link_map=link_map,
+                )
+                self._worker.enqueue(PostJob(
+                    forum_post_id=post_id,
+                    forum_id=dest["forum_fk"],
+                    kind=dest["kind"],
+                    target_id=dest["target_id"],
+                    title=title,
+                    body=body,
+                ))
+                post_ids.append(post_id)
+            except Exception as exc:
+                log(
+                    f"forum: failed to enqueue post for gallery {gallery_id} "
+                    f"dest {dest}: {exc}",
+                    level="warning", category="forum",
+                )
+        return post_ids
 
     def _enqueue_post(self, gallery_id: int, cfg: dict) -> int:
         # Composer can short-circuit rendering by passing _body_override /
