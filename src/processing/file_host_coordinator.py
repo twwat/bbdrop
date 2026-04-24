@@ -140,11 +140,6 @@ class FileHostCoordinator:
             with self.active_uploads_lock:
                 self.active_uploads.discard(upload_key)
 
-            log(
-                f"Released upload slots for {host_name} (gallery {gallery_id})",
-                level="debug",
-                category="file_hosts"
-            )
 
     def is_upload_active(self, gallery_id: int, host_name: str) -> bool:
         """Check if a specific upload is currently active.

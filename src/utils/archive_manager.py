@@ -146,10 +146,6 @@ class ArchiveManager:
                 paths, ref_count = self.archive_cache[db_id]
                 if paths and all(p.exists() for p in paths):
                     self.archive_cache[db_id] = (paths, ref_count + 1)
-                    log(
-                        f"Reusing existing archive for gallery {db_id} (refs: {ref_count + 1})",
-                        level="debug", category="file_hosts"
-                    )
                     return paths
                 else:
                     log(
@@ -219,13 +215,9 @@ class ArchiveManager:
                 return deleted
             elif ref_count <= 1:
                 self.archive_cache[db_id] = (paths, 0)
-                log(f"Released archive reference for gallery {db_id} (refs: 0, kept for retry)",
-                    level="debug", category="file_hosts")
                 return False
             else:
                 self.archive_cache[db_id] = (paths, ref_count - 1)
-                log(f"Released archive reference for gallery {db_id} (refs: {ref_count - 1})",
-                    level="debug", category="file_hosts")
                 return False
 
     def cleanup_gallery(self, gallery_id: int) -> None:

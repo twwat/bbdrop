@@ -129,21 +129,10 @@ def _md5_fetch_worker(
             K2S_MD5_BACKOFF_BASE_SEC * (2 ** attempt),
             K2S_MD5_MAX_BACKOFF_SEC,
         )
-        log(
-            f"{tag} md5 not ready, retry in {delay}s "
-            f"(attempt {attempt + 2}/{K2S_MD5_MAX_ATTEMPTS})",
-            level="debug",
-            category="file_hosts",
-        )
         time.sleep(delay)
 
     if md5:
         queue_store.update_file_host_upload(primary_row_id, md5_hash=md5)
-        log(
-            f"{tag} md5 landed: {md5} — unblocking siblings",
-            level="debug",
-            category="file_hosts",
-        )
     else:
         log(
             f"{tag} gave up after {K2S_MD5_MAX_ATTEMPTS} attempts — "
