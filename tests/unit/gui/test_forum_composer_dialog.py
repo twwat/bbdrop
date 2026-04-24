@@ -42,12 +42,10 @@ def _setup(conn) -> list[int]:
         "VALUES('T','user',0)",
     )
     tab_id = conn.execute("SELECT id FROM tabs WHERE name='T'").fetchone()[0]
-    fp.set_tab_posting_config(
+    # Use v2 multi-destination API (tab_posting_destinations table)
+    fp.add_tab_destination(
         conn, tab_id=tab_id, forum_fk=fid, kind="reply",
         target_id="111", body_template_name="Default",
-        title_template_name=None, trigger_mode="manual",
-        update_mode="whole", manual_edit_handling="skip_alert",
-        stale_triggers=["upload"], enabled=True,
     )
     conn.execute(
         "INSERT INTO galleries(path, status, added_ts, tab_id) "
@@ -65,12 +63,7 @@ def _setup(conn) -> list[int]:
 
 def _make_controller():
     controller = MagicMock()
-    controller.preview_render = MagicMock(return_value=("body text", "title text"))
     controller.post_now = MagicMock(return_value=999)
-    # Drop the auto-created `forum_post_changed` attribute so the dialog's
-    # `connect()` raises and is silently swallowed (we don't want a real signal
-    # for unit tests).
-    del controller.forum_post_changed
     return controller
 
 
@@ -81,7 +74,7 @@ def test_composer_lists_one_row_per_gallery(app, conn):
         conn=conn, controller=controller, gallery_ids=gids,
     )
     assert dlg.row_count() == 2
-    # Both rows have an effective config so neither warns
+    # Both rows have effective destinations so neither warns
     assert dlg.has_warning(0) is False
     assert dlg.has_warning(1) is False
 
@@ -95,8 +88,8 @@ def test_composer_post_enqueues_for_each_unskipped_row(app, conn):
     dlg.set_skipped(0, True)
     dlg.post_all()
     assert controller.post_now.call_count == 1  # only the unskipped row
-    _, kw = controller.post_now.call_args
-    assert kw.get("gallery_id") == gids[1]
+    args, _ = controller.post_now.call_args
+    assert args[0] == gids[1]
 
 
 def test_composer_handles_gallery_with_no_config(app, conn):
@@ -134,9 +127,10 @@ def test_composer_passes_body_override_when_edited(app, conn):
     )
     dlg._rows[0].body_edit.setPlainText("EDITED BODY")
     dlg.post_all()
-    _, kw = controller.post_now.call_args
-    cfg = kw["override_cfg"]
-    assert cfg["_body_override"] == "EDITED BODY"
+    args, _ = controller.post_now.call_args
+    dests = args[1]
+    assert len(dests) > 0
+    assert dests[0].get("_body_override") == "EDITED BODY"
 
 
 def test_composer_skips_warning_rows_on_post(app, conn):
@@ -162,5 +156,5 @@ def test_composer_skips_warning_rows_on_post(app, conn):
         gallery_ids=[*gids, new_gid],
     )
     dlg.post_all()
-    # Only the two configured galleries should be posted; the third warns.
+    # Only the two configured galleries should be posted; the third has no destinations.
     assert controller.post_now.call_count == 2
