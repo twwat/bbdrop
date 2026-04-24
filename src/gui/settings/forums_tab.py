@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from PyQt6.QtCore import QObject, QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QMessageBox, QPushButton, QSpinBox, QStyle,
     QStyledItemDelegate, QVBoxLayout, QWidget,
@@ -237,6 +237,7 @@ class ForumsPanel(QWidget):
             self._on_favicon_ready, Qt.ConnectionType.QueuedConnection,
         )
         self._build_ui()
+        self._load_posting_policy()
         self._reload_list()
         self._restore_last_selection()
         self._update_enabled_state()
@@ -313,6 +314,7 @@ class ForumsPanel(QWidget):
         left.setSpacing(10)
         left.addWidget(self._build_forums_group())
         left.addWidget(self._build_details_group())
+        left.addWidget(self._build_posting_policy_group())
         left.addStretch()
         root.addLayout(left, 3)
 
@@ -323,6 +325,91 @@ class ForumsPanel(QWidget):
         right.addWidget(self._build_targets_group())
         right.addStretch()
         root.addLayout(right, 2)
+
+    def _build_posting_policy_group(self) -> QGroupBox:
+        box = QGroupBox("Posting behaviour (global)")
+        form = QFormLayout(box)
+        form.setContentsMargins(10, 10, 10, 10)
+
+        self._update_mode_combo = QComboBox()
+        for value, label in (
+            ("whole", "Whole-body replace"),
+            ("surgical", "Surgical link swap"),
+            ("whole_then_surgical", "Whole, fall back to surgical"),
+        ):
+            self._update_mode_combo.addItem(label, value)
+        form.addRow("Update mode", self._update_mode_combo)
+
+        self._manual_edit_combo = QComboBox()
+        for value, label in (
+            ("skip_alert", "Skip and alert"),
+            ("overwrite", "Overwrite anyway"),
+            ("surgical", "Surgical only"),
+        ):
+            self._manual_edit_combo.addItem(label, value)
+        form.addRow("On manual edits", self._manual_edit_combo)
+
+        stale_row = QWidget()
+        stale_layout = QHBoxLayout(stale_row)
+        stale_layout.setContentsMargins(0, 0, 0, 0)
+        self._st_upload = QCheckBox("Upload finishes")
+        self._st_template = QCheckBox("Template edited")
+        self._st_link_format = QCheckBox("Link format changed")
+        self._st_manual = QCheckBox("Manual re-render")
+        for w in (self._st_upload, self._st_template, self._st_link_format, self._st_manual):
+            stale_layout.addWidget(w)
+        stale_layout.addStretch()
+        form.addRow("Mark stale when", stale_row)
+
+        save_btn = QPushButton("Save posting policy")
+        save_btn.clicked.connect(self._save_posting_policy)
+        form.addRow("", save_btn)
+
+        return box
+
+    def _load_posting_policy(self) -> None:
+        for key, combo in (
+            ("forum_update_mode", self._update_mode_combo),
+            ("forum_manual_edit_handling", self._manual_edit_combo),
+        ):
+            row = self._conn.execute(
+                "SELECT value_text FROM settings WHERE key=?", (key,)
+            ).fetchone()
+            if row and row[0]:
+                idx = combo.findData(row[0])
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+
+        import json
+        row = self._conn.execute(
+            "SELECT value_text FROM settings WHERE key=?", ("forum_stale_triggers",)
+        ).fetchone()
+        triggers = set(json.loads(row[0]) if row and row[0] else ["upload"])
+        self._st_upload.setChecked("upload" in triggers)
+        self._st_template.setChecked("template_edit" in triggers)
+        self._st_link_format.setChecked("link_format" in triggers)
+        self._st_manual.setChecked("manual_rerender" in triggers)
+
+    def _save_posting_policy(self) -> None:
+        import json
+        for key, combo in (
+            ("forum_update_mode", self._update_mode_combo),
+            ("forum_manual_edit_handling", self._manual_edit_combo),
+        ):
+            self._conn.execute(
+                "INSERT OR REPLACE INTO settings(key, value_text) VALUES(?,?)",
+                (key, combo.currentData() or ""),
+            )
+        triggers: list[str] = []
+        if self._st_upload.isChecked():      triggers.append("upload")
+        if self._st_template.isChecked():    triggers.append("template_edit")
+        if self._st_link_format.isChecked(): triggers.append("link_format")
+        if self._st_manual.isChecked():      triggers.append("manual_rerender")
+        self._conn.execute(
+            "INSERT OR REPLACE INTO settings(key, value_text) VALUES(?,?)",
+            ("forum_stale_triggers", json.dumps(triggers)),
+        )
+        self._conn.commit()
 
     def _build_forums_group(self) -> QGroupBox:
         box = QGroupBox("Forums")
