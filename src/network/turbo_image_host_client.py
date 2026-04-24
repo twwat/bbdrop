@@ -343,9 +343,6 @@ class TurboImageHostClient(ImageHostClient):
             result['upload_time'] = upload_time
             result['file_size'] = os.path.getsize(image_path)
 
-            log(f"Uploaded {filename} to TurboImageHost in {upload_time:.2f}s",
-                level="debug", category="uploads")
-
             return result
 
         except pycurl.error as e:
@@ -492,8 +489,6 @@ class TurboImageHostClient(ImageHostClient):
                 html = response_buffer.getvalue().decode('utf-8', errors='replace')
                 batch = self._parse_batch_html(html)
 
-                log(f"Batch results: {len(batch['images'])} images, gallery_id={batch['gallery_id']}",
-                    level="debug", category="uploads")
                 return batch
 
             except pycurl.error as e:

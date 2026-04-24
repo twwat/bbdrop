@@ -237,7 +237,6 @@ class PixhostClient(ImageHostClient):
             result['upload_time'] = upload_time
             result['file_size'] = os.path.getsize(image_path)
 
-            log(f"Uploaded {filename} to Pixhost in {upload_time:.2f}s", level="debug", category="uploads")
             return result
 
         except pycurl.error as e:
