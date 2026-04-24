@@ -5,7 +5,10 @@ Spec: docs/superpowers/specs/2026-04-20-forum-posting-design.md §6 / §8.
 
 from __future__ import annotations
 
+import sqlite3
+import threading
 import time
+import traceback
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from threading import Event, Lock
@@ -14,6 +17,7 @@ from typing import Callable, Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.network.forum.client import ForumClient, ForumErrorKind
+from src.storage import forum_posting as fp
 from src.utils.logger import log
 
 
@@ -55,12 +59,15 @@ class ForumPostingWorker(QThread):
 
     def __init__(
         self,
-        client_factory: Callable[[int], ForumClient],
-        cooldown_lookup: Callable[[int], float],
+        client_factory: Callable[[int, Optional[sqlite3.Connection]], ForumClient],
+        cooldown_lookup: Optional[Callable[[int], float]] = None,
+        db_connection_factory: Optional[Callable[[], sqlite3.Connection]] = None,
     ):
         super().__init__()
         self._client_factory = client_factory
-        self._cooldown_lookup = cooldown_lookup
+        self._cooldown_lookup_callback = cooldown_lookup
+        self._db_connection_factory = db_connection_factory
+        self._worker_conn: Optional[sqlite3.Connection] = None
         self._clients: dict[int, ForumClient] = {}
         self._queues: dict[int, deque] = defaultdict(deque)
         self._next_allowed: dict[int, float] = defaultdict(lambda: 0.0)
@@ -84,10 +91,45 @@ class ForumPostingWorker(QThread):
         self._paused_forums.discard(forum_id)
         self._wake.set()
 
+    def _cooldown_lookup(self, forum_id: int) -> float:
+        current_thread = threading.current_thread().ident
+        if self._worker_conn:
+            log(
+                f"Using worker connection {id(self._worker_conn)} from thread {current_thread}",
+                level="debug", category="forum",
+            )
+            try:
+                forum = fp.get_forum(self._worker_conn, forum_id)
+                cooldown = float(forum["default_cooldown_s"]) if forum else 30.0
+                log(
+                    f"Looked up cooldown for forum {forum_id}: {cooldown}s",
+                    level="debug", category="forum",
+                )
+                return cooldown
+            except Exception as e:
+                log(
+                    f"Failed to lookup cooldown for forum {forum_id} on thread {current_thread}: {e}\n{traceback.format_exc()}",
+                    level="error", category="forum",
+                )
+        elif self._cooldown_lookup_callback:
+            log(
+                f"Using callback for cooldown lookup on thread {current_thread}",
+                level="debug", category="forum",
+            )
+            return self._cooldown_lookup_callback(forum_id)
+        log(
+            f"No cooldown source available, using default 30s on thread {current_thread}",
+            level="debug", category="forum",
+        )
+        return 30.0
+
     def _client_for(self, forum_id: int) -> ForumClient:
         c = self._clients.get(forum_id)
         if c is None:
-            c = self._client_factory(forum_id)
+            try:
+                c = self._client_factory(forum_id, self._worker_conn)
+            except TypeError:
+                c = self._client_factory(forum_id)
             self._clients[forum_id] = c
         return c
 
@@ -108,23 +150,42 @@ class ForumPostingWorker(QThread):
         return None, max(0.0, soonest - now)
 
     def run(self) -> None:
-        while not self._stop:
-            job, sleep_for = self._pick_next_job()
-            if job is None:
-                self._wake.wait(timeout=min(sleep_for, 5.0))
-                self._wake.clear()
-                continue
-            try:
-                self._dispatch(job)
-            except Exception as e:
+        try:
+            log(
+                f"Forum worker started on thread {threading.current_thread().ident}",
+                level="debug", category="forum",
+            )
+            if self._db_connection_factory:
+                self._worker_conn = self._db_connection_factory()
                 log(
-                    f"forum worker dispatch error: {e}",
-                    level="error", category="forum",
+                    f"Created worker connection {id(self._worker_conn)} on thread {threading.current_thread().ident}",
+                    level="debug", category="forum",
                 )
-            finally:
-                self._next_allowed[job.forum_id] = (
-                    time.monotonic() + self._cooldown_lookup(job.forum_id)
+            else:
+                log(
+                    f"No db_connection_factory provided, will use callback",
+                    level="debug", category="forum",
                 )
+            while not self._stop:
+                job, sleep_for = self._pick_next_job()
+                if job is None:
+                    self._wake.wait(timeout=min(sleep_for, 5.0))
+                    self._wake.clear()
+                    continue
+                try:
+                    self._dispatch(job)
+                except Exception as e:
+                    log(
+                        f"forum worker dispatch error on thread {threading.current_thread().ident}: {e}\n{traceback.format_exc()}",
+                        level="error", category="forum",
+                    )
+                finally:
+                    self._next_allowed[job.forum_id] = (
+                        time.monotonic() + self._cooldown_lookup(job.forum_id)
+                    )
+        finally:
+            if self._worker_conn:
+                self._worker_conn.close()
 
     def _dispatch(self, job) -> None:
         if isinstance(job, PostJob):

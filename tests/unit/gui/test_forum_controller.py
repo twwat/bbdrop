@@ -69,7 +69,8 @@ def test_auto_post_enqueues_job_when_tab_configured_for_auto(app, conn):
     worker = MagicMock()
     template_renderer = MagicMock(return_value=("rendered body", ""))
     ctrl = ForumController(
-        conn=conn, worker=worker, template_renderer=template_renderer,
+        worker=worker, template_renderer=template_renderer,
+        db_connection_factory=lambda: conn,
     )
     ctrl.handle_gallery_uploaded(gid)
     assert worker.enqueue.called
@@ -84,7 +85,7 @@ def test_auto_post_skipped_when_trigger_is_manual(app, conn):
     gid = conn.execute("SELECT id FROM galleries").fetchone()[0]
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("", ""),
     )
     ctrl.handle_gallery_uploaded(gid)
@@ -102,7 +103,7 @@ def test_auto_post_skipped_when_disabled(app, conn):
     )
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("b", ""),
     )
     ctrl.handle_gallery_uploaded(gid)
@@ -118,7 +119,7 @@ def test_auto_post_skipped_if_already_posted(app, conn):
     fp.update_forum_post(conn, pid, status="posted", posted_post_id="1")
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("b", ""),
     )
     ctrl.handle_gallery_uploaded(gid)
@@ -130,7 +131,7 @@ def test_post_now_enqueues_regardless_of_trigger_mode(app, conn):
     gid = conn.execute("SELECT id FROM galleries").fetchone()[0]
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("body", ""),
     )
     pid = ctrl.post_now(gid)
@@ -149,7 +150,7 @@ def test_bbcode_regenerated_marks_posts_stale(app, conn):
     fp.update_forum_post(conn, pid, status="posted", posted_post_id="555")
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("", ""),
     )
     bbcode_regenerated_signal_hub.bbcode_regenerated.emit(gid, "template_edit")
@@ -166,7 +167,7 @@ def test_bbcode_regenerated_ignores_unrelated_cause(app, conn):
     fp.update_forum_post(conn, pid, status="posted")
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("", ""),
     )
     bbcode_regenerated_signal_hub.bbcode_regenerated.emit(gid, "template_edit")
@@ -182,7 +183,7 @@ def test_post_result_payload_persists_to_db(app, conn):
     )
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("", ""),
     )
     ctrl._on_post_result_payload(pid, {
@@ -204,7 +205,7 @@ def test_post_completed_failure_marks_failed(app, conn):
     )
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("", ""),
     )
     ctrl._on_post_completed(pid, False, "NETWORK:boom")
@@ -222,7 +223,7 @@ def test_auto_post_auto_remembers_target_in_library(app, conn):
     assert fp.list_targets(conn, fid) == []
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("body", ""),
     )
     ctrl.handle_gallery_uploaded(gid)
@@ -242,7 +243,7 @@ def test_auto_remember_does_not_duplicate_existing_target(app, conn):
     )
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("body", ""),
     )
     ctrl.handle_gallery_uploaded(gid)
@@ -258,7 +259,7 @@ def test_auto_remember_failure_does_not_break_post(app, conn, monkeypatch):
     _, fid, gid = _setup_tab_with_config(conn)
     worker = MagicMock()
     ctrl = ForumController(
-        conn=conn, worker=worker,
+        worker=worker, db_connection_factory=lambda: conn,
         template_renderer=lambda *a, **kw: ("body", ""),
     )
     import src.gui.forum_controller as fc_mod

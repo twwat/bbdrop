@@ -578,12 +578,25 @@ class BBDropGUI(QMainWindow):
         self.gallery_table_controller = GalleryTableController(self)
         self._update_checker = None  # Initialize update checker reference
 
-        # Forum posting controller — dedicated sqlite connection, owns posting worker.
+        # Forum posting controller — GUI owns GUI connection, worker owns worker connections.
         from src.gui.forum_controller import ForumController
         from src.storage.database import _connect
-        self._forum_db_conn = _connect(self.queue_manager.store.db_path)
+        import threading
+        db_path = self.queue_manager.store.db_path
+
+        # GUI thread connection — used only on GUI thread
+        self._forum_db_conn = _connect(db_path)
         self._forum_db_conn.row_factory = sqlite3.Row
-        self._forum_controller = ForumController(conn=self._forum_db_conn)
+
+        # Worker thread connection factory — creates fresh connections for worker thread
+        def make_forum_conn():
+            conn = _connect(db_path)
+            conn.row_factory = sqlite3.Row
+            return conn
+
+        self._forum_controller = ForumController(
+            db_connection_factory=make_forum_conn,
+        )
         self._forum_controller.start()
 
         # Now connect queue status changes (after worker_signal_handler is ready)

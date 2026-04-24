@@ -64,10 +64,10 @@ def _setup(conn):
 
 def _make_controller(conn):
     return ForumController(
-        conn=conn,
         worker=MagicMock(),
         template_renderer=lambda *a, **kw: ("", ""),
         credential_loader=lambda fid: ("", ""),
+        db_connection_factory=lambda: conn,
     )
 
 
