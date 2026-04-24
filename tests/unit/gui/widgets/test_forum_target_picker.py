@@ -110,3 +110,55 @@ def test_picker_set_targets_twice_replaces(conn_with_targets):
     result = picker.get_targets()
     assert len(result) == 1
     assert result[0]["target_id"] == "20"
+
+
+@pytest.mark.unit
+def test_picker_panel_loads_targets(conn_with_targets):
+    from src.gui.widgets.forum_target_picker import _TargetPickerPanel
+    panel = _TargetPickerPanel(conn_with_targets, current=[])
+    # Panel should have loaded the 2 targets + 1 header = 3 items
+    assert panel._list.count() == 3  # 1 forum header + 2 targets
+
+
+@pytest.mark.unit
+def test_picker_panel_premarks_current(conn_with_targets):
+    from src.gui.widgets.forum_target_picker import _TargetPickerPanel
+    from PyQt6.QtCore import Qt
+    current = [{"forum_fk": 1, "target_id": "10"}]
+    panel = _TargetPickerPanel(conn_with_targets, current=current)
+    # Find the item with target_id "10" and confirm it's checked
+    for i in range(panel._list.count()):
+        item = panel._list.item(i)
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data and data.get("target_id") == "10":
+            assert item.checkState() == Qt.CheckState.Checked
+            break
+
+
+@pytest.mark.unit
+def test_picker_panel_checked_keys_survive_filter(conn_with_targets):
+    """Checkbox state should persist across search/filter cycles."""
+    from src.gui.widgets.forum_target_picker import _TargetPickerPanel
+    from PyQt6.QtCore import Qt
+    panel = _TargetPickerPanel(conn_with_targets, current=[])
+    # Find and check "Thread 1"
+    for i in range(panel._list.count()):
+        item = panel._list.item(i)
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data and data.get("target_id") == "10":
+            item.setCheckState(Qt.CheckState.Checked)
+            break
+    # Filter list (Thread 1 disappears)
+    panel._filter("Sub")
+    # Clear filter (Thread 1 reappears)
+    panel._filter("")
+    # Thread 1 should still be checked
+    found = False
+    for i in range(panel._list.count()):
+        item = panel._list.item(i)
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data and data.get("target_id") == "10":
+            assert item.checkState() == Qt.CheckState.Checked, "Checked state lost after filter cycle"
+            found = True
+            break
+    assert found, "Thread 1 not found after filter cleared"

@@ -148,7 +148,7 @@ class _TargetPickerPanel(QFrame):
     def __init__(self, conn, current: list[dict], parent=None):
         super().__init__(parent, Qt.WindowType.Popup)
         self._conn = conn
-        self._current_keys = {(t["forum_fk"], t["target_id"]) for t in current}
+        self._checked_keys = {(t["forum_fk"], t["target_id"]) for t in current}
         self._all: list[dict] = []
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.resize(380, 320)
@@ -165,6 +165,7 @@ class _TargetPickerPanel(QFrame):
 
         self._list = QListWidget()
         self._list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self._list.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self._list, 1)
 
         btns = QHBoxLayout()
@@ -209,7 +210,7 @@ class _TargetPickerPanel(QFrame):
                 f"  {t['name']}  ({kind_label} #{t['target_id']})"
             )
             item.setData(Qt.ItemDataRole.UserRole, t)
-            checked = (t["forum_fk"], t["target_id"]) in self._current_keys
+            checked = (t["forum_fk"], t["target_id"]) in self._checked_keys
             item.setCheckState(
                 Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
             )
@@ -223,14 +224,20 @@ class _TargetPickerPanel(QFrame):
         ]
         self._render(filtered)
 
+    def _on_item_changed(self, item: QListWidgetItem) -> None:
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        key = (data["forum_fk"], data["target_id"])
+        if item.checkState() == Qt.CheckState.Checked:
+            self._checked_keys.add(key)
+        else:
+            self._checked_keys.discard(key)
+
     def _accept(self):
-        selected = []
-        for i in range(self._list.count()):
-            item = self._list.item(i)
-            if (item.flags() & Qt.ItemFlag.ItemIsEnabled and
-                    item.checkState() == Qt.CheckState.Checked):
-                data = item.data(Qt.ItemDataRole.UserRole)
-                if data:
-                    selected.append(data)
+        selected = [
+            t for t in self._all
+            if (t["forum_fk"], t["target_id"]) in self._checked_keys
+        ]
         self.targets_selected.emit(selected)
         self.close()
