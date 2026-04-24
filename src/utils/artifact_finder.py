@@ -55,3 +55,88 @@ def find_gallery_json_by_id(gallery_id: str, gallery_path: Optional[str] = None)
             return sorted(matches, key=os.path.getmtime, reverse=True)[0]
 
     return None
+
+
+def find_gallery_bbcode(
+    gallery_name: str,
+    gallery_id: str,
+    gallery_path: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Find BBCode artifact file by name and gallery ID.
+
+    Searches in this order:
+    1. .uploaded/ subfolder (if gallery_path provided)
+    2. Central storage
+
+    Args:
+        gallery_name: Gallery name for filename construction
+        gallery_id: Gallery ID for filename construction
+        gallery_path: Optional path to gallery folder
+
+    Returns:
+        BBCode content if found, empty string otherwise.
+    """
+    from src.storage.gallery_management import build_gallery_filenames
+    from src.utils.logger import log
+
+    if not gallery_name or not gallery_id:
+        return None
+
+    _, _, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
+    log(
+        f"artifact_finder: looking for {bbcode_filename} in .uploaded and central store",
+        level="debug", category="fileio",
+    )
+
+    # Check .uploaded subfolder first
+    if gallery_path:
+        base_dir = gallery_path if os.path.isdir(gallery_path) else os.path.dirname(gallery_path)
+        bbcode_path = os.path.join(base_dir, ".uploaded", bbcode_filename)
+        log(
+            f"artifact_finder: checking {bbcode_path}",
+            level="debug", category="fileio",
+        )
+        if os.path.isfile(bbcode_path):
+            try:
+                with open(bbcode_path, encoding="utf-8") as f:
+                    content = f.read()
+                    log(
+                        f"artifact_finder: found {bbcode_filename} in .uploaded ({len(content)} bytes)",
+                        level="debug", category="fileio",
+                    )
+                    return content
+            except OSError as e:
+                log(
+                    f"artifact_finder: error reading {bbcode_path}: {e}",
+                    level="warning", category="fileio",
+                )
+
+    # Check central storage
+    try:
+        from src.utils.paths import get_central_storage_path
+        central_path = get_central_storage_path()
+        central_bbcode_path = os.path.join(central_path, bbcode_filename)
+        log(
+            f"artifact_finder: checking {central_bbcode_path}",
+            level="debug", category="fileio",
+        )
+        if os.path.isfile(central_bbcode_path):
+            with open(central_bbcode_path, encoding="utf-8") as f:
+                content = f.read()
+                log(
+                    f"artifact_finder: found {bbcode_filename} in central ({len(content)} bytes)",
+                    level="debug", category="fileio",
+                )
+                return content
+    except Exception as e:
+        log(
+            f"artifact_finder: error checking central store: {e}",
+            level="warning", category="fileio",
+        )
+
+    log(
+        f"artifact_finder: {bbcode_filename} not found",
+        level="debug", category="fileio",
+    )
+    return None
