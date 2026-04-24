@@ -115,3 +115,27 @@ class TestFormatStatusSpeedCell:
             _w(status="failed:HTTP 500: connection reset", speed_bps=0.0)
         )
         assert tooltip == "Failed: HTTP 500: connection reset"
+
+    def test_waiting_md5_status(self):
+        text, color, tooltip, italic = format_status_speed_cell(
+            _w(status="waiting_md5")
+        )
+        assert text == "Waiting for MD5..."
+        assert color is not None
+        assert italic is False
+
+    def test_creating_from_hash_status(self):
+        text, color, tooltip, italic = format_status_speed_cell(
+            _w(status="creating_from_hash")
+        )
+        assert text == "Creating from MD5..."
+        assert color is not None
+        assert italic is False
+
+    def test_hash_created_status(self):
+        text, color, tooltip, italic = format_status_speed_cell(
+            _w(status="hash_created")
+        )
+        assert text == "File created without upload"
+        assert color is not None
+        assert italic is False

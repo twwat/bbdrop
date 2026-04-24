@@ -96,6 +96,18 @@ def format_status_speed_cell(
             tooltip = "Network error occurred"
     elif base_status == "paused":
         color = QColor("#B8860B")
+    elif base_status == "waiting_md5":
+        color = QColor("#5C8FBF") if _is_dark_palette() else QColor("#3A6F9F")
+        text = "Waiting for MD5..."
+        tooltip = "Waiting for sibling host MD5 before dedup upload"
+    elif base_status == "creating_from_hash":
+        color = QColor("#5C8FBF") if _is_dark_palette() else QColor("#3A6F9F")
+        text = "Creating from MD5..."
+        tooltip = "Sending createFileByHash to create file without upload"
+    elif base_status == "hash_created":
+        color = QColor("#66BB6A") if _is_dark_palette() else QColor("darkgreen")
+        text = "File created without upload"
+        tooltip = "File created via hash dedup — no bytes transferred"
     elif base_status == "disabled":
         italic = True
 
