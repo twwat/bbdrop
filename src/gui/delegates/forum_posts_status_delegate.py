@@ -117,16 +117,17 @@ class ForumPostsStatusDelegate(QStyledItemDelegate):
             posts: list[dict] = index.data(Qt.ItemDataRole.UserRole + 1) or []
             if path and posts:
                 pos = event.position().toPoint()
-                pill_rects = self._compute_pill_rects(option.rect, posts)
+                widget_font = option.widget.font() if option.widget else None
+                pill_rects = self._compute_pill_rects(option.rect, posts, widget_font)
                 for post, rect in zip(posts, pill_rects):
                     if rect.contains(pos):
                         self._signals.post_clicked.emit(path, post.get("forum_fk", 0))
                         return True
         return super().editorEvent(event, model, option, index)
 
-    def _compute_pill_rects(self, cell_rect: QRect, posts: list) -> list[QRect]:
+    def _compute_pill_rects(self, cell_rect: QRect, posts: list, font: QFont | None = None) -> list[QRect]:
         # Use the same scaled font as paint() so hit-rects match rendered pill widths.
-        pill_font = QFont()
+        pill_font = QFont(font) if font else QFont()
         pt = pill_font.pointSizeF()
         if pt > 0:
             pill_font.setPointSizeF(pt * 0.82)
