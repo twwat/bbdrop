@@ -84,7 +84,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 16  # Bump this when adding new migrations
+_SCHEMA_VERSION = 17  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -649,6 +649,87 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         """)
         log("Migration 16: forum_targets table created",
             level="info", category="database")
+
+        # Migration 17: multi-destination forum posting model.
+        # tab_posting_config (single-row) replaced by tab_posting_destinations
+        # (list) + tab_posting_settings (behavioral). gallery_posting_override
+        # (single-row) replaced by gallery_posting_destinations (list with
+        # add/replace/remove action). Old tables kept for history; new code
+        # only reads/writes the new tables.
+        existing_tables = {
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if "tab_posting_destinations" not in existing_tables:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS tab_posting_destinations (
+                    id INTEGER PRIMARY KEY,
+                    tab_id INTEGER NOT NULL REFERENCES tabs(id) ON DELETE CASCADE,
+                    forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
+                    target_id TEXT NOT NULL,
+                    kind TEXT NOT NULL CHECK(kind IN ('reply','new_thread')),
+                    body_template_name TEXT,
+                    created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                    updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                    UNIQUE(tab_id, forum_fk, target_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS tab_posting_settings (
+                    tab_id INTEGER PRIMARY KEY REFERENCES tabs(id) ON DELETE CASCADE,
+                    trigger_mode TEXT NOT NULL DEFAULT 'manual'
+                        CHECK(trigger_mode IN ('manual','auto_on_upload','none')),
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                    updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS gallery_posting_destinations (
+                    id INTEGER PRIMARY KEY,
+                    gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+                    forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
+                    target_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    body_template_name TEXT,
+                    action TEXT NOT NULL DEFAULT 'add'
+                        CHECK(action IN ('add','replace','remove')),
+                    created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                    updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                    UNIQUE(gallery_fk, forum_fk, target_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_tab_posting_dests_tab
+                    ON tab_posting_destinations(tab_id);
+                CREATE INDEX IF NOT EXISTS idx_gallery_posting_dests_gallery
+                    ON gallery_posting_destinations(gallery_fk);
+            """)
+
+            # Migrate existing tab_posting_config rows → new tables
+            conn.execute("""
+                INSERT OR IGNORE INTO tab_posting_destinations
+                    (tab_id, forum_fk, target_id, kind, body_template_name)
+                SELECT tab_id, forum_fk, target_id, kind, body_template_name
+                FROM tab_posting_config
+            """)
+            conn.execute("""
+                INSERT OR IGNORE INTO tab_posting_settings
+                    (tab_id, trigger_mode, enabled)
+                SELECT tab_id, trigger_mode, enabled
+                FROM tab_posting_config
+            """)
+
+            # Migrate existing gallery_posting_override rows → new table.
+            # Old overrides become 'add' actions (safest assumption).
+            conn.execute("""
+                INSERT OR IGNORE INTO gallery_posting_destinations
+                    (gallery_fk, forum_fk, target_id, kind, body_template_name, action)
+                SELECT gallery_fk, forum_fk, target_id, kind, body_template_name, 'add'
+                FROM gallery_posting_override
+                WHERE forum_fk IS NOT NULL AND target_id IS NOT NULL
+            """)
+            conn.commit()
+            log("Migration 17: multi-destination posting tables created",
+                level="info", category="database")
 
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
