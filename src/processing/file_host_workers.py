@@ -124,12 +124,43 @@ class FileHostWorker(QThread):
         self.current_db_id: Optional[int] = None
         self._should_stop_current = False
 
+        # Family sibling status tracking
+        self._family_status: str = ""
+        self._hash_created_ts: float = 0.0
+
         # Thread-safe upload throttle state
         self._upload_throttle_state = {}  # {(db_id, host): {'last_emit': time, 'last_progress': (up, total)}}
         self._throttle_lock = threading.Lock()
 
         # Connect credentials update signal
         self.credentials_update_requested.connect(self._update_credentials)
+
+    def _update_family_idle_status(self) -> None:
+        """Emit a family-aware idle status when the poll loop finds no pending work.
+
+        Transitions:
+          - hash_created within 3s hold → do nothing (let the label persist)
+          - blocked rows exist → emit "waiting_md5" (once, not every second)
+          - otherwise → emit "idle" to clear any stale family status
+        """
+        _HASH_CREATED_HOLD_SEC = 3.0
+
+        if self._family_status == "hash_created":
+            if time.time() - self._hash_created_ts < _HASH_CREATED_HOLD_SEC:
+                return
+            self._family_status = ""
+            self.status_updated.emit(self.host_id, "idle")
+            return
+
+        has_blocked = self.queue_store.has_blocked_uploads_for_host(self.host_id)
+        if has_blocked:
+            if self._family_status != "waiting_md5":
+                self._family_status = "waiting_md5"
+                self.status_updated.emit(self.host_id, "waiting_md5")
+        else:
+            if self._family_status == "waiting_md5":
+                self._family_status = ""
+                self.status_updated.emit(self.host_id, "idle")
 
     def _log(self, message: str, level: str = "info") -> None:
         """Helper to log with host name prefix.
@@ -590,7 +621,7 @@ class FileHostWorker(QThread):
                 pending_uploads = self.queue_store.get_pending_file_host_uploads(host_name=self.host_id)
 
                 if not pending_uploads:
-                    # No work to do, just wait (don't emit 0 bandwidth)
+                    self._update_family_idle_status()
                     time.sleep(1.0)
                     continue
 
@@ -740,6 +771,9 @@ class FileHostWorker(QThread):
             mirror_succeeded = self._try_family_mirror(row, mirror_client, family)
 
         if mirror_succeeded:
+            self._family_status = "hash_created"
+            self._hash_created_ts = time.time()
+            self.status_updated.emit(self.host_id, "hash_created")
             # Emit upload_completed so GUI refreshes queue display and artifacts
             self.upload_completed.emit(db_id, host_name, {'status': 'success', 'deduplication': True})
             self.host_gallery_settled.emit(db_id, host_name, True)
@@ -1321,6 +1355,9 @@ class FileHostWorker(QThread):
 
         if self._should_stop_current or self._stop_event.is_set():
             return False
+
+        self._family_status = "creating_from_hash"
+        self.status_updated.emit(self.host_id, "creating_from_hash")
 
         # Probe every sibling part. Any miss aborts immediately — we only
         # commit if the whole set lands.
