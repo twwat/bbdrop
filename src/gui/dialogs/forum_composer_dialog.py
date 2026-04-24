@@ -13,13 +13,18 @@ import os
 import sqlite3
 from typing import Optional
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
+    QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
+    QToolButton, QVBoxLayout, QWidget,
 )
 
+from src.network.forum.factory import create_forum_client
+from src.network.forum.session_store import SessionStore
 from src.storage import forum_posting as fp
+
+_ADD_NEW = "__add_new__"
 
 
 class _GalleryRow(QFrame):
@@ -38,6 +43,7 @@ class _GalleryRow(QFrame):
         self.title_input: Optional[QLineEdit] = None
         self.body_edit: Optional[QPlainTextEdit] = None
         self.status_label: Optional[QLabel] = None
+        self.target_combo: Optional[QComboBox] = None
         self._build()
 
     def _gallery_label(self) -> str:
@@ -73,29 +79,165 @@ class _GalleryRow(QFrame):
             ))
             return
 
-        v.addWidget(QLabel(
-            f"Target: {self._cfg['kind']} → {self._cfg['target_id']} "
-            f"(forum {self._cfg['forum_fk']})",
-        ))
+        # Target selector (dropdown with friendly names + "+" to add new)
+        target_layout = QHBoxLayout()
+        target_layout.addWidget(QLabel("Target:"))
+        self.target_combo = QComboBox()
+        self._populate_target_combo()
+        self.target_combo.currentIndexChanged.connect(self._on_target_changed)
+        target_layout.addWidget(self.target_combo, 1)
+        target_add_btn = QToolButton()
+        target_add_btn.setText("+")
+        target_add_btn.setToolTip("Add a subforum or thread from a URL")
+        target_add_btn.clicked.connect(self._on_add_target)
+        target_layout.addWidget(target_add_btn)
+        v.addLayout(target_layout)
+
+        # Render body and title, but don't fail if render errors
+        body = ""
+        title = ""
         try:
             body, title = self._controller.preview_render(self.gallery_id)
         except Exception as e:
-            self.warning = True
-            v.addWidget(QLabel(f"<i>Render failed: {e}</i>"))
-            return
+            # Render failure is not a fatal error — user can manually enter body
+            v.addWidget(QLabel(f"<i>Render warning: {e}</i>"))
 
         if self._cfg["kind"] == "new_thread":
-            v.addWidget(QLabel("Title:"))
+            title_layout = QHBoxLayout()
+            title_layout.addWidget(QLabel("Title:"))
             self.title_input = QLineEdit(title)
-            v.addWidget(self.title_input)
+            title_layout.addWidget(self.title_input, 1)
+            v.addLayout(title_layout)
 
         v.addWidget(QLabel("Body:"))
         self.body_edit = QPlainTextEdit(body)
         self.body_edit.setMinimumHeight(140)
-        v.addWidget(self.body_edit)
+        v.addWidget(self.body_edit, 1)
 
         self.status_label = QLabel("Ready")
         v.addWidget(self.status_label)
+
+    def _populate_target_combo(self) -> None:
+        """Fill target dropdown with friendly names from forum_targets library."""
+        self.target_combo.blockSignals(True)
+        self.target_combo.clear()
+
+        forum_id = self._cfg["forum_fk"]
+        targets = fp.list_targets(self._conn, forum_id)
+        current_target_id = str(self._cfg["target_id"])
+        current_kind = self._cfg["kind"]
+
+        selected_idx = -1
+        for i, t in enumerate(targets):
+            label = f"{t['name']} ({t['kind']} #{t['target_id']})"
+            self.target_combo.addItem(label, {
+                "kind": t["kind"],
+                "target_id": t["target_id"],
+            })
+            if (str(t["target_id"]) == current_target_id
+                    and t["kind"] == self._target_kind_from_cfg()):
+                selected_idx = i
+
+        # Add sentinel for "Add new target from URL"
+        self.target_combo.addItem("+ Add new target from URL…", _ADD_NEW)
+
+        if selected_idx >= 0:
+            self.target_combo.setCurrentIndex(selected_idx)
+        else:
+            # Show current target even if not in library (orphaned entry)
+            label = f"(configured) {current_kind} #{current_target_id}"
+            idx = self.target_combo.count() - 1  # Insert before "Add new"
+            self.target_combo.insertItem(idx, label, {
+                "kind": current_kind,
+                "target_id": current_target_id,
+            })
+            self.target_combo.setCurrentIndex(idx)
+
+        self.target_combo.blockSignals(False)
+
+    def _target_kind_from_cfg(self) -> str:
+        """Map config kind ('new_thread'/'reply') to target kind ('subforum'/'thread')."""
+        if self._cfg["kind"] == "new_thread":
+            return "subforum"
+        return "thread"
+
+    def _on_target_changed(self) -> None:
+        """Handle target combo changes; defer 'Add new' to next event loop."""
+        if self.target_combo.currentData() == _ADD_NEW:
+            QTimer.singleShot(0, self._on_add_target)
+
+    def _on_add_target(self) -> None:
+        """Prompt to add a new target from a URL."""
+        forum_id = self._cfg["forum_fk"]
+        forum = fp.get_forum(self._conn, forum_id)
+        if not forum:
+            self._restore_target_to_valid()
+            return
+
+        url, ok = QInputDialog.getText(
+            self.parent(), "Add target",
+            "Paste a subforum or thread URL:",
+            QLineEdit.EchoMode.Normal, "",
+        )
+        if not ok or not (url or "").strip():
+            self._restore_target_to_valid()
+            return
+
+        try:
+            client = create_forum_client(
+                forum["software_id"], base_url=forum["base_url"],
+                session_store=SessionStore(),
+            )
+            ref = client.parse_target_url(url.strip())
+        except Exception as e:
+            QMessageBox.warning(self.parent(), "Add target", f"Error: {e}")
+            self._restore_target_to_valid()
+            return
+
+        if ref is None:
+            QMessageBox.warning(
+                self.parent(), "Add target",
+                "Couldn't recognise that URL. Paste a subforum link "
+                "(e.g. /forumdisplay.php?f=…) or a thread link "
+                "(e.g. /showthread.php?t=…).",
+            )
+            self._restore_target_to_valid()
+            return
+
+        name, ok = QInputDialog.getText(
+            self.parent(), "Name this target",
+            f"Name for this {ref.kind} (#{ref.target_id}):",
+            QLineEdit.EchoMode.Normal,
+            ref.name or f"{ref.kind} {ref.target_id}",
+        )
+        if not ok:
+            self._restore_target_to_valid()
+            return
+
+        name = (name or "").strip() or ref.name or f"{ref.kind} {ref.target_id}"
+        fp.upsert_target(
+            self._conn, forum_fk=forum_id, name=name,
+            kind=ref.kind, target_id=ref.target_id,
+        )
+        self._populate_target_combo()
+        # Select the newly added target
+        for i in range(self.target_combo.count()):
+            data = self.target_combo.itemData(i)
+            if (isinstance(data, dict)
+                    and data.get("target_id") == ref.target_id
+                    and data.get("kind") == ref.kind):
+                self.target_combo.setCurrentIndex(i)
+                break
+
+    def _restore_target_to_valid(self) -> None:
+        """Move combo off the 'Add new' sentinel back to a real entry."""
+        count = self.target_combo.count()
+        for i in range(count):
+            if self.target_combo.itemData(i) != _ADD_NEW:
+                self.target_combo.blockSignals(True)
+                self.target_combo.setCurrentIndex(i)
+                self.target_combo.blockSignals(False)
+                return
 
 
 class ForumComposerDialog(QDialog):
@@ -136,9 +278,8 @@ class ForumComposerDialog(QDialog):
         inner_layout = QVBoxLayout(inner)
         for gid in gallery_ids:
             row = _GalleryRow(self._conn, gid, self._controller, self)
-            inner_layout.addWidget(row)
+            inner_layout.addWidget(row, 1)
             self._rows.append(row)
-        inner_layout.addStretch()
         scroll.setWidget(inner)
         outer.addWidget(scroll)
 
@@ -169,6 +310,12 @@ class ForumComposerDialog(QDialog):
                 continue
             try:
                 cfg = dict(row._cfg or {})
+                # Use selected target from dropdown if available
+                if hasattr(row, "target_combo"):
+                    target_data = row.target_combo.currentData()
+                    if target_data:
+                        cfg["kind"] = target_data["kind"]
+                        cfg["target_id"] = target_data["target_id"]
                 if row.title_input is not None:
                     cfg["_title_override"] = row.title_input.text()
                 if row.body_edit is not None:
