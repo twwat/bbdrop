@@ -1786,22 +1786,29 @@ class FileHostWorker(QThread):
     def _update_traffic_cache_from_user_info(self, user_info: Dict[str, Any]) -> None:
         """Persist K2S-family daily traffic info from user_info response.
 
-        Reads ``available_traffic`` (bytes) and ``quota_reset_at`` (ISO8601)
-        from the raw API payload. Ceiling is (re)seeded whenever the reset
-        timestamp changes — i.e. on rollover or plan change — so downgrades
-        are captured at the next reset instead of being stuck at max-seen.
+        Reads ``available_traffic`` (bytes) from the raw API payload. The
+        K2S API does not expose the reset time, but the daily quota always
+        rolls over at 00:00 UTC — so we compute the next reset locally.
+        Ceiling is (re)seeded on first observation, after rollover, or when
+        ``available`` exceeds the cached ceiling (plan upgrade).
         """
         raw = user_info.get("raw_response") if user_info else None
         if not isinstance(raw, dict):
             return
         available = raw.get("available_traffic")
-        reset_at = raw.get("quota_reset_at")
-        if available is None or not reset_at:
+        if available is None:
             return
         try:
             available_int = int(available)
         except (ValueError, TypeError):
             return
+
+        from datetime import datetime, timezone, timedelta
+        now_utc = datetime.now(timezone.utc)
+        next_reset = (now_utc + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        reset_at_iso = next_reset.isoformat()
 
         prefix = f"FileHosts/{self.host_id}"
         last_reset = self.settings.value(f"{prefix}/traffic_reset_at", "", type=str)
@@ -1811,14 +1818,20 @@ class FileHostWorker(QThread):
         except (ValueError, TypeError):
             ceiling = 0
 
-        # Seed ceiling on first observation; reseed whenever the quota
-        # window rolls over (new reset_at) so plan changes are reflected.
-        if ceiling <= 0 or reset_at != last_reset:
+        rolled_over = True
+        if last_reset:
+            try:
+                last_reset_dt = datetime.fromisoformat(last_reset)
+                rolled_over = last_reset_dt <= now_utc
+            except (ValueError, TypeError):
+                rolled_over = True
+
+        if ceiling <= 0 or rolled_over or available_int > ceiling:
             ceiling = available_int
 
         self.settings.setValue(f"{prefix}/traffic_available", str(available_int))
         self.settings.setValue(f"{prefix}/traffic_ceiling", str(ceiling))
-        self.settings.setValue(f"{prefix}/traffic_reset_at", str(reset_at))
+        self.settings.setValue(f"{prefix}/traffic_reset_at", reset_at_iso)
         self.settings.setValue(f"{prefix}/traffic_ts", int(time.time()))
         self.settings.sync()
 
