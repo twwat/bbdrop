@@ -18,6 +18,9 @@ from src.gui.widgets.placeholder_highlighter import PlaceholderHighlighter
 LINK_PLACEHOLDERS = [
     ("#link#", "Link", "Download URL", "https://example.com/file/abc123"),
     ("#hostName#", "Host Name", "Host display name (e.g. Rapidgator)", "Rapidgator"),
+    ("#fileName#", "File Name", "Uploaded filename incl. extension (e.g. Gallery.part1.rar)", "Gallery.part1.rar"),
+    ("#fileBaseName#", "Base Name", "Filename without extension (e.g. Gallery.part1)", "Gallery.part1"),
+    ("#fileExt#", "Extension", "File extension without dot, lowercased (e.g. rar)", "rar"),
     ("#fileSize#", "File Size", "Archive part file size (e.g. 250 MiB)", "250 MiB"),
     ("#partLabel#", "Part Label", "Part label for split archives (e.g. Part 1)", "Part 1"),
     ("#partNumber#", "Part Number", "Part number (1, 2, 3...)", "1"),
