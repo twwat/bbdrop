@@ -46,6 +46,7 @@ class PlaceholderHighlighter(QSyntaxHighlighter):
             "#custom1#", "#custom2#", "#custom3#", "#custom4#",
             "#ext1#", "#ext2#", "#ext3#", "#ext4#",
             "#link#", "#hostName#", "#fileSize#",
+            "#fileName#", "#fileBaseName#", "#fileExt#",
             "#partLabel#", "#partNumber#", "#partCount#",
             "#filename#", "#duration#", "#resolution#",
             "#fps#", "#bitrate#", "#videoCodec#", "#audioCodec#",
