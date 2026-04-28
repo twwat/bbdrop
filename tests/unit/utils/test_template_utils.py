@@ -111,3 +111,75 @@ class TestGetFileHostLinksForTemplate:
 
         result = get_file_host_links_for_template(mock_store, "/path/gallery")
         assert result == "https://rapidgator.net/file/abc"
+
+    @patch('src.utils.template_utils.get_config_manager')
+    @patch('src.utils.template_utils.get_file_host_setting')
+    def test_filename_placeholder_full(self, mock_setting, mock_config_mgr):
+        """#fileName# is replaced with the full uploaded filename including extension."""
+        from src.utils.template_utils import get_file_host_links_for_template
+
+        mock_store = Mock()
+        mock_store.get_file_host_uploads.return_value = [{
+            'host_name': 'rapidgator',
+            'status': 'completed',
+            'download_url': 'https://rapidgator.net/file/abc',
+            'part_number': 0,
+            'file_size': 262_144_000,
+            'file_name': 'Gallery.part1.rar',
+        }]
+
+        host_config = Mock()
+        host_config.name = "Rapidgator"
+        mock_config_mgr.return_value.hosts = {'rapidgator': host_config}
+        mock_setting.return_value = "[url=#link#]#fileName#[/url]"
+
+        result = get_file_host_links_for_template(mock_store, "/path/gallery")
+        assert result == "[url=https://rapidgator.net/file/abc]Gallery.part1.rar[/url]"
+
+    @patch('src.utils.template_utils.get_config_manager')
+    @patch('src.utils.template_utils.get_file_host_setting')
+    def test_filename_basename_and_ext_placeholders(self, mock_setting, mock_config_mgr):
+        """#fileBaseName# strips the extension; #fileExt# is the extension without the dot, lowercased."""
+        from src.utils.template_utils import get_file_host_links_for_template
+
+        mock_store = Mock()
+        mock_store.get_file_host_uploads.return_value = [{
+            'host_name': 'rapidgator',
+            'status': 'completed',
+            'download_url': 'https://rapidgator.net/file/abc',
+            'part_number': 0,
+            'file_size': 262_144_000,
+            'file_name': 'Gallery.part1.RAR',
+        }]
+
+        host_config = Mock()
+        host_config.name = "Rapidgator"
+        mock_config_mgr.return_value.hosts = {'rapidgator': host_config}
+        mock_setting.return_value = "#fileBaseName# . #fileExt#"
+
+        result = get_file_host_links_for_template(mock_store, "/path/gallery")
+        assert result == "Gallery.part1 . rar"
+
+    @patch('src.utils.template_utils.get_config_manager')
+    @patch('src.utils.template_utils.get_file_host_setting')
+    def test_filename_placeholders_empty_when_file_name_missing(self, mock_setting, mock_config_mgr):
+        """All three filename placeholders resolve to empty when file_name is missing."""
+        from src.utils.template_utils import get_file_host_links_for_template
+
+        mock_store = Mock()
+        mock_store.get_file_host_uploads.return_value = [{
+            'host_name': 'rapidgator',
+            'status': 'completed',
+            'download_url': 'https://rapidgator.net/file/abc',
+            'part_number': 0,
+            'file_size': 262_144_000,
+            # 'file_name' intentionally omitted
+        }]
+
+        host_config = Mock()
+        host_config.name = "Rapidgator"
+        mock_config_mgr.return_value.hosts = {'rapidgator': host_config}
+        mock_setting.return_value = "[#fileName#|#fileBaseName#|#fileExt#]"
+
+        result = get_file_host_links_for_template(mock_store, "/path/gallery")
+        assert result == "[||]"

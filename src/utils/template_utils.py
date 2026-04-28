@@ -1,5 +1,6 @@
 """Template utility functions for BBCode generation."""
 
+import os
 import sqlite3
 from collections import defaultdict
 from src.storage.database import QueueStore
@@ -74,6 +75,15 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
                         '#fileSize#',
                         format_binary_size(file_size) if file_size is not None else ''
                     )
+
+                    # Filename placeholders
+                    file_name_raw = u.get('file_name') or ''
+                    file_name_basename = os.path.basename(file_name_raw) if file_name_raw else ''
+                    stem, ext_with_dot = os.path.splitext(file_name_basename)
+                    file_ext = ext_with_dot[1:].lower() if ext_with_dot else ''
+                    formatted = formatted.replace('#fileName#', file_name_basename)
+                    formatted = formatted.replace('#fileBaseName#', stem)
+                    formatted = formatted.replace('#fileExt#', file_ext)
 
                     # Multi-part placeholders
                     if has_multi_part and len(host_uploads) > 1:
