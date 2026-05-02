@@ -343,31 +343,31 @@ class BandwidthManager(QObject):
     def _emit_aggregated(self) -> None:
         """Aggregate all sources and emit total bandwidth signal.
 
-        Called periodically by the emit timer. Sums bandwidth from all
-        active sources and emits the total. Updates session peak if
-        a new maximum is reached.
+        Called periodically by the emit timer. For inactive sources (or active
+        sources that have gone stale), feeds a zero sample on each tick so the
+        EMA decays gradually via alpha_down rather than snapping to zero.
         """
+        # Feed a zero sample to any source that is inactive or has not received
+        # a real update recently. This drives the EMA toward zero smoothly
+        # (audio-style release) instead of instantly excluding the source.
+        STALE_THRESHOLD_S = 1.0
+
         total = 0.0
 
-        # Add IMX bandwidth
-        if self._upload_source.active:
-            total += self._upload_source.smoothed_value
+        for source in (self._upload_source, self._link_checker_source):
+            if not source.active or source.time_since_update > STALE_THRESHOLD_S:
+                source.add_sample(0.0)
+            total += source.smoothed_value
 
-        # Add link checker bandwidth
-        if self._link_checker_source.active:
-            total += self._link_checker_source.smoothed_value
-
-        # Add file host bandwidths
         locker = QMutexLocker(self._lock)
         for source in self._file_host_sources.values():
-            if source.active:
-                total += source.smoothed_value
+            if not source.active or source.time_since_update > STALE_THRESHOLD_S:
+                source.add_sample(0.0)
+            total += source.smoothed_value
         locker.unlock()
 
-        # Always emit so the UI can reset when bandwidth drops to zero
         self.total_bandwidth_updated.emit(total)
 
-        # Track session peak
         if total > self._session_peak:
             self._session_peak = total
             self.peak_updated.emit(self._session_peak)

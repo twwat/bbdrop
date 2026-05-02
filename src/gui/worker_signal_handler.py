@@ -447,7 +447,8 @@ class WorkerSignalHandler(QObject):
     def _on_upload_worker_finished(self, *args):
         """Handle upload worker finished (any image host)."""
         self.bandwidth_manager._upload_source.active = False
-        self.bandwidth_manager._upload_source.reset()
+        # Do not reset() — preserves the smoothed state so _emit_aggregated can
+        # decay via alpha_down rather than snapping to zero.
 
         mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
