@@ -881,25 +881,50 @@ class FileHostWorker(QThread):
             is_single_file = folder_path.is_file()
 
             if is_single_file:
-                # Single file (e.g. video): upload raw unless it exceeds host limit
+                # Single file (e.g. video): upload raw unless it needs archiving/splitting
                 file_size = folder_path.stat().st_size
                 host_max_mb = get_file_host_setting(self.host_id, 'max_file_size_mb', 'int') or 0
                 host_max_bytes = host_max_mb * 1024 * 1024 if host_max_mb > 0 else 0
 
+                defaults = load_user_defaults()
+                split_enabled = defaults.get('archive_split_enabled', False)
+                split_mode = defaults.get('archive_split_mode', 'fixed')
+                if split_enabled:
+                    if split_mode == 'auto_host_limit':
+                        user_split_size_mb = host_max_mb
+                    else:
+                        user_split_size_mb = defaults.get('archive_split_size_mb', 0)
+                else:
+                    user_split_size_mb = 0
+
+                # Host limit takes priority; fall back to user split setting
                 if host_max_bytes > 0 and file_size > host_max_bytes:
-                    # File exceeds host limit — need to archive and split
+                    split_size_mb = host_max_mb
                     self._log(
                         f"File {folder_path.name} ({file_size // (1024*1024)}MB) exceeds "
                         f"host limit ({host_max_mb}MB), archiving with split",
                         level="info"
                     )
+                elif user_split_size_mb > 0 and file_size > user_split_size_mb * 1024 * 1024:
+                    split_size_mb = user_split_size_mb
+                    self._log(
+                        f"File {folder_path.name} ({file_size // (1024*1024)}MB) exceeds "
+                        f"split size ({user_split_size_mb}MB), archiving with split",
+                        level="info"
+                    )
+                else:
+                    split_size_mb = 0
+
+                if split_size_mb > 0:
+                    archive_format = defaults.get('archive_format', 'zip')
+                    archive_compression = defaults.get('archive_compression', 'store')
                     archive_paths = self._get_or_create_archive(
                         db_id=db_id,
                         folder_path=folder_path,
                         gallery_name=gallery_name,
-                        archive_format='zip',
-                        compression='store',
-                        split_size_mb=host_max_mb,
+                        archive_format=archive_format,
+                        compression=archive_compression,
+                        split_size_mb=split_size_mb,
                     )
                     archive_created = True
                 else:
