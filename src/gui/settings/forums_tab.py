@@ -20,17 +20,20 @@ import threading
 from typing import Optional
 from urllib.parse import urlparse
 
-from PyQt6.QtCore import QObject, QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QIcon
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMessageBox, QPushButton, QSpinBox, QStyle,
-    QStyledItemDelegate, QVBoxLayout, QWidget,
+    QMessageBox, QPushButton, QSpinBox,
+    QVBoxLayout, QWidget,
 )
 
 from src.gui.dialogs.forum_credential_test_dialog import ForumCredentialTestDialog
 from src.gui.widgets.info_button import InfoButton
+from src.gui.widgets.target_kind_delegate import (
+    TARGET_KIND_ROLE, TARGET_TID_ROLE, TargetKindDelegate,
+)
 from src.network.forum.factory import (
     create_forum_client, display_name_for, supported_software_ids,
 )
@@ -47,9 +50,10 @@ _FORUMS_MAX_ROWS = 10
 _TARGETS_MIN_ROWS = 3
 _TARGETS_MAX_ROWS = 20
 
-# Delegate reads each target's kind + numeric id via these custom roles.
-_TARGET_KIND_ROLE = Qt.ItemDataRole.UserRole + 1
-_TARGET_TID_ROLE = Qt.ItemDataRole.UserRole + 2
+# Re-exported under the legacy underscore names so the rest of this
+# module keeps reading from the shared roles without churn.
+_TARGET_KIND_ROLE = TARGET_KIND_ROLE
+_TARGET_TID_ROLE = TARGET_TID_ROLE
 
 # Matches any http(s) URL inside pasted text, regardless of delimiters.
 _URL_RE = re.compile(r"https?://\S+")
@@ -133,91 +137,6 @@ def _get_favicon_fetcher() -> _FaviconFetcher:
     if _favicon_fetcher is None:
         _favicon_fetcher = _FaviconFetcher()
     return _favicon_fetcher
-
-
-class _TargetKindDelegate(QStyledItemDelegate):
-    """Paints a small colored pill at the row's right edge showing
-    ``Subforum #304`` or ``Thread #12345``. Slimmer than the row so the
-    row height doesn't grow; color alone tells kinds apart at a glance."""
-
-    _PILL_BG = {
-        "subforum": "#2f6aa1",   # blue
-        "thread":   "#3d874a",   # green
-    }
-    _PILL_LABEL = {"subforum": "Subforum", "thread": "Thread"}
-    _PAD_H = 6
-    _GAP = 8
-    _RADIUS = 3
-
-    def paint(self, painter, option, index):
-        self.initStyleOption(option, index)
-        widget = option.widget
-        style = widget.style() if widget else QApplication.style()
-
-        # Let the style paint selection/hover background; suppress the
-        # default text so we can draw the name + trailing pill ourselves.
-        option.text = ""
-        style.drawControl(
-            QStyle.ControlElement.CE_ItemViewItem, option, painter, widget,
-        )
-
-        kind = index.data(_TARGET_KIND_ROLE) or ""
-        tid = index.data(_TARGET_TID_ROLE)
-        kind_label = self._PILL_LABEL.get(kind, "")
-        pill_text = (
-            f"{kind_label} #{tid}" if kind_label and tid else kind_label
-        )
-
-        painter.save()
-        rect = option.rect.adjusted(6, 0, -6, 0)
-        name_right = rect.right()
-
-        if pill_text:
-            pill_font = QFont(option.font)
-            pt = pill_font.pointSizeF()
-            if pt > 0:
-                pill_font.setPointSizeF(pt * 0.85)
-            painter.setFont(pill_font)
-            fm = painter.fontMetrics()
-            pill_w = fm.horizontalAdvance(pill_text) + 2 * self._PAD_H
-            pill_h = fm.height()
-            # Keep the pill shorter than the row so it can't push row
-            # height up; clamp to row height just in case.
-            pill_h = min(pill_h, rect.height() - 4)
-            pill_y = rect.y() + (rect.height() - pill_h) // 2
-            pill_rect = QRect(
-                rect.right() - pill_w, pill_y, pill_w, pill_h,
-            )
-
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(self._PILL_BG.get(kind, "#666")))
-            painter.drawRoundedRect(pill_rect, self._RADIUS, self._RADIUS)
-            painter.setPen(QColor("white"))
-            painter.drawText(
-                pill_rect, Qt.AlignmentFlag.AlignCenter, pill_text,
-            )
-            name_right = pill_rect.left() - self._GAP
-
-        painter.setFont(option.font)
-        if option.state & QStyle.StateFlag.State_Selected:
-            painter.setPen(option.palette.highlightedText().color())
-        else:
-            painter.setPen(option.palette.text().color())
-        text_rect = QRect(
-            rect.x(), rect.y(),
-            max(0, name_right - rect.x()), rect.height(),
-        )
-        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
-        fm = painter.fontMetrics()
-        elided = fm.elidedText(text, Qt.TextElideMode.ElideRight, text_rect.width())
-        painter.drawText(
-            text_rect,
-            int(
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
-            ),
-            elided,
-        )
-        painter.restore()
 
 
 class ForumsPanel(QWidget):
@@ -529,7 +448,7 @@ class ForumsPanel(QWidget):
         layout.addLayout(hint_row)
 
         self.target_list = QListWidget()
-        self.target_list.setItemDelegate(_TargetKindDelegate(self.target_list))
+        self.target_list.setItemDelegate(TargetKindDelegate(self.target_list))
         # Height fit-to-content (3..20 rows); applied on reload.
         layout.addWidget(self.target_list)
 
