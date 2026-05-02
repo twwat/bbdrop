@@ -2661,6 +2661,8 @@ class BBDropGUI(QMainWindow):
 
         Settings are cached in _log_show_level and _log_show_category for performance.
         """
+        if not hasattr(self, 'log_text'):
+            return
         try:
             # Use cached settings instead of lookup (performance optimization)
             # Start with the original message
