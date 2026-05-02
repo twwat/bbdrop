@@ -15,19 +15,90 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QPushButton, QToolButton, QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QLayout, QLineEdit, QListWidget,
+    QListWidgetItem, QPushButton, QSizePolicy, QToolButton,
+    QVBoxLayout, QWidget,
 )
 
 import src.storage.forum_posting as fp
+from src.gui.widgets.target_kind_delegate import (
+    TARGET_KIND_ROLE, TARGET_TID_ROLE, TargetKindDelegate,
+)
 
 _PILL_COLORS = {
     "subforum": "#2f6aa1",
     "thread": "#3d874a",
 }
+
+
+class _FlowLayout(QLayout):
+    """Wrapping horizontal layout. Children flow left-to-right and wrap
+    onto a new row when they would exceed the container's width. Used so
+    a long list of pills can never push the parent dialog wider than the
+    screen — the dialog grows downward instead."""
+
+    def __init__(self, parent=None, spacing=4):
+        super().__init__(parent)
+        self._items: list = []
+        self._spacing = spacing
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index):
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        m = self.contentsMargins()
+        size += QSize(m.left() + m.right(), m.top() + m.bottom())
+        return size
+
+    def _do_layout(self, rect, test_only):
+        x = rect.x()
+        y = rect.y()
+        line_h = 0
+        for item in self._items:
+            wid = item.sizeHint()
+            next_x = x + wid.width() + self._spacing
+            if next_x - self._spacing > rect.right() and line_h > 0:
+                x = rect.x()
+                y = y + line_h + self._spacing
+                next_x = x + wid.width() + self._spacing
+                line_h = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), wid))
+            x = next_x
+            line_h = max(line_h, wid.height())
+        return y + line_h - rect.y()
 
 
 class ForumTargetPicker(QWidget):
@@ -62,25 +133,26 @@ class ForumTargetPicker(QWidget):
         layout.setSpacing(4)
 
         self._pill_container = QWidget()
-        self._pill_layout = QHBoxLayout(self._pill_container)
-        self._pill_layout.setContentsMargins(0, 0, 0, 0)
-        self._pill_layout.setSpacing(4)
+        self._pill_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred,
+        )
+        self._pill_layout = _FlowLayout(self._pill_container, spacing=4)
 
         self._add_btn = QPushButton("+ Add")
         self._add_btn.setFixedWidth(60)
         self._add_btn.clicked.connect(self._open_picker)
 
         layout.addWidget(self._pill_container, 1)
-        layout.addWidget(self._add_btn)
+        layout.addWidget(self._add_btn, 0, Qt.AlignmentFlag.AlignTop)
 
     def _refresh_pills(self):
         while self._pill_layout.count():
             item = self._pill_layout.takeAt(0)
-            if item.widget():
+            if item and item.widget():
                 item.widget().deleteLater()
         for target in self._selected:
             self._pill_layout.addWidget(self._make_pill(target))
-        self._pill_layout.addStretch()
+        self._pill_container.updateGeometry()
 
     def _make_pill(self, target: dict) -> QWidget:
         kind = target.get("kind", "thread")
@@ -91,21 +163,24 @@ class ForumTargetPicker(QWidget):
 
         pill = QFrame()
         pill.setStyleSheet(
-            f"QFrame {{ background-color: {bg}; border-radius: 3px; }}"
+            f"QFrame {{ background-color: {bg}; border-radius: 2px; }}"
         )
         lay = QHBoxLayout(pill)
-        lay.setContentsMargins(6, 2, 2, 2)
-        lay.setSpacing(2)
+        lay.setContentsMargins(5, 0, 1, 0)
+        lay.setSpacing(0)
 
         lbl = QLabel(name)
-        lbl.setStyleSheet("color: white; font-size: 11px; background: transparent;")
+        lbl.setStyleSheet(
+            "color: white; font-size: 10px; background: transparent; padding: 0px;"
+        )
         lay.addWidget(lbl)
 
         close = QToolButton()
         close.setText("×")
+        close.setFixedSize(14, 14)
         close.setStyleSheet(
             "QToolButton { color: white; border: none; font-size: 11px; "
-            "background: transparent; }"
+            "background: transparent; padding: 0px; }"
             "QToolButton:hover { color: #ffdddd; }"
         )
         close.clicked.connect(lambda _checked, t=target: self._remove_target(t))
@@ -164,8 +239,8 @@ class _TargetPickerPanel(QFrame):
         layout.addWidget(self._search)
 
         self._list = QListWidget()
-        self._list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        self._list.itemChanged.connect(self._on_item_changed)
+        self._list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self._list.setItemDelegate(TargetKindDelegate(self._list))
         layout.addWidget(self._list, 1)
 
         btns = QHBoxLayout()
@@ -205,16 +280,13 @@ class _TargetPickerPanel(QFrame):
                 self._list.addItem(header)
                 current_forum = t["forum_name"]
 
-            kind_label = "Subforum" if t["kind"] == "subforum" else "Thread"
-            item = QListWidgetItem(
-                f"  {t['name']}  ({kind_label} #{t['target_id']})"
-            )
+            item = QListWidgetItem(t["name"])
             item.setData(Qt.ItemDataRole.UserRole, t)
-            checked = (t["forum_fk"], t["target_id"]) in self._checked_keys
-            item.setCheckState(
-                Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
-            )
+            item.setData(TARGET_KIND_ROLE, t["kind"])
+            item.setData(TARGET_TID_ROLE, t["target_id"])
             self._list.addItem(item)
+            if (t["forum_fk"], t["target_id"]) in self._checked_keys:
+                item.setSelected(True)
 
     def _filter(self, text: str):
         q = text.lower()
@@ -224,20 +296,13 @@ class _TargetPickerPanel(QFrame):
         ]
         self._render(filtered)
 
-    def _on_item_changed(self, item: QListWidgetItem) -> None:
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if not data:
-            return
-        key = (data["forum_fk"], data["target_id"])
-        if item.checkState() == Qt.CheckState.Checked:
-            self._checked_keys.add(key)
-        else:
-            self._checked_keys.discard(key)
-
     def _accept(self):
-        selected = [
-            t for t in self._all
-            if (t["forum_fk"], t["target_id"]) in self._checked_keys
-        ]
+        selected: list[dict] = []
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            if item.isSelected():
+                data = item.data(Qt.ItemDataRole.UserRole)
+                if data:
+                    selected.append(data)
         self.targets_selected.emit(selected)
         self.close()
