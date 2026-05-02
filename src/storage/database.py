@@ -84,7 +84,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 17  # Bump this when adding new migrations
+_SCHEMA_VERSION = 18  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -668,7 +668,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                     tab_id INTEGER NOT NULL REFERENCES tabs(id) ON DELETE CASCADE,
                     forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
                     target_id TEXT NOT NULL,
-                    kind TEXT NOT NULL CHECK(kind IN ('reply','new_thread')),
+                    kind TEXT NOT NULL CHECK(kind IN ('subforum','thread')),
                     body_template_name TEXT,
                     created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
                     updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
@@ -689,7 +689,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                     gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
                     forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
                     target_id TEXT NOT NULL,
-                    kind TEXT NOT NULL CHECK(kind IN ('reply','new_thread')),
+                    kind TEXT NOT NULL CHECK(kind IN ('subforum','thread')),
                     body_template_name TEXT,
                     action TEXT NOT NULL DEFAULT 'add'
                         CHECK(action IN ('add','replace','remove')),
@@ -730,6 +730,73 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             conn.commit()
             log("Migration 17: multi-destination posting tables created",
                 level="info", category="database")
+
+        # Migration 18: fix kind CHECK constraint on tab_posting_destinations
+        # and gallery_posting_destinations. Migration 17 copied the old
+        # ('reply','new_thread') constraint from tab_posting_config, but the
+        # forum_targets table (migration 16) uses ('subforum','thread') and the
+        # GUI passes that vocabulary directly. Rebuild both tables with the
+        # correct constraint; rows with the old vocabulary are dropped (none
+        # could have been written successfully through the GUI anyway).
+        try:
+            tab_check = conn.execute(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type='table' AND name='tab_posting_destinations'"
+            ).fetchone()
+            if tab_check and "'reply'" in tab_check[0]:
+                conn.executescript("""
+                    PRAGMA foreign_keys = OFF;
+
+                    CREATE TABLE tab_posting_destinations_new (
+                        id INTEGER PRIMARY KEY,
+                        tab_id INTEGER NOT NULL REFERENCES tabs(id) ON DELETE CASCADE,
+                        forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
+                        target_id TEXT NOT NULL,
+                        kind TEXT NOT NULL CHECK(kind IN ('subforum','thread')),
+                        body_template_name TEXT,
+                        created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                        updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                        UNIQUE(tab_id, forum_fk, target_id)
+                    );
+                    INSERT INTO tab_posting_destinations_new
+                        SELECT * FROM tab_posting_destinations
+                        WHERE kind IN ('subforum','thread');
+                    DROP TABLE tab_posting_destinations;
+                    ALTER TABLE tab_posting_destinations_new
+                        RENAME TO tab_posting_destinations;
+
+                    CREATE TABLE gallery_posting_destinations_new (
+                        id INTEGER PRIMARY KEY,
+                        gallery_fk INTEGER NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+                        forum_fk INTEGER NOT NULL REFERENCES forums(id) ON DELETE CASCADE,
+                        target_id TEXT NOT NULL,
+                        kind TEXT NOT NULL CHECK(kind IN ('subforum','thread')),
+                        body_template_name TEXT,
+                        action TEXT NOT NULL DEFAULT 'add'
+                            CHECK(action IN ('add','replace','remove')),
+                        created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                        updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                        UNIQUE(gallery_fk, forum_fk, target_id)
+                    );
+                    INSERT INTO gallery_posting_destinations_new
+                        SELECT * FROM gallery_posting_destinations
+                        WHERE kind IN ('subforum','thread');
+                    DROP TABLE gallery_posting_destinations;
+                    ALTER TABLE gallery_posting_destinations_new
+                        RENAME TO gallery_posting_destinations;
+
+                    CREATE INDEX IF NOT EXISTS idx_tab_posting_dests_tab
+                        ON tab_posting_destinations(tab_id);
+                    CREATE INDEX IF NOT EXISTS idx_gallery_posting_dests_gallery
+                        ON gallery_posting_destinations(gallery_fk);
+
+                    PRAGMA foreign_keys = ON;
+                """)
+                conn.commit()
+                log("Migration 18: rebuilt posting destination tables with correct kind CHECK",
+                    level="info", category="database")
+        except Exception as e:
+            log(f"Migration 18 failed: {e}", level="warning", category="database")
 
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
