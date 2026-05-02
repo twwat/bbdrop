@@ -154,6 +154,15 @@ ADVANCED_SETTINGS = [
         "max": 30000,
     },
     {
+        "key": "file_hosts/minimal_links",
+        "description": (
+            "Use short/minimal download URLs where available. "
+            "Rapidgator: rapidgator.net/file/<id>/name.html → rg.to/file/<id>"
+        ),
+        "default": False,
+        "type": "bool",
+    },
+    {
         "key": "k2s_family/upload_access",
         "description": (
             "Access level written on new K2S / FileBoom / TezFiles "

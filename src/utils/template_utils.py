@@ -1,12 +1,22 @@
 """Template utility functions for BBCode generation."""
 
 import os
+import re
 import sqlite3
 from collections import defaultdict
 from src.storage.database import QueueStore
 from src.utils.format_utils import format_binary_size
 from src.utils.logger import log
 from src.core.file_host_config import get_file_host_setting, get_config_manager
+
+
+def _minimal_url(host_id: str, url: str) -> str:
+    """Return a shortened URL for hosts that have a known minimal form."""
+    if host_id == 'rapidgator':
+        m = re.match(r'https?://(?:rapidgator\.net|rg\.to)/file/([^/]+)', url)
+        if m:
+            return f"https://rg.to/file/{m.group(1)}"
+    return url
 
 
 def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str) -> str:
@@ -39,6 +49,10 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
 
         config_manager = get_config_manager()
 
+        from src.utils.paths import read_config
+        _cfg = read_config()
+        use_minimal_links = _cfg.get('Advanced', 'file_hosts/minimal_links', fallback='false').lower() == 'true'
+
         # Group completed uploads by host
         uploads_by_host = defaultdict(list)
         for u in uploads:
@@ -63,6 +77,8 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
 
             for u in host_uploads:
                 download_url = u['download_url'].strip()
+                if use_minimal_links:
+                    download_url = _minimal_url(host_id, download_url)
                 part_num = u.get('part_number', 0)
 
                 if bbcode_format:
