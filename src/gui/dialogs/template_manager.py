@@ -594,10 +594,17 @@ class TemplateManagerDialog(QDialog):
             self.post_title_edit.blockSignals(False)
     
     def insert_placeholder(self, placeholder):
-        """Insert a placeholder at cursor position"""
-        cursor = self.template_editor.textCursor()
-        cursor.insertText(placeholder)
-        self.template_editor.setFocus()
+        """Insert a placeholder at cursor position in the active field."""
+        if self.post_title_edit.hasFocus():
+            pos = self.post_title_edit.cursorPosition()
+            text = self.post_title_edit.text()
+            self.post_title_edit.setText(text[:pos] + placeholder + text[pos:])
+            self.post_title_edit.setCursorPosition(pos + len(placeholder))
+            self.post_title_edit.setFocus()
+        else:
+            cursor = self.template_editor.textCursor()
+            cursor.insertText(placeholder)
+            self.template_editor.setFocus()
 
     def insert_text(self, text):
         """Insert text at cursor position"""
