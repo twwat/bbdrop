@@ -402,13 +402,14 @@ class ProgressTracker(QObject):
         except Exception as e:
             log(f"ERROR: Exception in progress_tracker: {e}", level="error", category="ui")
 
-        all_items = self._main_window.queue_manager.get_all_items()
-        uploading_count = sum(1 for item in all_items if item.status == "uploading")
-
-        if uploading_count == 0:
+        # speed_current_value_label is owned by the BandwidthManager
+        # (total_bandwidth_updated → _on_total_bandwidth_updated). Do not
+        # overwrite it here based on image-host queue state alone — file-host
+        # uploads keep the bandwidth source live and the manager already
+        # decays the displayed value to zero via its alpha_down release.
+        if not any(item.status == "uploading" for item in self._main_window.queue_manager.get_all_items()):
             self._bandwidth_samples.clear()
             self._current_transfer_kbps = 0.0
-            self._main_window.speed_current_value_label.setText("0.000 MiB/s")
 
 
     def _update_unnamed_count_background(self):
