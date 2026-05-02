@@ -21,7 +21,7 @@ beautifulsoup4>=4.12.0
 # Archive format support
 py7zr>=1.0.0
 rarfile>=4.1
-splitzip>=0.2.0
+splitzip>=0.3.0
 
 # Windows-specific
 colorama==0.4.6
