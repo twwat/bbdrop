@@ -351,17 +351,26 @@ class ArchiveManager:
 
         ZIP: uses splitzip (pure Python, proper split ZIP spec).
         7z: uses 7z CLI (requires 7-Zip installed).
+
+        Accepts either a directory (image gallery) or a single file (e.g. a
+        video too large for the host limit).
         """
-        image_files = self._get_image_files(folder_path)
-        if not image_files:
-            raise ValueError(f"No image files found in: {folder_path}")
+        path = Path(folder_path)
+        if path.is_file():
+            files = [path]
+        else:
+            files = self._get_image_files(path)
+            if not files:
+                files = self._get_video_files(path)
+            if not files:
+                raise ValueError(f"No archivable files found in: {path}")
 
         split_size_bytes = split_size_mb * 1024 * 1024
 
         if archive_format == 'zip':
-            return self._create_split_zip(image_files, base_name, compression, split_size_bytes)
+            return self._create_split_zip(files, base_name, compression, split_size_bytes)
         else:
-            return self._create_split_7z(image_files, base_name, compression, split_size_mb)
+            return self._create_split_7z(files, base_name, compression, split_size_mb)
 
     def _create_split_zip(
         self, image_files: List[Path], base_name: str,

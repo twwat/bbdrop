@@ -357,6 +357,37 @@ class TestSplitZipArchive:
                     # Should be deflated
                     assert info.compress_type == zipfile.ZIP_DEFLATED
 
+    def test_split_zip_single_file_input(self, temp_archive_dir, tmp_path):
+        """Single-file split: archive a video file too large for the host limit.
+
+        Regression: file_host_workers single-file branch passes the file path
+        (not a directory) to create_or_reuse_archive when split is needed; the
+        archive manager must accept a file and split it, not raise
+        "Path is not a directory".
+        """
+        pytest.importorskip("splitzip")
+
+        video = tmp_path / "video.mp4"
+        video.write_bytes(b'\x00' * (3 * 1024 * 1024))  # 3 MiB
+
+        manager = ArchiveManager(temp_dir=temp_archive_dir)
+        paths = manager.create_or_reuse_archive(
+            db_id=1,
+            folder_path=video,
+            archive_format='zip',
+            compression='store',
+            split_size_mb=1,
+        )
+
+        assert len(paths) >= 2  # 3 MiB / 1 MiB → multiple parts
+        for p in paths:
+            assert p.exists()
+
+        final = [p for p in paths if p.name.endswith('.zip')]
+        assert len(final) == 1
+        with zipfile.ZipFile(final[0], 'r') as zf:
+            assert 'video.mp4' in zf.namelist()
+
 
 class TestSplit7zArchive:
     """Test split 7Z archive creation with 7z CLI."""
