@@ -2317,7 +2317,7 @@ class QueueStore:
 
         placeholders = ",".join("?" for _ in members)
         sql = f"""
-            SELECT id, gallery_fk, host_name, part_number, md5_hash, file_name, file_id, total_bytes
+            SELECT id, gallery_fk, host_name, part_number, md5_hash, file_name, file_id, total_bytes, file_size
             FROM file_host_uploads
             WHERE gallery_fk = ?
               AND host_name IN ({placeholders})
@@ -2341,6 +2341,7 @@ class QueueStore:
                 "file_name": row[5],
                 "file_id": row[6],
                 "total_bytes": row[7] or 0,
+                "file_size": row[8],
             }
             existing = by_part.get(entry["part_number"])
             if existing is None:

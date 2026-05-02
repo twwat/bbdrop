@@ -1383,17 +1383,18 @@ class FileHostWorker(QThread):
 
         # Probe every sibling part. Any miss aborts immediately — we only
         # commit if the whole set lands.
-        part_results: list = []  # list of (part_number, md5, file_name, result)
+        part_results: list = []  # list of (part_number, md5, file_name, file_size, result)
         try:
             for part in sibling_parts:
                 if self._should_stop_current or self._stop_event.is_set():
                     return False
                 md5 = part["md5_hash"]
                 file_name = part["file_name"] or ""
+                file_size = part.get("file_size")
                 result = client.try_create_by_hash(md5, file_name)
                 if not (result and result.get("status") == "success"):
                     return False
-                part_results.append((part["part_number"], md5, file_name, result))
+                part_results.append((part["part_number"], md5, file_name, file_size, result))
         except Exception as e:
             self._log(
                 f"Family mirror exception for {host_name} "
@@ -1410,9 +1411,9 @@ class FileHostWorker(QThread):
         try:
             # Process part_number > 0 first, collect head row update for last
             head_result = None
-            for part_number, md5, file_name, result in part_results:
+            for part_number, md5, file_name, file_size, result in part_results:
                 if part_number == 0:
-                    head_result = (md5, file_name, result)
+                    head_result = (md5, file_name, file_size, result)
                     continue
                 new_id = self.queue_store.add_file_host_upload(
                     gallery_path=gallery_path,
@@ -1433,6 +1434,7 @@ class FileHostWorker(QThread):
                     status="completed",
                     md5_hash=md5,
                     file_name=file_name,
+                    file_size=file_size,
                     download_url=result.get("url", ""),
                     file_id=result.get("file_id", ""),
                     deduped=1,
@@ -1441,12 +1443,13 @@ class FileHostWorker(QThread):
             # Now update the head row (part 0). This is the last write — if
             # earlier writes failed we already returned False.
             if head_result is not None:
-                md5, file_name, result = head_result
+                md5, file_name, file_size, result = head_result
                 self.queue_store.update_file_host_upload(
                     head_upload_id,
                     status="completed",
                     md5_hash=md5,
                     file_name=file_name,
+                    file_size=file_size,
                     download_url=result.get("url", ""),
                     file_id=result.get("file_id", ""),
                     deduped=1,
