@@ -261,9 +261,17 @@ class TurboImageHostClient(ImageHostClient):
                 random.choices(string.ascii_lowercase + string.digits, k=20)
             )
 
-        upload_id = self._batch_upload_id or ''.join(
-            random.choices(string.ascii_lowercase + string.digits, k=20)
-        )
+        # Single-shot uploads (e.g. video screenshot sheets) call upload_image
+        # without create_gallery=True. fetch_batch_results requires a stored
+        # _batch_upload_id to scrape the result page — which is the only
+        # source of bbcode/image_url for Turbo. Without persisting the
+        # generated id below, single uploads returned empty data and the
+        # caller couldn't recover the URL.
+        if not self._batch_upload_id:
+            self._batch_upload_id = ''.join(
+                random.choices(string.ascii_lowercase + string.digits, k=20)
+            )
+        upload_id = self._batch_upload_id
 
         curl = self._get_thread_curl()
         response_buffer = BytesIO()
