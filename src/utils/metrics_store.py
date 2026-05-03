@@ -281,42 +281,51 @@ class MetricsStore:
         return self._peak_validators[host_name]
 
     def _cap_unrealistic_peaks(self) -> None:
-        """Reset historical peak_speed values that are clearly outliers
-        relative to that host's own avg_speed. Idempotent: rows where
-        peak/avg is already plausible are left alone.
-
-        Connection-agnostic: a 1 Gbps NIC user with avg=80 MiB/s and a
-        peak of 800 MiB/s gets reset; a 10 Gbps user with avg=600 MiB/s
-        and a peak of 1.2 GiB/s does NOT — their fast peak is consistent
-        with their fast average, so it stays.
-
-        Outlier definition: peak > 5x the avg implied by total bytes /
-        total transfer_time on the row. That ratio survives across any
-        line speed because both numerator and denominator scale together.
-        Reset to 0 so the next real upload re-establishes a sensible
-        peak via the smoothed observed_peak_kbps path.
-        """
+        """One-shot reset of peak_speed on rows polluted by the pre-fix
+        dedup path (which fed bytes_uploaded / millisecond hash-check
+        time into the peak comparison). Targets rows that recorded any
+        dedup. Gated by a settings key so it runs exactly once."""
         with self._db_lock:
             conn = self._connect()
             try:
+                done = conn.execute(
+                    "SELECT 1 FROM settings_kv WHERE key='peak_speed_dedup_reset_v1'"
+                ).fetchone() if self._settings_table_exists(conn) else None
+                if done:
+                    return
                 cursor = conn.execute("""
                     UPDATE host_metrics
-                    SET peak_speed = 0,
-                        peak_speed_date = NULL
-                    WHERE total_transfer_time > 0
-                      AND peak_speed > 5.0 * (bytes_uploaded * 1.0 / total_transfer_time)
-                      AND peak_speed > 50 * 1024 * 1024
+                    SET peak_speed = 0, peak_speed_date = NULL
+                    WHERE files_deduped > 0
                 """)
+                self._mark_one_shot_done(conn, 'peak_speed_dedup_reset_v1')
                 if cursor.rowcount > 0:
                     logger.info(
-                        f"Reset {cursor.rowcount} peak_speed value(s) where "
-                        f"peak >> avg (likely measurement artifacts from "
-                        f"sub-second transfers)"
+                        f"Reset peak_speed on {cursor.rowcount} row(s) "
+                        f"polluted by the pre-fix dedup path"
                     )
             except Exception as e:
-                logger.warning(f"Failed to reset outlier peak speeds: {e}")
+                logger.warning(f"Failed to reset polluted peak speeds: {e}")
             finally:
                 conn.close()
+
+    def _settings_table_exists(self, conn: sqlite3.Connection) -> bool:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='settings_kv'"
+        ).fetchone()
+        return row is not None
+
+    def _mark_one_shot_done(self, conn: sqlite3.Connection, key: str) -> None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings_kv (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+        conn.execute(
+            "INSERT OR REPLACE INTO settings_kv(key, value) VALUES(?, '1')",
+            (key,),
+        )
 
     def __del__(self):
         """
