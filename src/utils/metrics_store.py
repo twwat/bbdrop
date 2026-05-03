@@ -287,12 +287,15 @@ class MetricsStore:
         reflects real upload rates again. Idempotent: rows already at/under
         the threshold are left alone.
 
-        Threshold is 1 GiB/s — above any real residential or office
-        connection but well below the absurd values dedup transfers
-        produced. Reset to 0 so the next real upload re-establishes a
-        sensible peak via the smoothed observed_peak_kbps path.
+        Threshold matches PeakSpeedValidator.MAX_REALISTIC_KBPS so
+        historical bad data and future incoming samples share the same
+        definition of "obviously bogus". Above this gets reset to 0 so
+        the next real upload re-establishes a sensible peak via the
+        smoothed observed_peak_kbps path.
         """
-        max_realistic_bytes_per_sec = 1 * 1024 * 1024 * 1024
+        max_realistic_bytes_per_sec = (
+            PeakSpeedValidator.MAX_REALISTIC_KBPS * 1024
+        )
 
         with self._db_lock:
             conn = self._connect()
