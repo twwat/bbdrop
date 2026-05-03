@@ -462,9 +462,13 @@ class MetricsStore:
             else:
                 cache['files_failed'] += files_count
 
-            # Track peak speed (using validated observed peak or calculated average)
+            # Track peak speed (using validated observed peak or calculated average).
+            # Skip for deduped transfers: a hash-only check completes in milliseconds,
+            # so avg_speed = bytes / tiny_time produces absurd numbers (multi-GiB/s)
+            # that aren't real network throughput. Only record peaks when bytes
+            # actually flowed over the wire.
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            if speed > cache['peak_speed']:
+            if not deduped and speed > cache['peak_speed']:
                 cache['peak_speed'] = speed
                 cache['peak_speed_date'] = now_str
 
@@ -522,7 +526,7 @@ class MetricsStore:
                 today_cache['files_uploaded'] += files_count
             else:
                 today_cache['files_failed'] += files_count
-            if speed > today_cache['peak_speed']:
+            if not deduped and speed > today_cache['peak_speed']:
                 today_cache['peak_speed'] = speed
                 today_cache['peak_speed_date'] = now_str
             # Use avg_speed for rolling average, not peak
@@ -575,7 +579,7 @@ class MetricsStore:
                 all_time_cache['files_uploaded'] += files_count
             else:
                 all_time_cache['files_failed'] += files_count
-            if speed > all_time_cache['peak_speed']:
+            if not deduped and speed > all_time_cache['peak_speed']:
                 all_time_cache['peak_speed'] = speed
                 all_time_cache['peak_speed_date'] = now_str
             # Use avg_speed for rolling average, not peak
