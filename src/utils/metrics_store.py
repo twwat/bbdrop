@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
+from src.core.host_registry import to_host_id
 # Access central data dir path from shared helper
 from src.utils.paths import get_central_store_base_path
 
@@ -399,7 +400,10 @@ class MetricsStore:
         Emits signals for UI updates.
 
         Args:
-            host_name: The file host identifier (e.g., 'rapidgator', 'keep2share')
+            host_name: Any host-shaped string (display name, canonical id,
+                       any casing). Normalized to canonical host_id at the
+                       door so internal caches and the host_metrics_updated
+                       signal always carry the canonical form.
             bytes_uploaded: Number of bytes transferred
             transfer_time: Time taken for transfer in seconds
             success: Whether the transfer completed successfully
@@ -412,6 +416,11 @@ class MetricsStore:
             bytes_saved: Bytes avoided through dedup (family mirror). Tracked
                         separately from bytes_uploaded to quantify dedup savings.
         """
+        # Normalize the inbound string to its canonical host_id. From here on
+        # every cache key, every DB row, and every emitted signal carries the
+        # canonical id regardless of what the caller passed.
+        host_name = to_host_id(host_name)
+
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
 
@@ -645,6 +654,7 @@ class MetricsStore:
             Dict with metrics: bytes_uploaded, files_uploaded, files_failed,
             total_transfer_time, peak_speed, avg_speed, success_rate
         """
+        host_name = to_host_id(host_name)
         with self._cache_lock:
             if host_name not in self._session_cache:
                 return {
@@ -671,6 +681,7 @@ class MetricsStore:
         Returns:
             Dict with aggregated metrics for the period
         """
+        host_name = to_host_id(host_name)
         if period == 'session':
             return self.get_session_metrics(host_name)
 
@@ -1113,6 +1124,7 @@ class MetricsStore:
         Returns:
             List of dicts with date and metrics for each day
         """
+        host_name = to_host_id(host_name)
         result = []
         start_date = (datetime.now() - timedelta(days=days-1)).strftime('%Y-%m-%d')
 
