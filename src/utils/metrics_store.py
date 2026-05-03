@@ -278,26 +278,35 @@ class MetricsStore:
         return self._peak_validators[host_name]
 
     def _cap_unrealistic_peaks(self) -> None:
-        """Cap existing corrupted peak_speed values that exceed realistic limits.
+        """Reset historical peak_speed values that came from the dedup-pollution
+        bug (bytes / millisecond hash check ≈ multi-GiB/s) so the column
+        reflects real upload rates again. Idempotent: rows already at/under
+        the threshold are left alone.
 
-        This migration runs on startup to fix any historical data corruption
-        where peak_speed was calculated incorrectly (e.g., bytes/s stored as KB/s).
+        Threshold is 1 GiB/s — above any real residential or office
+        connection but well below the absurd values dedup transfers
+        produced. Reset to 0 so the next real upload re-establishes a
+        sensible peak via the smoothed observed_peak_kbps path.
         """
-        # 12.5 Gbps in bytes/s (matching PeakSpeedValidator but in bytes/s for DB)
-        max_realistic_bytes_per_sec = PeakSpeedValidator.MAX_REALISTIC_KBPS * 1024
+        max_realistic_bytes_per_sec = 1 * 1024 * 1024 * 1024
 
         with self._db_lock:
             conn = self._connect()
             try:
                 cursor = conn.execute("""
                     UPDATE host_metrics
-                    SET peak_speed = ?
+                    SET peak_speed = 0,
+                        peak_speed_date = NULL
                     WHERE peak_speed > ?
-                """, (max_realistic_bytes_per_sec, max_realistic_bytes_per_sec))
+                """, (max_realistic_bytes_per_sec,))
                 if cursor.rowcount > 0:
-                    logger.info(f"Capped {cursor.rowcount} unrealistic peak_speed values to {max_realistic_bytes_per_sec:.0f} B/s")
+                    logger.info(
+                        f"Reset {cursor.rowcount} unrealistic peak_speed "
+                        f"values (>1 GiB/s) to 0 — they'll be re-established "
+                        f"from real upload measurements going forward"
+                    )
             except Exception as e:
-                logger.warning(f"Failed to cap unrealistic peak speeds: {e}")
+                logger.warning(f"Failed to reset unrealistic peak speeds: {e}")
             finally:
                 conn.close()
 
