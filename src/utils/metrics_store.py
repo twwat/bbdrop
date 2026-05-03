@@ -428,10 +428,13 @@ class MetricsStore:
             bytes_saved: Bytes avoided through dedup (family mirror). Tracked
                         separately from bytes_uploaded to quantify dedup savings.
         """
-        # Normalize the inbound string to its canonical host_id. From here on
-        # every cache key, every DB row, and every emitted signal carries the
-        # canonical id regardless of what the caller passed.
         host_name = to_host_id(host_name)
+
+        # Dedup is not a transfer — only count files/bytes_saved, never
+        # touch transfer_time or any speed state.
+        if deduped:
+            self._record_dedup(host_name, files_count, bytes_saved, success)
+            return
 
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
@@ -637,6 +640,73 @@ class MetricsStore:
             self.signals.host_metrics_updated.emit(host_name, nested_metrics)
         except Exception as e:
             logger.debug(f"Failed to emit metrics signals: {e}")
+
+    _EMPTY_CACHE: Dict[str, Any] = {
+        'bytes_uploaded': 0, 'bytes_saved': 0,
+        'files_uploaded': 0, 'files_failed': 0, 'files_deduped': 0,
+        'total_transfer_time': 0.0,
+        'peak_speed': 0.0, 'peak_speed_date': None,
+        'speeds': [], 'avg_speed': 0.0,
+    }
+
+    def _ensure_cache(
+        self, store: Dict[str, Dict[str, Any]], host_name: str, period: str,
+    ) -> Dict[str, Any]:
+        """Return the per-host cache, hydrating from DB on first access."""
+        if host_name in store:
+            return store[host_name]
+        if period == 'session':
+            store[host_name] = dict(self._EMPTY_CACHE)
+        else:
+            db = self.get_aggregated_metrics(host_name, period)
+            store[host_name] = {
+                **self._EMPTY_CACHE,
+                **{k: db.get(k, self._EMPTY_CACHE[k]) for k in self._EMPTY_CACHE
+                   if k not in ('speeds',)},
+            }
+        return store[host_name]
+
+    def _record_dedup(
+        self, host_name: str, files_count: int, bytes_saved: int, success: bool,
+    ) -> None:
+        """Update counts and bytes_saved for a dedup. No speed/time state."""
+        with self._cache_lock:
+            for store, period in (
+                (self._session_cache, 'session'),
+                (self._today_cache, 'today'),
+                (self._all_time_cache, 'all_time'),
+            ):
+                cache = self._ensure_cache(store, host_name, period)
+                cache['bytes_saved'] += bytes_saved
+                cache['files_deduped'] += files_count
+                if success:
+                    cache['files_uploaded'] += files_count
+                else:
+                    cache['files_failed'] += files_count
+            session_copy = self._format_metrics(self._session_cache[host_name])
+            today_copy = self._format_metrics(self._today_cache[host_name])
+            all_time_copy = self._format_metrics(self._all_time_cache[host_name])
+
+        self._write_queue.put({
+            'type': 'transfer',
+            'host_name': host_name,
+            'bytes_uploaded': 0,
+            'bytes_saved': bytes_saved,
+            'transfer_time': 0.0,
+            'success': success,
+            'deduped': True,
+            'speed': 0.0,
+            'timestamp': time.time(),
+        })
+
+        try:
+            self.signals.host_metrics_updated.emit(host_name, {
+                'session': session_copy,
+                'today': today_copy,
+                'all_time': all_time_copy,
+            })
+        except Exception as e:
+            logger.debug(f"Failed to emit dedup metrics signal: {e}")
 
     def _format_metrics(self, cache: Dict[str, Any]) -> Dict[str, Any]:
         """Format cache data into a clean metrics dict."""
