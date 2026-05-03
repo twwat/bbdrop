@@ -194,16 +194,30 @@ class TabsTab(QWidget):
                     hidden_item.setBackground(QColor("#ffe6e6"))
                 self.tabs_table.setItem(row, 3, hidden_item)
 
-            # Update default tab combo
-            self.default_tab_combo.clear()
-            visible_tabs = [tab.name for tab in tabs if not tab.is_hidden]
-            self.default_tab_combo.addItems(visible_tabs)
+            # Update default tab combo.
+            #
+            # Block signals while we re-populate. Otherwise the first addItems()
+            # call fires currentTextChanged with whichever name happens to be
+            # first in the list — usually "Main" — and on_default_tab_changed
+            # writes that to last_active_tab via the tab_manager setter. The
+            # subsequent setCurrentIndex() restores the saved value, but if a
+            # QSettings flush lands in the millisecond gap (or if findText
+            # returns -1 because the saved tab isn't in the combo), "Main"
+            # ends up persisted. Net result: opening the settings dialog
+            # silently resets the saved last_active_tab.
+            self.default_tab_combo.blockSignals(True)
+            try:
+                self.default_tab_combo.clear()
+                visible_tabs = [tab.name for tab in tabs if not tab.is_hidden]
+                self.default_tab_combo.addItems(visible_tabs)
 
-            # Set current default tab
-            current_default = self.tab_manager.last_active_tab
-            index = self.default_tab_combo.findText(current_default)
-            if index >= 0:
-                self.default_tab_combo.setCurrentIndex(index)
+                # Set current default tab
+                current_default = self.tab_manager.last_active_tab
+                index = self.default_tab_combo.findText(current_default)
+                if index >= 0:
+                    self.default_tab_combo.setCurrentIndex(index)
+            finally:
+                self.default_tab_combo.blockSignals(False)
 
         except Exception as e:
             log(f"Error loading tabs settings: {e}", level="error", category="settings")
