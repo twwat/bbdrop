@@ -25,7 +25,7 @@ from src.utils.format_utils import format_binary_rate
 from src.utils.logger import log
 from src.gui.icon_manager import get_icon_manager
 from src.core.file_host_config import get_config_manager, get_file_host_setting, save_file_host_setting
-from src.core.host_registry import get_display_name
+from src.core.host_registry import get_display_name, to_host_id
 from src.core.image_host_config import get_image_host_config_manager, is_image_host_enabled, save_image_host_enabled, get_all_hosts
 from src.gui.widgets.custom_widgets import StorageTrafficBar
 from src.gui.widgets.worker_status_formatting import (
@@ -1150,18 +1150,13 @@ class WorkerStatusWidget(QWidget):
         # Update cache
         self._host_metrics_cache[host_name.lower()] = merged
 
-        # Find worker for this host and update metric columns.
-        #
-        # record_transfer is called with the canonical host_id ("imx",
-        # "turbo", "pixhost", "rapidgator", ...) but worker.hostname holds
-        # the display name ("imx.to", "TurboImageHost", "Pixhost", ...).
-        # Match on host_id first (which is canonical for both image and
-        # file host workers), and fall back to hostname for legacy rows
-        # that haven't been backfilled with a host_id yet.
-        target = host_name.lower()
+        # Find worker for this host. metrics_store normalizes its inputs
+        # through to_host_id() before emitting, so host_name here is always
+        # a canonical host_id and we match purely on worker.host_id. Display
+        # names never enter the comparison.
+        target = to_host_id(host_name)
         for worker_id, worker in self._workers.items():
-            wh_id = (worker.host_id or '').lower()
-            if wh_id == target or worker.hostname.lower() == target:
+            if (worker.host_id or '').lower() == target:
                 self._update_worker_metrics(worker_id, merged)
                 break
 
@@ -1365,9 +1360,10 @@ class WorkerStatusWidget(QWidget):
             files_remaining: Number of pending zip uploads for this host
             bytes_remaining: Total bytes remaining for pending uploads
         """
+        target = to_host_id(host_name)
         with QMutexLocker(self._workers_mutex):
             for worker_id, worker in self._workers.items():
-                if worker.worker_type == 'filehost' and (worker.host_id or worker.hostname).lower() == host_name.lower():
+                if worker.worker_type == 'filehost' and (worker.host_id or '').lower() == target:
                     worker.files_remaining = files_remaining
                     worker.bytes_remaining = bytes_remaining
                     self._update_files_remaining(worker_id, files_remaining)
