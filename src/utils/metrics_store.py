@@ -436,15 +436,6 @@ class MetricsStore:
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
 
-        # A transfer must run long enough for its bytes/time ratio to mean
-        # something. Sub-second transfers (small files completing in
-        # milliseconds) report inflated rates regardless of the user's
-        # actual line speed — pycurl flushes a buffered chunk and the
-        # math says "100 MiB in 0.12s = 833 MiB/s" even on a 1 Gbps NIC.
-        # We still record the bytes/files/dedup counts; we just don't
-        # let these short transfers establish the peak.
-        peak_eligible = transfer_time >= 1.0
-
         # Calculate average speed in bytes/second (for rolling average tracking)
         avg_speed = bytes_uploaded / transfer_time if transfer_time > 0 else 0
 
@@ -494,7 +485,7 @@ class MetricsStore:
             # that aren't real network throughput. Only record peaks when bytes
             # actually flowed over the wire.
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            if peak_eligible and not deduped and speed > cache['peak_speed']:
+            if not deduped and speed > cache['peak_speed']:
                 cache['peak_speed'] = speed
                 cache['peak_speed_date'] = now_str
 
@@ -552,7 +543,7 @@ class MetricsStore:
                 today_cache['files_uploaded'] += files_count
             else:
                 today_cache['files_failed'] += files_count
-            if peak_eligible and not deduped and speed > today_cache['peak_speed']:
+            if not deduped and speed > today_cache['peak_speed']:
                 today_cache['peak_speed'] = speed
                 today_cache['peak_speed_date'] = now_str
             # Use avg_speed for rolling average, not peak
@@ -605,7 +596,7 @@ class MetricsStore:
                 all_time_cache['files_uploaded'] += files_count
             else:
                 all_time_cache['files_failed'] += files_count
-            if peak_eligible and not deduped and speed > all_time_cache['peak_speed']:
+            if not deduped and speed > all_time_cache['peak_speed']:
                 all_time_cache['peak_speed'] = speed
                 all_time_cache['peak_speed_date'] = now_str
             # Use avg_speed for rolling average, not peak
