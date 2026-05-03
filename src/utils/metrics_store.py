@@ -28,41 +28,42 @@ from src.utils.paths import get_central_store_base_path
 logger = logging.getLogger(__name__)
 
 
-# Alias map: old display-name keys -> canonical host_id
-_HOST_NAME_ALIASES: Dict[str, str] = {
-    'IMX.to': 'imx',
-    'Imx': 'imx',
-    'Imx.To': 'imx',
-    'Imx.to': 'imx',
-    'Turbo': 'turbo',
-    'Turboimagehost': 'turbo',
-    'TurboImageHost': 'turbo',
-    'Pixhost': 'pixhost',
+# Test artifacts to delete (case-insensitive — match either form)
+_DELETE_KEYS = {
+    'Host_0', 'Host_1', 'Host_2', 'Host_3', 'Host_4', 'Host_5',
+    'host_0', 'host_1', 'host_2', 'host_3', 'host_4', 'host_5',
+    'TestHost', 'testhost',
 }
-
-# Test artifacts to delete
-_DELETE_KEYS = {'Host_0', 'Host_1', 'Host_2', 'Host_3', 'Host_4', 'Host_5'}
 
 
 def _migrate_host_name_keys(db_path: str) -> None:
-    """One-time migration: normalize host_name keys to host_id.
+    """Idempotent migration: collapse non-canonical host_name keys into
+    their canonical host_id via host_registry.to_host_id().
 
-    Merges rows with display-name keys into their canonical host_id,
-    summing counts/bytes and taking max peak_speed. Deletes test artifacts.
+    Any existing row whose key normalizes to a different value is merged
+    into the canonical row (summing counts/bytes, taking max peak_speed)
+    or renamed when no canonical row exists. Test artifacts are removed.
+    Runs every startup — no-op when the DB is already canonical.
     """
     conn = sqlite3.connect(db_path)
     try:
-        # Check if migration needed — look for any alias keys
         cursor = conn.execute("SELECT DISTINCT host_name FROM host_metrics")
         existing_keys = {row[0] for row in cursor.fetchall()}
 
-        aliases_present = existing_keys & set(_HOST_NAME_ALIASES.keys())
-        artifacts_present = existing_keys & _DELETE_KEYS
+        # Build per-key migration plan: { old_key: canonical_id } for any
+        # row whose stored key isn't already canonical. Only touch keys
+        # that actually need to move.
+        plan: Dict[str, str] = {}
+        for key in existing_keys:
+            canonical = to_host_id(key)
+            if canonical and canonical != key:
+                plan[key] = canonical
 
-        if not aliases_present and not artifacts_present:
+        artifacts_present = existing_keys & _DELETE_KEYS
+        if not plan and not artifacts_present:
             return  # Already clean
 
-        # Delete test artifacts
+        # Delete test artifacts first.
         if artifacts_present:
             placeholders = ','.join('?' * len(artifacts_present))
             conn.execute(
@@ -70,12 +71,7 @@ def _migrate_host_name_keys(db_path: str) -> None:
                 list(artifacts_present)
             )
 
-        # Merge alias keys into canonical host_id
-        for old_key, new_key in _HOST_NAME_ALIASES.items():
-            if old_key not in existing_keys:
-                continue
-
-            # Get all period rows for the old key
+        for old_key, new_key in plan.items():
             old_rows = conn.execute(
                 "SELECT period_type, period_date, bytes_uploaded, files_uploaded, "
                 "files_failed, files_deduped, total_transfer_time, peak_speed "
@@ -88,16 +84,13 @@ def _migrate_host_name_keys(db_path: str) -> None:
                 bytes_up, files_up, files_fail = row[2], row[3], row[4]
                 files_dedup, transfer_time, peak = row[5], row[6], row[7]
 
-                # Check if canonical key already has a row for this period
                 existing = conn.execute(
-                    "SELECT id, bytes_uploaded, files_uploaded, files_failed, "
-                    "files_deduped, total_transfer_time, peak_speed "
-                    "FROM host_metrics WHERE host_name = ? AND period_type = ? AND period_date IS ?",
+                    "SELECT id FROM host_metrics "
+                    "WHERE host_name = ? AND period_type = ? AND period_date IS ?",
                     (new_key, period_type, period_date)
                 ).fetchone()
 
                 if existing:
-                    # Merge into existing row
                     conn.execute(
                         "UPDATE host_metrics SET "
                         "bytes_uploaded = bytes_uploaded + ?, "
@@ -111,18 +104,20 @@ def _migrate_host_name_keys(db_path: str) -> None:
                          transfer_time, peak, existing[0])
                     )
                 else:
-                    # Rename the row
                     conn.execute(
                         "UPDATE host_metrics SET host_name = ? "
                         "WHERE host_name = ? AND period_type = ? AND period_date IS ?",
                         (new_key, old_key, period_type, period_date)
                     )
 
-            # Delete any remaining old-key rows (in case rename hit UNIQUE conflict)
+            # Drop any rows that lost their UNIQUE-conflict race.
             conn.execute("DELETE FROM host_metrics WHERE host_name = ?", (old_key,))
 
         conn.commit()
-        logger.info("Migrated host_metrics keys to canonical host_id format")
+        logger.info(
+            f"host_metrics: collapsed {len(plan)} non-canonical key(s) "
+            f"to host_id form"
+        )
 
     except Exception as e:
         logger.warning(f"host_metrics key migration failed: {e}")
