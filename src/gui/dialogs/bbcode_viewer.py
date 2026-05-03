@@ -66,79 +66,61 @@ class BBCodeViewerDialog(QDialog):
         # Load content
         self.load_content()
     
-    def get_file_paths(self):
-        """Get the BBCode file paths (central and folder locations)"""
-        # Try to get gallery info from the main GUI
-        gallery_id = None
-        gallery_name = None
-        
-        # Find the main GUI window to get item info
+    def _resolve_gallery_identity(self):
+        """Return (gallery_name, gallery_id) for this folder, sourced from the
+        in-memory queue item when available, falling back to a DB lookup. Both
+        are used to construct the canonical artifact filenames."""
+        gallery_id = ""
+        gallery_name = ""
         widget = self.parent()
         while widget:
             if hasattr(widget, 'queue_manager'):
                 item = widget.queue_manager.get_item(self.folder_path)
                 if item:
-                    gallery_id = item.gallery_id
-                    gallery_name = item.name
+                    gallery_id = item.gallery_id or ""
+                    gallery_name = item.name or ""
                 break
             widget = widget.parent()
-
-        # Use same gallery_id fallback as save_gallery_artifacts:
-        # when gallery_id is empty, derive from filename without extension
         if not gallery_id:
-            gallery_id = os.path.splitext(self.folder_name)[0]
+            try:
+                from src.storage.database import QueueStore
+                gallery_id = QueueStore().get_gallery_id(self.folder_path)
+            except Exception:
+                gallery_id = ""
         if not gallery_name:
             gallery_name = os.path.basename(self.folder_path)
+        return gallery_name, gallery_id
 
-        # Central location files in standardized naming (fallback to legacy if not found)
+    def get_file_paths(self):
+        """Return the canonical artifact paths used by save_files()."""
         from src.storage.gallery_management import build_gallery_filenames
-        if gallery_id and gallery_name:
-            _, json_filename, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
-            central_bbcode = os.path.join(self.central_path, bbcode_filename)
-            central_url = None
+        gallery_name, gallery_id = self._resolve_gallery_identity()
+        if gallery_id:
+            _, _, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
         else:
-            # Fallback to legacy naming detection for read-only purposes
-            central_bbcode = os.path.join(self.central_path, f"{self.folder_name}_bbcode.txt")
-            central_url = os.path.join(self.central_path, f"{self.folder_name}.url")
-
-        # Folder location files: standardized names under .uploaded (fallback to legacy glob)
-        import glob
-        base_dir = self.folder_path if os.path.isdir(self.folder_path) else os.path.dirname(self.folder_path)
+            bbcode_filename = f"{gallery_name}_bbcode.txt"
+        base_dir = (
+            self.folder_path if os.path.isdir(self.folder_path)
+            else os.path.dirname(self.folder_path)
+        )
         uploaded_dir = os.path.join(base_dir, ".uploaded")
-        if gallery_id and gallery_name:
-            _, json_filename, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
-            folder_bbcode_files = glob.glob(os.path.join(uploaded_dir, glob.escape(bbcode_filename)))
-            folder_url_files = []
-        else:
-            folder_bbcode_files = glob.glob(os.path.join(uploaded_dir, f"{self.folder_name}_bbcode.txt"))
-            folder_url_files = []
-        
         return {
-            'central_bbcode': central_bbcode,
-            'central_url': central_url,
-            'folder_bbcode': folder_bbcode_files[0] if folder_bbcode_files else None,
-            'folder_url': folder_url_files[0] if folder_url_files else None
+            'central_bbcode': os.path.join(self.central_path, bbcode_filename),
+            'folder_bbcode': os.path.join(uploaded_dir, bbcode_filename),
         }
-    
+
     def load_content(self):
-        """Load BBCode content from files"""
-        file_paths = self.get_file_paths()
-        
-        # Try to load from central location first, then folder location
-        content = ""
-        source_file = None
-        
-        if os.path.exists(file_paths['central_bbcode']):
-            with open(file_paths['central_bbcode'], 'r', encoding='utf-8') as f:
-                content = f.read()
-            source_file = file_paths['central_bbcode']
-        elif file_paths['folder_bbcode'] and os.path.exists(file_paths['folder_bbcode']):
-            with open(file_paths['folder_bbcode'], 'r', encoding='utf-8') as f:
-                content = f.read()
-            source_file = file_paths['folder_bbcode']
-        
-        if source_file:
-            self.info_label.setText(f"Loaded from: {source_file}")
+        """Load BBCode content via the unified DB-first resolver."""
+        from src.utils.artifact_finder import resolve_gallery_bbcode
+        gallery_name, gallery_id = self._resolve_gallery_identity()
+        content, source = resolve_gallery_bbcode(
+            gallery_path=self.folder_path,
+            gallery_name=gallery_name,
+            gallery_id=gallery_id,
+        )
+
+        if content:
+            self.info_label.setText(f"Loaded from: {source or 'database'}")
             self.text_edit.setPlainText(content)
         else:
             self.info_label.setText("No BBCode files found for this gallery")
@@ -157,19 +139,32 @@ class BBCodeViewerDialog(QDialog):
         QTimer.singleShot(1000, lambda: self.copy_btn.setText("Copy to Clipboard"))
     
     def save_files(self):
-        """Save content to both central and folder locations"""
+        """Save content to the database and to both .txt locations on disk."""
         content = self.text_edit.toPlainText()
         file_paths = self.get_file_paths()
 
         try:
-            # Save to central location
+            # Persist to database (primary source of truth).
+            try:
+                from src.storage.database import QueueStore
+                _, gallery_id = self._resolve_gallery_identity()
+                QueueStore().set_gallery_bbcode(
+                    self.folder_path, content,
+                    gallery_id=gallery_id or None,
+                )
+            except Exception as e:
+                # Disk write below still succeeds; surface the warning but
+                # don't block the save.
+                from src.utils.logger import log
+                log(f"BBCode viewer: DB write failed for {self.folder_path}: {e}",
+                    level="warning", category="database")
+
+            # Mirror to disk (.uploaded + central) under canonical naming.
+            os.makedirs(os.path.dirname(file_paths['folder_bbcode']), exist_ok=True)
             with open(file_paths['central_bbcode'], 'w', encoding='utf-8') as f:
                 f.write(content)
-
-            # Save to folder location if it exists
-            if file_paths['folder_bbcode']:
-                with open(file_paths['folder_bbcode'], 'w', encoding='utf-8') as f:
-                    f.write(content)
+            with open(file_paths['folder_bbcode'], 'w', encoding='utf-8') as f:
+                f.write(content)
 
             # Notify forum-posting hub so tracked forum_posts can stale-flag.
             db_id = self._find_gallery_db_id()
