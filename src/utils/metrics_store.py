@@ -128,8 +128,12 @@ def _migrate_host_name_keys(db_path: str) -> None:
 class PeakSpeedValidator:
     """Validates peak speed measurements to filter outliers."""
 
-    # 12.5 Gbps in KB/s (~12,800,000 KB/s = ~12,207 MiB/s)
-    MAX_REALISTIC_KBPS = 12.5 * 1024 * 1024
+    # 2 Gbps in KB/s (= 256 MB/s ≈ 244 MiB/s). Anything above this is treated
+    # as a measurement artifact (pycurl reporting a buffered chunk over a
+    # microsecond window, etc.) rather than real network throughput. Comfortably
+    # exceeds residential gigabit/2-gigabit fiber peaks; bump if you're on a
+    # genuinely faster line.
+    MAX_REALISTIC_KBPS = 256 * 1024
 
     # Smoothing parameters (match BandwidthManager)
     WINDOW_SIZE = 10
