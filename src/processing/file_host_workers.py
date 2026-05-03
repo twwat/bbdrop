@@ -1179,7 +1179,14 @@ class FileHostWorker(QThread):
                             deduped=1
                         )
 
-                    # Record metrics for successful transfer
+                    # Record metrics for successful transfer.
+                    #
+                    # When the host returns deduplication=True, no bytes
+                    # actually moved over the wire — it was a hash check.
+                    # Track that as bytes_saved (the size that would have
+                    # transferred) rather than bytes_uploaded, matching the
+                    # K2S family hash-match path below and what the
+                    # statistics dialog's "Skipped (Dedup)" column reads.
                     from src.utils.metrics_store import get_metrics_store
                     metrics_store = get_metrics_store()
                     if metrics_store:
@@ -1187,13 +1194,15 @@ class FileHostWorker(QThread):
                             peak_kbps = self.queue_store._main_window.worker_signal_handler.bandwidth_manager.get_file_host_bandwidth(host_name)
                         except AttributeError:
                             peak_kbps = None
+                        is_dedup = bool(result.get('deduplication'))
                         metrics_store.record_transfer(
                             host_name=self.host_id,
-                            bytes_uploaded=part_size,
+                            bytes_uploaded=0 if is_dedup else part_size,
                             transfer_time=upload_elapsed_time,
                             success=True,
-                            observed_peak_kbps=peak_kbps,
-                            deduped=bool(result.get('deduplication'))
+                            observed_peak_kbps=None if is_dedup else peak_kbps,
+                            deduped=is_dedup,
+                            bytes_saved=part_size if is_dedup else 0,
                         )
                     avg_speed_mbs = (part_size / upload_elapsed_time / (1024 * 1024)) if upload_elapsed_time > 0 else 0
                     self._log(
