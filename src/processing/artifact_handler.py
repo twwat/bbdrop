@@ -336,18 +336,33 @@ class ArtifactHandler(QObject):
         if not item:
             raise Exception("Gallery not found in database")
 
-        # Find JSON artifact file by gallery ID
-        from src.utils.artifact_finder import find_gallery_json_by_id
+        # Resolve the canonical JSON artifact. resolve_gallery_json handles
+        # both the post-v19 {name}_{id}.json shape and the legacy duplicated
+        # {name}_{name}.json shape, and renames legacy files to canonical
+        # while it's at it (along with the sibling _bbcode.txt).
+        from src.utils.artifact_finder import (
+            resolve_gallery_json, find_gallery_json_by_id,
+        )
 
-        gallery_id = getattr(item, 'gallery_id', None)
+        gallery_id = getattr(item, 'gallery_id', None) or ""
         if not gallery_id:
-            # Video items (and hosts that don't return gallery_id) use filename as fallback,
-            # matching the same logic in save_gallery_artifacts
-            gallery_id = os.path.splitext(os.path.basename(gallery_path))[0]
+            try:
+                from src.storage.database import QueueStore
+                gallery_id = QueueStore().get_gallery_id(gallery_path)
+            except Exception:
+                gallery_id = ""
 
-        json_path = find_gallery_json_by_id(gallery_id, gallery_path)
+        gallery_name = item.name or os.path.basename(gallery_path)
+        json_path = resolve_gallery_json(gallery_path, gallery_name, gallery_id)
         if not json_path:
-            log(f"No JSON artifact file found for gallery ID {gallery_id}", level="warning", category="artifact")
+            # Last-resort glob in case the row's name has shifted since save.
+            json_path = find_gallery_json_by_id(gallery_id, gallery_path) if gallery_id else None
+        if not json_path:
+            log(
+                f"No JSON artifact file found for gallery '{gallery_name}' "
+                f"(id={gallery_id})",
+                level="warning", category="artifact",
+            )
             return
 
         # Load JSON data
@@ -362,12 +377,14 @@ class ArtifactHandler(QObject):
             log(f"Dimensions are 0 for gallery regeneration. "
                 f"JSON path: {json_path}, stats section: {stats}", category="fileio")
 
-        # Reuse existing save_gallery_artifacts function with the new template
-        # It will handle BBCode generation, file saving, and JSON updates
-        # Use current gallery name from database (which could be renamed), not from old JSON
+        # Reuse existing save_gallery_artifacts function with the new template.
+        # It will handle BBCode generation, file saving, and JSON updates.
+        # Use the current gallery name and gallery_id from the database — the
+        # in-memory item reflects post-v19 migration state, while the JSON
+        # may carry a stale legacy synth id from before the migration.
         current_gallery_name = item.name if item.name else json_data['meta']['gallery_name']
         results = {
-            'gallery_id': json_data['meta']['gallery_id'],
+            'gallery_id': gallery_id or json_data['meta'].get('gallery_id', ''),
             'gallery_name': current_gallery_name,
             'images': json_data.get('images', []),
             'total_size': stats.get('total_size', 0),
