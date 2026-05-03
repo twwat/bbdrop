@@ -84,7 +84,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 18  # Bump this when adding new migrations
+_SCHEMA_VERSION = 19  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -122,7 +122,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             insertion_order INTEGER DEFAULT 0,
             failed_files TEXT,
             media_type TEXT DEFAULT 'image',
-            download_links TEXT DEFAULT ''
+            download_links TEXT DEFAULT '',
+            bbcode TEXT DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS galleries_status_idx ON galleries(status);
         CREATE INDEX IF NOT EXISTS galleries_added_idx ON galleries(added_ts DESC);
@@ -798,6 +799,41 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         except Exception as e:
             log(f"Migration 18 failed: {e}", level="warning", category="database")
 
+        # Migration to version 19: rendered BBCode is now persisted in the
+        # database alongside the on-disk .txt artifact. Adds the bbcode column
+        # and backfills a stable gallery_id for any row that doesn't yet have
+        # one (file-host-only video uploads were leaving gallery_id empty,
+        # which forced filename-archaeology in every read site).
+        try:
+            gallery_columns = {c[1] for c in conn.execute("PRAGMA table_info(galleries)").fetchall()}
+            if 'bbcode' not in gallery_columns:
+                conn.execute("ALTER TABLE galleries ADD COLUMN bbcode TEXT DEFAULT ''")
+                gallery_columns.add('bbcode')
+                log("Migration 19: added bbcode column to galleries",
+                    level="info", category="database")
+
+            # Assign a generated gallery_id to any row that's missing one.
+            # Existing rows with a real id (image-host uploads) are untouched.
+            cur = conn.execute(
+                "SELECT id FROM galleries WHERE gallery_id IS NULL OR gallery_id = ''"
+            )
+            empty_id_rows = [r[0] for r in cur.fetchall()]
+            if empty_id_rows:
+                from src.storage.gallery_management import generate_gallery_id
+                for row_id in empty_id_rows:
+                    conn.execute(
+                        "UPDATE galleries SET gallery_id = ? WHERE id = ?",
+                        (generate_gallery_id(), row_id),
+                    )
+                log(
+                    f"Migration 19: assigned gallery_id to {len(empty_id_rows)} rows "
+                    f"that previously had none",
+                    level="info", category="database",
+                )
+            conn.commit()
+        except Exception as e:
+            log(f"Migration 19 failed: {e}", level="warning", category="database")
+
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
         # Continue anyway - the app should still work
@@ -1077,10 +1113,27 @@ class QueueStore:
                 columns.append(col_name)
                 values.append(col_value)
 
-        # Build SQL statement
+        # Build SQL statement.
+        #
+        # gallery_id is preserved on conflict when the incoming value is empty.
+        # save_gallery_artifacts persists the canonical gallery_id directly via
+        # set_gallery_bbcode(); a subsequent queue-state upsert from an
+        # in-memory item that still has the empty default must NOT clobber it.
         columns_str = ', '.join(columns)
         placeholders = ','.join(['?'] * len(columns))
-        update_pairs = ','.join([f"{col}=excluded.{col}" for col in columns if col not in ('path', 'id')])
+        update_pairs_parts: List[str] = []
+        for col in columns:
+            if col in ('path', 'id'):
+                continue
+            if col == 'gallery_id':
+                update_pairs_parts.append(
+                    "gallery_id=CASE WHEN excluded.gallery_id IS NULL "
+                    "OR excluded.gallery_id = '' THEN gallery_id "
+                    "ELSE excluded.gallery_id END"
+                )
+            else:
+                update_pairs_parts.append(f"{col}=excluded.{col}")
+        update_pairs = ','.join(update_pairs_parts)
 
         sql = f"""
             INSERT INTO galleries({columns_str})
@@ -1271,6 +1324,73 @@ class QueueStore:
             sql = "DELETE FROM galleries WHERE path IN (%s)" % ",".join(["?"] * len(paths))
             cur = conn.execute(sql, tuple(paths))
             return cur.rowcount if hasattr(cur, 'rowcount') else 0
+
+    def get_gallery_bbcode(self, path: str) -> str:
+        """Return the rendered BBCode stored for the gallery at this path.
+
+        Empty string if the row doesn't exist or the column hasn't been
+        populated yet (legacy rows that haven't been re-saved post-v19).
+        """
+        if not path:
+            return ""
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                cur = conn.execute("SELECT bbcode FROM galleries WHERE path = ?", (path,))
+                row = cur.fetchone()
+                return (row[0] or "") if row else ""
+        except Exception as e:
+            log(f"get_gallery_bbcode failed for {path}: {e}",
+                level="warning", category="database")
+            return ""
+
+    def get_gallery_id(self, path: str) -> str:
+        """Return the persisted gallery_id for the gallery at this path."""
+        if not path:
+            return ""
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                cur = conn.execute("SELECT gallery_id FROM galleries WHERE path = ?", (path,))
+                row = cur.fetchone()
+                return (row[0] or "") if row else ""
+        except Exception as e:
+            log(f"get_gallery_id failed for {path}: {e}",
+                level="warning", category="database")
+            return ""
+
+    def set_gallery_bbcode(self, path: str, bbcode: str, gallery_id: Optional[str] = None) -> None:
+        """Persist rendered BBCode for the gallery at this path. Optionally
+        also persist a freshly-assigned gallery_id (only overwrites the row's
+        gallery_id when the new value is non-empty AND the row's existing
+        gallery_id is empty — never clobbers a real host-issued id).
+        """
+        if not path:
+            return
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                if gallery_id:
+                    conn.execute(
+                        """
+                        UPDATE galleries
+                        SET bbcode = ?,
+                            gallery_id = CASE
+                                WHEN gallery_id IS NULL OR gallery_id = '' THEN ?
+                                ELSE gallery_id
+                            END
+                        WHERE path = ?
+                        """,
+                        (bbcode, gallery_id, path),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE galleries SET bbcode = ? WHERE path = ?",
+                        (bbcode, path),
+                    )
+        except Exception as e:
+            log(f"set_gallery_bbcode failed for {path}: {e}",
+                level="error", category="database")
 
     def update_insertion_orders(self, ordered_paths: List[str]) -> None:
         if not ordered_paths:
