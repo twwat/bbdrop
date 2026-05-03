@@ -3037,78 +3037,34 @@ class BBDropGUI(QMainWindow):
         self.file_host_controller._on_file_host_icon_double_clicked(gallery_path, host_name)
 
     def copy_bbcode_to_clipboard(self, path: str):
-        """Copy BBCode content to clipboard for the given item"""
-        # Check if item is completed
+        """Copy BBCode content to clipboard for the given item.
+
+        DB-first resolution via resolve_gallery_bbcode (galleries.bbcode column,
+        with disk fallback for legacy rows). Eliminates the previous filename-
+        archaeology path that diverged from save_gallery_artifacts' writer.
+        """
         item = self.queue_manager.get_item(path)
         if not item or item.status != "completed":
-            log(f"BBcode copy failed: {os.path.basename(path)} is not completed", level="debug", category="fileio")
+            log(f"BBcode copy failed: {os.path.basename(path)} is not completed",
+                level="debug", category="fileio")
             return
-        
-        folder_name = os.path.basename(path)
-        
-        # Import here to avoid circular imports  
-        from src.utils.paths import get_central_storage_path
-        central_path = get_central_storage_path()
-        
-        # Try central location first with standardized naming, fallback to legacy
-        from src.storage.gallery_management import build_gallery_filenames
-        item = self.queue_manager.get_item(path)
-        # Use same gallery_id fallback as save_gallery_artifacts
-        gallery_id = (item.gallery_id if item else '') or os.path.splitext(os.path.basename(path))[0]
-        gallery_name = (item.name if item else '') or folder_name
-        if gallery_id and gallery_name:
-            log(f"BBcode copy: gallery_name='{gallery_name}', gallery_id='{gallery_id}'", level="debug", category="fileio")
-            _, _, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
-            central_bbcode = os.path.join(central_path, bbcode_filename)
-            log(f"BBcode copy: central_bbcode path='{central_bbcode}' Exists={os.path.exists(central_bbcode)}", level="debug", category="fileio")
-        else:
-            central_bbcode = os.path.join(central_path, f"{folder_name}_bbcode.txt") # Fallback to old format for existing files
-        
-        content = ""
-        source_file = None
-        
-        if os.path.exists(central_bbcode):
-            with open(central_bbcode, 'r', encoding='utf-8') as f:
-                content = f.read()
-            source_file = central_bbcode
-        else:
-            # Try pattern-based lookup using gallery_id if exact filename fails
-            if item and item.gallery_id:
-                import glob
-                log(f"BBcode copy: exact filename not found, trying pattern-based lookup for gallery_id '{item.gallery_id}'", level="debug", category="fileio")
-                pattern = os.path.join(central_path, f"*_{glob.escape(item.gallery_id)}_bbcode.txt")
-                matches = glob.glob(pattern)
-                log(f"BBcode copy, found {len(matches)} matches for '{pattern}': {matches}", level="debug", category="fileio")
-                if matches:
-                    central_bbcode = matches[0]  # Use first match
-                    log(f"BBcode copy using pattern match: {central_bbcode}", level="debug", category="fileio")
-                    if os.path.exists(central_bbcode):
-                        with open(central_bbcode, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        source_file = central_bbcode
 
-        if not content:
-            import glob # Try folder location (existing format)
-            base_dir = path if os.path.isdir(path) else os.path.dirname(path)
-            # Prefer standardized .uploaded location, fallback to legacy
-            if gallery_id and gallery_name:
-                _, _, bbcode_filename = build_gallery_filenames(gallery_name, gallery_id)
-                folder_bbcode_files = glob.glob(os.path.join(base_dir, ".uploaded", glob.escape(bbcode_filename)))
-            else:
-                folder_bbcode_files = glob.glob(os.path.join(base_dir, "gallery_*_bbcode.txt"))
-            
-            if folder_bbcode_files and os.path.exists(folder_bbcode_files[0]):
-                with open(folder_bbcode_files[0], 'r', encoding='utf-8') as f:
-                    content = f.read()
-                source_file = folder_bbcode_files[0]
-        
+        from src.utils.artifact_finder import resolve_gallery_bbcode
+        content, source = resolve_gallery_bbcode(
+            gallery_path=path,
+            gallery_name=item.name or os.path.basename(path),
+            gallery_id=getattr(item, 'gallery_id', '') or "",
+        )
+
         if content:
             clipboard = QApplication.clipboard()
             if clipboard:
                 clipboard.setText(content)
-                log(f"Copied BBCode to clipboard from: {source_file}", level="info", category="fileio")
+                log(f"Copied BBCode to clipboard from: {source or 'database'}",
+                    level="info", category="fileio")
         else:
-            log(f"No BBCode file found for: {folder_name}", level="info", category="fileio")
+            log(f"No BBCode found for: {os.path.basename(path)}",
+                level="info", category="fileio")
 
     def check_image_status_via_menu(self, paths: List[str]):
         """Check image online status for selected completed galleries.
