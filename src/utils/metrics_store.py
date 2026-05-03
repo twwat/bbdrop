@@ -281,21 +281,21 @@ class MetricsStore:
         return self._peak_validators[host_name]
 
     def _cap_unrealistic_peaks(self) -> None:
-        """Reset historical peak_speed values that came from the dedup-pollution
-        bug (bytes / millisecond hash check ≈ multi-GiB/s) so the column
-        reflects real upload rates again. Idempotent: rows already at/under
-        the threshold are left alone.
+        """Reset historical peak_speed values that are clearly outliers
+        relative to that host's own avg_speed. Idempotent: rows where
+        peak/avg is already plausible are left alone.
 
-        Threshold matches PeakSpeedValidator.MAX_REALISTIC_KBPS so
-        historical bad data and future incoming samples share the same
-        definition of "obviously bogus". Above this gets reset to 0 so
-        the next real upload re-establishes a sensible peak via the
-        smoothed observed_peak_kbps path.
+        Connection-agnostic: a 1 Gbps NIC user with avg=80 MiB/s and a
+        peak of 800 MiB/s gets reset; a 10 Gbps user with avg=600 MiB/s
+        and a peak of 1.2 GiB/s does NOT — their fast peak is consistent
+        with their fast average, so it stays.
+
+        Outlier definition: peak > 5x the avg implied by total bytes /
+        total transfer_time on the row. That ratio survives across any
+        line speed because both numerator and denominator scale together.
+        Reset to 0 so the next real upload re-establishes a sensible
+        peak via the smoothed observed_peak_kbps path.
         """
-        max_realistic_bytes_per_sec = (
-            PeakSpeedValidator.MAX_REALISTIC_KBPS * 1024
-        )
-
         with self._db_lock:
             conn = self._connect()
             try:
@@ -303,16 +303,18 @@ class MetricsStore:
                     UPDATE host_metrics
                     SET peak_speed = 0,
                         peak_speed_date = NULL
-                    WHERE peak_speed > ?
-                """, (max_realistic_bytes_per_sec,))
+                    WHERE total_transfer_time > 0
+                      AND peak_speed > 5.0 * (bytes_uploaded * 1.0 / total_transfer_time)
+                      AND peak_speed > 50 * 1024 * 1024
+                """)
                 if cursor.rowcount > 0:
                     logger.info(
-                        f"Reset {cursor.rowcount} unrealistic peak_speed "
-                        f"values (>1 GiB/s) to 0 — they'll be re-established "
-                        f"from real upload measurements going forward"
+                        f"Reset {cursor.rowcount} peak_speed value(s) where "
+                        f"peak >> avg (likely measurement artifacts from "
+                        f"sub-second transfers)"
                     )
             except Exception as e:
-                logger.warning(f"Failed to reset unrealistic peak speeds: {e}")
+                logger.warning(f"Failed to reset outlier peak speeds: {e}")
             finally:
                 conn.close()
 
