@@ -418,7 +418,7 @@ def save_gallery_artifacts(
 
     Returns: dict with paths written: { 'uploaded': {'bbcode': str, 'json': str}, 'central': {...}}
     """
-    from src.storage.gallery_management import build_gallery_filenames
+    from src.storage.gallery_management import build_gallery_filenames, generate_gallery_id
 
     # Determine storage preferences
     defaults = load_user_defaults()
@@ -427,7 +427,28 @@ def save_gallery_artifacts(
     if store_in_central is None:
         store_in_central = defaults.get('store_in_central', True)
 
-    gallery_id = results.get('gallery_id', '') or os.path.splitext(os.path.basename(folder_path))[0]
+    # gallery_id resolution.
+    #
+    # If the upload host gave us one (IMX, Turbo, Pixhost), use it. Otherwise
+    # check the database — a previously-assigned id (from migration 19's
+    # backfill, or from a prior save in this session) is the stable one to
+    # reuse. Only as a last resort do we mint a fresh id. Never fall back to
+    # the filename stem the way old code did — that produced
+    # "{name}_{name}_bbcode.txt" duplication for video items where name and
+    # stem coincided.
+    gallery_id = (results.get('gallery_id') or '').strip()
+    if not gallery_id:
+        try:
+            from src.storage.database import QueueStore
+            gallery_id = QueueStore().get_gallery_id(folder_path)
+        except Exception:
+            gallery_id = ''
+    if not gallery_id:
+        gallery_id = generate_gallery_id()
+    # Push the resolved id back into results so callers (and the JSON
+    # artifact written below) all carry the same canonical id.
+    results['gallery_id'] = gallery_id
+
     gallery_name = results.get('gallery_name') or os.path.basename(folder_path)
     if not gallery_name:
         return {}
@@ -717,5 +738,18 @@ def save_gallery_artifacts(
             json.dump(json_payload, jf, ensure_ascii=False, indent=2)
         written_paths.setdefault('central', {})['bbcode'] = os.path.join(central_path, bbcode_filename)
         written_paths.setdefault('central', {})['json'] = os.path.join(central_path, json_filename)
+
+    # Mirror the rendered BBCode into the database so Ctrl-C, the BBCode
+    # viewer, and any future read site can resolve content via the queue
+    # item's path without filename archaeology. Also persist the resolved
+    # gallery_id when the row didn't previously have one (set_gallery_bbcode
+    # only updates gallery_id when the existing value is empty, so a real
+    # host-issued id is never clobbered).
+    try:
+        from src.storage.database import QueueStore
+        QueueStore().set_gallery_bbcode(folder_path, bbcode_content, gallery_id=gallery_id)
+    except Exception as e:
+        log(f"Failed to persist BBCode to database for {folder_path}: {e}",
+            level="warning", category="database")
 
     return written_paths
