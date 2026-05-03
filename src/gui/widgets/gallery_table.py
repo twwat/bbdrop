@@ -1061,7 +1061,13 @@ class GalleryTableWidget(QTableWidget):
         if not widget:
             log(f"No widget with queue_manager found", level="warning", category="fileio")
             return
-        # Aggregate BBCode contents; reuse copy function to centralize path lookup
+        # Aggregate BBCode contents.
+        #
+        # Single source of truth: galleries.bbcode in the database (post-v19),
+        # with disk fallback through resolve_gallery_bbcode for legacy rows
+        # that haven't been re-saved since the migration. Both paths converge
+        # on the same canonical {name}_{gallery_id}_bbcode.txt naming.
+        from src.utils.artifact_finder import resolve_gallery_bbcode
         contents = []
         for path in paths:
             item = widget.queue_manager.get_item(path)
@@ -1070,47 +1076,12 @@ class GalleryTableWidget(QTableWidget):
                 continue
             if item.status != "completed":
                 continue
-            # Inline read similar to copy_bbcode_to_clipboard to avoid changing it
-            folder_name = os.path.basename(path)
-            # Use cached functions or fallbacks
-            if hasattr(widget, '_get_central_storage_path'):
-                central_path = widget._get_central_storage_path()
-            else:
-                central_path = os.path.expanduser("~/.bbdrop/galleries")
-                log(f"Using fallback central_path: {central_path}", level="debug")
-            if item.gallery_id and (item.name or folder_name):
-                if hasattr(widget, '_build_gallery_filenames'):
-                    _, _, bbcode_filename = widget._build_gallery_filenames(item.name or folder_name, item.gallery_id)
-                else:
-                    # No sanitization - only rename worker should sanitize
-                    gallery_name = item.name or folder_name
-                    bbcode_filename = f"{gallery_name}_{item.gallery_id}_bbcode.txt"
-                    log(f"Using fallback filename: {bbcode_filename}", level="debug")
-                central_bbcode = os.path.join(central_path, bbcode_filename)
-            else:
-                central_bbcode = os.path.join(central_path, f"{folder_name}_bbcode.txt")
-                log(f"Using folder_name fallback: {central_bbcode}", level="debug")
-            # If exact file doesn't exist, try pattern-based lookup
-            if not os.path.exists(central_bbcode) and item.gallery_id:
-                import glob
-                pattern = os.path.join(central_path, f"*_{item.gallery_id}_bbcode.txt")
-                matches = glob.glob(pattern)
-                if matches:
-                    central_bbcode = matches[0]
-
-            # Move file I/O to background to avoid blocking GUI
-            def _read_bbcode_async():
-                text = ""
-                if os.path.exists(central_bbcode):
-                    try:
-                        with open(central_bbcode, 'r', encoding='utf-8') as f:
-                            text = f.read().strip()
-                    except Exception:
-                        text = ""
-                return text
-
-            # For now, read synchronously but this should be moved to a background worker
-            text = _read_bbcode_async()
+            text, _source = resolve_gallery_bbcode(
+                gallery_path=path,
+                gallery_name=item.name or os.path.basename(path),
+                gallery_id=getattr(item, 'gallery_id', '') or "",
+            )
+            text = (text or "").strip()
             if text:
                 contents.append(text)
         num_posts = len(contents)
