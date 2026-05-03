@@ -61,6 +61,20 @@ def build_gallery_filenames(gallery_name, gallery_id):
     bbcode_filename = f"{gallery_name}_{gallery_id}_bbcode.txt"
     return gallery_name, json_filename, bbcode_filename
 
+
+def generate_gallery_id():
+    """Generate a stable, portable, short gallery_id for galleries that aren't
+    assigned one by their upload host (e.g. file-host-only video uploads).
+
+    Format: 10 lowercase alphanumeric chars (~52 bits of entropy). Wide enough
+    that collisions are statistically irrelevant across a single user's library,
+    short enough to keep the artifact filenames readable.
+    """
+    import secrets
+    import string
+    alphabet = string.ascii_lowercase + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(10))
+
 def check_if_gallery_exists(folder_name):
     """Check if gallery files already exist for this folder"""
     central_path = get_central_storage_path()
