@@ -401,6 +401,19 @@ class ArtifactHandler(QObject):
             'media_type': json_data['meta'].get('media_type', 'image'),
             'video_metadata': json_data.get('video_metadata') or {},
             'video_details_template': json_data.get('settings', {}).get('video_details_template', ''),
+            # Preserve cover_result so the cover BBCode survives regeneration
+            # (triggered automatically on every file-host upload completion).
+            # Prefer the in-memory item's cover_result (sourced from the
+            # galleries.cover_result column, which is only written when a
+            # cover upload actually succeeded) over the JSON copy. JSON
+            # cover_result can be stale on rows that were regen'd before
+            # this fix landed — those JSONs got rewritten with cover_result
+            # = [], even though the DB still has the real cover.
+            'cover_result': (
+                getattr(item, 'cover_result', None)
+                or json_data.get('cover_result', [])
+                or []
+            ),
         }
 
         # Prepare custom fields dict from the item
