@@ -1150,9 +1150,18 @@ class WorkerStatusWidget(QWidget):
         # Update cache
         self._host_metrics_cache[host_name.lower()] = merged
 
-        # Find worker for this host and update metric columns
+        # Find worker for this host and update metric columns.
+        #
+        # record_transfer is called with the canonical host_id ("imx",
+        # "turbo", "pixhost", "rapidgator", ...) but worker.hostname holds
+        # the display name ("imx.to", "TurboImageHost", "Pixhost", ...).
+        # Match on host_id first (which is canonical for both image and
+        # file host workers), and fall back to hostname for legacy rows
+        # that haven't been backfilled with a host_id yet.
+        target = host_name.lower()
         for worker_id, worker in self._workers.items():
-            if worker.hostname.lower() == host_name.lower():
+            wh_id = (worker.host_id or '').lower()
+            if wh_id == target or worker.hostname.lower() == target:
                 self._update_worker_metrics(worker_id, merged)
                 break
 
