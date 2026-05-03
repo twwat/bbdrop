@@ -156,11 +156,11 @@ class StatisticsDialog(QDialog):
 
         # Create table
         self._file_hosts_table = QTableWidget()
-        self._file_hosts_table.setColumnCount(10)
+        self._file_hosts_table.setColumnCount(11)
         self._file_hosts_table.setHorizontalHeaderLabels([
-            "Host", "Files", "Failed", "Deduped",
+            "Host", "Files", "Success", "Fail", "Deduped",
             "Uploaded", "Skipped (Dedup)", "Total",
-            "Peak Speed", "Avg Speed", "Success"
+            "Peak Speed", "Avg Speed", "Success %"
         ])
 
         # Configure table appearance
@@ -440,60 +440,42 @@ class StatisticsDialog(QDialog):
 
         self._file_hosts_table.setRowCount(len(sorted_hosts))
 
+        right_align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+
+        def _set(row: int, col: int, text: str, align=right_align):
+            item = QTableWidgetItem(text)
+            item.setTextAlignment(align)
+            self._file_hosts_table.setItem(row, col, item)
+
         for row, (host_name, metrics) in enumerate(sorted_hosts):
-            # Host name (capitalize for display)
-            host_item = QTableWidgetItem(get_display_name(host_name))
-            self._file_hosts_table.setItem(row, 0, host_item)
+            files_uploaded = metrics.get('files_uploaded', 0)
+            files_failed = metrics.get('files_failed', 0)
+            files_total = files_uploaded + files_failed
+            bytes_uploaded = metrics.get('bytes_uploaded', 0)
+            bytes_saved = metrics.get('bytes_saved', 0)
 
-            # Files Uploaded
-            files_up = QTableWidgetItem(f"{metrics.get('files_uploaded', 0):,}")
-            files_up.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 1, files_up)
+            # Host
+            _set(row, 0, get_display_name(host_name),
+                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-            # Files Failed
-            files_fail = QTableWidgetItem(f"{metrics.get('files_failed', 0):,}")
-            files_fail.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 2, files_fail)
+            # Files (total attempts), Success, Fail
+            _set(row, 1, f"{files_total:,}")
+            _set(row, 2, f"{files_uploaded:,}")
+            _set(row, 3, f"{files_failed:,}")
 
             # Files Deduplicated
-            files_dedup = QTableWidgetItem(f"{metrics.get('files_deduped', 0):,}")
-            files_dedup.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 3, files_dedup)
+            _set(row, 4, f"{metrics.get('files_deduped', 0):,}")
 
-            # Data Uploaded (bytes actually transferred)
-            bytes_uploaded = metrics.get('bytes_uploaded', 0)
-            data_up = QTableWidgetItem(format_binary_size(bytes_uploaded))
-            data_up.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 4, data_up)
+            # Data Uploaded / Skipped / Total
+            _set(row, 5, format_binary_size(bytes_uploaded))
+            _set(row, 6, format_binary_size(bytes_saved))
+            _set(row, 7, format_binary_size(bytes_uploaded + bytes_saved))
 
-            # Data Saved (bytes avoided through dedup)
-            bytes_saved = metrics.get('bytes_saved', 0)
-            data_saved = QTableWidgetItem(format_binary_size(bytes_saved))
-            data_saved.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 5, data_saved)
+            # Peak / Avg Speed (MetricsStore stores B/s, format_binary_rate expects KiB/s)
+            _set(row, 8, format_binary_rate(metrics.get('peak_speed', 0) / 1024))
+            _set(row, 9, format_binary_rate(metrics.get('avg_speed', 0) / 1024))
 
-            # Total Data (uploaded + saved)
-            total_data = QTableWidgetItem(format_binary_size(bytes_uploaded + bytes_saved))
-            total_data.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 6, total_data)
-
-            # Peak Speed: MetricsStore stores B/s, format_binary_rate expects KiB/s
-            peak_speed_bps = metrics.get('peak_speed', 0)
-            peak_kbps = peak_speed_bps / 1024
-            peak_item = QTableWidgetItem(format_binary_rate(peak_kbps))
-            peak_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 7, peak_item)
-
-            # Avg Speed: MetricsStore stores B/s, format_binary_rate expects KiB/s
-            avg_speed_bps = metrics.get('avg_speed', 0)
-            avg_kbps = avg_speed_bps / 1024
-            avg_item = QTableWidgetItem(format_binary_rate(avg_kbps))
-            avg_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 8, avg_item)
-
-            # Success Rate
+            # Success %
             success_rate = metrics.get('success_rate', 100.0)
-            rate_item = QTableWidgetItem(f"{success_rate:.1f}%")
-            rate_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._file_hosts_table.setItem(row, 9, rate_item)
+            _set(row, 10, f"{success_rate:.1f}%")
 
