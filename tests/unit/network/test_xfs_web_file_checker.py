@@ -47,9 +47,15 @@ class TestWalkAccount:
         assert set(inventory.keys()) == {"a", "b", "c"}
 
     def test_nested_folders_recurse(self):
+        # Every non-root folder lists a ".." parent-nav row alongside its
+        # real subfolders — the walker must descend into the real
+        # subfolders without re-walking the parent.
         fm = FakeFileManager({
-            ("0", 1):    ([_folder("10", file_count=2)], [_file("a")]),
-            ("10", 1):   ([], [_file("b"), _file("c")]),
+            ("0", 1):  ([_folder("sub", file_count=2)], [_file("a")]),
+            ("sub", 1): (
+                [_folder("0", name="..", file_count=None)],
+                [_file("b"), _file("c")],
+            ),
         })
         checker = XFSWebFileChecker(fm)
         inventory = checker.walk_account()
@@ -107,19 +113,18 @@ class TestWalkAccount:
         assert scraped_ids.count("0") == 1
 
     def test_cyclic_folder_graph_terminates(self):
-        # Filedot panels render parent breadcrumb links as folder rows,
-        # so subfolder listings can re-reference an already-visited folder.
-        # Use file_count=None for the cycle-edge folders so the walker
-        # cannot use the count short-circuit to break the loop.
+        # Defense-in-depth: even if the ".." filter misses (renamed skin,
+        # different host wording, etc.), the visited-set must prevent any
+        # folder from being scraped twice.
         fm = FakeFileManager({
-            ("0", 1): ([_folder("3998", file_count=None)], []),
-            ("3998", 1): ([_folder("4002", file_count=25)], []),
-            ("4002", 1): ([_folder("3998", file_count=None)], [_file("x")]),
+            ("0", 1):   ([_folder("a", file_count=None)], []),
+            ("a", 1):   ([_folder("b", file_count=None)], []),
+            # "b" lists "a" again as a regular folder row (no ".." name).
+            ("b", 1):   ([_folder("a", file_count=None)], [_file("x")]),
         })
         checker = XFSWebFileChecker(fm)
         inventory = checker.walk_account()
         assert "x" in inventory
-        # Each folder must be scraped at most once
         scraped_ids = [fid for (fid, _page, _pp) in fm.calls]
         assert len(scraped_ids) == len(set(scraped_ids)), (
             f"folder scraped more than once: {scraped_ids}"
