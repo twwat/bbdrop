@@ -73,9 +73,12 @@ class FiledotFileManagerClient(XFSWebFileManagerBase):
 
     # ---- URL builders -----------------------------------------------------
 
-    def _folder_url(self, folder_id: str, page: int = 1) -> str:
+    def _folder_url(self, folder_id: str, page: int = 1, per_page: Optional[int] = None) -> str:
         fld = folder_id if folder_id and folder_id not in ("/", "") else "0"
-        return f"{self.BASE_URL}/files/?fld_id={fld}&page={page}"
+        url = f"{self.BASE_URL}/files/?fld_id={fld}&page={page}"
+        if per_page is not None:
+            url += f"&per_page={per_page}"
+        return url
 
     def _file_edit_url(self, file_code: str) -> str:
         return f"{self.BASE_URL}/file_edit?file_code={file_code}"

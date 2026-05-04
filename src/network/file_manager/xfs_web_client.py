@@ -154,7 +154,7 @@ class XFSWebFileManagerBase(FileManagerClient):
 
     # ---- URL builder hooks (subclasses override) --------------------------
 
-    def _folder_url(self, folder_id: str, page: int = 1) -> str:
+    def _folder_url(self, folder_id: str, page: int = 1, per_page: Optional[int] = None) -> str:
         raise NotImplementedError
 
     def _file_edit_url(self, file_code: str) -> str:
@@ -195,8 +195,8 @@ class XFSWebFileManagerBase(FileManagerClient):
 
     # ---- Scraping ---------------------------------------------------------
 
-    def _scrape_page(self, folder_id: str, page: int) -> Tuple[list, list]:
-        page_html = self._web_get(self._folder_url(folder_id, page))
+    def _scrape_page(self, folder_id: str, page: int, per_page: Optional[int] = None) -> Tuple[list, list]:
+        page_html = self._web_get(self._folder_url(folder_id, page, per_page=per_page))
 
         if self.USES_CSRF_TOKEN:
             token_match = self._TOKEN_RE.search(page_html)
