@@ -10,6 +10,7 @@ import certifi
 from io import BytesIO
 from typing import Dict, List, Optional, Any
 
+from src.core.constants import CHROME_UA
 from src.utils.logger import log
 
 
@@ -48,6 +49,7 @@ class K2SFileChecker:
             curl.setopt(pycurl.CAINFO, certifi.where())
             curl.setopt(pycurl.SSL_VERIFYPEER, 1)
             curl.setopt(pycurl.SSL_VERIFYHOST, 2)
+            curl.setopt(pycurl.USERAGENT, CHROME_UA)
             curl.setopt(pycurl.POST, 1)
             curl.setopt(pycurl.POSTFIELDS, encoded)
             curl.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
