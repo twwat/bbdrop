@@ -215,6 +215,12 @@ class XFSWebFileManagerBase(FileManagerClient):
             fld_id = match.group(1)
             raw_name = match.group(2)
             name = html.unescape(re.sub(r'<[^>]+>', '', raw_name).strip())
+            file_count: Optional[int] = None
+            if match.lastindex and match.lastindex >= 3:
+                try:
+                    file_count = int(match.group(3))
+                except (ValueError, TypeError):
+                    file_count = None
             self._known_folder_ids.add(fld_id)
             folders.append(FileInfo(
                 id=fld_id,
@@ -225,6 +231,7 @@ class XFSWebFileManagerBase(FileManagerClient):
                     "fld_id": fld_id,
                     "name": name,
                     "raw_name": raw_name,
+                    "file_count": file_count,
                 },
             ))
 

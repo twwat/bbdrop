@@ -56,7 +56,8 @@ class FiledotFileManagerClient(XFSWebFileManagerBase):
     _FOLDER_ROW_RE = re.compile(
         r'<tr class="folderrow">'
         r'.*?href="https?://filedot\.(?:to|xyz)/files\?fld_id=(\d+)"[^>]*>'
-        r'\s*(.*?)\s*</a>',
+        r'\s*(.*?)\s*</a>'
+        r'(?:.*?<td class="howfiles"[^>]*>(?:<img[^>]*>)?\s*(\d+)\s*</td>)?',
         re.DOTALL,
     )
     _TOKEN_RE = re.compile(r'token=([a-f0-9]{16,})', re.IGNORECASE)
