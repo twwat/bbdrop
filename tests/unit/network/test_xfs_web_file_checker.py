@@ -143,3 +143,13 @@ class TestCalcStorageUsed:
         }
         checker = XFSWebFileChecker(FakeFileManager({}))
         assert checker.calc_storage_used(inv) == 300
+
+
+def test_filedot_class_exposes_per_page_max():
+    from src.network.file_manager.filedot_client import FiledotFileManagerClient
+    assert FiledotFileManagerClient.PER_PAGE_MAX == 5000
+
+
+def test_filespace_class_exposes_per_page_max():
+    from src.network.file_manager.filespace_client import FilespaceFileManagerClient
+    assert FilespaceFileManagerClient.PER_PAGE_MAX == 500

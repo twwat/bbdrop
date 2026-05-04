@@ -40,6 +40,7 @@ class FilespaceFileManagerClient(XFSWebFileManagerBase):
     BASE_URL = "https://filespace.com"
     LINK_PREFIX = "https://filespace.com/"
     USES_CSRF_TOKEN = False
+    PER_PAGE_MAX = 500
 
     # File row: <TR align=center class="hi"> ... file_id value="\d+" ...
     # href="https://filespace.com/<code>">name</a> ... <TD align=right>size</TD>

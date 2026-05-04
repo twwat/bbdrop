@@ -44,6 +44,7 @@ class FiledotFileManagerClient(XFSWebFileManagerBase):
     BASE_URL = "https://filedot.to"
     LINK_PREFIX = "https://filedot.to/"
     USES_CSRF_TOKEN = True
+    PER_PAGE_MAX = 5000
 
     _FILE_ROW_RE = re.compile(
         r'<tr class="filerow">'
