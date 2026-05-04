@@ -103,7 +103,7 @@ def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
                 if decrypted:
                     from src.core.file_host_config import get_config_manager
                     config_mgr = get_config_manager()
-                    rg_config = config_mgr.get_host_config('rapidgator')
+                    rg_config = config_mgr.get_host('rapidgator')
                     if rg_config:
                         from src.network.file_host_client import FileHostClient
                         client = FileHostClient(rg_config, credentials=decrypted, host_id='rapidgator')
@@ -130,7 +130,7 @@ def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
             from src.network.file_host_client import FileHostClient
             from src.core.engine import AtomicCounter
             config_mgr = get_config_manager()
-            host_cfg = config_mgr.get_host_config(host_id)
+            host_cfg = config_mgr.get_host(host_id)
             if not host_cfg:
                 log(f"No config for {host_id}", level="warning", category="scanner")
                 continue
