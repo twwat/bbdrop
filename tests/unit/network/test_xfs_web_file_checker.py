@@ -89,6 +89,42 @@ class TestWalkAccount:
         inventory = checker.walk_account(cancel_event=cancel)
         assert inventory == {}
 
+    def test_parent_nav_dotdot_row_is_skipped(self):
+        # XFS panels render a ".." parent-nav row inside subfolder
+        # listings. The walker must not queue it.
+        fm = FakeFileManager({
+            ("0", 1): ([_folder("10", file_count=2)], []),
+            ("10", 1): (
+                [_folder("0", name="..", file_count=None)],
+                [_file("a")],
+            ),
+        })
+        checker = XFSWebFileChecker(fm)
+        inventory = checker.walk_account()
+        assert "a" in inventory
+        scraped_ids = [fid for (fid, _page, _pp) in fm.calls]
+        # Root visited once at start; the ".." row must not cause a re-fetch.
+        assert scraped_ids.count("0") == 1
+
+    def test_cyclic_folder_graph_terminates(self):
+        # Filedot panels render parent breadcrumb links as folder rows,
+        # so subfolder listings can re-reference an already-visited folder.
+        # Use file_count=None for the cycle-edge folders so the walker
+        # cannot use the count short-circuit to break the loop.
+        fm = FakeFileManager({
+            ("0", 1): ([_folder("3998", file_count=None)], []),
+            ("3998", 1): ([_folder("4002", file_count=25)], []),
+            ("4002", 1): ([_folder("3998", file_count=None)], [_file("x")]),
+        })
+        checker = XFSWebFileChecker(fm)
+        inventory = checker.walk_account()
+        assert "x" in inventory
+        # Each folder must be scraped at most once
+        scraped_ids = [fid for (fid, _page, _pp) in fm.calls]
+        assert len(scraped_ids) == len(set(scraped_ids)), (
+            f"folder scraped more than once: {scraped_ids}"
+        )
+
 
 class TestCheckGalleryFromInventory:
     def test_all_online(self):

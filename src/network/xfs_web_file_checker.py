@@ -42,11 +42,18 @@ class XFSWebFileChecker:
         per_page = getattr(self._fm, "PER_PAGE_MAX", 500)
         inventory: Dict[str, FileInfo] = {}
         queue: List[str] = ["0"]  # root folder id
+        # XFS panels render breadcrumb / parent back-links as folder rows,
+        # so the same fld_id can show up in multiple parent listings.
+        # Without this set the walker pingpongs and hammers the host.
+        visited: set[str] = set()
 
         while queue:
             if cancel_event is not None and cancel_event.is_set():
                 return {}
             folder_id = queue.pop()
+            if folder_id in visited:
+                continue
+            visited.add(folder_id)
             page = 1
             while True:
                 if cancel_event is not None and cancel_event.is_set():
@@ -67,6 +74,13 @@ class XFSWebFileChecker:
 
                 if page == 1:
                     for fld in folders:
+                        if fld.id in visited:
+                            continue
+                        # XFS panels include a ".." parent-nav row in
+                        # subfolder listings; queueing it would re-enter
+                        # the parent folder.
+                        if fld.name == "..":
+                            continue
                         count = fld.metadata.get("file_count")
                         if count is None or count > 0:
                             # Treat unknown counts as "fetch to be safe".
