@@ -128,7 +128,7 @@ def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
         try:
             from src.core.file_host_config import get_config_manager
             from src.network.file_host_client import FileHostClient
-            from src.utils.bandwidth_counter import AtomicCounter
+            from src.core.engine import AtomicCounter
             config_mgr = get_config_manager()
             host_cfg = config_mgr.get_host_config(host_id)
             if not host_cfg:
