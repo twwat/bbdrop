@@ -59,7 +59,8 @@ class K2SFileChecker:
             status_code = curl.getinfo(pycurl.RESPONSE_CODE)
 
             if status_code != 200:
-                raise Exception(f"API returned HTTP {status_code}")
+                body_preview = response_buffer.getvalue().decode('utf-8', errors='replace')[:500]
+                raise Exception(f"API returned HTTP {status_code}: {body_preview!r}")
 
             return json.loads(response_buffer.getvalue().decode('utf-8'))
         finally:
