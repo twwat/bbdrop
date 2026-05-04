@@ -58,16 +58,12 @@ class XFSWebFileChecker:
             while True:
                 if cancel_event is not None and cancel_event.is_set():
                     return {}
-                try:
-                    folders, files = self._fm._scrape_page(
-                        folder_id, page, per_page=per_page
-                    )
-                except Exception as e:
-                    log(
-                        f"XFS scrape failed for folder={folder_id} page={page}: {e}",
-                        level="error", category="scanner",
-                    )
-                    break
+                # Errors propagate: a partial walk would mark un-walked files
+                # as offline, so the scan_coordinator treats any walk failure
+                # as a host-skip signal.
+                folders, files = self._fm._scrape_page(
+                    folder_id, page, per_page=per_page
+                )
 
                 for f in files:
                     inventory[f.id] = f

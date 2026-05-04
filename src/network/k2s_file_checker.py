@@ -93,13 +93,11 @@ class K2SFileChecker:
         # Enumerate subfolders. The API expects 'parent_id' here (NOT 'parent' —
         # that gets silently ignored and returns the root listing, which causes
         # infinite recursion). Root is expressed as an empty body.
+        # Errors propagate: a partial walk would mark un-walked files as offline,
+        # so the scan_coordinator treats any walk failure as a host-skip signal.
         body = {} if folder_id == '/' else {'parent_id': folder_id}
-        try:
-            resp = self._api_post('getFoldersList', body)
-            subfolder_ids: list[str] = resp.get('foldersIds', [])
-        except Exception as e:
-            log(f"K2S getFoldersList failed for folder '{folder_id}': {e}", level="error", category="scanner")
-            subfolder_ids = []
+        resp = self._api_post('getFoldersList', body)
+        subfolder_ids: list[str] = resp.get('foldersIds', [])
 
         # Enumerate files in this folder (skip root — root has no files directly).
         # Paginate with the API's max page size (1000); API rejects larger limits
@@ -108,16 +106,12 @@ class K2SFileChecker:
             page_size = 1000
             offset = 0
             while True:
-                try:
-                    fresp = self._api_post('getFilesList', {
-                        'parent': folder_id,
-                        'limit': page_size,
-                        'offset': offset,
-                        'extended_info': True,
-                    })
-                except Exception as e:
-                    log(f"K2S getFilesList failed for folder '{folder_id}': {e}", level="error", category="scanner")
-                    break
+                fresp = self._api_post('getFilesList', {
+                    'parent': folder_id,
+                    'limit': page_size,
+                    'offset': offset,
+                    'extended_info': True,
+                })
                 page = fresp.get('files', [])
                 all_files.extend(page)
                 if len(page) < page_size:

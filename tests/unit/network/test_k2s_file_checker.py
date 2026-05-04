@@ -108,6 +108,13 @@ class TestGetAllFiles:
             files = checker.get_all_files()
         assert files == []
 
+    def test_root_walk_failure_propagates(self):
+        """API error on root walk must raise so the coordinator skips the host."""
+        checker = self._make_checker()
+        with patch.object(checker, '_api_post', side_effect=Exception("HTTP 403: Cloudflare")):
+            with pytest.raises(Exception):
+                checker.get_all_files()
+
     def test_single_folder_with_files(self):
         """One folder with two files."""
         checker = self._make_checker()

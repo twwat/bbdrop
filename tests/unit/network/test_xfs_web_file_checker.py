@@ -84,6 +84,19 @@ class TestWalkAccount:
         assert "z1" in inventory and "z2" in inventory
         assert len(inventory) == 5002
 
+    def test_root_scrape_failure_propagates(self):
+        # If we cannot reach the host at all, the walker must raise so the
+        # coordinator skips the host instead of marking every gallery offline.
+        class FailingFM:
+            PER_PAGE_MAX = 5000
+
+            def _scrape_page(self, *args, **kwargs):
+                raise RuntimeError("HTTP 403: Cloudflare blocked")
+
+        checker = XFSWebFileChecker(FailingFM())
+        with pytest.raises(RuntimeError):
+            checker.walk_account()
+
     def test_cancel_event_stops_walk(self):
         cancel = threading.Event()
         cancel.set()
