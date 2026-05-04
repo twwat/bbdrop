@@ -140,7 +140,7 @@ def _load_rapidgator_token() -> Optional[str]:
 
         from src.core.file_host_config import get_config_manager
         config_mgr = get_config_manager()
-        rg_config = config_mgr.get_host_config("rapidgator")
+        rg_config = config_mgr.get_host("rapidgator")
         if not rg_config:
             return None
 
