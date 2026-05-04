@@ -62,6 +62,44 @@ class FilespaceFileManagerClient(XFSWebFileManagerBase):
         re.DOTALL | re.IGNORECASE,
     )
 
+    _REMOVED_LINK_RE = re.compile(
+        r"<a\b[^>]*\bclass=['\"]red['\"][^>]*\bhref=['\"]https?://filespace\.com/([a-zA-Z0-9]+)['\"][^>]*>",
+        re.IGNORECASE,
+    )
+
+    # ---- Scraping with removed-file detection ------------------------------
+
+    def _scrape_page(self, folder_id: str, page: int, per_page=None):
+        """Scrape folder page and mark admin-removed files unavailable.
+
+        Captures HTML during the base scrape via _web_get monkeypatching,
+        then post-processes to detect removed-file markers without re-fetching.
+        """
+        # Capture HTML during the base scrape so we don't re-fetch.
+        captured = {}
+        real_get = self._web_get
+
+        def capture(url):
+            body = real_get(url)
+            captured["html"] = body
+            return body
+
+        self._web_get = capture
+        try:
+            folders, files = super()._scrape_page(folder_id, page, per_page=per_page)
+        finally:
+            self._web_get = real_get
+
+        html_body = captured.get("html", "")
+        removed_codes = {
+            m.group(1) for m in self._REMOVED_LINK_RE.finditer(html_body)
+        }
+        if removed_codes:
+            for f in files:
+                if f.id in removed_codes:
+                    f.is_available = False
+        return folders, files
+
     # ---- URL builders -----------------------------------------------------
 
     def _folder_url(self, folder_id: str, page: int = 1, per_page: Optional[int] = None) -> str:
