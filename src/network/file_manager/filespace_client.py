@@ -57,7 +57,8 @@ class FilespaceFileManagerClient(XFSWebFileManagerBase):
     _FOLDER_ROW_RE = re.compile(
         r'<TR>\s*(?:<!--.*?-->\s*)?<TD[^>]*>\s*<img[^>]*alt="Folder"[^>]*>\s*</TD>'
         r'\s*<TD[^>]*>\s*<a[^>]+href="\?op=my_files&amp;fld_id=(\d+)"[^>]*>'
-        r'\s*(?:<b>)?\s*([^<]+?)\s*(?:</b>)?\s*</a>',
+        r'\s*(?:<b>)?\s*([^<]+?)\s*(?:</b>)?\s*</a>'
+        r'.*?<TD[^>]*>\s*(\d+)\s*files\s*</TD>',
         re.DOTALL | re.IGNORECASE,
     )
 
