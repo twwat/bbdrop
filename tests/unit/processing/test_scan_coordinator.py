@@ -149,6 +149,30 @@ class TestScanCoordinatorCancellation:
         assert coord.is_cancelled
 
 
+class TestScanCoordinatorXFSWebDispatcher:
+    """Test dispatcher routing for XFS-web hosts (filedot, filespace)."""
+
+    def test_dispatcher_routes_filedot_to_xfs_web_job(self, monkeypatch):
+        """Filedot job should be handed to _run_xfs_web_job, not skipped."""
+        coord = ScanCoordinator(store=MagicMock(), connection_limiter=MagicMock())
+        called = []
+        monkeypatch.setattr(coord, "_run_xfs_web_job",
+                            lambda job: called.append(job) or [])
+        job = HostScanJob(host_type="file", host_id="filedot", galleries=[])
+        coord._run_job(job)
+        assert called and called[0].host_id == "filedot"
+
+    def test_dispatcher_routes_filespace_to_xfs_web_job(self, monkeypatch):
+        """Filespace job should be handed to _run_xfs_web_job, not skipped."""
+        coord = ScanCoordinator(store=MagicMock(), connection_limiter=MagicMock())
+        called = []
+        monkeypatch.setattr(coord, "_run_xfs_web_job",
+                            lambda job: called.append(job) or [])
+        job = HostScanJob(host_type="file", host_id="filespace", galleries=[])
+        coord._run_job(job)
+        assert called and called[0].host_id == "filespace"
+
+
 class TestScanCoordinatorIMXRouting:
     """Test that IMX galleries are routed to the moderat endpoint, not ThumbnailChecker."""
 

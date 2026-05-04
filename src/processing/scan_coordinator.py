@@ -33,8 +33,11 @@ K2S_API_BASES = {
     'tezfiles': 'https://tezfiles.com/api/v2',
 }
 
+# File hosts that share the XFS web-panel scraping path (no JSON API).
+XFS_WEB_FAMILY_HOSTS = frozenset({'filedot', 'filespace'})
+
 # File hosts with no checker implementation yet
-UNSUPPORTED_FILE_HOSTS = frozenset({'filedot', 'filespace'})
+UNSUPPORTED_FILE_HOSTS = frozenset()
 
 
 @dataclass
@@ -48,23 +51,30 @@ class HostScanJob:
     # For RapidGator: each gallery has 'db_id', 'download_urls' (list)
 
 
-def _load_file_host_credentials() -> Dict[str, str]:
-    """Load decrypted credentials/tokens for file hosts from OS keyring.
+def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
+    """Load decrypted credentials/tokens and authenticated FileHostClient
+    instances for hosts the scanner can check.
 
     For K2S-family hosts (api_key auth), the decrypted credential IS the
     access token. For RapidGator (token_login), tries the token cache first,
-    then falls back to login.
+    then falls back to login. For XFS-web hosts (filedot/filespace), builds
+    live FileHostClient instances with session login.
 
     Returns:
-        Dict mapping host_id to auth token string.
+        (credentials, xfs_clients):
+        - credentials: host_id -> auth token string (K2S family + RapidGator)
+        - xfs_clients: host_id -> live FileHostClient with session login
+          (Filedot/Filespace; required because XFS-web mgrs delegate
+          HTTP through the live client)
     """
     credentials: Dict[str, str] = {}
+    xfs_clients: Dict[str, Any] = {}
 
     try:
         from src.utils.credentials import get_credential, decrypt_password
     except ImportError:
         log("Credentials module not available", level="error", category="scanner")
-        return credentials
+        return credentials, xfs_clients
 
     # K2S-family: api_key auth — decrypted credential IS the token
     for host_id in K2S_FAMILY_HOSTS:
@@ -102,7 +112,44 @@ def _load_file_host_credentials() -> Dict[str, str]:
     except Exception as e:
         log(f"Failed to get rapidgator token: {e}", level="warning", category="scanner")
 
-    return credentials
+    # XFS-web hosts: session-based — build a live FileHostClient and stash it
+    for host_id in XFS_WEB_FAMILY_HOSTS:
+        encrypted = get_credential(f'file_host_{host_id}_credentials')
+        if not encrypted:
+            continue
+        try:
+            decrypted = decrypt_password(encrypted)
+        except Exception as e:
+            log(f"Failed to decrypt {host_id} credentials: {e}",
+                level="warning", category="scanner")
+            continue
+        if not decrypted:
+            continue
+        try:
+            from src.core.file_host_config import get_config_manager
+            from src.network.file_host_client import FileHostClient
+            from src.utils.bandwidth_counter import AtomicCounter
+            config_mgr = get_config_manager()
+            host_cfg = config_mgr.get_host_config(host_id)
+            if not host_cfg:
+                log(f"No config for {host_id}", level="warning", category="scanner")
+                continue
+            client = FileHostClient(
+                host_cfg, AtomicCounter(),
+                credentials=decrypted, host_id=host_id,
+            )
+            # Login is performed in __init__ when requires_auth + credentials
+            # are present; verify the cookie jar is populated as a sanity check.
+            if not client.cookie_jar:
+                log(f"{host_id} login did not yield session cookies — skipping",
+                    level="warning", category="scanner")
+                continue
+            xfs_clients[host_id] = client
+        except Exception as e:
+            log(f"Failed to build {host_id} client: {e}",
+                level="warning", category="scanner")
+
+    return credentials, xfs_clients
 
 
 class ScanCoordinator:
@@ -138,6 +185,12 @@ class ScanCoordinator:
         self._k2s_inventory_by_host: Dict[str, Dict[str, dict]] = {}
         self._k2s_storage_by_host: Dict[str, int] = {}
         self._k2s_lock = threading.Lock()
+        # XFS-web (filedot/filespace) per-host inventory cache. Each host is a
+        # separate account, so we cache per host_id behind one lock.
+        self._xfs_inventory_by_host: Dict[str, Dict[str, Any]] = {}
+        self._xfs_storage_by_host: Dict[str, int] = {}
+        self._xfs_clients: Dict[str, Any] = {}  # host_id -> live FileHostClient
+        self._xfs_lock = threading.Lock()
 
     @property
     def is_cancelled(self) -> bool:
@@ -152,9 +205,10 @@ class ScanCoordinator:
         image_galleries: List[Dict[str, Any]],
         file_uploads: List[Dict[str, Any]],
     ) -> None:
-        # Load credentials if none were provided
+        # Load credentials and XFS-web clients if none were provided.
         if not self._credentials:
-            self._credentials = _load_file_host_credentials()
+            self._credentials, xfs = _load_file_host_credentials()
+            self._xfs_clients.update(xfs)
 
         self._cancelled.clear()
         self._scan_thread = threading.Thread(
@@ -213,12 +267,15 @@ class ScanCoordinator:
             if self._completion_callback:
                 k2s_total = (sum(self._k2s_storage_by_host.values())
                              if self._k2s_storage_by_host else None)
-                self._completion_callback({
+                summary = {
                     'total_hosts': len(all_jobs),
                     'total_galleries': len(all_results),
                     'elapsed': elapsed,
                     'k2s_storage_used': k2s_total,
-                })
+                }
+                for host_id, used in self._xfs_storage_by_host.items():
+                    summary[f'{host_id}_storage_used'] = used
+                self._completion_callback(summary)
 
         except Exception as e:
             log(f"Scan coordinator error: {e}", level="error", category="scanner")
@@ -235,6 +292,8 @@ class ScanCoordinator:
             return self._run_k2s_job(job)
         elif job.host_id == 'rapidgator':
             return self._run_rapidgator_job(job)
+        elif job.host_id in XFS_WEB_FAMILY_HOSTS:
+            return self._run_xfs_web_job(job)
         elif job.host_id in UNSUPPORTED_FILE_HOSTS:
             log(f"No checker implemented for {job.host_id} yet", level="info", category="scanner")
             return []
@@ -389,6 +448,98 @@ class ScanCoordinator:
             if self._progress_callback:
                 self._progress_callback(job.host_type, job.host_id, i + 1, gallery_count,
                                         cumulative_online, cumulative_items)
+
+            detail = None
+            if check_result.get('offline_urls'):
+                detail = json.dumps({'offline_urls': check_result['offline_urls']})
+
+            results.append((
+                db_id,
+                job.host_type,
+                job.host_id,
+                check_result['status'],
+                check_result['online'],
+                check_result['total'],
+                now,
+                detail,
+            ))
+
+        return results
+
+    def _run_xfs_web_job(self, job: HostScanJob) -> List[Tuple]:
+        """Check filedot/filespace galleries via authenticated folder walk."""
+        fhc = self._xfs_clients.get(job.host_id)
+        if fhc is None:
+            log(f"No authenticated client for {job.host_id} — skipping",
+                level="warning", category="scanner")
+            return []
+
+        # Build the file-manager subclass for this host
+        if job.host_id == 'filedot':
+            from src.network.file_manager.filedot_client import (
+                FiledotFileManagerClient,
+            )
+            fm = FiledotFileManagerClient(file_host_client=fhc)
+        elif job.host_id == 'filespace':
+            from src.network.file_manager.filespace_client import (
+                FilespaceFileManagerClient,
+            )
+            fm = FilespaceFileManagerClient(file_host_client=fhc)
+        else:
+            log(f"Unknown XFS-web host {job.host_id}",
+                level="error", category="scanner")
+            return []
+
+        from src.network.xfs_web_file_checker import XFSWebFileChecker
+        checker = XFSWebFileChecker(fm)
+
+        with self._xfs_lock:
+            inventory = self._xfs_inventory_by_host.get(job.host_id)
+            if inventory is None:
+                log(f"Walking {job.host_id} account folders",
+                    level="info", category="scanner")
+                try:
+                    inventory = checker.walk_account(cancel_event=self._cancelled)
+                except Exception as e:
+                    log(f"{job.host_id} folder walk failed: {e}",
+                        level="error", category="scanner")
+                    return []
+                if self._cancelled.is_set():
+                    return []
+                self._xfs_inventory_by_host[job.host_id] = inventory
+                self._xfs_storage_by_host[job.host_id] = (
+                    checker.calc_storage_used(inventory)
+                )
+                log(
+                    f"{job.host_id} folder walk complete: {len(inventory)} files, "
+                    f"{self._xfs_storage_by_host[job.host_id]} bytes used",
+                    level="info", category="scanner",
+                )
+
+        results: List[Tuple] = []
+        now = int(time.time())
+        gallery_count = len(job.galleries)
+        cumulative_online = 0
+        cumulative_items = 0
+
+        for i, gallery in enumerate(job.galleries):
+            if self._cancelled.is_set():
+                break
+
+            file_codes = gallery.get('file_ids', {})
+            db_id = gallery['db_id']
+
+            check_result = checker.check_gallery_from_inventory(
+                file_codes, inventory
+            )
+
+            cumulative_online += check_result.get('online', 0)
+            cumulative_items += check_result.get('total', 0)
+            if self._progress_callback:
+                self._progress_callback(
+                    job.host_type, job.host_id, i + 1, gallery_count,
+                    cumulative_online, cumulative_items,
+                )
 
             detail = None
             if check_result.get('offline_urls'):
