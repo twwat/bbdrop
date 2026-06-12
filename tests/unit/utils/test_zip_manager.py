@@ -302,7 +302,7 @@ class TestSplitZipArchive:
     def test_split_zip_empty_folder_raises(self, manager, tmp_path):
         empty = tmp_path / "empty"
         empty.mkdir()
-        with pytest.raises(ValueError, match="No image files found"):
+        with pytest.raises(ValueError, match="No archivable files found"):
             manager.create_or_reuse_archive(
                 1, empty, archive_format='zip', split_size_mb=1
             )
