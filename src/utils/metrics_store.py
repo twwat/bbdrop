@@ -635,6 +635,7 @@ class MetricsStore:
             'success': success,
             'deduped': deduped,
             'speed': speed,
+            'files_count': files_count,
             'timestamp': time.time()
         })
 
@@ -705,6 +706,7 @@ class MetricsStore:
             'success': success,
             'deduped': True,
             'speed': 0.0,
+            'files_count': files_count,
             'timestamp': time.time(),
         })
 
@@ -1089,6 +1091,13 @@ class MetricsStore:
         success = item['success']
         is_deduped = item.get('deduped', False)
         speed = item['speed']
+        # Per-image counting: a gallery upload carries files_count > 1.
+        # Mirror the in-memory cache accounting so today/all_time DB rows
+        # don't undercount (they were hardcoded to 1 per transfer).
+        files_count = max(1, int(item.get('files_count', 1)))
+        files_uploaded = files_count if success else 0
+        files_failed = 0 if success else files_count
+        files_deduped = files_count if is_deduped else 0
         today = datetime.now().strftime('%Y-%m-%d')
 
         with self._db_lock:
@@ -1118,9 +1127,9 @@ class MetricsStore:
                     host_name,
                     bytes_uploaded,
                     bytes_saved,
-                    1 if success else 0,
-                    0 if success else 1,
-                    1 if is_deduped else 0,
+                    files_uploaded,
+                    files_failed,
+                    files_deduped,
                     transfer_time,
                     speed,
                     now_str,
@@ -1147,9 +1156,9 @@ class MetricsStore:
                     host_name,
                     bytes_uploaded,
                     bytes_saved,
-                    1 if success else 0,
-                    0 if success else 1,
-                    1 if is_deduped else 0,
+                    files_uploaded,
+                    files_failed,
+                    files_deduped,
                     transfer_time,
                     speed,
                     now_str
