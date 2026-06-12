@@ -386,6 +386,12 @@ class ArtifactHandler(QObject):
         results = {
             'gallery_id': gallery_id or json_data['meta'].get('gallery_id', ''),
             'gallery_name': current_gallery_name,
+            # Preserve gallery_url so #galleryLink# survives regeneration.
+            # Prefer the DB-backed item value; fall back to the JSON meta.
+            'gallery_url': (
+                getattr(item, 'gallery_url', '')
+                or json_data['meta'].get('gallery_url', '')
+            ),
             'images': json_data.get('images', []),
             'total_size': stats.get('total_size', 0),
             'successful_count': stats.get('successful_count', 0),
