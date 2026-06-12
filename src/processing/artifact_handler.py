@@ -16,6 +16,7 @@ Thread Safety:
 import os
 import json
 import queue
+from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from datetime import datetime
 
@@ -261,6 +262,14 @@ class ArtifactHandler(QObject):
         self._db_id_to_path = db_id_to_path
         self._parent_widget = parent_widget
         self._pending_regen_timers: dict[int, QTimer] = {}
+        # Auto-regen does JSON reads + artifact writes (the .uploaded/ copy
+        # may live on a network share), so it must not run on the GUI
+        # thread — completion bursts were freezing the UI for seconds.
+        # A single worker also serializes regens, matching the previous
+        # one-at-a-time event-loop behavior.
+        self._regen_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix='bbcode-regen'
+        )
 
     def regenerate_bbcode_for_gallery(self, gallery_path: str, force: bool = False):
         """Regenerate BBCode for a gallery using its current template.
@@ -506,22 +515,38 @@ class ArtifactHandler(QObject):
             timer.stop()
             timer.deleteLater()
         self._pending_regen_timers.clear()
+        self._regen_executor.shutdown(wait=False, cancel_futures=True)
 
     def _run_auto_regen(self, db_id: int):
-        """Execute the deferred regen after the debounce window elapses."""
+        """Hand the deferred regen to the background executor.
+
+        Runs on the GUI thread (QTimer); the actual regen work is file
+        I/O heavy and must happen off-thread.
+        """
         timer = self._pending_regen_timers.pop(db_id, None)
         if timer is not None:
             timer.deleteLater()
+        try:
+            self._regen_executor.submit(self._auto_regen_background, db_id)
+        except RuntimeError:
+            # Executor already shut down — app is tearing down, skip.
+            pass
 
-        path = self._db_id_to_path.get(db_id)
-        if not path:
-            for item in self._queue_manager.get_all_items():
-                if item.db_id == db_id:
-                    path = item.path
-                    self._db_id_to_path[db_id] = path
-                    break
-        if path and self.should_auto_regenerate_bbcode(path):
-            self.regenerate_bbcode_for_gallery(path, force=False)
+    def _auto_regen_background(self, db_id: int):
+        """Resolve the gallery path and regenerate artifacts (worker thread)."""
+        try:
+            path = self._db_id_to_path.get(db_id)
+            if not path:
+                for item in self._queue_manager.get_all_items():
+                    if item.db_id == db_id:
+                        path = item.path
+                        self._db_id_to_path[db_id] = path
+                        break
+            if path and self.should_auto_regenerate_bbcode(path):
+                self.regenerate_bbcode_for_gallery(path, force=False)
+        except Exception as e:
+            log(f"Auto-regen failed for db_id={db_id}: {e}",
+                level="warning", category="artifact")
 
     def _get_regen_debounce_ms(self) -> int:
         """Read the debounce window from the [Advanced] INI section."""
