@@ -1614,21 +1614,35 @@ class FileHostClient:
             # Extract link using JSON path
             if self.config.link_path:
                 link = self._extract_from_json(data, self.config.link_path)
-                if link:
-                    result["url"] = self.config.link_prefix + str(link) + self.config.link_suffix
+                # XFS-style hosts (filedot, filespace) return the literal
+                # string 'undef' as the file code when the upload POST is
+                # rejected (stale/invalid session). Treat sentinel values as
+                # a failed upload so the worker's retry logic kicks in
+                # instead of persisting links like https://host/undef.
+                link_str = str(link).strip() if link else ""
+                if link_str.lower() in ("", "undef", "error", "null", "none", "false"):
+                    result["status"] = "error"
+                    result["error"] = (
+                        f"Upload rejected by server: invalid file code "
+                        f"{link_str!r} in response {json.dumps(data)[:200]}"
+                    )
+                    return result
+                result["url"] = self.config.link_prefix + link_str + self.config.link_suffix
 
-                    # Apply regex transformation
-                    if self.config.link_regex:
-                        url_str = result["url"]
-                        if isinstance(url_str, str):
-                            match = re.search(self.config.link_regex, url_str)
-                            if match and match.groups():
-                                result["url"] = self.config.link_prefix + match.group(1) + self.config.link_suffix
+                # Apply regex transformation
+                if self.config.link_regex:
+                    url_str = result["url"]
+                    if isinstance(url_str, str):
+                        match = re.search(self.config.link_regex, url_str)
+                        if match and match.groups():
+                            result["url"] = self.config.link_prefix + match.group(1) + self.config.link_suffix
 
             # Extract file_id for delete operations
             if self.config.file_id_path:
                 file_id = self._extract_from_json(data, self.config.file_id_path)
-                if file_id:
+                if file_id and str(file_id).strip().lower() not in (
+                    "undef", "error", "null", "none", "false"
+                ):
                     result["file_id"] = str(file_id)
 
         elif self.config.response_type == "text":

@@ -1014,3 +1014,58 @@ class TestFileHostClientEdgeCases:
         # Test hash calculation
         calculated_hash = client._calculate_file_hash(test_file)
         assert calculated_hash == expected_hash
+
+
+class TestParseResponseSentinels:
+    """XFS-style hosts return literal 'undef' as the file code when an
+    upload POST is rejected (stale/invalid session). _parse_response must
+    surface that as an error so worker retry logic kicks in, instead of
+    minting links like https://filedot.to/undef."""
+
+    @pytest.fixture
+    def client(self):
+        config = Mock(spec=HostConfig)
+        config.requires_auth = False
+        config.response_type = "json"
+        config.link_path = ["file_code"]
+        config.link_prefix = "https://filedot.to/"
+        config.link_suffix = ""
+        config.link_regex = None
+        config.file_id_path = ["file_code"]
+        return FileHostClient(
+            host_config=config,
+            bandwidth_counter=AtomicCounter(),
+        )
+
+    def test_valid_file_code_succeeds(self, client):
+        result = client._parse_response(
+            json.dumps({"file_code": "e9h9jhsbl77c"}), 200
+        )
+        assert result["status"] == "success"
+        assert result["url"] == "https://filedot.to/e9h9jhsbl77c"
+        assert result["file_id"] == "e9h9jhsbl77c"
+
+    @pytest.mark.parametrize("sentinel", ["undef", "UNDEF", "error", "null", "none", "false", "", " "])
+    def test_sentinel_file_code_is_error(self, client, sentinel):
+        result = client._parse_response(
+            json.dumps({"file_code": sentinel}), 200
+        )
+        assert result["status"] == "error"
+        assert "url" not in result
+        assert "invalid file code" in result["error"]
+
+    def test_missing_file_code_is_error(self, client):
+        result = client._parse_response(json.dumps({"other": 1}), 200)
+        assert result["status"] == "error"
+        assert "url" not in result
+
+    def test_sentinel_file_id_not_stored(self, client):
+        """file_id extraction skips sentinel values even when the link
+        path resolves elsewhere."""
+        client.config.link_path = ["link"]
+        client.config.file_id_path = ["file_code"]
+        result = client._parse_response(
+            json.dumps({"link": "abc123", "file_code": "undef"}), 200
+        )
+        assert result["status"] == "success"
+        assert "file_id" not in result
