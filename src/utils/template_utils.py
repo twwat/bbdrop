@@ -92,9 +92,13 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
                         format_binary_size(file_size) if file_size is not None else ''
                     )
 
-                    # Filename placeholders
+                    # Filename placeholders. Strip the internal bbdrop_<id>_
+                    # archive prefix — rows written before the worker started
+                    # storing clean names still carry it in the DB.
+                    from src.network.file_host_client import get_clean_filename
                     file_name_raw = u.get('file_name') or ''
                     file_name_basename = os.path.basename(file_name_raw) if file_name_raw else ''
+                    file_name_basename = get_clean_filename(file_name_basename)
                     stem, ext_with_dot = os.path.splitext(file_name_basename)
                     file_ext = ext_with_dot[1:].lower() if ext_with_dot else ''
                     formatted = formatted.replace('#fileName#', file_name_basename)

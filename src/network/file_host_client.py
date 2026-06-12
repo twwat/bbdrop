@@ -27,6 +27,35 @@ from src.core.constants import CHROME_UA as _CHROME_UA
 _K2S_ACCESS_VALUES = ("public", "premium", "private")
 
 
+def get_clean_filename(filename: str) -> str:
+    """Extract clean filename without internal ID prefix.
+
+    Removes 'bbdrop_{id}_' prefix from archive filenames. Local temp
+    archives carry the prefix to stay unique; hosts (and anything
+    user-visible, like the stored file_name / #fileName# placeholder)
+    get the clean name.
+
+    Examples:
+        'bbdrop_1555_Test70e.zip' → 'Test70e.zip'
+        'bbdrop_999_My_Gallery-2024.zip' → 'My_Gallery-2024.zip'
+        'normal_file.zip' → 'normal_file.zip' (unchanged)
+        'bbdrop_gallery_1555.zip' → 'bbdrop_gallery_1555.zip' (fallback pattern, unchanged)
+
+    Args:
+        filename: Original filename (possibly with bbdrop prefix)
+
+    Returns:
+        Cleaned filename suitable for external hosts
+    """
+    # Match "bbdrop_<numbers>_<rest>" and extract <rest>
+    match = re.match(r'^bbdrop_\d+_(.+)$', filename)
+    if match:
+        return match.group(1)
+
+    # No prefix found, return as-is (safe fallback)
+    return filename
+
+
 def _k2s_default_upload_access() -> str:
     """Return the access level to apply to new K2S-family uploads.
 
@@ -559,30 +588,8 @@ class FileHostClient:
         return md5 or None
 
     def _get_clean_filename(self, filename: str) -> str:
-        """Extract clean filename without internal ID prefix.
-
-        Removes 'bbdrop_{id}_' prefix from ZIP filenames before uploading to hosts.
-        This keeps local temp files unique while sending clean names externally.
-
-        Examples:
-            'bbdrop_1555_Test70e.zip' → 'Test70e.zip'
-            'bbdrop_999_My_Gallery-2024.zip' → 'My_Gallery-2024.zip'
-            'normal_file.zip' → 'normal_file.zip' (unchanged)
-            'bbdrop_gallery_1555.zip' → 'bbdrop_gallery_1555.zip' (fallback pattern, unchanged)
-
-        Args:
-            filename: Original filename (possibly with bbdrop prefix)
-
-        Returns:
-            Cleaned filename suitable for external hosts
-        """
-        # Match "bbdrop_<numbers>_<rest>" and extract <rest>
-        match = re.match(r'^bbdrop_\d+_(.+)$', filename)
-        if match:
-            return match.group(1)
-
-        # No prefix found, return as-is (safe fallback)
-        return filename
+        """Extract clean filename without internal ID prefix."""
+        return get_clean_filename(filename)
 
     def _refresh_auth_token(self) -> None:
         """Refresh authentication token based on auth type.

@@ -23,7 +23,7 @@ from src.core.file_host_config import (
     get_host_family,
     is_family_dedup_enabled,
 )
-from src.network.file_host_client import FileHostClient
+from src.network.file_host_client import FileHostClient, get_clean_filename
 from src.processing.file_host_coordinator import get_coordinator
 from src.proxy.resolver import ProxyResolver
 from src.proxy.models import ProxyContext
@@ -1167,7 +1167,10 @@ class FileHostWorker(QThread):
                             finished_ts=int(time.time()),
                             download_url=download_url,
                             file_id=file_id,
-                            file_name=archive_path.name,
+                            # Hosts receive the clean name (see FORM_FILENAME
+                            # in FileHostClient); store the same so #fileName#
+                            # doesn't leak the internal bbdrop_<id>_ prefix.
+                            file_name=get_clean_filename(archive_path.name),
                             raw_response=str(result.get('raw_response', {}))[:10000],
                             uploaded_bytes=part_size,
                         )
@@ -1398,7 +1401,9 @@ class FileHostWorker(QThread):
                 if self._should_stop_current or self._stop_event.is_set():
                     return False
                 md5 = part["md5_hash"]
-                file_name = part["file_name"] or ""
+                # Older DB rows may still carry the internal bbdrop_<id>_
+                # prefix; clean it before reuse in API calls and new rows.
+                file_name = get_clean_filename(part["file_name"] or "")
                 file_size = part.get("file_size")
                 result = client.try_create_by_hash(md5, file_name)
                 if not (result and result.get("status") == "success"):
