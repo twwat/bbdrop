@@ -1464,13 +1464,14 @@ class WorkerStatusWidget(QWidget):
         if item is None:
             return
 
-        text, color, tooltip, italic = format_status_speed_cell(worker)
+        text, color, tooltip, italic, bold = format_status_speed_cell(worker)
         item.setText(text)
         item.setToolTip(tooltip)
         item.setData(Qt.ItemDataRole.UserRole + 10, worker.speed_bps)
 
         font = item.font()
         font.setItalic(italic)
+        font.setBold(bold)
         item.setFont(font)
 
         if color is not None:
@@ -1827,7 +1828,7 @@ class WorkerStatusWidget(QWidget):
                     self.status_table.setItem(row_idx, col_idx, status_icon_item)
 
                 elif col_config.id == 'status_speed':
-                    text, color, tooltip, italic = format_status_speed_cell(worker)
+                    text, color, tooltip, italic, bold = format_status_speed_cell(worker)
                     item = QTableWidgetItem(text)
                     item.setTextAlignment(col_config.alignment)
                     item.setToolTip(tooltip)
@@ -1841,9 +1842,10 @@ class WorkerStatusWidget(QWidget):
                             self.palette().color(QPalette.ColorRole.PlaceholderText)
                         )
 
-                    if italic:
+                    if italic or bold:
                         font = item.font()
-                        font.setItalic(True)
+                        font.setItalic(italic)
+                        font.setBold(bold)
                         item.setFont(font)
 
                     self.status_table.setItem(row_idx, col_idx, item)

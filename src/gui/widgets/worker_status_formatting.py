@@ -43,13 +43,14 @@ class WorkerStatus:
 
 def format_status_speed_cell(
     worker: WorkerStatus,
-) -> tuple[str, "QColor | None", str, bool]:
+) -> tuple[str, "QColor | None", str, bool, bool]:
     """Format the combined status/speed cell for one worker.
 
     Returns:
-        (text, color, tooltip, italic) — color is None when the caller
-        should fall back to the default text colour. italic=True means the
-        caller should set an italic font (used for disabled workers).
+        (text, color, tooltip, italic, bold) — color is None when the
+        caller should fall back to the default text colour. italic=True
+        means the caller should set an italic font (used for disabled
+        workers); bold=True a bold font (active transfer speed).
     """
     status = worker.status or "idle"
     speed_bps = worker.speed_bps or 0.0
@@ -63,12 +64,16 @@ def format_status_speed_cell(
     tooltip = f"Status: {text}"
     color: QColor | None = None
     italic = False
+    bold = False
 
     if base_status == "uploading":
         color = QColor("#66BB6A") if _is_dark_palette() else QColor("darkgreen")
         if speed_bps > 0:
+            # A live transfer rate already says "uploading" — show just the
+            # speed, bolded, so it reads at a glance and fits the column.
             speed_text = _format_speed_value(speed_bps)
-            text = f"Uploading · {speed_text}"
+            text = speed_text
+            bold = True
             tooltip = f"Status: Uploading\nCurrent Speed: {speed_text}"
     elif base_status == "retry_pending":
         color = QColor("#DAA520")
@@ -111,7 +116,7 @@ def format_status_speed_cell(
     elif base_status == "disabled":
         italic = True
 
-    return text, color, tooltip, italic
+    return text, color, tooltip, italic, bold
 
 
 # Intentionally independent of WorkerStatusWidget._format_speed so this
