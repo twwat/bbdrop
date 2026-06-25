@@ -109,6 +109,35 @@ class TestLinkScannerDashboard:
         # Should not raise
         dashboard.closeEvent(QCloseEvent())
 
+        # Verify no cancel/wait were attempted since there's no coordinator
+        # (This is a simple sanity check that closeEvent completes successfully)
+        assert dashboard._coordinator is None
+
+    def test_load_initial_data_logs_scan_stats_error(self, qtbot, mock_queue_manager):
+        """FIX 1: _load_initial_data should log error when get_scan_stats_by_host() fails."""
+        from src.gui.dialogs.link_scanner_dashboard import LinkScannerDashboard
+
+        # Make get_scan_stats_by_host raise an exception
+        mock_queue_manager.store.get_scan_stats_by_host.side_effect = RuntimeError("DB connection failed")
+
+        with patch('src.gui.dialogs.link_scanner_dashboard.log') as mock_log:
+            # Construct the dashboard — this calls _load_initial_data
+            dlg = LinkScannerDashboard(parent=None, queue_manager=mock_queue_manager)
+            qtbot.addWidget(dlg)
+
+            # Assert that log was called with error level for the scan stats failure
+            # Look for the error log call about scan stats
+            error_calls = [call for call in mock_log.call_args_list
+                          if call[1].get('level') == 'error']
+            assert len(error_calls) > 0, "No error log call found for scan stats failure"
+
+            # Check that one of the error logs mentions scan stats
+            found_scan_stats_error = any(
+                'scan' in str(call[0][0]).lower() or 'stats' in str(call[0][0]).lower()
+                for call in error_calls
+            )
+            assert found_scan_stats_error, f"Expected scan/stats error log, but got: {error_calls}"
+
     def test_close_event_scanner_not_running(self, qtbot, dashboard):
         """closeEvent should not call wait if scanner is not running."""
         from PyQt6.QtGui import QCloseEvent

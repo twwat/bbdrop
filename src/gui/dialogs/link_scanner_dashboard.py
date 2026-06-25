@@ -160,7 +160,8 @@ class LinkScannerDashboard(QDialog):
 
         try:
             scan_stats = store.get_scan_stats_by_host()
-        except Exception:
+        except Exception as e:
+            log(f"Failed to load initial scanner data: {e}", level="error", category="scanner")
             scan_stats = {}
 
         # Build host data dict for the host table
