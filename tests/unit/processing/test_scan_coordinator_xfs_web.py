@@ -2,7 +2,7 @@
 XFSWebFileChecker and produces a result tuple + storage summary."""
 import json
 import threading
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.network.file_manager.client import FileInfo
 from src.processing.scan_coordinator import (
@@ -86,18 +86,56 @@ def test_completion_summary_includes_xfs_storage_keys():
     coord._xfs_storage_by_host["filespace"] = 5678
 
     # Need at least one job to trigger the full summary code path
-    # Use an image gallery to avoid complex file host setup
-    coord._run_scan(
-        image_galleries=[
-            {
-                "db_id": 99,
-                "host_id": "imx",
-                "path": "/gallery",
-                "thumb_urls": ["https://imx.to/a.jpg"],
-            }
-        ],
-        file_uploads=[],
-    )
+    # Use an image gallery to avoid complex file host setup.
+    # _run_scan now loads credentials on the worker thread; stub it so the
+    # test doesn't touch the OS keyring or attempt real host logins.
+    with patch(
+        "src.processing.scan_coordinator._load_file_host_credentials",
+        return_value=({}, {}),
+    ):
+        coord._run_scan(
+            image_galleries=[
+                {
+                    "db_id": 99,
+                    "host_id": "imx",
+                    "path": "/gallery",
+                    "thumb_urls": ["https://imx.to/a.jpg"],
+                }
+            ],
+            file_uploads=[],
+        )
 
     assert captured.get("filedot_storage_used") == 1234
     assert captured.get("filespace_storage_used") == 5678
+
+
+def test_completion_fires_even_when_credential_load_raises():
+    """If worker-thread credential loading blows up, the completion callback
+    must still fire so the dashboard leaves its 'scanning' state instead of
+    hanging forever."""
+    captured = {}
+
+    def on_complete(summary):
+        captured["summary"] = summary
+
+    coord = ScanCoordinator(
+        store=MagicMock(), connection_limiter=MagicMock(),
+        completion_callback=on_complete,
+    )
+
+    with patch(
+        "src.processing.scan_coordinator._load_file_host_credentials",
+        side_effect=RuntimeError("keyring exploded"),
+    ):
+        coord._run_scan(
+            image_galleries=[
+                {"db_id": 1, "host_id": "imx", "path": "/g",
+                 "thumb_urls": ["https://imx.to/a.jpg"]},
+            ],
+            file_uploads=[],
+        )
+
+    # Completion fired despite the exception (minimal summary from the
+    # finally-block fallback).
+    assert "summary" in captured
+    assert "elapsed" in captured["summary"]

@@ -205,11 +205,12 @@ class ScanCoordinator:
         image_galleries: List[Dict[str, Any]],
         file_uploads: List[Dict[str, Any]],
     ) -> None:
-        # Load credentials and XFS-web clients if none were provided.
-        if not self._credentials:
-            self._credentials, xfs = _load_file_host_credentials()
-            self._xfs_clients.update(xfs)
-
+        # NOTE: credential loading and per-host session logins
+        # (_load_file_host_credentials) are deliberately NOT done here —
+        # they perform blocking network logins (rapidgator/filedot/filespace)
+        # and this method runs on the GUI thread. Loading is deferred to
+        # _run_scan on the worker thread so the UI never blocks on a slow or
+        # unreachable host. See _run_scan.
         self._cancelled.clear()
         self._scan_thread = threading.Thread(
             target=self._run_scan,
@@ -227,7 +228,31 @@ class ScanCoordinator:
         start_time = time.time()
         all_results: List[Tuple[int, str, str, str, int, int, int, Optional[str]]] = []
 
+        # The dashboard only resets its "scanning" UI state when the completion
+        # callback fires. Guarantee it fires exactly once on every exit path
+        # (success, no-jobs, cancel, or exception) so the UI can never get
+        # stuck — including when credential loading below raises.
+        completion_sent = False
+
+        def _send_completion(summary: Dict[str, Any]) -> None:
+            nonlocal completion_sent
+            if completion_sent:
+                return
+            completion_sent = True
+            if self._completion_callback:
+                self._completion_callback(summary)
+
         try:
+            # Load credentials and XFS-web clients on the worker thread (these
+            # perform blocking network logins; must never run on the GUI
+            # thread). Skipped if credentials were injected at construction.
+            if not self._credentials:
+                self._credentials, xfs = _load_file_host_credentials()
+                self._xfs_clients.update(xfs)
+
+            if self._cancelled.is_set():
+                return
+
             imx_job = self._build_imx_job(image_galleries)
             image_jobs = self._build_image_host_jobs(image_galleries)
             file_jobs = self._build_file_host_jobs(file_uploads)
@@ -235,8 +260,7 @@ class ScanCoordinator:
 
             if not all_jobs:
                 log("No scan jobs to run", level="info", category="scanner")
-                if self._completion_callback:
-                    self._completion_callback({'total_hosts': 0, 'total_galleries': 0, 'elapsed': 0})
+                _send_completion({'total_hosts': 0, 'total_galleries': 0, 'elapsed': 0})
                 return
 
             log(f"Starting scan: {len(all_jobs)} host jobs ({len(image_jobs)} image, {len(file_jobs)} file)",
@@ -264,21 +288,29 @@ class ScanCoordinator:
                     level="info", category="scanner")
 
             elapsed = time.time() - start_time
-            if self._completion_callback:
-                k2s_total = (sum(self._k2s_storage_by_host.values())
-                             if self._k2s_storage_by_host else None)
-                summary = {
-                    'total_hosts': len(all_jobs),
-                    'total_galleries': len(all_results),
-                    'elapsed': elapsed,
-                    'k2s_storage_used': k2s_total,
-                }
-                for host_id, used in self._xfs_storage_by_host.items():
-                    summary[f'{host_id}_storage_used'] = used
-                self._completion_callback(summary)
+            k2s_total = (sum(self._k2s_storage_by_host.values())
+                         if self._k2s_storage_by_host else None)
+            summary = {
+                'total_hosts': len(all_jobs),
+                'total_galleries': len(all_results),
+                'elapsed': elapsed,
+                'k2s_storage_used': k2s_total,
+            }
+            for host_id, used in self._xfs_storage_by_host.items():
+                summary[f'{host_id}_storage_used'] = used
+            _send_completion(summary)
 
         except Exception as e:
             log(f"Scan coordinator error: {e}", level="error", category="scanner")
+        finally:
+            # Cancel and exception paths fall through here without a summary;
+            # emit a minimal one so the dashboard always leaves "scanning".
+            if not completion_sent:
+                _send_completion({
+                    'total_hosts': 0,
+                    'total_galleries': len(all_results),
+                    'elapsed': time.time() - start_time,
+                })
 
     def _run_job(self, job: HostScanJob) -> List[Tuple]:
         if self._cancelled.is_set():
