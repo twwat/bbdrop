@@ -79,6 +79,19 @@ def encrypt_password(password):
     f = Fernet(key)
     return f.encrypt(password.encode()).decode()
 
+def _looks_encrypted(value) -> bool:
+    """True if value is structurally a Fernet token (so we must NOT treat it as plaintext).
+
+    Fernet tokens are urlsafe-base64 and always begin with 'gAAAAA' (version byte 0x80 + timestamp).
+    Plaintext usernames realistically never start with 'gAAAAA'.
+
+    This is used to distinguish between:
+    - Plaintext (e.g. 'myusername') - safe to encrypt
+    - Encrypted (starts with 'gAAAAA') - do NOT re-encrypt even if it fails to decrypt
+      (failure could be corrupted ciphertext or master-key mismatch, not plaintext)
+    """
+    return isinstance(value, str) and value.startswith('gAAAAA')
+
 def decrypt_password(encrypted_password):
     """Decrypt password with proper error handling.
 
@@ -216,12 +229,20 @@ def migrate_imx_credentials():
         value = get_credential(key)
         if not value:
             continue
-        try:
-            decrypt_password(value)
-        except Exception:
-            encrypted = encrypt_password(value)
-            set_credential(key, encrypted)
-            log(f"Encrypted plaintext '{key}'", level="info", category="auth")
+        if _looks_encrypted(value):
+            # Already an encrypted token. Verify it still decrypts; if not, it's
+            # corrupted or a key mismatch — leave it ALONE (never re-encrypt) and log loudly.
+            try:
+                decrypt_password(value)
+            except CredentialDecryptionError:
+                log(f"Credential '{key}' is encrypted but cannot be decrypted "
+                    f"(corrupted or master-key mismatch) — leaving as-is, not re-encrypting",
+                    level="error", category="auth")
+            continue
+        # Genuine plaintext -> encrypt it
+        encrypted = encrypt_password(value)
+        set_credential(key, encrypted)
+        log(f"Encrypted plaintext '{key}'", level="info", category="auth")
 
 
 def _migrate_encryption_keys():
