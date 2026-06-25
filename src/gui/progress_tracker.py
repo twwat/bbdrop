@@ -170,17 +170,33 @@ class ProgressTracker(QObject):
 
         return total_bytes, uploaded_bytes
 
-    def _compute_work_bytes(self, items) -> Tuple[int, int]:
-        """Sum byte-weighted work across items for the overall progress bar."""
+    def _compute_work_bytes(self, items, file_host_map=None) -> Tuple[int, int]:
+        """Sum byte-weighted work across items for the overall progress bar.
+
+        file_host_map: optional {path: [rows]} pre-fetched by the caller. When
+        omitted, ONE scoped batch query covers all items — never one query per
+        row (that loop was the GUI-thread freeze).
+        """
+        if file_host_map is None:
+            paths = [p for p in (getattr(it, 'path', '') for it in items) if p]
+            try:
+                file_host_map = self._main_window.queue_manager.store.\
+                    get_file_host_uploads_for_paths(paths)
+            except Exception as e:
+                log(f"Failed scoped file-host fetch for progress: {e}",
+                    level="warning", category="ui")
+                file_host_map = {}
+
         total_bytes = 0
         uploaded_bytes = 0
         for item in items:
-            item_total, item_uploaded = self._compute_item_work_bytes(item)
+            rows = file_host_map.get(getattr(item, 'path', ''), [])
+            item_total, item_uploaded = self._compute_item_work_bytes(item, rows)
             total_bytes += item_total
             uploaded_bytes += item_uploaded
         return total_bytes, uploaded_bytes
 
-    def compute_item_display(self, item) -> Tuple[int, str]:
+    def compute_item_display(self, item, file_host_rows=None) -> Tuple[int, str]:
         """Return (percent, effective_status) for a per-row display.
 
         Percent is byte-weighted across image host + file host work, with a
@@ -190,7 +206,8 @@ class ProgressTracker(QObject):
         uploading, or failed -- so the row doesn't prematurely read as
         "Completed" while large video/archive uploads are still in flight.
         """
-        file_host_rows = self._get_file_host_rows(getattr(item, 'path', ''))
+        if file_host_rows is None:
+            file_host_rows = self._get_file_host_rows(getattr(item, 'path', ''))
         total_bytes, uploaded_bytes = self._compute_item_work_bytes(item, file_host_rows)
 
         if total_bytes > 0:
@@ -225,7 +242,7 @@ class ProgressTracker(QObject):
 
         return percent, effective_status
 
-    def refresh_row_display(self, path: str):
+    def refresh_row_display(self, path: str, file_host_rows=None):
         """Refresh the per-row progress bar, status icon/text, and action
         buttons for one gallery using byte-weighted effective state.
 
@@ -243,7 +260,7 @@ class ProgressTracker(QObject):
             return
 
         try:
-            percent, effective_status = self.compute_item_display(item)
+            percent, effective_status = self.compute_item_display(item, file_host_rows)
         except Exception as e:
             log(f"compute_item_display failed for {path}: {e}",
                 level="warning", category="ui")
@@ -311,7 +328,7 @@ class ProgressTracker(QObject):
         except Exception:
             pass
 
-    def update_progress_display(self):
+    def update_progress_display(self, file_host_map=None):
         """Update current tab progress and statistics."""
         items = self._main_window._get_current_tab_items()
 
@@ -323,7 +340,7 @@ class ProgressTracker(QObject):
             self._main_window.stats_label.setText(f"No galleries in {current_tab_name}")
             return
 
-        total_bytes, uploaded_bytes = self._compute_work_bytes(items)
+        total_bytes, uploaded_bytes = self._compute_work_bytes(items, file_host_map)
 
         if total_bytes > 0:
             raw_percent = int((uploaded_bytes / total_bytes) * 100)
