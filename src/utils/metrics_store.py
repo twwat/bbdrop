@@ -514,7 +514,6 @@ class MetricsStore:
                 cache['avg_speed'] = 0.0
 
             # Update today_cache (initialize empty if not present)
-            datetime.now().strftime('%Y-%m-%d')
             if host_name not in self._today_cache:
                 # Load existing metrics from DB to avoid overwriting historical data
                 db_metrics = self.get_aggregated_metrics(host_name, 'today')
@@ -1241,6 +1240,7 @@ class MetricsStore:
                         bytes_uploaded,
                         files_uploaded,
                         files_failed,
+                        files_deduped,
                         total_transfer_time,
                         peak_speed,
                         peak_speed_date
