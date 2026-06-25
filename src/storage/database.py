@@ -1081,8 +1081,8 @@ class QueueStore:
             imx_status_checked = int(imx_status_checked)
 
         # Optional columns - add if they exist in schema
+        # Note: tab_id is handled separately via subquery to resolve atomically at INSERT time
         optional_fields = {
-            'tab_id': tab_id,
             'custom1': custom1,
             'custom2': custom2,
             'custom3': custom3,
@@ -1113,6 +1113,14 @@ class QueueStore:
                 columns.append(col_name)
                 values.append(col_value)
 
+        # Resolve tab_id atomically at INSERT time via subquery
+        # This prevents orphaning galleries if a tab is deleted between SELECT and INSERT
+        tab_id_subquery = False
+        if 'tab_id' in existing_columns:
+            columns.append('tab_id')
+            values.append(tab_name)   # canonical name; resolved by the subquery below
+            tab_id_subquery = True
+
         # Build SQL statement.
         #
         # gallery_id is preserved on conflict when the incoming value is empty.
@@ -1120,7 +1128,16 @@ class QueueStore:
         # set_gallery_bbcode(); a subsequent queue-state upsert from an
         # in-memory item that still has the empty default must NOT clobber it.
         columns_str = ', '.join(columns)
-        placeholders = ','.join(['?'] * len(columns))
+
+        # Build per-column placeholders so tab_id uses a resolving subquery
+        placeholder_list = []
+        for col in columns:
+            if col == 'tab_id' and tab_id_subquery:
+                placeholder_list.append("COALESCE((SELECT id FROM tabs WHERE name = ? AND is_active = 1), 1)")
+            else:
+                placeholder_list.append('?')
+        placeholders = ','.join(placeholder_list)
+
         update_pairs_parts: List[str] = []
         for col in columns:
             if col in ('path', 'id'):
@@ -1691,8 +1708,6 @@ class QueueStore:
                 if "UNIQUE constraint failed" in str(e):
                     raise sqlite3.IntegrityError(f"Tab name '{name}' already exists") from e
                 raise
-
-        return False  # Should not reach here, but satisfies type checker
 
     def update_tab(self, tab_id: int, name: Optional[str] = None, display_order: Optional[int] = None, color_hint: Optional[str] = None) -> bool:
         """Update an existing tab.
