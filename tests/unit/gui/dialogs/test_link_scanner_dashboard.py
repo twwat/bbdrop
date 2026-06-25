@@ -2,7 +2,7 @@
 
 import os
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -81,3 +81,57 @@ class TestLinkScannerDashboard:
 
     def test_wider_than_old_dialog(self, dashboard):
         assert dashboard.minimumWidth() >= 750
+
+    def test_close_event_cancels_scan_and_waits(self, qtbot, dashboard, mock_queue_manager):
+        """BUG A: closeEvent should cancel any running scan before the dialog is destroyed."""
+        from PyQt6.QtGui import QCloseEvent
+
+        # Mock the coordinator with a running scan
+        dashboard._coordinator = MagicMock()
+        dashboard._coordinator.is_scanning = True
+        dashboard._coordinator.wait.return_value = True
+
+        # Trigger closeEvent
+        dashboard.closeEvent(QCloseEvent())
+
+        # Assert cancel and wait were called
+        dashboard._coordinator.cancel.assert_called_once()
+        dashboard._coordinator.wait.assert_called_once()
+        # Check that wait was called with a timeout
+        call_args = dashboard._coordinator.wait.call_args
+        assert call_args[1]['timeout'] == 5.0 or call_args[0][0] == 5.0
+
+    def test_close_event_no_coordinator(self, qtbot, dashboard):
+        """closeEvent should not crash if coordinator is None."""
+        from PyQt6.QtGui import QCloseEvent
+        dashboard._coordinator = None
+
+        # Should not raise
+        dashboard.closeEvent(QCloseEvent())
+
+    def test_close_event_scanner_not_running(self, qtbot, dashboard):
+        """closeEvent should not call wait if scanner is not running."""
+        from PyQt6.QtGui import QCloseEvent
+
+        dashboard._coordinator = MagicMock()
+        dashboard._coordinator.is_scanning = False
+
+        dashboard.closeEvent(QCloseEvent())
+
+        # cancel and wait should NOT be called
+        dashboard._coordinator.cancel.assert_not_called()
+        dashboard._coordinator.wait.assert_not_called()
+
+    def test_reload_gallery_table_logs_error_on_db_failure(self, dashboard, mock_queue_manager):
+        """BUG B: _reload_gallery_table should log errors instead of silently swallowing them."""
+        mock_queue_manager.store.get_galleries_for_dashboard.side_effect = RuntimeError("DB connection failed")
+
+        with patch('src.gui.dialogs.link_scanner_dashboard.log') as mock_log:
+            dashboard._reload_gallery_table('imx')
+
+            # Assert log was called with error level
+            mock_log.assert_called()
+            call_args = mock_log.call_args
+            # Should log with level="error"
+            assert call_args[1]['level'] == 'error'
+            assert 'Failed to reload gallery table' in call_args[0][0]

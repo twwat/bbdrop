@@ -196,6 +196,27 @@ class ScanCoordinator:
     def is_cancelled(self) -> bool:
         return self._cancelled.is_set()
 
+    @property
+    def is_scanning(self) -> bool:
+        """Return True if a scan thread is currently running."""
+        t = self._scan_thread
+        return t is not None and t.is_alive()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Join the scan thread; returns True if it finished within timeout.
+
+        Args:
+            timeout: Maximum seconds to wait. None waits indefinitely.
+
+        Returns:
+            True if thread is None or finished, False if still alive after timeout.
+        """
+        t = self._scan_thread
+        if t is None:
+            return True
+        t.join(timeout)
+        return not t.is_alive()
+
     def cancel(self) -> None:
         self._cancelled.set()
         log("Scan cancelled by user", level="info", category="scanner")

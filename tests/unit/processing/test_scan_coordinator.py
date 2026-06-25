@@ -148,6 +148,57 @@ class TestScanCoordinatorCancellation:
         coord._cancelled.set()
         assert coord.is_cancelled
 
+    def test_is_scanning_false_when_no_thread(self):
+        """is_scanning should return False when _scan_thread is None."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        coord._scan_thread = None
+        assert not coord.is_scanning
+
+    def test_is_scanning_true_when_thread_alive(self):
+        """is_scanning should return True when _scan_thread is alive."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        # Create a short-lived thread
+        coord._scan_thread = threading.Thread(target=lambda: time.sleep(0.1))
+        coord._scan_thread.start()
+        # Thread should be alive immediately after start
+        assert coord.is_scanning
+        coord._scan_thread.join()
+        # After join, thread should be dead
+        assert not coord.is_scanning
+
+    def test_is_scanning_false_when_thread_dead(self):
+        """is_scanning should return False when _scan_thread has finished."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        coord._scan_thread = threading.Thread(target=lambda: None)
+        coord._scan_thread.start()
+        coord._scan_thread.join()
+        assert not coord.is_scanning
+
+    def test_wait_returns_true_when_no_thread(self):
+        """wait() should return True immediately if _scan_thread is None."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        coord._scan_thread = None
+        result = coord.wait(timeout=1.0)
+        assert result is True
+
+    def test_wait_returns_true_after_thread_finishes(self):
+        """wait() should return True when thread finishes within timeout."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        coord._scan_thread = threading.Thread(target=lambda: time.sleep(0.05))
+        coord._scan_thread.start()
+        result = coord.wait(timeout=1.0)
+        assert result is True
+
+    def test_wait_returns_false_on_timeout(self):
+        """wait() should return False if thread doesn't finish within timeout."""
+        coord = ScanCoordinator.__new__(ScanCoordinator)
+        coord._scan_thread = threading.Thread(target=lambda: time.sleep(2.0))
+        coord._scan_thread.start()
+        result = coord.wait(timeout=0.05)
+        assert result is False
+        # Clean up
+        coord._scan_thread.join(timeout=0.1)
+
 
 class TestScanCoordinatorXFSWebDispatcher:
     """Test dispatcher routing for XFS-web hosts (filedot, filespace)."""

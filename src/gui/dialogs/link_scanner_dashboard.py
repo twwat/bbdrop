@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QApplication, QSizePolicy,
 )
 from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtGui import QCloseEvent
 
 from src.gui.widgets.scanner_widgets import (
     HostTableWidget,
@@ -56,6 +57,22 @@ class LinkScannerDashboard(QDialog):
 
         self._setup_ui()
         self._load_initial_data()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Cancel any running scan and wait for the worker to stop before the
+        dialog is destroyed, so the coordinator can't emit into a deleted object.
+
+        Fixes BUG A: prevents RuntimeError when dashboard closes with active scan.
+        """
+        try:
+            if self._coordinator and self._coordinator.is_scanning:
+                self._coordinator.cancel()
+                if not self._coordinator.wait(timeout=5.0):
+                    log("Scan coordinator did not stop within 5s on dialog close",
+                        level="warning", category="scanner")
+        except Exception as e:
+            log(f"Error stopping scan on dialog close: {e}", level="warning", category="scanner")
+        super().closeEvent(event)
 
     def _center_on_parent(self) -> None:
         parent_widget = self.parent()
@@ -187,8 +204,9 @@ class LinkScannerDashboard(QDialog):
             if gallery_data:
                 filtered = [r for r in gallery_data if r.get('host_id') == host_id]
                 self._gallery_table.load_results(filtered)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Failed to reload gallery table for host {host_id}: {e}",
+                level="error", category="scanner")
 
     def _on_scan_requested(self, age_days: int, host_filter: str, scan_type: str, age_mode: str) -> None:
         self._overall_bar.setValue(0)
