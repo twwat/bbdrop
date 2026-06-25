@@ -90,7 +90,16 @@ class CompletionWorker(QThread):
         Note:
             This method returns immediately; actual processing happens in background thread.
         """
-        self.completion_queue.put((path, results, gui_parent))
+        # Read UI settings on GUI thread to avoid widget access from worker thread
+        ui_settings = {}
+        try:
+            ui_settings['thumbnail_size'] = gui_parent.thumbnail_size_combo.currentIndex() + 1
+            ui_settings['thumbnail_format'] = gui_parent.thumbnail_format_combo.currentIndex() + 1
+        except Exception:
+            # If reading fails, worker will use safe defaults
+            pass
+
+        self.completion_queue.put((path, results, gui_parent, ui_settings))
 
     def run(self):
         """Process completions in background thread"""
@@ -100,8 +109,8 @@ class CompletionWorker(QThread):
                 if item is None:  # Exit signal
                     break
 
-                path, results, gui_parent = item
-                self._process_completion_background(path, results, gui_parent)
+                path, results, gui_parent, ui_settings = item
+                self._process_completion_background(path, results, gui_parent, ui_settings)
                 self.completion_processed.emit(path)
 
             except queue.Empty:
@@ -109,8 +118,10 @@ class CompletionWorker(QThread):
             except Exception as e:
                 log(f"Completion processing error: {e}", level="error", category="fileio")
 
-    def _process_completion_background(self, path: str, results: dict, gui_parent):
+    def _process_completion_background(self, path: str, results: dict, gui_parent, ui_settings: dict = None):
         """Do the heavy completion processing in background thread"""
+        if ui_settings is None:
+            ui_settings = {}
         try:
             # Create gallery files with new naming format
             gallery_id = results.get('gallery_id', '')
@@ -201,15 +212,12 @@ class CompletionWorker(QThread):
                     results={
                         **results,
                         'started_at': (
-                            datetime.fromtimestamp(
-                                gui_parent.queue_manager.items[path].start_time
-                            ).strftime('%Y-%m-%d %H:%M:%S')
-                            if path in gui_parent.queue_manager.items
-                            and gui_parent.queue_manager.items[path].start_time
+                            datetime.fromtimestamp(queue_item.start_time).strftime('%Y-%m-%d %H:%M:%S')
+                            if queue_item and getattr(queue_item, 'start_time', None)
                             else None
                         ),
-                        'thumbnail_size': gui_parent.thumbnail_size_combo.currentIndex() + 1,
-                        'thumbnail_format': gui_parent.thumbnail_format_combo.currentIndex() + 1,
+                        'thumbnail_size': ui_settings.get('thumbnail_size', 1),
+                        'thumbnail_format': ui_settings.get('thumbnail_format', 1),
                         'parallel_batch_size': load_user_defaults().get('parallel_batch_size', 4),
                     },
                     template_name=template_name,
