@@ -76,6 +76,9 @@ class UploadWorker(QThread):
         self.rename_worker = None
         self._rename_worker_available = (RenameWorker is not None)
 
+        # Track the started-hook thread for synchronization at artifact save
+        self._started_hook_thread = None
+
 
     def stop(self):
         """Stop the worker thread"""
@@ -315,7 +318,8 @@ class UploadWorker(QThread):
                 except Exception as e:
                     log(f"Error executing started hook: {e}", level="error", category="hooks")
 
-            threading.Thread(target=run_started_hook, daemon=True).start()
+            self._started_hook_thread = threading.Thread(target=run_started_hook, daemon=True)
+            self._started_hook_thread.start()
 
             # Emit start signal
             self.gallery_started.emit(item.path, item.total_images or 0)
@@ -888,6 +892,12 @@ class UploadWorker(QThread):
     def _save_artifacts_for_result(self, item: GalleryQueueItem, results: dict):
         """Save gallery artifacts (BBCode, JSON) in worker thread. Returns artifact paths dict."""
         try:
+            # Join the started-hook thread if it exists and is still running
+            # This ensures ext1-4 are settled before we read them below
+            t = getattr(self, '_started_hook_thread', None)
+            if t is not None and t.is_alive():
+                t.join(timeout=30)  # Bounded timeout prevents hung hook from deadlocking worker
+
             # Build custom fields dict including ext1-4
             custom_fields = {
                 'custom1': item.custom1,
