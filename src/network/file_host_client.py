@@ -847,6 +847,22 @@ class FileHostClient:
                 return None
         return result
 
+    def _build_poll_url(self, upload_id: Optional[str]) -> str:
+        """Build poll URL with safe None handling for upload_id and auth_token.
+
+        Prevents TypeError when upload_id is None (e.g., from _extract_from_json)
+        or auth_token is None by converting both to strings with empty fallback.
+
+        Args:
+            upload_id: Upload ID (can be None for K2S-family hosts)
+
+        Returns:
+            Poll URL with {upload_id} and {token} placeholders replaced
+        """
+        return self.config.upload_poll_url.replace(
+            "{upload_id}", str(upload_id or "")
+        ).replace("{token}", self.auth_token or "")
+
     def _xferinfo_callback(self, download_total, downloaded, upload_total, uploaded):
         """pycurl progress callback.
 
@@ -1414,7 +1430,7 @@ class FileHostClient:
         if self.config.upload_poll_url:
             time.sleep(self.config.upload_poll_delay)
 
-            poll_url = self.config.upload_poll_url.replace("{upload_id}", upload_id).replace("{token}", self.auth_token or "")
+            poll_url = self._build_poll_url(upload_id)
 
             for attempt in range(self.config.upload_poll_retries):
                 curl = pycurl.Curl()
