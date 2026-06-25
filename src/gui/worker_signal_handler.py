@@ -24,6 +24,11 @@ from src.gui.bandwidth_manager import BandwidthManager
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI
 
+# Coalescing window for file-host-driven UI refreshes. Leading-edge: the first
+# event after idle refreshes immediately; further events within the window
+# collapse into one trailing pass. One scoped query per pass, so this is cheap.
+REFRESH_COALESCE_MS = 60
+
 
 class WorkerSignalHandler(QObject):
     """Handles worker signals and status updates for the main window."""
@@ -45,9 +50,11 @@ class WorkerSignalHandler(QObject):
         self._filehost_base_bytes: Dict[str, int] = {}
         self._filehost_base_files: Dict[str, int] = {}
 
-        # Throttle for progress bar refreshes driven by file host upload progress
-        self._progress_refresh_pending = False
-        # Gallery paths that need a per-row refresh on the next throttle flush
+        # Coalesced refresh state (leading-edge + trailing). Replaces the old
+        # trailing-only _progress_refresh_pending flag.
+        self._refresh_cooldown_active = False
+        self._refresh_trailing_pending = False
+        # Gallery paths needing a per-row refresh on the next pass.
         self._rows_needing_refresh: set[str] = set()
 
     @property
@@ -186,37 +193,66 @@ class WorkerSignalHandler(QObject):
                 gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
                 if gallery_path:
                     self._rows_needing_refresh.add(gallery_path)
-            self._schedule_progress_refresh()
+            self._request_refresh()
         except Exception as e:
             log(f"Error handling file host upload progress: {e}", level="error", category="file_hosts")
 
-    def _schedule_progress_refresh(self):
-        """Throttled trigger for overall progress bar refresh from file host progress."""
-        if self._progress_refresh_pending:
-            return
-        self._progress_refresh_pending = True
-        QTimer.singleShot(150, self._do_progress_refresh)
+    def _request_refresh(self):
+        """Leading-edge + trailing coalesce.
+
+        First call after an idle moment refreshes immediately (snappy); calls
+        during the cooldown window collapse into one trailing refresh. Used by
+        file-host progress, completion, and failure handlers alike.
+        """
+        if not self._refresh_cooldown_active:
+            self._refresh_cooldown_active = True
+            self._do_progress_refresh()
+            QTimer.singleShot(REFRESH_COALESCE_MS, self._end_refresh_cooldown)
+        else:
+            self._refresh_trailing_pending = True
+
+    def _end_refresh_cooldown(self):
+        """Fire the coalesced trailing pass (if any) and re-arm while busy."""
+        if self._refresh_trailing_pending:
+            self._refresh_trailing_pending = False
+            self._do_progress_refresh()
+            QTimer.singleShot(REFRESH_COALESCE_MS, self._end_refresh_cooldown)
+        else:
+            self._refresh_cooldown_active = False
 
     def _do_progress_refresh(self):
-        """Execute the deferred progress refresh after the throttle window."""
-        self._progress_refresh_pending = False
+        """One refresh pass: fetch file-host rows for the current tab + dirty
+        rows in a SINGLE scoped query, then update the overall bar and each
+        dirty row from that map. No per-row DB queries (that was the freeze)."""
         mw = self._mw
         if mw is None:
             self._rows_needing_refresh.clear()
             return
-        try:
-            mw.progress_tracker.update_progress_display()
-        except Exception as e:
-            log(f"Error refreshing progress display: {e}", level="warning", category="ui")
 
-        # Flush per-row refreshes queued by file host progress events. Each
-        # row reflects image + file host byte-weighted state, so the bar
-        # moves during large video uploads instead of sitting at 100%.
-        paths_to_refresh = list(self._rows_needing_refresh)
+        dirty = list(self._rows_needing_refresh)
         self._rows_needing_refresh.clear()
-        for path in paths_to_refresh:
+
+        try:
+            items = mw._get_current_tab_items()
+            paths = {getattr(it, 'path', '') for it in items}
+            paths.update(dirty)
+            paths.discard('')
+            fh_map = mw.queue_manager.store.get_file_host_uploads_for_paths(list(paths))
+        except Exception as e:
+            log(f"Error fetching file host rows for refresh: {e}",
+                level="warning", category="ui")
+            fh_map = {}
+
+        try:
+            mw.progress_tracker.update_progress_display(file_host_map=fh_map)
+        except Exception as e:
+            log(f"Error refreshing progress display: {e}",
+                level="warning", category="ui")
+
+        for path in dirty:
             try:
-                mw.progress_tracker.refresh_row_display(path)
+                mw.progress_tracker.refresh_row_display(
+                    path, file_host_rows=fh_map.get(path, []))
             except Exception as e:
                 log(f"Error refreshing row for {path}: {e}",
                     level="warning", category="ui")
@@ -240,8 +276,6 @@ class WorkerSignalHandler(QObject):
             msg = f"Deduped on {display_host}: {gallery_name}" if gallery_name else f"Deduped on {display_host}"
             mw.show_status_message(msg, 5000)
 
-        # Re-check gallery completion: if this was the last outstanding
-        # file host row, fire the delayed gallery_completed notification.
         gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
         if gallery_path:
             try:
@@ -249,22 +283,11 @@ class WorkerSignalHandler(QObject):
             except Exception as e:
                 log(f"Error re-checking gallery completion after file host: {e}",
                     level="warning", category="ui")
-            # Refresh the specific row so its progress bar and effective
-            # status flip to their final value (100% / Completed if this
-            # was the last file host row).
-            try:
-                mw.progress_tracker.refresh_row_display(gallery_path)
-            except Exception as e:
-                log(f"Error refreshing row after file host completion: {e}",
-                    level="warning", category="ui")
+            self._rows_needing_refresh.add(gallery_path)
 
-        # Refresh the byte-weighted overall progress bar immediately so the
-        # last settled row snaps to its final contribution.
-        try:
-            mw.progress_tracker.update_progress_display()
-        except Exception as e:
-            log(f"Error refreshing progress after file host completion: {e}",
-                level="warning", category="ui")
+        # One coalesced, leading-edge refresh (overall bar + dirty rows) — no
+        # per-row query storm, repaints on the next turn.
+        self._request_refresh()
 
         # Fire notification
         mw = self._mw
@@ -280,19 +303,12 @@ class WorkerSignalHandler(QObject):
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
-        # Refresh the gallery row so its progress bar reflects the
-        # now-stalled file host contribution; effective status keeps
-        # showing "uploading" while retries are pending (matches
-        # gallery_completed notification logic).
         mw = self._mw
         if mw is not None:
             gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
             if gallery_path:
-                try:
-                    mw.progress_tracker.refresh_row_display(gallery_path)
-                except Exception as e:
-                    log(f"Error refreshing row after file host failure: {e}",
-                        level="warning", category="ui")
+                self._rows_needing_refresh.add(gallery_path)
+            self._request_refresh()
 
         # Fire notification
         if hasattr(mw, 'notification_manager'):
