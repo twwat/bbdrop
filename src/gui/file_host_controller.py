@@ -418,11 +418,19 @@ class FileHostController(QObject):
         # Get all gallery paths
         items = self._main_window.queue_manager.get_all_items()
 
-        # Batch query for all file host uploads
+        # Batch query for all file host uploads - fetch all in ONE query instead of per-row
+        paths = [item.path for item in items]
+        try:
+            rows_by_path = self._main_window.queue_manager.store.get_file_host_uploads_for_paths(paths)
+        except Exception as e:
+            log(f"Failed to batch-load file host uploads: {e}", level="warning", category="file_hosts")
+            rows_by_path = {}
+
+        # Build map using original paths (keying by os.path.normpath to match batch query keys)
         file_host_uploads_map = {}
         for item in items:
-            uploads = self._main_window.queue_manager.store.get_file_host_uploads(item.path)
-            file_host_uploads_map[item.path] = {u['host_name']: u for u in uploads}
+            rows = rows_by_path.get(os.path.normpath(item.path), [])
+            file_host_uploads_map[item.path] = {u['host_name']: u for u in rows}
 
         # Update all file host status table items for delegate rendering
         table = self._main_window.gallery_table.table
