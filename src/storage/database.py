@@ -2260,6 +2260,70 @@ class QueueStore:
 
         return uploads_by_path
 
+    def get_file_host_uploads_for_paths(
+        self, paths: List[str]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Get file host uploads for a specific set of gallery paths in ONE query.
+
+        Scoped sibling of get_all_file_host_uploads_batch: instead of every
+        gallery, fetch only the requested paths (WHERE path IN ...). Used by the
+        progress-refresh path so a burst of completions costs one query instead
+        of one-per-visible-row. Row dicts match get_file_host_uploads exactly.
+
+        Args:
+            paths: Gallery folder paths to fetch rows for.
+
+        Returns:
+            Dict mapping each (normalized) requested path to its list of upload
+            row dicts. Paths with no rows map to an empty list. Empty input ->
+            empty dict.
+        """
+        if not paths:
+            return {}
+
+        norm_paths = [os.path.normpath(p) for p in paths]
+        result: Dict[str, List[Dict[str, Any]]] = {p: [] for p in norm_paths}
+        placeholders = ",".join("?" for _ in norm_paths)
+
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            cursor = conn.execute(
+                f"""
+                SELECT
+                    g.path,
+                    fh.id, fh.gallery_fk, fh.host_name, fh.status,
+                    fh.zip_path, fh.started_ts, fh.finished_ts,
+                    fh.uploaded_bytes, fh.total_bytes,
+                    fh.download_url, fh.file_id, fh.file_name, fh.error_message,
+                    fh.raw_response, fh.retry_count, fh.created_ts,
+                    COALESCE(fh.part_number, 0),
+                    fh.md5_hash, fh.file_size, COALESCE(fh.deduped, 0),
+                    fh.blocked_by_upload_id, COALESCE(fh.dedup_only, 0)
+                FROM file_host_uploads fh
+                JOIN galleries g ON fh.gallery_fk = g.id
+                WHERE g.path IN ({placeholders})
+                ORDER BY g.path, fh.host_name ASC, fh.part_number ASC
+                """,
+                tuple(norm_paths),
+            )
+            for row in cursor.fetchall():
+                path = row[0]
+                upload = {
+                    'id': row[1], 'gallery_fk': row[2], 'host_name': row[3],
+                    'status': row[4], 'zip_path': row[5], 'started_ts': row[6],
+                    'finished_ts': row[7], 'uploaded_bytes': row[8],
+                    'total_bytes': row[9], 'download_url': row[10],
+                    'file_id': row[11], 'file_name': row[12],
+                    'error_message': row[13], 'raw_response': row[14],
+                    'retry_count': row[15], 'created_ts': row[16],
+                    'part_number': row[17], 'md5_hash': row[18],
+                    'file_size': row[19], 'deduped': bool(row[20]),
+                    'blocked_by_upload_id': row[21], 'dedup_only': bool(row[22]),
+                }
+                result.setdefault(path, []).append(upload)
+
+        return result
+
     def update_file_host_upload(
         self,
         upload_id: int,
