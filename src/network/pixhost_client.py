@@ -115,12 +115,15 @@ class PixhostClient(ImageHostClient):
 
             response_text = response_buffer.getvalue().decode('utf-8')
             json_resp = json.loads(response_text)
-            
+
             self._gallery_hash = json_resp.get('gallery_hash')
             self._gallery_upload_hash = json_resp.get('gallery_upload_hash')
-            
+
             if not self._gallery_hash:
                 raise RuntimeError("Could not find gallery_hash in response")
+
+            if not self._gallery_upload_hash:
+                raise RuntimeError("Could not find gallery_upload_hash in response")
 
             log(f"Created Pixhost gallery: {self._gallery_hash}", level="debug", category="uploads")
             return self._gallery_hash
