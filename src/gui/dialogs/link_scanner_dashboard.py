@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar,
     QDialogButtonBox, QApplication, QSizePolicy,
 )
-from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtCore import QTimer, pyqtSignal, QObject, QRunnable, QThreadPool, Qt
 from PyQt6.QtGui import QCloseEvent
 
 from src.gui.widgets.scanner_widgets import (
@@ -22,6 +22,11 @@ from src.gui.widgets.scanner_widgets import (
 from src.core.host_registry import get_display_name
 from src.gui.theme_manager import get_online_status_colors
 from src.utils.logger import log
+
+
+class _GalleryLoadSignals(QObject):
+    """Signal carrier for async gallery table loads."""
+    loaded = pyqtSignal(int, str, list)  # (generation, host_id, rows)
 
 
 class LinkScannerDashboard(QDialog):
@@ -46,6 +51,10 @@ class LinkScannerDashboard(QDialog):
         self._scan_totals: Dict[str, int] = {}
         self._host_data: Dict[str, dict] = {}  # host_id -> {label, gallery_count, ...}
 
+        # Async gallery table load infrastructure
+        self._gallery_load_gen = 0
+        self._gallery_load_signals = _GalleryLoadSignals()
+
         self.setWindowTitle("Link Scanner")
         self.setModal(False)
         self.setMinimumSize(850, 550)
@@ -54,6 +63,9 @@ class LinkScannerDashboard(QDialog):
 
         self._progress_signal.connect(self._on_scan_progress)
         self._complete_signal.connect(self._on_scan_complete)
+        self._gallery_load_signals.loaded.connect(
+            self._on_gallery_data_loaded, Qt.ConnectionType.QueuedConnection
+        )
 
         self._setup_ui()
         self._load_initial_data()
@@ -196,18 +208,29 @@ class LinkScannerDashboard(QDialog):
             self._host_table.select_host(host_id)
 
     def _reload_gallery_table(self, host_id: str) -> None:
-        """Reload the gallery table for the given host."""
+        """Reload the gallery table for the given host (asynchronously, off the GUI thread)."""
         self._gallery_table.clear_rows()
         if not self.queue_manager:
             return
-        try:
-            gallery_data = self.queue_manager.store.get_galleries_for_dashboard()
-            if gallery_data:
-                filtered = [r for r in gallery_data if r.get('host_id') == host_id]
-                self._gallery_table.load_results(filtered)
-        except Exception as e:
-            log(f"Failed to reload gallery table for host {host_id}: {e}",
-                level="error", category="scanner")
+
+        # Increment generation and capture it for this load
+        self._gallery_load_gen += 1
+        gen = self._gallery_load_gen
+        store = self.queue_manager.store
+        signals = self._gallery_load_signals
+
+        class _LoadGalleryTask(QRunnable):
+            """Worker task to load gallery data off the GUI thread."""
+            def run(task_self):
+                try:
+                    rows = store.get_galleries_for_dashboard() or []
+                except Exception as e:
+                    log(f"Failed to load gallery table for host {host_id}: {e}",
+                        level="error", category="scanner")
+                    rows = []
+                signals.loaded.emit(gen, host_id, rows)
+
+        QThreadPool.globalInstance().start(_LoadGalleryTask())
 
     def _on_scan_requested(self, age_days: int, host_filter: str, scan_type: str, age_mode: str) -> None:
         self._overall_bar.setValue(0)
@@ -291,6 +314,19 @@ class LinkScannerDashboard(QDialog):
 
         # Revert host bars to health and refresh data
         QTimer.singleShot(100, self._refresh_after_scan)
+
+    def _on_gallery_data_loaded(self, gen: int, host_id: str, rows: list) -> None:
+        """Handle async gallery data load (called on GUI thread via queued signal).
+
+        Drops stale results using generation counter.
+        """
+        if gen != self._gallery_load_gen:
+            # Newer load already started; ignore stale result
+            return
+
+        # Filter rows by host_id and populate table
+        filtered = [r for r in rows if r.get('host_id') == host_id]
+        self._gallery_table.load_results(filtered)
 
     def _refresh_after_scan(self) -> None:
         """Reload all data after scan completion."""

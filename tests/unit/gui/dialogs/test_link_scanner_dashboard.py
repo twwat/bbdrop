@@ -151,16 +151,18 @@ class TestLinkScannerDashboard:
         dashboard._coordinator.cancel.assert_not_called()
         dashboard._coordinator.wait.assert_not_called()
 
-    def test_reload_gallery_table_logs_error_on_db_failure(self, dashboard, mock_queue_manager):
+    def test_reload_gallery_table_logs_error_on_db_failure(self, qtbot, dashboard, mock_queue_manager):
         """BUG B: _reload_gallery_table should log errors instead of silently swallowing them."""
         mock_queue_manager.store.get_galleries_for_dashboard.side_effect = RuntimeError("DB connection failed")
 
         with patch('src.gui.dialogs.link_scanner_dashboard.log') as mock_log:
-            dashboard._reload_gallery_table('imx')
+            # Wait for the async load signal to fire and the slot to process it
+            with qtbot.waitSignal(dashboard._gallery_load_signals.loaded, timeout=2000):
+                dashboard._reload_gallery_table('imx')
 
-            # Assert log was called with error level
+            # Assert log was called with error level (in the async worker thread)
             mock_log.assert_called()
             call_args = mock_log.call_args
             # Should log with level="error"
             assert call_args[1]['level'] == 'error'
-            assert 'Failed to reload gallery table' in call_args[0][0]
+            assert 'Failed to load gallery table' in call_args[0][0]
