@@ -58,7 +58,7 @@ class FileHostController(QObject):
                 uploads_list = self._main_window.queue_manager.store.get_file_host_uploads(gallery_path)
                 host_uploads = {upload['host_name']: upload for upload in uploads_list}
             except Exception as e:
-                log(f"Failed to load file host uploads: {e}", level="warning", category="file_hosts")
+                log(f"Failed to load file host uploads: {e}", level="error", category="file_hosts")
                 return
 
             hosts_item.setData(Qt.ItemDataRole.UserRole + 1, host_uploads)

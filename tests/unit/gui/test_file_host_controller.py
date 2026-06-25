@@ -378,3 +378,52 @@ class TestQueueFileHostUpload:
 
         MockMsgBox.warning.assert_called_once()
         mock_main_window.queue_manager.store.add_file_host_upload.assert_not_called()
+
+
+class TestRefreshFileHostWidgetsErrorHandling:
+    """Test suite for error handling in _refresh_file_host_widgets_for_db_id."""
+
+    @pytest.fixture
+    def mock_main_window(self):
+        """Create a mock main window with required attributes."""
+        mw = Mock()
+        mw.queue_manager = Mock()
+        mw.queue_manager.mutex = QMutex()
+        mw.queue_manager.items = {}
+        mw.queue_manager.store = Mock()
+        mw.gallery_table = Mock()
+        mw.path_to_row = {"/test/gallery": 0}
+        mw.row_to_path = {0: "/test/gallery"}
+        mw._file_host_uploads_cache = {}
+        return mw
+
+    @pytest.fixture
+    def controller(self, mock_main_window):
+        """Create controller with mocked main window."""
+        return FileHostController(mock_main_window)
+
+    def test_logs_error_level_on_get_file_host_uploads_exception(self, controller, mock_main_window):
+        """Verify that when get_file_host_uploads raises, log is called at level='error'."""
+        # Setup cache hit
+        controller._db_id_to_path[42] = "/test/gallery"
+
+        # Mock table item to return a valid item
+        mock_table_item = Mock()
+        mock_main_window.gallery_table.table.item.return_value = mock_table_item
+
+        # Make store.get_file_host_uploads raise an exception
+        mock_main_window.queue_manager.store.get_file_host_uploads.side_effect = Exception("DB connection failed")
+
+        # Patch the log function to capture calls
+        with patch('src.gui.file_host_controller.log') as mock_log:
+            controller._refresh_file_host_widgets_for_db_id(42)
+
+            # Verify log was called at level="error" (not "warning")
+            # The call should be for "Failed to load file host uploads: ..."
+            log_calls = mock_log.call_args_list
+            # Find the call with level="error"
+            error_log_found = any(
+                call[1].get('level') == 'error' for call in log_calls
+                if 'Failed to load' in str(call[0])
+            )
+            assert error_log_found, f"Expected log call with level='error', got: {log_calls}"

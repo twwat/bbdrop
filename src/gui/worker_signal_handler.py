@@ -262,9 +262,9 @@ class WorkerSignalHandler(QObject):
         mw = self._mw
         # Defer UI refresh to avoid blocking signal emission
         # Use QTimer.singleShot(0) to schedule on next event loop iteration
-        QTimer.singleShot(0, lambda: mw._refresh_file_host_widgets_for_db_id(db_id))
+        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id))
         # Trigger artifact regeneration if auto-regenerate is enabled (non-blocking, after UI refresh)
-        QTimer.singleShot(100, lambda: mw.artifact_handler.auto_regenerate_for_db_id(db_id))
+        QTimer.singleShot(100, lambda: self._mw and self._mw.artifact_handler.auto_regenerate_for_db_id(db_id))
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 

@@ -432,6 +432,7 @@ class GalleryFileManagerDialog(QDialog):
 
         # Show progress dialog - stored as instance variable to prevent GC
         self._scan_progress_dialog = QProgressDialog("Scanning files...", "Cancel", 0, len(files), self)
+        self._scan_progress_dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._scan_progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
 
         self.scanner = FileScanner(self.gallery_path, files)
