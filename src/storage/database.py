@@ -1745,39 +1745,18 @@ class QueueStore:
                     "SELECT default_template FROM tabs WHERE name = ? AND is_active = 1",
                     (tab_name,),
                 ).fetchone()
-        except sqlite3.OperationalError:
-            # Column absent — migration 20 was swallowed and will never be
-            # retried (_ensure_schema stamps the version regardless), so
-            # degrade to today's behaviour instead of raising on every add.
+        except sqlite3.OperationalError as e:
+            # Usually means the column is absent: migration 20 was swallowed
+            # and will never be retried (_ensure_schema stamps the version
+            # regardless), so degrade to today's behaviour instead of raising
+            # on every add. But OperationalError also covers a lock that
+            # outlasted busy_timeout (5s) and real I/O errors, and failing
+            # open silently on a hot path would hide those — so leave a trace.
+            log(f"get_tab_default_template({tab_name!r}) failed, treating as "
+                f"no default: {e}", level="debug", category="database")
             return None
         value = (row[0] or "").strip() if row else ""
         return value or None
-
-    def set_tab_default_template(self, tab_id: int, template_name: Optional[str]) -> bool:
-        """Set (or clear) a tab's default BBCode template by row id.
-
-        Pass None or "" to clear it back to "None (Current selection)"; both
-        persist as NULL so there is only one stored sentinel.
-        """
-        value = (template_name or "").strip() or None
-        with _ConnectionContext(self.db_path) as conn:
-            _ensure_schema(conn)
-            cursor = conn.execute(
-                "UPDATE tabs SET default_template = ?, updated_ts = ? WHERE id = ?",
-                (value, time.time(), tab_id),
-            )
-            return cursor.rowcount > 0
-
-    def set_tab_default_template_by_name(self, tab_name: str, template_name: Optional[str]) -> bool:
-        """Name-keyed convenience wrapper around set_tab_default_template."""
-        with _ConnectionContext(self.db_path) as conn:
-            _ensure_schema(conn)
-            row = conn.execute(
-                "SELECT id FROM tabs WHERE name = ? AND is_active = 1", (tab_name,)
-            ).fetchone()
-        if not row:
-            return False
-        return self.set_tab_default_template(row[0], template_name)
 
     def update_tab(self, tab_id: int, name: Optional[str] = None, display_order: Optional[int] = None, color_hint: Optional[str] = None) -> bool:
         """Update an existing tab.

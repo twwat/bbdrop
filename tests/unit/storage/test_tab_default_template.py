@@ -47,6 +47,21 @@ def conn():
         pass
 
 
+def _set_default(store, tab_name, template):
+    """Write tabs.default_template directly.
+
+    The production writer is the Tab Settings panel, which uses its own
+    connection (matching its forum-posting siblings); QueueStore deliberately
+    exposes no setter, so tests write the column the same way several sibling
+    storage tests already do.
+    """
+    with sqlite3.connect(store.db_path) as c:
+        c.execute(
+            "UPDATE tabs SET default_template = ? WHERE name = ?",
+            (template, tab_name),
+        )
+
+
 @pytest.fixture
 def store():
     """A QueueStore on a throwaway db file."""
@@ -111,7 +126,7 @@ class TestGetTabDefaultTemplate:
         assert store.get_tab_default_template("Main") is None
 
     def test_returns_stored_value(self, store):
-        store.set_tab_default_template_by_name("Main", "Nubiles")
+        _set_default(store, "Main", "Nubiles")
         assert store.get_tab_default_template("Main") == "Nubiles"
 
     def test_empty_string_reads_as_none(self, store):
@@ -194,7 +209,7 @@ class TestAddItemResolvesTabDefault:
 
     def test_tab_default_overrides_passed_template(self, qm, store, gallery):
         """The whole feature: the tab default beats an explicit argument."""
-        store.set_tab_default_template_by_name("Main", "Nubiles")
+        _set_default(store, "Main", "Nubiles")
 
         qm.add_item(gallery, template_name="from_combo", tab_name="Main")
 
@@ -236,9 +251,86 @@ class TestRenameKeepsDefault:
         changes -- but a future refactor of update_tab could silently break
         this, which is why it is a test and not a comment."""
         tab_id = store.create_tab("Shoots")
-        store.set_tab_default_template_by_name("Shoots", "Nubiles")
+        _set_default(store, "Shoots", "Nubiles")
 
         store.update_tab(tab_id, name="Photosets")
 
         assert store.get_tab_default_template("Photosets") == "Nubiles"
         assert store.get_tab_default_template("Shoots") is None
+
+
+# ---------------------------------------------------------------------------
+# Guarantees that hold only because the relevant methods are untouched
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestTabDefaultDoesNotReachOtherPaths:
+    """These three are stated requirements, and each is currently satisfied
+    only because the method involved never consults the tab default. Nothing
+    structural stops a future change from wiring one up, so pin them."""
+
+    def _row_template(self, store, path):
+        with sqlite3.connect(store.db_path) as c:
+            return c.execute(
+                "SELECT template FROM galleries WHERE path = ?", (path,)
+            ).fetchone()[0]
+
+    def test_per_item_override_beats_the_tab_default(self, store, tmp_path):
+        """The sharpest case: a user explicitly re-templating one gallery that
+        sits in a tab which has a default set. The override must stick."""
+        store.create_tab("Shoots")
+        _set_default(store, "Shoots", "Nubiles")
+        path = str(tmp_path / "g")
+        store.bulk_upsert([{
+            "path": path, "name": "g", "status": "queued",
+            "template_name": "Nubiles", "tab_name": "Shoots",
+        }])
+
+        store.update_item_template(path, "Manual")
+
+        assert self._row_template(store, path) == "Manual"
+
+    def test_moving_into_a_tab_does_not_retemplate(self, store, tmp_path):
+        """Moving an existing gallery into a tab with a default must leave its
+        template alone -- move_galleries_to_tab writes tab_id/tab_name only."""
+        store.create_tab("Shoots")
+        _set_default(store, "Shoots", "Nubiles")
+        path = str(tmp_path / "g")
+        store.bulk_upsert([{
+            "path": path, "name": "g", "status": "queued",
+            "template_name": "Keepme", "tab_name": "Main",
+        }])
+
+        store.move_galleries_to_tab([path], "Shoots")
+
+        assert self._row_template(store, path) == "Keepme"
+
+    def test_restore_from_db_does_not_retemplate(self, store, tmp_path):
+        """Reopening the app must not re-template galleries already in a tab
+        that has since been given a default -- _dict_to_item reads the
+        persisted value and never calls get_tab_default_template."""
+        from unittest.mock import patch
+        from src.storage.queue_manager import QueueManager
+
+        store.create_tab("Shoots")
+        # load_persistent_queue skips non-existent dirs unless completed.
+        gdir = tmp_path / "g"
+        gdir.mkdir()
+        path = str(gdir)
+        store.bulk_upsert([{
+            "path": path, "name": "g", "status": "queued",
+            "template_name": "Original", "tab_name": "Shoots",
+        }])
+        # Default set AFTER the gallery was already filed under that tab.
+        _set_default(store, "Shoots", "Nubiles")
+
+        with patch('src.storage.queue_manager.QueueStore', return_value=store), \
+             patch('src.storage.queue_manager.QSettings'):
+            qm = QueueManager()
+            qm.load_persistent_queue()
+            try:
+                item = qm.get_item(path)
+                assert item is not None, "gallery should be restored"
+                assert item.template_name == "Original"
+            finally:
+                qm._scan_worker_running = False

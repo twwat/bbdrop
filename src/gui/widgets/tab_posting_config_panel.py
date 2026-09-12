@@ -19,7 +19,6 @@ TabPostingConfigPanel(conn, tab_id, parent) — embeddable panel.
 from __future__ import annotations
 
 import sqlite3
-import time
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -199,9 +198,13 @@ class TabPostingConfigPanel(QWidget):
 
     def _save_default_template(self):
         value = self.default_template_combo.currentData() or None
+        # strftime('%s','now') matches every other tabs.updated_ts writer
+        # (update_tab, the display_order setter) rather than binding a Python
+        # float.
         self._conn.execute(
-            "UPDATE tabs SET default_template = ?, updated_ts = ? WHERE id = ?",
-            (value, time.time(), self._tab_id),
+            "UPDATE tabs SET default_template = ?, "
+            "updated_ts = strftime('%s','now') WHERE id = ?",
+            (value, self._tab_id),
         )
         self._conn.commit()
 
