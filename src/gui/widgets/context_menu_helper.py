@@ -515,8 +515,14 @@ class GalleryContextMenuHelper(QObject):
                         # For completed galleries, regenerate BBCode
                         if gallery_item and gallery_item.status == "completed":
                             try:
-                                # Use existing regenerate_gallery_bbcode method
-                                self.main_window.regenerate_gallery_bbcode(gallery_path, template_name)
+                                # regenerate_gallery_bbcode lives on
+                                # artifact_handler (artifact_handler.py:339),
+                                # not on the main window -- calling it here
+                                # raised AttributeError for every completed
+                                # gallery. gallery_table_controller.py:480
+                                # does it correctly.
+                                self.main_window.artifact_handler.regenerate_gallery_bbcode(
+                                    gallery_path, template_name)
                                 bbcode_regenerated += 1
                             except Exception as e:
                                 log(f"Failed to regenerate BBCode for {gallery_path}: {e}", level="error", category="ui")
@@ -563,7 +569,11 @@ class GalleryContextMenuHelper(QObject):
             for row in range(table.rowCount()):
                 name_item = table.item(row, COL_NAME)
                 if name_item:
-                    gallery_path = name_item.data(table.UserRole)
+                    # Qt.ItemDataRole.UserRole, not table.UserRole -- the
+                    # widget has no such attribute, so this raised
+                    # AttributeError and silently aborted the refresh.
+                    # table_row_manager.py:236 stores the path under this role.
+                    gallery_path = name_item.data(Qt.ItemDataRole.UserRole)
                     if gallery_path in gallery_paths:
                         template_item = table.item(row, COL_TEMPLATE)
                         if template_item:

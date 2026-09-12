@@ -61,7 +61,11 @@ def mock_main_window(mock_queue_manager, mock_tab_manager):
     main_window.gallery_table = Mock()
     main_window.gallery_table.table = Mock()
     main_window.add_log_message = Mock()
-    main_window.regenerate_gallery_bbcode = Mock()
+    # regenerate_gallery_bbcode lives on artifact_handler, NOT on the main
+    # window. A bare Mock() main_window accepts any attribute, so asserting
+    # against main_window.regenerate_gallery_bbcode passed for nine months
+    # while production raised AttributeError on every completed gallery.
+    main_window.artifact_handler.regenerate_gallery_bbcode = Mock()
 
     # Add common methods that might be delegated to
     main_window.start_selected_via_menu = Mock()
@@ -774,7 +778,7 @@ class TestTemplateUpdate:
         with patch('src.utils.format_utils.timestamp', return_value="12:00"):
             context_menu_helper.set_template_for_galleries(paths, template_name)
 
-        context_menu_helper.main_window.regenerate_gallery_bbcode.assert_called_with(
+        context_menu_helper.main_window.artifact_handler.regenerate_gallery_bbcode.assert_called_with(
             paths[0], template_name
         )
 
