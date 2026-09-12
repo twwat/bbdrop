@@ -826,8 +826,20 @@ class FileHostClient:
             elif "403" in error_text or "Forbidden" in error_text:
                 response_code = 403
 
-            # Check if this is a stale token error
-            if self._detect_stale_token_error(error_text, response_code):
+            # UploadRejectedError must be checked FIRST. Its message contains
+            # the host's rejection text, which matches the very stale-token
+            # patterns configured for that host — so without this guard the
+            # pattern check below would re-upload the payload, which is the
+            # exact thing the account probe was added to prevent.
+            if isinstance(e, UploadRejectedError):
+                raise
+
+            # Check if this is a stale token error. SessionExpiredError is
+            # unconditional — it is only raised when we already know the
+            # session is dead, so it needs no pattern match.
+            if isinstance(e, SessionExpiredError) or self._detect_stale_token_error(
+                error_text, response_code
+            ):
                 if self._log_callback:
                     self._log_callback("Token expired, re-authenticating", "debug")
                 # Refresh token
@@ -961,8 +973,10 @@ class FileHostClient:
         if self.config.upload_init_url:
             return self._with_token_retry(self._upload_multistep, file_path, md5_hash=md5_hash)
 
-        # Standard upload
-        return self._upload_standard(file_path)
+        # Standard upload — routed through the same retry wrapper as every
+        # other operation, so an expired session refreshes and retries once
+        # instead of uploading the payload anonymously.
+        return self._with_token_retry(self._upload_standard, file_path)
 
     # Markers that mean "this URL is a login page, not the page we asked for".
     _LOGIN_URL_MARKERS = ("op=login", "/login")
@@ -1111,7 +1125,7 @@ class FileHostClient:
             return False
         return not self._looks_like_login_page(effective_url)
 
-    def _upload_standard(self, file_path: Path) -> Dict[str, Any]:
+    def _upload_standard(self, file_path: Path, **kwargs) -> Dict[str, Any]:
         """Perform standard single-step upload.
 
         Args:
@@ -1131,6 +1145,10 @@ class FileHostClient:
         server_sess_id = None
         if self.config.get_server:
             upload_url, server_sess_id = self._get_upload_server()
+
+        # Acquire the session BEFORE opening the upload handle. Raises
+        # SessionExpiredError if the session is dead, so no payload moves.
+        sess_id = self._acquire_session_id(upload_url)
 
         curl = pycurl.Curl()
         self._configure_ssl(curl)
@@ -1168,62 +1186,6 @@ class FileHostClient:
                 cookie_str = "; ".join(f"{k}={v}" for k, v in self.cookie_jar.items())
                 curl.setopt(pycurl.COOKIE, cookie_str)
 
-            # Extract session ID for session-based uploads (before upload)
-            sess_id = None
-            if self.config.auth_type == "session":
-                # Method 1: Use cookie value directly (e.g., FileSpace uses xfss cookie)
-                if self.config.session_cookie_name:
-                    if self.config.session_cookie_name in self.cookie_jar:
-                        sess_id = self.cookie_jar[self.config.session_cookie_name]
-                        if self._log_callback: self._log_callback(f"Using {self.config.session_cookie_name} cookie as sess_id: {sess_id[:20]}...", "debug")
-                    else:
-                        if self._log_callback: self._log_callback(f"Warning: {self.config.session_cookie_name} cookie not found in cookie jar", "warning")
-                
-                # Method 2: Extract from upload page HTML using regex (e.g., FileDot)
-                elif self.config.session_id_regex:
-                    # Visit upload page to extract fresh session ID
-                    upload_page_url = self.config.upload_page_url
-                    if not upload_page_url:
-                        # Fallback: derive from upload_endpoint (remove /upload.cgi or similar)
-                        import re
-                        base_url = re.sub(r'/[^/]*$', '', upload_url)
-                        upload_page_url = f"{base_url}/upload"
-                    
-                    if self._log_callback: self._log_callback(f"Visiting upload page to extract session ID: {upload_page_url}", "debug")
-
-                    page_curl = pycurl.Curl()
-                    self._configure_ssl(page_curl)
-                    self._configure_proxy(page_curl)
-                    page_buffer = BytesIO()
-                    try:
-                        page_curl.setopt(pycurl.URL, upload_page_url)
-                        page_curl.setopt(pycurl.WRITEDATA, page_buffer)
-                        page_curl.setopt(pycurl.TIMEOUT, 30)
-                        page_curl.setopt(pycurl.USERAGENT, _CHROME_UA)
-                        page_curl.setopt(pycurl.FOLLOWLOCATION, True)
-
-                        # Use session cookies
-                        if self.cookie_jar:
-                            page_curl.setopt(pycurl.COOKIE, cookie_str)
-
-                        page_curl.perform()
-                        page_html = page_buffer.getvalue().decode('utf-8')
-                        
-                        # Extract session ID using regex
-                        import re
-                        match = re.search(self.config.session_id_regex, page_html)
-                        if match:
-                            sess_id = match.group(1)
-                            # Store in auth_token for reuse in delete and other operations
-                            self.auth_token = sess_id
-                            # Track when this token was acquired for TTL management
-                            self._session_token_timestamp = time.time()
-                            if self._log_callback: self._log_callback(f"Extracted session ID: {sess_id[:20]}...", "debug")
-                        else:
-                            if self._log_callback: self._log_callback("Could not extract session ID from upload page", "debug")
-                    finally:
-                        page_curl.close()
-
             # Upload file
             file_size = file_path.stat().st_size
 
@@ -1257,11 +1219,49 @@ class FileHostClient:
 
             response_code = curl.getinfo(pycurl.RESPONSE_CODE)
 
+            if response_code in (401, 403) and self.config.auth_type == "session":
+                # Same situation as the body-based rejection below, just
+                # signalled by status code. Without this it raises a bare
+                # Exception, which _with_token_retry does not catch (its
+                # except tuple is pycurl.error / ConnectionError / ValueError)
+                # and which the worker's _is_retryable_error treats as
+                # retryable — so the payload would be re-uploaded three more
+                # times, which is the original bug's waste pattern exactly.
+                if self._session_is_alive():
+                    raise UploadRejectedError(
+                        f"Upload rejected with status {response_code}")
+                raise SessionExpiredError(
+                    f"Upload rejected with status {response_code} — session expired")
+
             if response_code not in [200, 201]:
                 raise Exception(f"Upload failed with status {response_code}")
 
             response_text = response_buffer.getvalue().decode('utf-8')
-            return self._parse_response(response_text, response_code)
+            result = self._parse_response(response_text, response_code)
+
+            # An auth-shaped rejection on an HTTP 200 is ambiguous: either the
+            # session died mid-upload, or the account genuinely cannot upload.
+            # Re-uploading is only correct in the first case, and the payload
+            # is measured in gigabytes — so ask the account page which it is
+            # instead of gambling.
+            #
+            # Gated on check_body_on_success — the same flag delete_file uses
+            # for "inspect the body for stale patterns even on a 2xx"
+            # (:1829, :1837). It defaults to False, so only hosts that opt in
+            # (currently filedot) take this path.
+            if (
+                self.config.check_body_on_success
+                and result.get("status") == "error"
+                and self._detect_stale_token_error(response_text, response_code)
+            ):
+                if self._session_is_alive():
+                    # Session is fine — the host means what it says. Failing
+                    # here is terminal: UploadRejectedError is not treated as
+                    # stale, so nothing re-uploads.
+                    raise UploadRejectedError(result.get("error", "upload rejected"))
+                raise SessionExpiredError(result.get("error", "session expired"))
+
+            return result
 
         finally:
             curl.close()

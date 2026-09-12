@@ -206,6 +206,13 @@ class TestFileHostClientUploadStandard:
         config.auth_type = None
         config.upload_timeout = 300
         config.inactivity_timeout = 60
+        # Both must be set explicitly. stale_token_patterns is a
+        # field(default_factory=list), so it is absent from dir(HostConfig)
+        # and Mock(spec=...) raises AttributeError on access.
+        # check_body_on_success IS in dir(), so an unset Mock hands back a
+        # truthy child Mock -- the inverse of its real False default.
+        config.stale_token_patterns = []
+        config.check_body_on_success = False
         return config
 
     @pytest.fixture
