@@ -272,7 +272,7 @@ class RenameWorker(QObject):
                 try:
                     unnamed = self._get_unnamed_galleries()
                     if unnamed:
-                        log(f"Auto-renaming {len(unnamed)} galleries", category="renaming", level="info")
+                        log(f"IMX: Auto-renaming {len(unnamed)} galleries", category="renaming", level="info")
                         for gallery_id, gallery_name in list(unnamed.items()):
                             if self.rename_gallery_with_session(gallery_id, gallery_name):
                                 self._remove_unnamed_gallery(gallery_id)
@@ -450,7 +450,7 @@ class RenameWorker(QObject):
 
                 # Check if we hit DDoS-Guard
                 if 'DDoS-Guard' in response.text or 'ddos-guard' in response.text:
-                    log("DDoS-Guard detected: galleries will be queued for auto-rename", level="info", category="auth")
+                    log("IMX: DDoS-Guard detected — galleries will be queued for auto-rename", level="info", category="auth")
                     # Note: axios-ddos-guard-bypass has a bug where it doesn't maintain
                     # session cookies (PHPSESSID) when the interceptor triggers, causing
                     # login failures. Rather than fight a buggy library, we queue galleries
@@ -518,15 +518,15 @@ class RenameWorker(QObject):
                 return False
 
             if 'DDoS-Guard' in edit_page.text:
-                log("DDoS-Guard detected", level="warning", category="renaming")
+                log("IMX: DDoS-Guard detected", level="warning", category="renaming")
                 return False
 
             if 'login' in edit_page.url or 'login' in edit_page.text.lower():
-                log("Not logged in - attempting re-authentication", level="warning", category="renaming")
+                log("IMX: Not logged in — attempting re-authentication", level="warning", category="renaming")
                 if retry_on_auth_failure and self._attempt_reauth_with_rate_limit():
                     return self.rename_gallery_with_session(gallery_id, new_name, retry_on_auth_failure=False)
                 else:
-                    log("Re-authentication failed - marking session as dead", level="warning", category="renaming")
+                    log("IMX: Re-authentication failed — marking session as dead", level="warning", category="renaming")
                     self.login_successful = False  # Mark session as dead to stop queue processing
                 return False
 
@@ -539,7 +539,7 @@ class RenameWorker(QObject):
             response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
 
             if response.status_code == 200:
-                log(f"Successfully renamed gallery '{gallery_id}' to '{new_name}'", category="renaming", level="info")
+                log(f"IMX: Successfully renamed gallery '{gallery_id}' to '{new_name}'", category="renaming", level="info")
                 return True
             else:
                 log(f"Rename failed (HTTP {response.status_code})", level="debug", category="renaming")
@@ -572,7 +572,7 @@ class RenameWorker(QObject):
         Returns dict with {status, bbcode, image_url, thumb_url} or None on failure.
         """
         if not self.login_successful:
-            log("Cover upload: not authenticated", level="warning", category="cover")
+            log("IMX: Cover upload not authenticated", level="warning", category="cover")
             return None
 
         try:
@@ -594,16 +594,16 @@ class RenameWorker(QObject):
                 )
 
             if response.status_code != 200:
-                log(f"Cover upload failed: HTTP {response.status_code}", level="warning", category="cover")
+                log(f"IMX: Cover upload failed — HTTP {response.status_code}", level="warning", category="cover")
                 return None
 
             # Parse BBCode from response textarea
             bbcode, image_url, thumb_url = self._parse_cover_response(response.text)
             if not bbcode:
-                log("Cover upload: failed to parse response", level="warning", category="cover")
+                log("IMX: Cover upload failed to parse response", level="warning", category="cover")
                 return None
 
-            log(f"Cover uploaded successfully for gallery {gallery_id}", level="info", category="cover")
+            log(f"IMX: Cover uploaded successfully for gallery {gallery_id}", level="info", category="cover")
             return {
                 "status": "success",
                 "bbcode": bbcode,
@@ -715,13 +715,13 @@ class RenameWorker(QObject):
 
                 # Wait for login to complete before processing
                 if not self.login_complete.wait(timeout=30):
-                    log("Status check: Login timeout", level="warning", category="status_check")
+                    log("IMX: Status check login timeout", level="warning", category="status_check")
                     self.status_check_error.emit("Login timeout - please try again later")
                     self.status_check_queue.task_done()
                     continue
 
                 if not self.login_successful:
-                    log("Status check: Not authenticated", level="warning", category="status_check")
+                    log("IMX: Status check not authenticated", level="warning", category="status_check")
                     self.status_check_error.emit("Not authenticated - please login first")
                     self.status_check_queue.task_done()
                     continue
@@ -848,7 +848,7 @@ class RenameWorker(QObject):
             return {}
 
         total_urls = len(all_urls)
-        log(f"Checking status of {total_urls} URLs from {len(gallery_info)} galleries",
+        log(f"IMX: Checking status of {total_urls} URLs from {len(gallery_info)} galleries",
             level="info", category="status_check")
 
         # Emit initial progress
@@ -949,7 +949,7 @@ class RenameWorker(QObject):
                     'offline_urls': offline_list
                 }
 
-        log(f"Found {total_online} online URLs out of {total_urls} submitted",
+        log(f"IMX: Found {total_online} online URLs out of {total_urls} submitted",
             level="info", category="status_check")
 
         return results
@@ -1170,7 +1170,7 @@ class RenameWorker(QObject):
 
                     # If authentication is dead, stop processing queue to avoid hammering server
                     if not self.login_successful:
-                        log("Authentication failed - stopping queue processing and saving remaining galleries", level="warning", category="renaming")
+                        log("IMX: Authentication failed — stopping queue processing and saving remaining galleries", level="warning", category="renaming")
                         self.queue.task_done()
 
                         # Drain remaining queue and save all for later
