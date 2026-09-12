@@ -6,6 +6,7 @@ to improve maintainability and separation of concerns.
 
 import os
 import time
+from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Tuple
 
@@ -177,6 +178,14 @@ class ProgressTracker(QObject):
         omitted, ONE scoped batch query covers all items — never one query per
         row (that loop was the GUI-thread freeze).
         """
+        # This slot is wired to Qt signals. PyQt binds a signal's arguments to
+        # whatever slot parameters will take them, so a pyqtSignal(str) landed
+        # its payload here and .get() below raised AttributeError on every tab
+        # change. The wiring is fixed at the connect site; this guard keeps any
+        # future mis-wiring a degraded refresh rather than a crash.
+        if file_host_map is not None and not isinstance(file_host_map, Mapping):
+            file_host_map = None
+
         if file_host_map is None:
             paths = [p for p in (getattr(it, 'path', '') for it in items) if p]
             try:

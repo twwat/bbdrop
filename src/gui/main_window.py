@@ -782,7 +782,11 @@ class BBDropGUI(QMainWindow):
         if hasattr(self.gallery_table, 'tab_changed'):
             self.gallery_table.tab_changed.connect(self.refresh_filter)
             self.gallery_table.tab_changed.connect(self.progress_tracker._update_button_counts)
-            self.gallery_table.tab_changed.connect(self.progress_tracker.update_progress_display)
+            # Discard the signal's payload: tab_changed is pyqtSignal(str) and
+            # update_progress_display's first parameter is file_host_map, so a
+            # direct connect binds the tab NAME to it and crashes the refresh.
+            self.gallery_table.tab_changed.connect(
+                lambda _tab_name: self.progress_tracker.update_progress_display())
         
         # Connect gallery move signal to handle tab assignments
         # Connect tab bar drag-drop signal directly to our handler
