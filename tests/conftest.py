@@ -20,6 +20,92 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _isolate_app_data_dir(tmp_path_factory, worker_id):
+    """Point every app path at a throwaway directory for the whole session.
+
+    NOT opt-in. On 2026-08-25 and 2026-09-12 the GUI tests wrote the user's
+    real ~/.bbdrop/bbdrop.ini -- settings dialogs call save_to_config(), which
+    resolves get_config_path() -- destroying all bbcode formats and the
+    filedot_* tuning keys. Losing filedot_trigger silently stopped FileDot
+    uploads being queued at all, with no error and no log line.
+
+    Partial isolation already existed: tests/unit/gui/conftest.py's
+    mock_tab_config_paths patches general_tab, scanning_tab and hooks_tab --
+    but not file_hosts_tab, forums_tab, log_tab or settings_dialog, which is
+    exactly why the damage landed in [FILE_HOSTS]. Any test that has to
+    remember to isolate itself will eventually forget.
+
+    Session-scoped so it is in force before the first test imports anything
+    that resolves a path. Keyed by worker_id for explicitness: xdist already
+    gives each worker its own basetemp, so this is belt-and-braces rather than
+    the thing that makes it safe -- but it makes the per-worker intent obvious.
+    """
+    base = tmp_path_factory.mktemp(f"bbdrop-{worker_id}-")
+    os.environ["BBDROP_BASE_PATH"] = str(base)
+    try:
+        yield base
+    finally:
+        os.environ.pop("BBDROP_BASE_PATH", None)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _block_real_keyring(_isolate_app_data_dir):
+    """Refuse real OS keyring writes for the whole session.
+
+    Two exposures, the second far worse than the first:
+
+      * file_hosts_tab.save_to_config() calls set_credential(..., '') for
+        every host whose widget is empty -- clears one entry.
+      * encrypt_password() -> get_encryption_key() -> _migrate_encryption_keys()
+        does keyring.set_password("bbdrop", "_master_key", new_key) at
+        credentials.py:352. Rotating that master key makes ALL stored
+        credentials permanently undecryptable. Unrecoverable, unlike a
+        cleared entry.
+
+    Raises a BaseException subclass, NOT AssertionError, because the app
+    swallows Exception twice on this path and would render the guard silent:
+      credentials.py:158  except Exception -> CredentialDecryptionError
+      file_hosts_tab      except Exception -> log warning, carry on
+    A swallowed guard is worse than none: the test goes green, and the raise
+    aborts save_to_config() before its config.write(), changing behaviour in
+    a way that masks whether isolation is working.
+
+    Covers delete_password too -- remove_credential() wraps it in a bare
+    `except Exception: pass` (credentials.py:171), silent by construction.
+    """
+    import keyring
+
+    class KeyringWriteBlocked(BaseException):
+        """Deliberately not an Exception -- see the docstring above."""
+
+    # tests/integration/test_credential_persistence.py does a genuine
+    # round-trip against the real backend with its own cleanup fixture, gated
+    # on skipif(not _has_real_keyring()) -- which IS satisfied on Windows.
+    # Blocking it would break a passing test and look like the isolation work
+    # broke credentials: the worst possible false signal for this bug.
+    ALLOWED_PREFIX = "file_host_INTEGRATION_TEST"
+
+    orig_set, orig_del = keyring.set_password, keyring.delete_password
+
+    def _guard(orig, verb):
+        def _inner(service, username, *args, **kwargs):
+            if not str(username).startswith(ALLOWED_PREFIX):
+                raise KeyringWriteBlocked(
+                    f"a test tried to {verb} the real keyring entry "
+                    f"{service}/{username}; mock keyring in that test"
+                )
+            return orig(service, username, *args, **kwargs)
+        return _inner
+
+    keyring.set_password = _guard(orig_set, "write")
+    keyring.delete_password = _guard(orig_del, "delete")
+    try:
+        yield
+    finally:
+        keyring.set_password, keyring.delete_password = orig_set, orig_del
+
+
 @pytest.fixture(autouse=True)
 def mock_qmessagebox_globally(monkeypatch):
     """

@@ -86,3 +86,28 @@ class TestBasePathOverride:
 
         expected = os.path.join(os.path.expanduser("~"), ".bbdrop")
         assert paths.get_base_path() == expected
+
+
+@pytest.mark.unit
+class TestSuiteWideIsolation:
+    """These assert the autouse fixture is actually in force. They take no
+    fixture of their own on purpose -- if isolation only worked when a test
+    asked for it, it would not have prevented the incident."""
+
+    def test_base_path_is_not_the_real_home(self):
+        real = Path(os.path.expanduser("~")).resolve() / ".bbdrop"
+        assert Path(paths.get_base_path()).resolve() != real, (
+            "tests are resolving to the user's real ~/.bbdrop -- the autouse "
+            "isolation fixture in tests/conftest.py is missing or bypassed"
+        )
+
+    def test_config_path_is_not_the_real_ini(self):
+        real = Path(os.path.expanduser("~")).resolve() / ".bbdrop" / "bbdrop.ini"
+        assert Path(paths.get_config_path()).resolve() != real, (
+            "tests would write the user's real bbdrop.ini"
+        )
+
+    def test_override_is_actually_set(self):
+        assert os.environ.get("BBDROP_BASE_PATH"), (
+            "BBDROP_BASE_PATH is unset during the run; isolation is not active"
+        )
