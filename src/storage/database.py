@@ -84,7 +84,7 @@ class _ConnectionContext:
         return False
 
 
-_SCHEMA_VERSION = 19  # Bump this when adding new migrations
+_SCHEMA_VERSION = 20  # Bump this when adding new migrations
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -833,6 +833,21 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             conn.commit()
         except Exception as e:
             log(f"Migration 19 failed: {e}", level="warning", category="database")
+
+        # Migration 20: per-tab default BBCode template.
+        # NULL means "None (Current selection)" — fall through to whatever the
+        # caller passed to add_item (quick-settings combo, or the Video tab
+        # default). ADD COLUMN with no DEFAULT gives existing rows NULL, which
+        # is exactly that, so existing tabs keep today's behaviour.
+        try:
+            tab_columns = {c[1] for c in conn.execute("PRAGMA table_info(tabs)").fetchall()}
+            if 'default_template' not in tab_columns:
+                conn.execute("ALTER TABLE tabs ADD COLUMN default_template TEXT")
+                log("Migration 20: added default_template column to tabs",
+                    level="info", category="database")
+            conn.commit()
+        except Exception as e:
+            log(f"Migration 20 failed: {e}", level="warning", category="database")
 
     except Exception as e:
         log(f"Warning: Migration failed: {e}", level="warning", category="database")
@@ -1709,9 +1724,64 @@ class QueueStore:
                     raise sqlite3.IntegrityError(f"Tab name '{name}' already exists") from e
                 raise
 
+    def get_tab_default_template(self, tab_name: Optional[str]) -> Optional[str]:
+        """Return the tab's default BBCode template, or None.
+
+        None means "None (Current selection)" — the caller's own template
+        choice stands. Also returns None for an unknown tab name ("All Tabs"
+        is virtual and never a real row) and for a pre-migration database.
+
+        IMPORTANT: when this returns a value it OVERRIDES the template_name
+        passed to add_item — it is not a default *for* that argument. That is
+        what "the tab default wins with no exceptions" means, and it is what
+        makes the Video tab's own default lose to a tab default.
+        """
+        if not tab_name:
+            return None
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                row = conn.execute(
+                    "SELECT default_template FROM tabs WHERE name = ? AND is_active = 1",
+                    (tab_name,),
+                ).fetchone()
+        except sqlite3.OperationalError:
+            # Column absent — migration 20 was swallowed and will never be
+            # retried (_ensure_schema stamps the version regardless), so
+            # degrade to today's behaviour instead of raising on every add.
+            return None
+        value = (row[0] or "").strip() if row else ""
+        return value or None
+
+    def set_tab_default_template(self, tab_id: int, template_name: Optional[str]) -> bool:
+        """Set (or clear) a tab's default BBCode template by row id.
+
+        Pass None or "" to clear it back to "None (Current selection)"; both
+        persist as NULL so there is only one stored sentinel.
+        """
+        value = (template_name or "").strip() or None
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            cursor = conn.execute(
+                "UPDATE tabs SET default_template = ?, updated_ts = ? WHERE id = ?",
+                (value, time.time(), tab_id),
+            )
+            return cursor.rowcount > 0
+
+    def set_tab_default_template_by_name(self, tab_name: str, template_name: Optional[str]) -> bool:
+        """Name-keyed convenience wrapper around set_tab_default_template."""
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            row = conn.execute(
+                "SELECT id FROM tabs WHERE name = ? AND is_active = 1", (tab_name,)
+            ).fetchone()
+        if not row:
+            return False
+        return self.set_tab_default_template(row[0], template_name)
+
     def update_tab(self, tab_id: int, name: Optional[str] = None, display_order: Optional[int] = None, color_hint: Optional[str] = None) -> bool:
         """Update an existing tab.
-        
+
         Args:
             tab_id: ID of tab to update
             name: New name (optional)

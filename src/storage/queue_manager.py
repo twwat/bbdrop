@@ -1444,6 +1444,18 @@ class QueueManager(QObject):
         """Add gallery to queue"""
         path = _normalize_path(path)
         log(f"DEBUG: QueueManager.add_item called with path={path}, tab_name={tab_name}, image_host_id={image_host_id}", level="debug", category="queue")
+
+        # A tab's default template OVERRIDES whatever the caller chose — that
+        # is the feature ("the tab default wins with no exceptions"), so it
+        # beats the quick-settings combo and the Video tab default alike.
+        # None/NULL means "None (Current selection)": leave the caller's value
+        # alone. Read outside the mutex — it's a DB round trip.
+        tab_default = self.store.get_tab_default_template(tab_name)
+        if tab_default:
+            log(f"Tab '{tab_name}' default template overrides '{template_name}' with '{tab_default}'",
+                level="debug", category="queue")
+            template_name = tab_default
+
         with QMutexLocker(self.mutex):
             if path in self.items:
                 return False

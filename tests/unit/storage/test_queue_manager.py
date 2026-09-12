@@ -63,6 +63,11 @@ def mock_store():
     store.bulk_upsert_async.return_value = None
     store.delete_by_paths.return_value = 1
     store.update_item_custom_field.return_value = True
+    # Must be explicit: a bare Mock() returns a truthy child Mock here, which
+    # add_item would treat as a per-tab default template and use to override
+    # the caller's template_name. None is the production default (no tab
+    # default set == "None (Current selection)").
+    store.get_tab_default_template.return_value = None
     return store
 
 
