@@ -53,11 +53,36 @@ def get_project_root() -> str:
         # Navigate up from src/utils/paths.py to the project root
         return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def _env_base_override() -> str:
+    """BBDROP_BASE_PATH, or '' when unset/blank.
+
+    Shared by get_base_path() and get_default_central_store_base_path() so a
+    test run cannot reach real user data through either.
+    """
+    return os.environ.get("BBDROP_BASE_PATH", "").strip()
+
+
 def get_base_path() -> str:
     """Get the base path for all app data (config, galleries, templates).
 
-    Checks QSettings for custom base path (bootstrap), falls back to default ~/.bbdrop
+    Resolution order:
+      1. BBDROP_BASE_PATH environment variable (tests, portable installs)
+      2. QSettings custom base path (bootstrap)
+      3. ~/.bbdrop
+
+    The env var is checked FIRST and deliberately: it is how the test suite
+    guarantees it cannot reach the user's real config. Letting QSettings win
+    would mean a stale user setting could pull a test run back onto the live
+    files, which is exactly the failure this ordering prevents.
     """
+    env_base = _env_base_override()
+    if env_base:
+        # DO NOT log here. AppLogger resolves its own logs directory through
+        # get_central_store_base_path() -> get_base_path(), so logging inside
+        # this function re-enters the logger and deadlocks on its lock. An
+        # earlier revision did exactly that and hung the test run.
+        return env_base
+
     try:
         # Check QSettings for custom base path (bootstrap location)
         from PyQt6.QtCore import QSettings
@@ -286,7 +311,20 @@ def _unique_destination_path(dest_dir: str, filename: str) -> str:
         suffix += 1
 
 def get_default_central_store_base_path():
-    """Return the default central store BASE path. Alias for get_base_path default."""
+    """Return the default central store BASE path — the HOME location.
+
+    Deliberately NOT get_base_path(): the Settings > General storage picker
+    compares the two to decide whether the user is on home, portable or a
+    custom path, and labels the Home radio with this value. Collapsing them
+    makes "Custom location" unselectable.
+
+    Honours BBDROP_BASE_PATH only so tests cannot write a real bbdrop.ini
+    here via general_tab's save path; in production the variable is unset and
+    behaviour is unchanged.
+    """
+    env_base = _env_base_override()
+    if env_base:
+        return env_base
     return os.path.join(os.path.expanduser("~"), ".bbdrop")
 
 
