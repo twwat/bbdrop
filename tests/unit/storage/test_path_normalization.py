@@ -27,6 +27,9 @@ def temp_dir():
 def mock_store():
     """Mock QueueStore."""
     store = Mock()
+    # add_item consults this; a bare Mock() would return a truthy
+    # child Mock and be used as a per-tab default template override.
+    store.get_tab_default_template.return_value = None
     store.load_all_items.return_value = []
     store.bulk_upsert.return_value = None
     store.bulk_upsert_async.return_value = None
