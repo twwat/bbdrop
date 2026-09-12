@@ -85,6 +85,30 @@ def _k2s_default_upload_access() -> str:
     return value if value in _K2S_ACCESS_VALUES else "public"
 
 
+class SessionExpiredError(ValueError):
+    """Raised when a session-auth host's session cannot be established.
+
+    Subclasses ValueError deliberately, for two reasons:
+
+    1. `_with_token_retry` already catches ValueError, so this flows into the
+       existing refresh-and-retry-once machinery.
+    2. `FileHostWorker._is_retryable_error` lists ValueError as non-retryable,
+       so once the client has re-logged-in and retried once, the worker fails
+       fast instead of re-uploading the payload again.
+    """
+
+
+class UploadRejectedError(ValueError):
+    """Raised when the host rejects an upload for a reason that is NOT the
+    session — e.g. the account genuinely lacks upload permission.
+
+    Deliberately distinct from SessionExpiredError: `_with_token_retry` does
+    not treat this as stale, so it never re-uploads the payload. Also a
+    ValueError, so the worker's `_is_retryable_error` fails it immediately
+    rather than re-uploading from its own retry loop.
+    """
+
+
 class FileHostClient:
     """pycurl-based file host uploader with bandwidth tracking."""
 
@@ -939,6 +963,153 @@ class FileHostClient:
 
         # Standard upload
         return self._upload_standard(file_path)
+
+    # Markers that mean "this URL is a login page, not the page we asked for".
+    _LOGIN_URL_MARKERS = ("op=login", "/login")
+
+    def _looks_like_login_page(self, effective_url: str) -> bool:
+        """Detect that a fetch was redirected to a login page.
+
+        Mirrors the check RenameWorker makes for IMX
+        (`'login' in edit_page.url`). FileDot answers an unauthenticated
+        GET /upload with `302 -> ?op=login`.
+        """
+        url = (effective_url or "").lower()
+        return any(marker in url for marker in self._LOGIN_URL_MARKERS)
+
+    def _acquire_session_id(self, upload_url: str) -> Optional[str]:
+        """Obtain the sess_id required to upload as a logged-in user.
+
+        Returns None for hosts that need no sess_id. Raises
+        SessionExpiredError when a session IS required but cannot be
+        obtained — the caller must NOT upload in that case.
+        """
+        if self.config.auth_type != "session":
+            return None
+
+        # Method 1: the session cookie doubles as sess_id (FileSpace).
+        if self.config.session_cookie_name:
+            sess_id = (self.cookie_jar.get(self.config.session_cookie_name) or "").strip()
+            if not sess_id:
+                raise SessionExpiredError(
+                    f"{self.config.name}: session cookie "
+                    f"'{self.config.session_cookie_name}' missing or empty — session expired"
+                )
+            return sess_id
+
+        # Method 2: scrape sess_id from the authenticated upload page (FileDot).
+        if not self.config.session_id_regex:
+            return None
+
+        upload_page_url = self.config.upload_page_url
+        if not upload_page_url:
+            base_url = re.sub(r'/[^/]*$', '', upload_url)
+            upload_page_url = f"{base_url}/upload"
+            if "{" in upload_page_url:
+                # upload_url can still carry an unexpanded {server} template:
+                # _refresh_auth_token passes config.upload_endpoint raw, and
+                # {server} is only substituted inside _upload_standard via
+                # _get_upload_server(). Deriving from it yields "{server}/upload",
+                # which would silently fetch a garbage URL. Fail loudly — this
+                # is a config error, not an expired session, so it is a plain
+                # ValueError and must not trigger a re-login retry.
+                raise ValueError(
+                    f"{self.config.name}: cannot derive an upload page URL from "
+                    f"unexpanded template {upload_url!r} — set upload_page_url "
+                    f"in the host config"
+                )
+
+        cookie_str = "; ".join(f"{k}={v}" for k, v in self.cookie_jar.items())
+
+        page_curl = pycurl.Curl()
+        self._configure_ssl(page_curl)
+        self._configure_proxy(page_curl)
+        page_buffer = BytesIO()
+        try:
+            page_curl.setopt(pycurl.URL, upload_page_url)
+            page_curl.setopt(pycurl.WRITEDATA, page_buffer)
+            page_curl.setopt(pycurl.TIMEOUT, 30)
+            page_curl.setopt(pycurl.USERAGENT, _CHROME_UA)
+            page_curl.setopt(pycurl.FOLLOWLOCATION, True)
+            if cookie_str:
+                page_curl.setopt(pycurl.COOKIE, cookie_str)
+            page_curl.perform()
+
+            response_code = page_curl.getinfo(pycurl.RESPONSE_CODE)
+            effective_url = page_curl.getinfo(pycurl.EFFECTIVE_URL)
+            page_html = page_buffer.getvalue().decode('utf-8', errors='replace')
+        finally:
+            page_curl.close()
+
+        if response_code != 200:
+            raise SessionExpiredError(
+                f"{self.config.name}: upload page returned HTTP {response_code} — session expired"
+            )
+
+        if self._looks_like_login_page(effective_url):
+            raise SessionExpiredError(
+                f"{self.config.name}: upload page redirected to login "
+                f"({effective_url}) — session expired"
+            )
+
+        match = re.search(self.config.session_id_regex, page_html)
+        if not match:
+            raise SessionExpiredError(
+                f"{self.config.name}: no sess_id field on upload page — session expired"
+            )
+
+        sess_id = match.group(1)
+        with self._token_lock:
+            self.auth_token = sess_id
+            self._session_token_timestamp = time.time()
+        return sess_id
+
+    def _session_is_alive(self) -> bool:
+        """Cheaply decide whether the current session is still valid.
+
+        Used to disambiguate an auth-shaped rejection AFTER an upload has
+        already transferred. Fetching a few KB of account page is far cheaper
+        than re-uploading a multi-GB archive to find out.
+
+        Returns True when the account page loads normally (so the session is
+        fine and the host's rejection means what it says), False when it
+        redirects to login or errors (so the session died mid-upload).
+
+        Conservative when it cannot tell: no user_info_url configured means
+        no probe is possible, and it reports True — i.e. treat the rejection
+        as genuine and do NOT re-upload.
+        """
+        if not self.config.user_info_url:
+            return True
+
+        cookie_str = "; ".join(f"{k}={v}" for k, v in self.cookie_jar.items())
+
+        curl = pycurl.Curl()
+        self._configure_ssl(curl)
+        self._configure_proxy(curl)
+        buffer = BytesIO()
+        try:
+            curl.setopt(pycurl.URL, self.config.user_info_url)
+            curl.setopt(pycurl.WRITEDATA, buffer)
+            curl.setopt(pycurl.TIMEOUT, 15)
+            curl.setopt(pycurl.USERAGENT, _CHROME_UA)
+            curl.setopt(pycurl.FOLLOWLOCATION, True)
+            if cookie_str:
+                curl.setopt(pycurl.COOKIE, cookie_str)
+            curl.perform()
+
+            response_code = curl.getinfo(pycurl.RESPONSE_CODE)
+            effective_url = curl.getinfo(pycurl.EFFECTIVE_URL)
+        except pycurl.error:
+            # Network trouble tells us nothing about the session. Report alive
+            # so we fail terminally rather than re-uploading on a guess.
+            return True
+        finally:
+            curl.close()
+
+        if response_code != 200:
+            return False
+        return not self._looks_like_login_page(effective_url)
 
     def _upload_standard(self, file_path: Path) -> Dict[str, Any]:
         """Perform standard single-step upload.
