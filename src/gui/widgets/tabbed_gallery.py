@@ -1031,7 +1031,7 @@ class TabbedGalleryWidget(QWidget):
             menu.addSeparator()
             tab_info = self.tab_manager.get_tab_by_name(base_tab_name)
             if tab_info is not None:
-                posting_action = menu.addAction("Posting…")
+                posting_action = menu.addAction("Tab Settings…")
                 posting_action.triggered.connect(
                     lambda checked, tid=tab_info.id:
                         self._open_tab_posting_config(tid)
