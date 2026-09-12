@@ -10,6 +10,29 @@ from src.utils.logger import log
 from src.core.file_host_config import get_file_host_setting, get_config_manager
 
 
+def _sub_token(text: str, token: str, value: str) -> str:
+    """Replace a #token# placeholder, ignoring the case the user typed.
+
+    The canonical spelling is camelCase (`#fileName#`), but host configs
+    predating that convention use lowercase `#filename#`. Lowercase
+    `#filename#` is also the video contact-sheet placeholder, which
+    ``apply_template`` blanks for image galleries -- so a file host format
+    using it would silently render empty. Consuming every casing here, ahead
+    of ``apply_template``, makes both spellings work without rewriting the
+    user's saved formats.
+
+    The ``#`` delimiters anchor each match, so `#fileName#` cannot match
+    inside `#fileBaseName#`. ``value`` is injected via a lambda so
+    backslashes in filenames aren't interpreted as regex escapes.
+    """
+    return re.sub(
+        r'#' + re.escape(token) + r'#',
+        lambda _m: value,
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
 def _minimal_url(host_id: str, url: str) -> str:
     """Return a shortened URL for hosts that have a known minimal form."""
     if host_id == 'rapidgator':
@@ -101,9 +124,9 @@ def get_file_host_links_for_template(queue_store: QueueStore, gallery_path: str)
                     file_name_basename = get_clean_filename(file_name_basename)
                     stem, ext_with_dot = os.path.splitext(file_name_basename)
                     file_ext = ext_with_dot[1:].lower() if ext_with_dot else ''
-                    formatted = formatted.replace('#fileName#', file_name_basename)
-                    formatted = formatted.replace('#fileBaseName#', stem)
-                    formatted = formatted.replace('#fileExt#', file_ext)
+                    formatted = _sub_token(formatted, 'fileName', file_name_basename)
+                    formatted = _sub_token(formatted, 'fileBaseName', stem)
+                    formatted = _sub_token(formatted, 'fileExt', file_ext)
 
                     # Multi-part placeholders
                     if has_multi_part and len(host_uploads) > 1:

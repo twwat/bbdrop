@@ -2132,9 +2132,9 @@ class BBDropGUI(QMainWindow):
     # Worker signal handling delegated to WorkerSignalHandler
     # =========================================================================
 
-    def _refresh_file_host_widgets_for_db_id(self, db_id: int):
+    def _refresh_file_host_widgets_for_db_id(self, db_id: int, gallery_path: str = ""):
         """Refresh file host widgets for a specific gallery ID."""
-        self.file_host_controller._refresh_file_host_widgets_for_db_id(db_id)
+        self.file_host_controller._refresh_file_host_widgets_for_db_id(db_id, gallery_path)
 
 
     def browse_for_folders(self):

@@ -8,7 +8,7 @@ class TestStartupCredentialCheckRemoved:
     def test_no_check_credentials_method(self):
         """BBDropGUI should not have a check_credentials method."""
         import ast
-        with open("src/gui/main_window.py") as f:
+        with open("src/gui/main_window.py", encoding="utf-8") as f:
             tree = ast.parse(f.read())
 
         methods = []
@@ -23,7 +23,7 @@ class TestStartupCredentialCheckRemoved:
     def test_no_has_imx_credentials_function(self):
         """Module-level has_imx_credentials should not exist."""
         import ast
-        with open("src/gui/main_window.py") as f:
+        with open("src/gui/main_window.py", encoding="utf-8") as f:
             tree = ast.parse(f.read())
 
         top_level_funcs = [

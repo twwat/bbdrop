@@ -338,6 +338,23 @@ def main():
                     log(f"Waiting for {window._file_host_startup_expected} file host worker{'s' if window._file_host_startup_expected != 1 else ''}",
                         level="debug", category="startup")
 
+                # Reclaim temp archives orphaned by a previous session
+                # (crash, kill, or an upload whose gallery never settled).
+                # Deliberately driven from the app entry point rather than
+                # from FileHostWorkerManager: this deletes real files, and
+                # must not fire as a side effect of constructing or
+                # initialising an object (tests do that). Runs before any
+                # worker spawns, so it can't race a live reference.
+                def _sweep_orphaned_archives():
+                    try:
+                        from src.utils.archive_manager import get_archive_manager
+                        get_archive_manager().sweep_orphans()
+                    except Exception as e:
+                        log(f"Orphaned archive sweep failed: {e}",
+                            level="warning", category="startup")
+
+                QTimer.singleShot(50, _sweep_orphaned_archives)
+
                 # Now start the workers
                 QTimer.singleShot(100, lambda: window.file_host_manager.init_enabled_hosts())
 

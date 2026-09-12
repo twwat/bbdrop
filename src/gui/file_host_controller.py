@@ -24,16 +24,21 @@ class FileHostController(QObject):
         self._main_window = main_window
         self._db_id_to_path = {}
 
-    def _refresh_file_host_widgets_for_db_id(self, db_id: int):
+    def _refresh_file_host_widgets_for_db_id(self, db_id: int, gallery_path: str = ""):
         """Refresh file host widgets for a specific gallery ID - OPTIMIZED VERSION
 
         This method is called asynchronously via QTimer to avoid blocking signal emission.
-        Optimized to use O(1) lookups instead of iterating all items.
+        Prefer passing gallery_path (from the worker signal) — it is authoritative.
+        Resolving db_id against item.db_id is a legacy fallback only: item.db_id
+        is a predicted id that can diverge from the real galleries.id.
         """
         try:
             from src.gui.widgets.gallery_table import GalleryTableWidget
 
-            gallery_path = self._db_id_to_path.get(db_id)
+            if gallery_path:
+                self._db_id_to_path[db_id] = gallery_path
+            else:
+                gallery_path = self._db_id_to_path.get(db_id)
 
             if not gallery_path:
                 for item in self._main_window.queue_manager.get_all_items():
@@ -43,14 +48,20 @@ class FileHostController(QObject):
                         break
 
             if not gallery_path:
+                log(f"File host widget refresh skipped: no gallery path for db_id={db_id}",
+                    level="warning", category="file_hosts")
                 return
 
             row = self._main_window.path_to_row.get(gallery_path)
             if row is None:
+                log(f"File host widget refresh skipped: no table row for {gallery_path}",
+                    level="warning", category="file_hosts")
                 return
 
             hosts_item = self._main_window.gallery_table.table.item(row, GalleryTableWidget.COL_HOSTS_STATUS)
             if hosts_item is None:
+                log(f"File host widget refresh skipped: no hosts cell at row {row} for {gallery_path}",
+                    level="warning", category="file_hosts")
                 return
 
             host_uploads = {}
@@ -58,6 +69,9 @@ class FileHostController(QObject):
                 uploads_list = self._main_window.queue_manager.store.get_file_host_uploads(gallery_path)
                 host_uploads = {upload['host_name']: upload for upload in uploads_list}
             except Exception as e:
+                # error, not warning: unlike the skip cases above (which are
+                # expected for rows not on screen), a failed DB read means the
+                # display silently goes stale.
                 log(f"Failed to load file host uploads: {e}", level="error", category="file_hosts")
                 return
 

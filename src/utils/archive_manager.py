@@ -8,6 +8,7 @@ Replaces the ZIP-only ZIPManager with format-agnostic archive creation.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -203,22 +204,89 @@ class ArchiveManager:
             paths, ref_count = self.archive_cache[db_id]
 
             if force_delete:
-                deleted = False
-                for p in paths:
-                    try:
-                        if p.exists():
-                            p.unlink()
-                            deleted = True
-                    except (OSError, PermissionError) as e:
-                        log(f"Failed to delete {p}: {e}", level="error", category="file_hosts")
+                deleted = self._delete_paths(paths)
                 del self.archive_cache[db_id]
                 return deleted
             elif ref_count <= 1:
+                # Deliberately keep the archive at ref 0: an auto-retry can
+                # then reuse it instead of re-zipping the whole gallery.
+                # The caller is responsible for calling cleanup_gallery()
+                # once no further attempt can use it -- see
+                # FileHostWorker._cleanup_archive_if_settled.
                 self.archive_cache[db_id] = (paths, 0)
                 return False
             else:
                 self.archive_cache[db_id] = (paths, ref_count - 1)
                 return False
+
+    def _delete_paths(self, paths: List[Path]) -> bool:
+        """Unlink archive parts, tolerating files already gone.
+
+        Returns True if at least one file was actually removed.
+        """
+        deleted = False
+        for p in paths:
+            try:
+                if p.exists():
+                    p.unlink()
+                    deleted = True
+            except (OSError, PermissionError) as e:
+                log(f"Failed to delete {p}: {e}", level="error", category="file_hosts")
+        return deleted
+
+    def sweep_orphans(self) -> Tuple[int, int]:
+        """Delete stale bbdrop_* archives left in the temp dir.
+
+        Archives from a previous session (crash, kill, or the pre-fix leak)
+        have no cache entry and nothing else will ever remove them. Call this
+        at startup, before any upload takes a reference.
+
+        Archives currently tracked in ``archive_cache`` are skipped so a
+        running upload is never pulled out from under itself.
+
+        Returns:
+            (files_deleted, bytes_freed)
+        """
+        # Matches both forms produced by _generate_archive_name:
+        #   bbdrop_<id>_<safe name>.zip   (named gallery)
+        #   bbdrop_gallery_<id>.zip       (no name, or name sanitised empty)
+        # The trailing [._] keeps 'bbdrop_notanumber.zip' and similar
+        # non-BBDrop files out.
+        pattern = re.compile(r'^bbdrop_(?:gallery_)?\d+[._]')
+        in_use = set()
+        with self.lock:
+            for paths, _ in self.archive_cache.values():
+                in_use.update(str(p) for p in paths)
+
+        deleted = 0
+        freed = 0
+        try:
+            entries = list(self.temp_dir.iterdir())
+        except (OSError, PermissionError) as e:
+            log(f"Could not scan temp dir for orphaned archives: {e}",
+                level="warning", category="file_hosts")
+            return (0, 0)
+
+        for entry in entries:
+            try:
+                if not entry.is_file() or not pattern.match(entry.name):
+                    continue
+                if str(entry) in in_use:
+                    continue
+                size = entry.stat().st_size
+                entry.unlink()
+                deleted += 1
+                freed += size
+            except (OSError, PermissionError) as e:
+                # Locked by another process/session -- leave it alone.
+                log(f"Could not remove orphaned archive {entry}: {e}",
+                    level="debug", category="file_hosts")
+
+        if deleted:
+            log(f"Removed {deleted} orphaned archive(s), freed "
+                f"{freed / (1024 * 1024):.1f} MiB from {self.temp_dir}",
+                level="info", category="file_hosts")
+        return (deleted, freed)
 
     def cleanup_gallery(self, gallery_id: int) -> None:
         """Force cleanup of archive for a gallery."""

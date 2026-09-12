@@ -491,7 +491,7 @@ class ArtifactHandler(QObject):
 
         return True
 
-    def auto_regenerate_for_db_id(self, db_id: int):
+    def auto_regenerate_for_db_id(self, db_id: int, gallery_path: str = ""):
         """Schedule debounced artifact regen for gallery by ID.
 
         A burst of file host completions for the same gallery (K2S family
@@ -499,8 +499,14 @@ class ArtifactHandler(QObject):
         the fully-settled link set. Manual single-host completions still
         regen — they just land after the debounce window.
 
+        Prefer passing gallery_path (from the worker signal): resolving
+        db_id against item.db_id is unreliable because item.db_id is a
+        predicted id that can diverge from the real galleries.id.
+
         Must be called from the GUI thread (QTimer requires it).
         """
+        if gallery_path:
+            self._db_id_to_path[db_id] = gallery_path
         delay_ms = self._get_regen_debounce_ms()
         existing = self._pending_regen_timers.pop(db_id, None)
         if existing is not None:
@@ -509,7 +515,7 @@ class ArtifactHandler(QObject):
 
         timer = QTimer(self)
         timer.setSingleShot(True)
-        timer.timeout.connect(lambda: self._run_auto_regen(db_id))
+        timer.timeout.connect(lambda: self._run_auto_regen(db_id, gallery_path))
         self._pending_regen_timers[db_id] = timer
         timer.start(delay_ms)
 
@@ -525,7 +531,7 @@ class ArtifactHandler(QObject):
         self._pending_regen_timers.clear()
         self._regen_executor.shutdown(wait=False, cancel_futures=True)
 
-    def _run_auto_regen(self, db_id: int):
+    def _run_auto_regen(self, db_id: int, gallery_path: str = ""):
         """Hand the deferred regen to the background executor.
 
         Runs on the GUI thread (QTimer); the actual regen work is file
@@ -535,22 +541,30 @@ class ArtifactHandler(QObject):
         if timer is not None:
             timer.deleteLater()
         try:
-            self._regen_executor.submit(self._auto_regen_background, db_id)
+            self._regen_executor.submit(self._auto_regen_background, db_id, gallery_path)
         except RuntimeError:
             # Executor already shut down — app is tearing down, skip.
             pass
 
-    def _auto_regen_background(self, db_id: int):
-        """Resolve the gallery path and regenerate artifacts (worker thread)."""
+    def _auto_regen_background(self, db_id: int, gallery_path: str = ""):
+        """Regenerate artifacts for the gallery (worker thread).
+
+        gallery_path from the worker signal is authoritative; db_id
+        resolution against item.db_id is a legacy fallback only.
+        """
         try:
-            path = self._db_id_to_path.get(db_id)
+            path = gallery_path or self._db_id_to_path.get(db_id)
             if not path:
                 for item in self._queue_manager.get_all_items():
                     if item.db_id == db_id:
                         path = item.path
                         self._db_id_to_path[db_id] = path
                         break
-            if path and self.should_auto_regenerate_bbcode(path):
+            if not path:
+                log(f"Auto-regen skipped: no gallery path for db_id={db_id}",
+                    level="warning", category="artifact")
+                return
+            if self.should_auto_regenerate_bbcode(path):
                 self.regenerate_bbcode_for_gallery(path, force=False)
         except Exception as e:
             log(f"Auto-regen failed for db_id={db_id}: {e}",

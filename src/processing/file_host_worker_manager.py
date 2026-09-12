@@ -33,10 +33,10 @@ class FileHostWorkerManager(QObject):
     test_completed = pyqtSignal(str, dict)  # host_id, results_dict
     spinup_complete = pyqtSignal(str, str)  # host_id, error_message
     enabled_workers_changed = pyqtSignal(list)  # List of enabled host_ids
-    upload_started = pyqtSignal(int, str)  # gallery_id, host_name
-    upload_progress = pyqtSignal(int, str, object, object, float)  # gallery_id, host_name, uploaded, total, speed_bps
-    upload_completed = pyqtSignal(int, str, dict)  # gallery_id, host_name, result
-    upload_failed = pyqtSignal(int, str, str)  # gallery_id, host_name, error
+    upload_started = pyqtSignal(int, str, str)  # gallery_id, host_name, gallery_path
+    upload_progress = pyqtSignal(int, str, object, object, float, str)  # gallery_id, host_name, uploaded, total, speed_bps, gallery_path
+    upload_completed = pyqtSignal(int, str, dict, str)  # gallery_id, host_name, result, gallery_path
+    upload_failed = pyqtSignal(int, str, str, str)  # gallery_id, host_name, error, gallery_path
     bandwidth_updated = pyqtSignal(str, float)  # host_id, KB/s
     worker_status_updated = pyqtSignal(str, str)  # host_id, status_text
 
@@ -219,6 +219,19 @@ class FileHostWorkerManager(QObject):
         # Always cancel any in-flight md5 pollers first, even if there are no
         # workers left — the coordinator's Timers outlive individual workers.
         self.family_coordinator.shutdown()
+
+        # Drop any archives still cached, regardless of refcount — nothing
+        # will upload them after this point. Runs before the early return so
+        # a session that never spawned a worker still cleans up.
+        try:
+            from src.utils.archive_manager import get_archive_manager
+            removed = get_archive_manager().cleanup_all()
+            if removed:
+                log(f"Removed {removed} temp archive(s) at shutdown",
+                    level="info", category="file_hosts")
+        except Exception as e:
+            log(f"Archive cleanup at shutdown failed: {e}",
+                level="warning", category="file_hosts")
 
         if not self.workers:
             return

@@ -57,6 +57,10 @@ class WorkerSignalHandler(QObject):
         # Gallery paths needing a per-row refresh on the next pass.
         self._rows_needing_refresh: set[str] = set()
 
+        # Guards 'queue_finished' so a run announces completion once, not
+        # once per gallery. Reset in start_worker for each new run.
+        self._queue_finished_notified = False
+
     @property
     def _mw(self):
         """Get main window reference, or None if C++ object was deleted."""
@@ -74,6 +78,8 @@ class WorkerSignalHandler(QObject):
         if not mw:
             return
         if mw.worker is None or not mw.worker.isRunning():
+            # New run -- allow 'queue_finished' to fire again.
+            self._queue_finished_notified = False
             mw.worker = UploadWorker(
                 mw.queue_manager,
                 peak_bandwidth_callback=lambda: self.bandwidth_manager._upload_source.peak_value,
@@ -158,15 +164,37 @@ class WorkerSignalHandler(QObject):
     # File Host Upload Signal Handlers
     # =========================================================================
 
-    def on_file_host_upload_started(self, db_id: int, host_name: str):
+    def _seed_db_id_path(self, db_id: int, gallery_path: str) -> str:
+        """Record the authoritative db_id -> path mapping from a worker signal.
+
+        The signal's gallery_path comes straight from the file_host_uploads
+        row, so it is always correct. Falls back to the cache for legacy
+        callers that don't pass a path; logs when resolution fails entirely
+        (previously a silent no-op that left rows stale).
+        """
+        mw = self._mw
+        if mw is None:
+            return gallery_path
+        if gallery_path:
+            mw.file_host_controller._db_id_to_path[db_id] = gallery_path
+            return gallery_path
+        resolved = mw.file_host_controller._db_id_to_path.get(db_id)
+        if not resolved:
+            log(f"Could not resolve gallery path for db_id={db_id}; "
+                "row display may go stale", level="warning", category="file_hosts")
+        return resolved or ""
+
+    def on_file_host_upload_started(self, db_id: int, host_name: str, gallery_path: str = ""):
         """Handle file host upload started - ASYNC to prevent blocking main thread."""
+        gallery_path = self._seed_db_id_path(db_id, gallery_path)
         # Defer UI refresh to avoid blocking signal emission
-        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id))
+        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
         # Update queue display for this host so bytes column populates immediately
         self._update_filehost_queue_for_host(host_name)
 
     def on_file_host_upload_progress(self, db_id: int, host_name: str,
-                                      uploaded_bytes: int, total_bytes: int, speed_bps: float = 0.0):
+                                      uploaded_bytes: int, total_bytes: int,
+                                      speed_bps: float = 0.0, gallery_path: str = ""):
         """Handle file host upload progress with detailed display."""
         try:
             # Calculate percentage
@@ -188,11 +216,9 @@ class WorkerSignalHandler(QObject):
             # but we DO want the overall byte-weighted bar AND the gallery
             # row that owns this upload to move, so schedule a throttled
             # refresh (150ms coalesced singleshot).
-            mw = self._mw
-            if mw is not None:
-                gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
-                if gallery_path:
-                    self._rows_needing_refresh.add(gallery_path)
+            gallery_path = self._seed_db_id_path(db_id, gallery_path)
+            if gallery_path:
+                self._rows_needing_refresh.add(gallery_path)
             self._request_refresh()
         except Exception as e:
             log(f"Error handling file host upload progress: {e}", level="error", category="file_hosts")
@@ -257,14 +283,16 @@ class WorkerSignalHandler(QObject):
                 log(f"Error refreshing row for {path}: {e}",
                     level="warning", category="ui")
 
-    def on_file_host_upload_completed(self, db_id: int, host_name: str, result: dict):
+    def on_file_host_upload_completed(self, db_id: int, host_name: str, result: dict,
+                                       gallery_path: str = ""):
         """Handle file host upload completed - ASYNC to prevent blocking main thread."""
         mw = self._mw
+        gallery_path = self._seed_db_id_path(db_id, gallery_path)
         # Defer UI refresh to avoid blocking signal emission
         # Use QTimer.singleShot(0) to schedule on next event loop iteration
-        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id))
+        QTimer.singleShot(0, lambda: mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
         # Trigger artifact regeneration if auto-regenerate is enabled (non-blocking, after UI refresh)
-        QTimer.singleShot(100, lambda: self._mw and self._mw.artifact_handler.auto_regenerate_for_db_id(db_id))
+        QTimer.singleShot(100, lambda: mw.artifact_handler.auto_regenerate_for_db_id(db_id, gallery_path))
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
@@ -276,13 +304,17 @@ class WorkerSignalHandler(QObject):
             msg = f"Deduped on {display_host}: {gallery_name}" if gallery_name else f"Deduped on {display_host}"
             mw.show_status_message(msg, 5000)
 
-        gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
+        # Re-check gallery completion: if this was the last outstanding
+        # file host row, fire the delayed gallery_completed notification.
         if gallery_path:
             try:
                 mw.upload_lifecycle_handler.maybe_notify_gallery_done(gallery_path)
             except Exception as e:
                 log(f"Error re-checking gallery completion after file host: {e}",
                     level="warning", category="ui")
+            # Mark the row dirty so its progress bar and effective status flip
+            # to their final value (100% / Completed if this was the last file
+            # host row) on the coalesced pass below.
             self._rows_needing_refresh.add(gallery_path)
 
         # One coalesced, leading-edge refresh (overall bar + dirty rows) — no
@@ -294,18 +326,28 @@ class WorkerSignalHandler(QObject):
         if hasattr(mw, 'notification_manager'):
             mw.notification_manager.notify('filehost_upload_completed')
 
-    def on_file_host_upload_failed(self, db_id: int, host_name: str, error_message: str):
+        # Image uploads usually finish before the file hosts do, so the
+        # run-level check that ran back then would have been suppressed.
+        # Re-check now that this row has settled.
+        self._maybe_notify_queue_finished()
+
+    def on_file_host_upload_failed(self, db_id: int, host_name: str, error_message: str,
+                                    gallery_path: str = ""):
         """Handle file host upload failed - ASYNC to prevent blocking main thread."""
         log(f"File host upload failed: {host_name} for gallery {db_id}: {error_message}",
             level="warning", category="file_hosts")
+        gallery_path = self._seed_db_id_path(db_id, gallery_path)
         # Defer UI refresh to avoid blocking signal emission
-        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id))
+        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
+        # Refresh the gallery row so its progress bar reflects the
+        # now-stalled file host contribution; effective status keeps
+        # showing "uploading" while retries are pending (matches
+        # gallery_completed notification logic).
         mw = self._mw
         if mw is not None:
-            gallery_path = mw.file_host_controller._db_id_to_path.get(db_id)
             if gallery_path:
                 self._rows_needing_refresh.add(gallery_path)
             self._request_refresh()
@@ -313,6 +355,10 @@ class WorkerSignalHandler(QObject):
         # Fire notification
         if hasattr(mw, 'notification_manager'):
             mw.notification_manager.notify('filehost_upload_failed', detail=error_message[:80])
+
+        # A terminal failure can be the last outstanding row for the run.
+        # Re-check so the run still reports finished instead of going quiet.
+        self._maybe_notify_queue_finished()
 
     def _resolve_gallery_name(self, db_id: int) -> str:
         """Resolve gallery display name from db_id via the file host controller's cache."""
@@ -479,17 +525,64 @@ class WorkerSignalHandler(QObject):
             host_id=host_id
         )
 
-        # Check if entire queue is done (no more queued/uploading items)
+        self._maybe_notify_queue_finished()
+
+    # File host row statuses that still represent outstanding work. 'failed'
+    # and 'cancelled' are deliberately excluded -- they're terminal, and
+    # treating them as outstanding would suppress the notification forever.
+    _FILE_HOST_ACTIVE_STATUSES = ("pending", "uploading")
+
+    def _file_host_work_outstanding(self, items) -> bool:
+        """True if any queued gallery still has a file host upload running.
+
+        Only galleries currently in the queue are considered: the batch query
+        returns every gallery in the database, and a stale pending row from a
+        past session would otherwise suppress the notification permanently.
+
+        On a read failure this returns False -- better to notify than to go
+        silent for the rest of the session.
+        """
+        mw = self._mw
+        if mw is None:
+            return False
+        try:
+            rows_by_path = mw.queue_manager.store.get_all_file_host_uploads_batch() or {}
+        except Exception as e:
+            log(f"Could not read file host rows for completion check: {e}",
+                level="warning", category="notifications")
+            return False
+
+        for item in items:
+            for row in rows_by_path.get(getattr(item, 'path', ''), []):
+                if row.get('deduped'):
+                    continue
+                if row.get('status') in self._FILE_HOST_ACTIVE_STATUSES:
+                    return True
+        return False
+
+    def _maybe_notify_queue_finished(self):
+        """Fire 'queue_finished' once, when image AND file host work is done.
+
+        Called from per-gallery finished signals, so it must gate itself:
+        without the guard it re-announced after every gallery.
+        """
+        mw = self._mw
+        if mw is None or self._queue_finished_notified:
+            return
         try:
             items = mw.queue_manager.get_all_items()
-            any_active = any(i.status in ("queued", "uploading") for i in items)
-            if not any_active and hasattr(mw, 'notification_manager'):
+            if any(i.status in ("queued", "uploading") for i in items):
+                return
+            if self._file_host_work_outstanding(items):
+                return
+            self._queue_finished_notified = True
+            if hasattr(mw, 'notification_manager'):
                 mw.notification_manager.notify('queue_finished')
         except Exception as e:
             log(f"Error checking queue status for notification: {e}",
                 level="warning", category="notifications")
 
-    def _on_filehost_worker_started(self, db_id: int, host_name: str):
+    def _on_filehost_worker_started(self, db_id: int, host_name: str, gallery_path: str = ""):
         """Handle file host worker upload started."""
         mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
@@ -506,7 +599,8 @@ class WorkerSignalHandler(QObject):
         )
 
     def _on_filehost_worker_progress(self, db_id: int, host_name: str,
-                                      uploaded: int, total: int, speed_bps: float):
+                                      uploaded: int, total: int, speed_bps: float,
+                                      gallery_path: str = ""):
         """Handle file host worker upload progress."""
         mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
@@ -542,7 +636,8 @@ class WorkerSignalHandler(QObject):
                 worker.bytes_remaining = adjusted
                 mw.worker_status_widget._update_bytes_remaining(worker_id, adjusted)
 
-    def _on_filehost_worker_completed(self, db_id: int, host_name: str, result: dict):
+    def _on_filehost_worker_completed(self, db_id: int, host_name: str, result: dict,
+                                       gallery_path: str = ""):
         """Handle file host worker upload completion."""
         # Deactivate file host bandwidth source so monitor shows 0
         self.bandwidth_manager.on_host_completed(host_name)
@@ -561,7 +656,8 @@ class WorkerSignalHandler(QObject):
             host_id=host_name.lower()
         )
 
-    def _on_filehost_worker_failed(self, db_id: int, host_name: str, error: str):
+    def _on_filehost_worker_failed(self, db_id: int, host_name: str, error: str,
+                                    gallery_path: str = ""):
         """Handle file host worker upload failure."""
         mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):

@@ -183,3 +183,121 @@ class TestGetFileHostLinksForTemplate:
 
         result = get_file_host_links_for_template(mock_store, "/path/gallery")
         assert result == "[||]"
+
+
+class TestFilenamePlaceholderCaseInsensitivity:
+    """Filename tokens must resolve regardless of the case the user typed.
+
+    Older host configs (and the built-in defaults shipped before the
+    camelCase convention landed) use lowercase `#filename#`. That token
+    collides with the video contact-sheet `#filename#` in apply_template,
+    which blanks it for image galleries. Consuming it here -- before
+    apply_template runs -- fixes both spellings without touching the INI.
+    """
+
+    def _store(self, file_name, part_number=0, extra=None):
+        rows = [{
+            'host_name': 'filedot',
+            'status': 'completed',
+            'download_url': 'https://filedot.to/abc',
+            'part_number': part_number,
+            'file_size': 1024,
+            'file_name': file_name,
+        }]
+        if extra:
+            rows.extend(extra)
+        store = Mock()
+        store.get_file_host_uploads.return_value = rows
+        return store
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("token", ["#fileName#", "#filename#", "#FileName#"])
+    @patch('src.utils.template_utils.get_config_manager')
+    @patch('src.utils.template_utils.get_file_host_setting')
+    def test_filename_token_any_case(self, mock_setting, mock_config_mgr, token):
+        """All casings of the filename token resolve to the uploaded name."""
+        from src.utils.template_utils import get_file_host_links_for_template
+
+        host_config = Mock()
+        host_config.name = "Filedot"
+        mock_config_mgr.return_value.hosts = {'filedot': host_config}
+        mock_setting.return_value = f"[url=#link#]{token}[/url]"
+
+        store = self._store('Gallery.zip')
+        result = get_file_host_links_for_template(store, "/path/gallery")
+        assert result == "[url=https://filedot.to/abc]Gallery.zip[/url]"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("token,expected", [
+        ("#fileBaseName#", "Gallery.part1"),
+        ("#filebasename#", "Gallery.part1"),
+        ("#fileExt#", "rar"),
+        ("#fileext#", "rar"),
+    ])
+    @patch('src.utils.template_utils.get_config_manager')
+    @patch('src.utils.template_utils.get_file_host_setting')
+    def test_basename_and_ext_tokens_any_case(self, mock_setting, mock_config_mgr,
+                                              token, expected):
+        """#fileBaseName# / #fileExt# are also case-insensitive."""
+        from src.utils.template_utils import get_file_host_links_for_template
+
+        host_config = Mock()
+        host_config.name = "Filedot"
+        mock_config_mgr.return_value.hosts = {'filedot': host_config}
+        mock_setting.return_value = f"[{token}]"
+
+        store = self._store('Gallery.part1.rar')
+        result = get_file_host_links_for_template(store, "/path/gallery")
+        assert result == f"[{expected}]"
+
+    @pytest.mark.unit
+    @patch('src.utils.template_utils.get_config_manager')
+    @patch('src.utils.template_utils.get_file_host_setting')
+    def test_filename_token_does_not_eat_basename_token(self, mock_setting, mock_config_mgr):
+        """#fileName# must not match inside #fileBaseName#."""
+        from src.utils.template_utils import get_file_host_links_for_template
+
+        host_config = Mock()
+        host_config.name = "Filedot"
+        mock_config_mgr.return_value.hosts = {'filedot': host_config}
+        mock_setting.return_value = "#filename#|#filebasename#|#fileext#"
+
+        store = self._store('Gallery.part1.rar')
+        result = get_file_host_links_for_template(store, "/path/gallery")
+        assert result == "Gallery.part1.rar|Gallery.part1|rar"
+
+    @pytest.mark.unit
+    @patch('src.utils.template_utils.get_config_manager')
+    @patch('src.utils.template_utils.get_file_host_setting')
+    def test_split_archive_uses_per_part_filename(self, mock_setting, mock_config_mgr):
+        """Split archives resolve each part's own filename, non-split the single one."""
+        from src.utils.template_utils import get_file_host_links_for_template
+
+        host_config = Mock()
+        host_config.name = "Filedot"
+        mock_config_mgr.return_value.hosts = {'filedot': host_config}
+        mock_setting.return_value = "#filename#"
+
+        store = self._store('Gallery.part1.rar', part_number=0, extra=[{
+            'host_name': 'filedot',
+            'status': 'completed',
+            'download_url': 'https://filedot.to/def',
+            'part_number': 1,
+            'file_size': 1024,
+            'file_name': 'Gallery.part2.rar',
+        }])
+        result = get_file_host_links_for_template(store, "/path/gallery")
+        assert result.split("\n") == ["Gallery.part1.rar", "Gallery.part2.rar"]
+
+    @pytest.mark.unit
+    def test_backslash_in_value_is_literal(self):
+        """A backslash in the value must not be read as a regex backreference.
+
+        Tested against the helper directly: os.path.basename strips at the
+        backslash on Windows, so this can't be driven end-to-end there, but
+        the substitution must stay literal on every platform.
+        """
+        from src.utils.template_utils import _sub_token
+
+        assert _sub_token('#fileName#', 'fileName', r'Odd\1Name.zip') == r'Odd\1Name.zip'
+        assert _sub_token('#fileName#', 'fileName', r'A\g<0>B') == r'A\g<0>B'

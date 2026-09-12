@@ -45,10 +45,14 @@ class FileHostWorker(QThread):
     SPINUP_RETRY_MAX_TIME_DEFAULT = 600
 
     # Signals for communication with GUI
-    upload_started = pyqtSignal(int, str)  # db_id, host_name
-    upload_progress = pyqtSignal(int, str, object, object, float)  # db_id, host_name, uploaded_bytes, total_bytes, speed_bps
-    upload_completed = pyqtSignal(int, str, dict)  # db_id, host_name, result_dict
-    upload_failed = pyqtSignal(int, str, str)  # db_id, host_name, error_message
+    # gallery_path rides along on every upload signal so GUI handlers can act
+    # on the row directly. db_id (gallery_fk) must NOT be resolved against
+    # in-memory item.db_id — that value is a *predicted* id that can diverge
+    # from the real galleries.id (see filehost-row-update bug).
+    upload_started = pyqtSignal(int, str, str)  # db_id, host_name, gallery_path
+    upload_progress = pyqtSignal(int, str, object, object, float, str)  # db_id, host_name, uploaded_bytes, total_bytes, speed_bps, gallery_path
+    upload_completed = pyqtSignal(int, str, dict, str)  # db_id, host_name, result_dict, gallery_path
+    upload_failed = pyqtSignal(int, str, str, str)  # db_id, host_name, error_message, gallery_path
     bandwidth_updated = pyqtSignal(str, float)  # host_id, KB/s from pycurl
     log_message = pyqtSignal([str], [str, str])  # Overloaded: (message) or (level, message) for backward compatibility
 
@@ -643,7 +647,7 @@ class FileHostWorker(QThread):
 
                     self._log(f"FAIL FAST: {error_msg}", level="warning")
                     # CRITICAL: Emit signal FIRST before DB write (fail-fast path)
-                    self.upload_failed.emit(db_id, host_name, error_msg)
+                    self.upload_failed.emit(db_id, host_name, error_msg, gallery_path)
                     self.queue_store.update_file_host_upload(
                         upload_id,
                         status='failed',
@@ -655,7 +659,7 @@ class FileHostWorker(QThread):
                 if not folder_path.is_dir() and not folder_path.is_file():
                     error_msg = f"Path does not exist: {gallery_path}"
                     self._log(f"FAIL FAST: {error_msg}", level="warning")
-                    self.upload_failed.emit(db_id, host_name, error_msg)
+                    self.upload_failed.emit(db_id, host_name, error_msg, gallery_path)
                     self.queue_store.update_file_host_upload(
                         upload_id,
                         status='failed',
@@ -775,7 +779,7 @@ class FileHostWorker(QThread):
             self._hash_created_ts = time.time()
             self.status_updated.emit(self.host_id, "hash_created")
             # Emit upload_completed so GUI refreshes queue display and artifacts
-            self.upload_completed.emit(db_id, host_name, {'status': 'success', 'deduplication': True})
+            self.upload_completed.emit(db_id, host_name, {'status': 'success', 'deduplication': True}, gallery_path)
             self.host_gallery_settled.emit(db_id, host_name, True)
             return
 
@@ -856,7 +860,7 @@ class FileHostWorker(QThread):
 
         # CRITICAL: Emit started signal FIRST before database write
         # This ensures GUI gets immediate notification without waiting for DB
-        self.upload_started.emit(db_id, host_name)
+        self.upload_started.emit(db_id, host_name, gallery_path)
 
         # Update status to uploading (AFTER signal emission)
         self.queue_store.update_file_host_upload(
@@ -1018,7 +1022,7 @@ class FileHostWorker(QThread):
 
                     # Emit outside the lock to avoid deadlocks
                     if should_emit:
-                        self.upload_progress.emit(db_id, host_name, uploaded, total, speed_bps)
+                        self.upload_progress.emit(db_id, host_name, uploaded, total, speed_bps, gallery_path)
 
                     # Emit bandwidth periodically (speed_bps is bytes/sec, convert to KB/s)
                     # Only emit when we have actual speed data - don't emit 0 during
@@ -1222,7 +1226,7 @@ class FileHostWorker(QThread):
 
             # All parts uploaded successfully
             # CRITICAL: Emit signal FIRST before any blocking operations
-            self.upload_completed.emit(db_id, host_name, result)
+            self.upload_completed.emit(db_id, host_name, result, gallery_path)
 
             # Increment shared K2S family storage counter
             if get_host_family(self.host_id) == 'k2s':
@@ -1280,7 +1284,7 @@ class FileHostWorker(QThread):
             else:
                 # CRITICAL: Emit failed signal FIRST before blocking operations
                 # This ensures GUI gets immediate notification
-                self.upload_failed.emit(db_id, host_name, error_msg)
+                self.upload_failed.emit(db_id, host_name, error_msg, gallery_path)
 
                 self._cleanup_upload_throttle_state(db_id, host_name)
 
@@ -1313,12 +1317,47 @@ class FileHostWorker(QThread):
             # Release ZIP reference only if an archive was actually created
             if archive_created:
                 self.archive_manager.release_archive(db_id)
+                # release_archive() intentionally keeps the archive at ref 0
+                # so an auto-retry can reuse it. Nothing ever reclaimed it
+                # afterwards, so every finished gallery leaked its archive
+                # into the temp dir. Drop it once no retry can still need it.
+                self._cleanup_archive_if_settled(db_id, gallery_path)
 
             # Clear current upload tracking
             self.current_upload_id = None
             self.current_host = None
             self.current_db_id = None
             self._should_stop_current = False
+
+    # Row statuses that mean another upload attempt could still reuse the
+    # cached archive: queued for retry, in flight, or waiting on a family
+    # primary that will unblock it.
+    _ARCHIVE_RETAIN_STATUSES = ('pending', 'uploading', 'blocked')
+
+    def _cleanup_archive_if_settled(self, db_id: int, gallery_path: str) -> None:
+        """Delete the cached archive once no attempt can still use it.
+
+        Checks every file host row for the gallery, not just this worker's:
+        a second host that hasn't started yet would otherwise have to re-zip.
+        Failures are non-fatal -- worst case the archive is reclaimed by the
+        startup sweep instead.
+        """
+        try:
+            rows = self.queue_store.get_file_host_uploads(gallery_path)
+        except Exception as e:
+            self._log(
+                f"Could not check archive settle state for gallery {db_id}: {e}",
+                level="debug")
+            return
+
+        if any(r.get('status') in self._ARCHIVE_RETAIN_STATUSES for r in rows):
+            return
+
+        try:
+            self.archive_manager.cleanup_gallery(db_id)
+        except Exception as e:
+            self._log(f"Archive cleanup failed for gallery {db_id}: {e}",
+                      level="warning")
 
     def _try_family_mirror(self, row: dict, client, family) -> bool:
         """Attempt to mirror a family primary's completed part set via hash dedup.
