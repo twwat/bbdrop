@@ -25,7 +25,8 @@
       "login": "{username}",
       "password": "{password}"
     },
-    "session_cookie_name": "xfss"
+    "session_cookie_name": "xfss",
+    "session_token_ttl": 3600
   },
   "defaults": {
     "max_file_size_mb": 5000,

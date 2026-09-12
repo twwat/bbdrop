@@ -7,7 +7,9 @@
   "upload": {
     "endpoint": "{server}/upload.cgi",
     "get_server": "https://filedot.to/server",
-    "server_response_path": ["url"],
+    "server_response_path": [
+      "url"
+    ],
     "method": "POST",
     "file_field": "file_0",
     "extra_fields": {
@@ -41,9 +43,12 @@
     "stale_token_patterns": [
       "Anti-CSRF check failed",
       "session.*expired",
-      "token.*invalid"
+      "token.*invalid",
+      "uploads are not enabled for your account type",
+      "\"file_code\"\\s*:\\s*\"undef\""
     ],
-    "check_body_on_success": true
+    "check_body_on_success": true,
+    "session_token_ttl": 3600
   },
   "defaults": {
     "max_file_size_mb": 5120,
@@ -55,7 +60,10 @@
   "delete": {
     "url": "https://filedot.to/?op=my_files",
     "method": "POST",
-    "params": ["del_code", "sess_id"]
+    "params": [
+      "del_code",
+      "sess_id"
+    ]
   },
   "user_info": {
     "url": "https://filedot.to/account/",

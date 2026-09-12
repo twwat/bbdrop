@@ -500,3 +500,52 @@ class TestSessionRefresh:
 
         assert client.cookie_jar.get("xfss") == "fresh"
         assert client._session_token_timestamp is not None
+
+
+@pytest.mark.unit
+class TestSessionHostConfigs:
+    """Reads the real host JSON. Uses the session-scoped `project_root`
+    fixture from tests/conftest.py:280 rather than a CWD-relative path — a
+    bare Path("assets/...") resolves against the process working directory
+    and breaks under IDE runners or any invocation from outside the repo
+    root, even though it happens to work for `pytest` launched there."""
+
+    @pytest.mark.parametrize("host_file", ["filedot", "filespace"])
+    def test_session_hosts_declare_ttl(self, host_file, project_root):
+        """Without a TTL, _is_token_stale() never fires and the proactive
+        half of _with_token_retry is dead code."""
+        data = json.loads(
+            (project_root / "assets" / "hosts" / f"{host_file}.json")
+            .read_text(encoding="utf-8"))
+
+        assert data["auth_type"] == "session"
+        ttl = data["auth"].get("session_token_ttl")
+        assert isinstance(ttl, int) and ttl > 0
+
+    def test_filedot_stale_patterns_match_real_rejection(
+        self, filedot_config, bandwidth_counter, project_root
+    ):
+        """The exact body FileDot returned on 2026-09-08."""
+        data = json.loads(
+            (project_root / "assets" / "hosts" / "filedot.json")
+            .read_text(encoding="utf-8"))
+        filedot_config.stale_token_patterns = data["auth"]["stale_token_patterns"]
+
+        client = build_client(filedot_config, bandwidth_counter)
+        body = ('{"file_code": "undef", "file_status": '
+                '"uploads are not enabled for your account type"}')
+
+        assert client._detect_stale_token_error(body, 200) is True
+
+    def test_filedot_patterns_do_not_match_success(
+        self, filedot_config, bandwidth_counter, project_root
+    ):
+        data = json.loads(
+            (project_root / "assets" / "hosts" / "filedot.json")
+            .read_text(encoding="utf-8"))
+        filedot_config.stale_token_patterns = data["auth"]["stale_token_patterns"]
+
+        client = build_client(filedot_config, bandwidth_counter)
+        body = '{"file_code": "ldw7tefsiyzn", "file_status": "OK"}'
+
+        assert client._detect_stale_token_error(body, 200) is False
