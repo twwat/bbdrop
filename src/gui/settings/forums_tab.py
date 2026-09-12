@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 
 from src.gui.dialogs.forum_credential_test_dialog import ForumCredentialTestDialog
 from src.gui.widgets.info_button import InfoButton
+from src.utils.paths import get_base_path
 from src.gui.widgets.target_kind_delegate import (
     TARGET_KIND_ROLE, TARGET_TID_ROLE, TargetKindDelegate,
 )
@@ -68,9 +69,10 @@ class _FaviconFetcher(QObject):
 
     def __init__(self):
         super().__init__()
-        self._cache_dir = os.path.join(
-            os.path.expanduser("~"), ".bbdrop", "favicons",
-        )
+        # Via get_base_path(), not a hardcoded ~/.bbdrop: that is only the
+        # default location, and a portable or custom install would otherwise
+        # scatter its favicon cache into the user's home directory.
+        self._cache_dir = os.path.join(get_base_path(), "favicons")
         try:
             os.makedirs(self._cache_dir, exist_ok=True)
         except OSError:

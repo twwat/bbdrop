@@ -37,9 +37,18 @@ def find_gallery_json_by_id(gallery_id: str, gallery_path: Optional[str] = None)
         if os.path.exists(central_path):
             search_locations.append(central_path)
     except (ImportError, Exception):
-        # Fallback to hardcoded path if imports fail
-        home = os.path.expanduser("~")
-        fallback_central = os.path.join(home, ".bbdrop", "galleries")
+        # Resolve the user's ACTUAL data directory rather than assuming
+        # ~/.bbdrop, which is only the default -- a portable or custom install
+        # would otherwise have its galleries looked for in the wrong place.
+        # get_base_path is imported separately because the failure above may
+        # have been the get_central_storage_path import specifically; only if
+        # paths is wholly unavailable do we use the default location.
+        try:
+            from src.utils.paths import get_base_path
+            fallback_base = get_base_path()
+        except Exception:
+            fallback_base = os.path.join(os.path.expanduser("~"), ".bbdrop")
+        fallback_central = os.path.join(fallback_base, "galleries")
         if os.path.exists(fallback_central):
             search_locations.append(fallback_central)
 

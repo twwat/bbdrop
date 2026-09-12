@@ -135,7 +135,6 @@ DEFAULT_CHUNK_SIZE = 8192
 MAX_QUEUE_SIZE = 1000
 
 # File Paths
-CONFIG_DIR_NAME = ".bbdrop"
 CONFIG_FILE_NAME = "bbdrop.ini"
 DATABASE_FILE_NAME = "bbdrop.db"
 TEMPLATES_DIR_NAME = "templates"

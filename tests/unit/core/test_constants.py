@@ -479,11 +479,6 @@ class TestPerformanceSettings:
 class TestFilePaths:
     """Test suite for file path and directory name constants."""
 
-    def test_config_dir_name_starts_with_dot(self):
-        """Test CONFIG_DIR_NAME is hidden directory."""
-        assert CONFIG_DIR_NAME == ".bbdrop"
-        assert CONFIG_DIR_NAME.startswith('.')
-
     def test_file_names_have_correct_extensions(self):
         """Test configuration file names have correct extensions."""
         assert CONFIG_FILE_NAME == "bbdrop.ini"

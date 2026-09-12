@@ -111,3 +111,138 @@ class TestSuiteWideIsolation:
         assert os.environ.get("BBDROP_BASE_PATH"), (
             "BBDROP_BASE_PATH is unset during the run; isolation is not active"
         )
+
+
+@pytest.mark.unit
+class TestNoHardcodedHomePaths:
+
+    # Allowed (path, literal) pairs -- NOT whole files.
+    #
+    # Keying on the file alone would mean a NEW hardcoded path added to an
+    # allowlisted file is invisible forever. That matters most for
+    # general_tab.py, which is a settings tab that writes config: the exact
+    # file class that caused this bug.
+    # Allowed (path, line, literal) triples -- NOT whole files, and NOT
+    # (path, literal) either. Literal-keying would let a NEW hardcoded
+    # ~/.bbdrop anywhere in an already-listed file pass silently. Line-keying
+    # fails loudly when code moves, which is the safe direction: someone
+    # re-verifies rather than a bypass slipping through.
+    _ALLOWED = {
+        # The one legitimate definition site.
+        ("src/utils/paths.py", 98, ".bbdrop"),
+        ("src/utils/paths.py", 186, ".bbdrop"),
+        ("src/utils/paths.py", 328, ".bbdrop"),
+        # Portable-install path: joined to the APP root, not the user's home,
+        # so it cannot reach real user data.
+        ("src/gui/settings/general_tab.py", 117, ".bbdrop"),
+        ("src/gui/settings/general_tab.py", 477, ".bbdrop"),
+        # Last-resort defaults, reached ONLY when src.utils.paths is itself
+        # unavailable -- these sit inside `except` handlers whose whole purpose
+        # is that get_base_path() could not be imported. No other value exists
+        # at that point, and both try get_base_path() first.
+        ("src/gui/main_window.py", 1515, "~/.bbdrop"),
+        ("src/utils/artifact_finder.py", 50, ".bbdrop"),
+    }
+
+    def test_no_source_file_rebuilds_the_base_path_by_hand(self):
+        """AST-based on purpose.
+
+        A line-regex version of this test was blind to 4 of the 5 bypasses
+        that existed when it was written: three used the `~/.bbdrop` tilde-path
+        form rather than a bare `~`, and one split `expanduser("~")` and the
+        `.bbdrop` join across two lines. It reported a clean bill of health
+        while the worst offenders -- main_window's import-failure fallback,
+        which is exactly what a GUI test with mocked imports hits -- sat
+        untouched.
+
+        Walking the AST for string constants catches every spelling, and
+        skipping docstrings keeps the ~12 prose mentions of "~/.bbdrop" from
+        drowning the signal.
+        """
+        import ast
+        from pathlib import Path as P
+
+        def docstring_nodes(tree):
+            """Every Constant node that is a module/class/function docstring."""
+            out = set()
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Module, ast.ClassDef,
+                                     ast.FunctionDef, ast.AsyncFunctionDef)):
+                    body = getattr(node, "body", None)
+                    if body and isinstance(body[0], ast.Expr) and \
+                            isinstance(body[0].value, ast.Constant) and \
+                            isinstance(body[0].value.value, str):
+                        out.add(id(body[0].value))
+            return out
+
+        # Anchored to the repo, NOT the cwd. A bare P("src") resolves against
+        # whatever directory pytest was invoked from, so running from anywhere
+        # but the repo root would find zero files and pass vacuously -- a
+        # guard test that silently certifies nothing.
+        src_root = P(__file__).resolve().parents[3] / "src"
+        assert src_root.is_dir(), f"expected src/ at {src_root}"
+
+        offenders = []
+        for path in sorted(src_root.rglob("*.py")):
+            rel = path.relative_to(src_root.parent).as_posix()
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+            except SyntaxError:
+                continue
+            skip = docstring_nodes(tree)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Constant) and isinstance(node.value, str) \
+                        and ".bbdrop" in node.value and id(node) not in skip:
+                    if (rel, node.lineno, node.value) in self._ALLOWED:
+                        continue
+                    offenders.append(f"{rel}:{node.lineno} {node.value!r}")
+
+        assert offenders == [], (
+            "these build a ~/.bbdrop path by hand instead of calling "
+            f"get_base_path(), so they escape test isolation: {offenders}"
+        )
+
+    # Helpers in system_utils.py that reach the user's profile WITHOUT ever
+    # spelling ".bbdrop", so the AST test above is structurally blind to them.
+    # get_app_data_directory() does app_dir.mkdir(parents=True, exist_ok=True)
+    # under %APPDATA% / ~/Library/Application Support / ~/.config -- a real
+    # write into the user's profile.
+    _UNREACHABLE_HELPERS = (
+        "get_home_directory",
+        "get_app_data_directory",
+        "get_temp_directory",
+    )
+
+    def test_profile_writing_helpers_stay_unreachable(self):
+        """A REACHABILITY guard, deliberately SEPARATE from the AST test.
+
+        The two answer different questions -- spelling vs. reachability.
+        Folding this into the walker would mean allowlisting cookies.py
+        (Firefox profiles), screenshot_sheet.py (font dirs) and general_tab.py
+        wholesale, which is exactly the coarse whole-file allowlisting that
+        makes a guard blind to future additions.
+
+        These three have no callers in src/ today (only their own test file).
+        This test exists so that stays true: the moment one is imported, it
+        must be routed through get_base_path() first.
+        """
+        import re
+        from pathlib import Path as P
+
+        src_root = P(__file__).resolve().parents[3] / "src"
+        pattern = re.compile("|".join(self._UNREACHABLE_HELPERS))
+
+        importers = []
+        for path in sorted(src_root.rglob("*.py")):
+            rel = path.relative_to(src_root.parent).as_posix()
+            if rel == "src/utils/system_utils.py":   # definition site
+                continue
+            for i, line in enumerate(
+                    path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                if pattern.search(line):
+                    importers.append(f"{rel}:{i}")
+
+        assert importers == [], (
+            "these write into the user's profile and are invisible to the "
+            f".bbdrop guard; route them through get_base_path() first: {importers}"
+        )
