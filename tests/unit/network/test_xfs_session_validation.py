@@ -439,3 +439,64 @@ class TestNonSessionUploadUnaffected:
 
         assert result['status'] == 'success'
         assert result['url'] == 'https://dl.test/ok123'
+
+
+@pytest.mark.unit
+class TestSessionRefresh:
+
+    def test_refresh_relogins_before_scraping(self, filedot_config, bandwidth_counter):
+        """Re-scraping with dead cookies just re-fetches the login page."""
+        client = build_client(filedot_config, bandwidth_counter)
+        client.credentials = "user:pass"
+        client._login_session_based = Mock()
+        client._acquire_session_id = Mock(return_value="fresh-sess")
+
+        client._refresh_auth_token()
+
+        client._login_session_based.assert_called_once_with("user:pass")
+        # Delegates to the validated acquisition path rather than a second
+        # copy of the scrape that checks nothing.
+        client._acquire_session_id.assert_called_once()
+
+    def test_refresh_without_credentials_does_not_login(self, filedot_config, bandwidth_counter):
+        client = build_client(filedot_config, bandwidth_counter)
+        client.credentials = None
+        client._login_session_based = Mock()
+
+        client._refresh_auth_token()
+
+        client._login_session_based.assert_not_called()
+
+    @patch('src.network.file_host_client.pycurl.Curl')
+    def test_login_stamps_session_timestamp(
+        self, mock_curl_class, filespace_config, bandwidth_counter
+    ):
+        """Without a timestamp, _is_token_stale() can never fire for FileSpace."""
+        curl = MagicMock()
+        curl.getinfo.return_value = 200
+
+        def _perform():
+            for call_item in curl.setopt.call_args_list:
+                if call_item[0][0] == pycurl.HEADERFUNCTION:
+                    call_item[0][1](
+                        b"HTTP/1.1 200 OK\r\nSet-Cookie: xfss=fresh; path=/\r\n\r\n")
+                elif call_item[0][0] == pycurl.WRITEDATA:
+                    call_item[0][1].write(b"<html></html>")
+
+        curl.perform.side_effect = _perform
+        mock_curl_class.return_value = curl
+
+        filespace_config.login_url = "https://filespace.test/"
+        filespace_config.login_fields = {
+            "op": "login", "login": "{username}", "password": "{password}"}
+        filespace_config.captcha_regex = None
+        filespace_config.captcha_field = "code"
+        filespace_config.captcha_transform = None
+
+        client = build_client(filespace_config, bandwidth_counter)
+        assert client._session_token_timestamp is None
+
+        client._login_session_based("user:pass")
+
+        assert client.cookie_jar.get("xfss") == "fresh"
+        assert client._session_token_timestamp is not None

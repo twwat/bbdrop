@@ -504,6 +504,12 @@ class FileHostClient:
             if not self.cookie_jar:
                 raise ValueError("Login failed: No session cookies received")
 
+            # Stamp the session age so _is_token_stale() can fire. Cookie-path
+            # hosts (FileSpace) never scrape a sess_id, so this is their only
+            # chance to record when the session began.
+            with self._token_lock:
+                self._session_token_timestamp = time.time()
+
             pass  # Login complete
 
         finally:
@@ -651,70 +657,34 @@ class FileHostClient:
                 token_cache.store_token(self.host_id, new_token, self.config.token_ttl)
 
         elif self.config.auth_type == "session":
-            # Session-based auth: extract fresh sess_id from upload page
-
             # Check credentials availability (same pattern as token_login)
             if not self.credentials:
                 if self._log_callback:
                     self._log_callback("Cannot refresh session: no credentials available", "warning")
                 return
 
-            if not self.config.session_id_regex:
-                if self._log_callback:
-                    self._log_callback(f"No session_id_regex configured for {self.config.name}, cannot refresh", "warning")
-                return
+            # The cookies are what expired — re-scraping the upload page with
+            # them just re-fetches the login page. Get fresh cookies first.
+            self._login_session_based(self.credentials)
 
-            # Log token age for TTL discovery
-            with self._token_lock:
-                pass
+            # Then reuse the same validated acquisition path the upload uses,
+            # rather than a second copy of the scrape that checks nothing.
+            # Sets auth_token and the timestamp on success; raises
+            # SessionExpiredError if even a fresh login can't get a session.
+            #
+            # NOTE: upload_endpoint is passed UNEXPANDED here — for filedot it
+            # is the literal "{server}/upload.cgi", because {server} is only
+            # substituted inside _upload_standard. That is safe only because
+            # the argument is a fallback used when upload_page_url is unset,
+            # and every session host configures upload_page_url. If one ever
+            # does not, _acquire_session_id raises a config ValueError rather
+            # than fetching "{server}/upload".
+            if self.config.session_id_regex:
+                self._acquire_session_id(self.config.upload_endpoint)
 
-            pass  # Refresh session token
-
-            upload_page_url = self.config.upload_page_url
-            if not upload_page_url:
-                # Derive upload page URL from upload endpoint
-                import re
-                base_url = re.sub(r'/[^/]*$', '', self.config.upload_endpoint)
-                upload_page_url = f"{base_url}/upload"
-
-            curl = pycurl.Curl()
-            self._configure_ssl(curl)
-
-            self._configure_proxy(curl)
-            buffer = BytesIO()
-            try:
-                curl.setopt(pycurl.URL, upload_page_url)
-                curl.setopt(pycurl.WRITEDATA, buffer)
-                curl.setopt(pycurl.TIMEOUT, 30)
-                curl.setopt(pycurl.USERAGENT, _CHROME_UA)
-                curl.setopt(pycurl.FOLLOWLOCATION, True)
-
-                # Send session cookies for authentication
-                if self.cookie_jar:
-                    cookie_str = "; ".join(f"{k}={v}" for k, v in self.cookie_jar.items())
-                    curl.setopt(pycurl.COOKIE, cookie_str)
-
-                curl.perform()
-                page_html = buffer.getvalue().decode('utf-8')
-
-                # Extract fresh sess_id
-                import re
-                match = re.search(self.config.session_id_regex, page_html)
-                if match:
-                    new_token = match.group(1)
-                    new_timestamp = time.time()
-
-                    # Thread-safe token update
-                    with self._token_lock:
-                        self.auth_token = new_token
-                        self._session_token_timestamp = new_timestamp
-
-                    pass  # Session token refreshed
-                else:
-                    if self._log_callback:
-                        self._log_callback("Failed to extract session token from upload page", "warning")
-            finally:
-                curl.close()
+            # Cookie-as-sess_id hosts (FileSpace) need nothing further: the
+            # fresh cookies ARE the refresh, and _login_session_based stamped
+            # the timestamp.
 
     def _is_token_stale(self) -> bool:
         """Check if current token is likely stale based on TTL.
