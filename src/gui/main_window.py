@@ -1499,19 +1499,34 @@ class BBDropGUI(QMainWindow):
             self._get_central_store_base_path = get_central_store_base_path
         except Exception as e:
             log(f"Failed to cache format/template/gallery functions: {e}", level="error", category="startup")
+
+            # Resolve the user's ACTUAL data directory for the fallbacks below.
+            # These used to hardcode ~/.bbdrop, which is only the default --
+            # a user on a portable or custom location would silently get the
+            # wrong folder if this branch ever fired. get_base_path() honours
+            # BBDROP_BASE_PATH, then the QSettings custom path, then ~/.bbdrop.
+            # It is imported separately because the failure above may have been
+            # any one of four import lines; only if paths itself is unavailable
+            # do we fall back to the default location.
+            try:
+                from src.utils.paths import get_base_path
+                _base = get_base_path()
+            except Exception:
+                _base = os.path.expanduser("~/.bbdrop")
+
             self._format_binary_rate = lambda rate, precision=2: self._format_rate_consistent(rate, precision)
             self._format_binary_size = lambda size, precision=2: f"{size} B" if size else ""
             self._get_unnamed_galleries = lambda: {}
             self._check_if_gallery_exists = lambda name: []
             self._timestamp = lambda: time.strftime("%H:%M:%S")
-            self._get_central_storage_path = lambda: os.path.expanduser("~/.bbdrop")
+            self._get_central_storage_path = lambda: _base
             self._build_gallery_filenames = lambda name, id: (f"{name}_{id}.json", f"{name}_{id}.json", f"{name}_{id}_bbcode.txt")
             self._save_gallery_artifacts = lambda *args, **kwargs: {}
             self._generate_bbcode_from_template = lambda *args, **kwargs: ""
             self._load_templates = lambda: {"default": ""}
-            self._get_template_path = lambda: os.path.expanduser("~/.bbdrop/templates")
+            self._get_template_path = lambda: os.path.join(_base, "templates")
             self._version = "unknown"
-            self._get_central_store_base_path = lambda: os.path.expanduser("~/.bbdrop")
+            self._get_central_store_base_path = lambda: _base
         
     def setup_ui(self):
         try:
