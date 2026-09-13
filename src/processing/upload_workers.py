@@ -967,8 +967,15 @@ class UploadWorker(QThread):
         The gallery loaders leave uploaded_files empty (for speed) but restore
         gallery_id, so without this a resumed gallery re-uploads every image
         into the existing host gallery.
+
+        Deliberately does NOT consult item.uploaded_images: UploadWorker.run
+        emits gallery_started before this runs, and the GUI's
+        on_gallery_started handler resets uploaded_images to 0 on this same
+        shared item in response to that signal. Gating on it races the GUI
+        thread and usually loses, skipping the restore. The DB rows (and
+        gallery_id) are the source of truth instead; a full reset clears both.
         """
-        if item.uploaded_files or not item.gallery_id or not (item.uploaded_images or 0):
+        if item.uploaded_files or not item.gallery_id:
             return
         try:
             rows = self.queue_manager.store.get_uploaded_images(item.path)

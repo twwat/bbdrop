@@ -65,13 +65,26 @@ def test_no_restore_without_gallery_id():
     assert captured['already_uploaded'] == set()
 
 
-def test_no_restore_when_nothing_uploaded_yet():
+def test_restores_even_after_gui_reset_uploaded_count():
+    """on_gallery_started resets uploaded_images to 0 on this same shared item
+    before the engine runs; the restore must not skip because of that race."""
     worker, queue_manager = _worker(ROWS)
     item = GalleryQueueItem(path="/tmp/g", name="g", gallery_id="G1", uploaded_images=0)
 
-    _run(worker, item)
+    captured = _run(worker, item)
 
-    queue_manager.store.get_uploaded_images.assert_not_called()
+    queue_manager.store.get_uploaded_images.assert_called_once_with("/tmp/g")
+    assert captured['already_uploaded'] == {"a.jpg", "b.jpg"}
+
+
+def test_no_rows_means_full_upload():
+    worker, queue_manager = _worker(rows=[])
+    item = GalleryQueueItem(path="/tmp/g", name="g", gallery_id="G1", uploaded_images=0)
+
+    captured = _run(worker, item)
+
+    assert captured['already_uploaded'] == set()
+    assert item.uploaded_images_data == []
 
 
 def test_in_memory_state_wins_over_db():
