@@ -1044,8 +1044,10 @@ class QueueManager(QObject):
     
     def reset_gallery_complete(self, path: str):
         """Complete gallery reset - clear everything and rescan from scratch"""
+        was_reset = False
         with QMutexLocker(self.mutex):
             if path in self.items:
+                was_reset = True
                 item = self.items[path]
                 old_status = item.status
                 
@@ -1073,7 +1075,16 @@ class QueueManager(QObject):
                 
                 # Trigger full rescan
                 self._call_on_main(lambda: self._initiate_scan(path), delay_ms=100)
-        
+
+        if was_reset:
+            # Otherwise the old host gallery's image rows would count as
+            # "already uploaded" when a later upload of this gallery resumes.
+            try:
+                self.store.clear_uploaded_images(path)
+            except Exception as e:
+                log(f"Could not clear uploaded images for {path}: {e}",
+                    level="warning", category="database")
+
         self._inc_version()
     
     def rescan_failed_folder(self, path: str):

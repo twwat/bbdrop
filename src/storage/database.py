@@ -2758,6 +2758,56 @@ class QueueStore:
 
         return result
 
+    def get_uploaded_images(self, gallery_path: str) -> List[Tuple[str, Dict[str, Any]]]:
+        """Filenames and upload data already recorded for a gallery.
+
+        Used to resume a partial upload after an app restart (the gallery
+        loaders leave uploaded_files empty for speed). Returns
+        [(filename, {'image_url', 'thumb_url', 'size_bytes', 'width', 'height'})]
+        ordered by filename; [] if the gallery has no rows.
+        """
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            rows = conn.execute(
+                """
+                SELECT i.filename, i.url, i.thumb_url, i.size_bytes, i.width, i.height
+                FROM images i
+                JOIN galleries g ON i.gallery_fk = g.id
+                WHERE g.path = ?
+                ORDER BY i.filename
+                """,
+                (gallery_path,),
+            ).fetchall()
+        return [
+            (row[0], {
+                'image_url': row[1] or '',
+                'thumb_url': row[2] or '',
+                'size_bytes': int(row[3] or 0),
+                'width': int(row[4] or 0),
+                'height': int(row[5] or 0),
+            })
+            for row in rows
+        ]
+
+    def clear_uploaded_images(self, gallery_path: str):
+        """Delete a gallery's uploaded-image rows (e.g. on a full reset).
+
+        Queued on the store's single-worker executor, behind any async save
+        already queued: an older snapshot still carrying the old
+        uploaded_files would otherwise re-insert the rows after the delete.
+        Returns the concurrent.futures.Future (callers normally don't wait).
+        """
+        return self._executor.submit(self._delete_uploaded_images, gallery_path)
+
+    def _delete_uploaded_images(self, gallery_path: str) -> None:
+        with _ConnectionContext(self.db_path) as conn:
+            _ensure_schema(conn)
+            conn.execute(
+                "DELETE FROM images WHERE gallery_fk IN (SELECT id FROM galleries WHERE path = ?)",
+                (gallery_path,),
+            )
+            conn.commit()
+
     def update_gallery_imx_status(self, gallery_path: str, status_text: str, checked_timestamp: int) -> bool:
         """Update the IMX status for a gallery.
 

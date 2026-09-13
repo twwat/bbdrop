@@ -1453,3 +1453,17 @@ class TestMainThreadMarshalling:
 
         assert held == [False]
         assert path in [d['path'] for d in mock_store.bulk_upsert.call_args[0][0]]
+
+
+class TestResetClearsUploadedImages:
+    """IMG-5: a full reset must drop the old host gallery's image rows."""
+
+    def test_reset_gallery_complete_clears_uploaded_image_rows(self, queue_manager, mock_store):
+        from src.storage.queue_manager import _normalize_path
+        path = _normalize_path("/fake/reset_gallery")
+        queue_manager.items[path] = GalleryQueueItem(
+            path=path, status=QUEUE_STATE_FAILED, gallery_id="G1")
+
+        queue_manager.reset_gallery_complete(path)
+
+        mock_store.clear_uploaded_images.assert_called_once_with(path)
