@@ -628,3 +628,51 @@ class TestFileHostWorkerEdgeCases:
 
         # Should handle error gracefully
         assert "testhost" not in worker.host_credentials
+
+
+class TestUploadSuccessMessage:
+    """Success line names the host-facing file, then URL, size, time, speed."""
+
+    def test_format(self):
+        from pathlib import Path
+        from src.utils.format_utils import format_binary_size
+
+        size = 150 * 1024 * 1024
+        msg = FileHostWorker._format_upload_success(
+            Path("/tmp/bbdrop_2339_Nubiles 2026-09-05 Boni Ready.zip"),
+            "https://filedot.to/psk9f6emzjp3", size, 7.5,
+        )
+
+        assert msg == (
+            "Successfully uploaded 'Nubiles 2026-09-05 Boni Ready.zip': "
+            f"https://filedot.to/psk9f6emzjp3 ({format_binary_size(size)}) "
+            "in 7.5s (20.0 MiB/s)"
+        )
+
+    def test_split_part_is_identified_by_filename(self):
+        from pathlib import Path
+
+        msg = FileHostWorker._format_upload_success(
+            Path("/tmp/bbdrop_1_Set.z01"), "https://h/x", 1024, 1.0,
+        )
+
+        assert msg.startswith("Successfully uploaded 'Set.z01': https://h/x ")
+        assert "(part" not in msg
+
+    def test_zero_elapsed_does_not_divide_by_zero(self):
+        from pathlib import Path
+
+        msg = FileHostWorker._format_upload_success(Path("a.zip"), "u", 10, 0.0)
+
+        assert msg.endswith("in 0.0s (0.0 MiB/s)")
+
+    def test_deduplicated_omits_time_and_speed(self):
+        """Nothing was sent, so a speed figure would be meaningless."""
+        from pathlib import Path
+        from src.utils.format_utils import format_binary_size
+
+        msg = FileHostWorker._format_upload_success(
+            Path("bbdrop_1_Set.zip"), "https://h/x", 2048, 0.3, deduplicated=True)
+
+        assert msg == (f"Successfully uploaded 'Set.zip': https://h/x "
+                       f"({format_binary_size(2048)}, deduplicated)")

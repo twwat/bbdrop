@@ -79,6 +79,20 @@ class FileHostWorker(QThread):
                 md5.update(chunk)
         return md5.hexdigest()
 
+    @staticmethod
+    def _format_upload_success(archive_path, download_url: str, size_bytes: int,
+                               elapsed_s: float, deduplicated: bool = False) -> str:
+        """Success log line: host-facing filename, URL, size, time, speed.
+
+        A deduplicated upload sent nothing, so time and speed are omitted.
+        """
+        head = (f"Successfully uploaded '{get_clean_filename(archive_path.name)}': "
+                f"{download_url} ({format_binary_size(size_bytes)}")
+        if deduplicated:
+            return f"{head}, deduplicated)"
+        speed_mibs = (size_bytes / elapsed_s / (1024 * 1024)) if elapsed_s > 0 else 0
+        return f"{head}) in {elapsed_s:.1f}s ({speed_mibs:.1f} MiB/s)"
+
     def __init__(self, host_id: str, queue_store: QueueStore):
         """Initialize file host worker for a specific host.
 
@@ -1212,11 +1226,10 @@ class FileHostWorker(QThread):
                             deduped=is_dedup,
                             bytes_saved=part_size if is_dedup else 0,
                         )
-                    avg_speed_mbs = (part_size / upload_elapsed_time / (1024 * 1024)) if upload_elapsed_time > 0 else 0
                     self._log(
-                        f"Successfully uploaded {gallery_name}"
-                        f"{f' (part {part_idx + 1})' if len(archive_paths) > 1 else ''}"
-                        f" in {upload_elapsed_time:.1f}s ({avg_speed_mbs:.1f} MiB/s): {download_url}",
+                        self._format_upload_success(
+                            archive_path, download_url, part_size, upload_elapsed_time,
+                            deduplicated=bool(result.get('deduplication'))),
                         level="info")
 
                     # Update session after successful upload (in case tokens refreshed)
