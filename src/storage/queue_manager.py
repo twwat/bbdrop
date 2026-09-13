@@ -1289,14 +1289,13 @@ class QueueManager(QObject):
     )
 
     def _collect_items_for_save(self, specific_paths: List[str] | None = None) -> List[dict]:
-        """Snapshot persistable items as dicts, under the mutex."""
-        with QMutexLocker(self.mutex):
-            if specific_paths:
-                items = [self.items[p] for p in specific_paths if p in self.items]
-            else:
-                items = list(self.items.values())
-            return [self._item_to_dict(item) for item in items
-                    if item.status in self._PERSISTED_STATES]
+        """Snapshot persistable items as dicts. Caller must hold self.mutex."""
+        if specific_paths:
+            items = [self.items[p] for p in specific_paths if p in self.items]
+        else:
+            items = list(self.items.values())
+        return [self._item_to_dict(item) for item in items
+                if item.status in self._PERSISTED_STATES]
 
     def save_persistent_queue(self, specific_paths: List[str] | None = None):
         """Save queue state to database"""
@@ -1304,11 +1303,14 @@ class QueueManager(QObject):
             self._batched_changes.update(specific_paths)
             return
 
-        queue_data = self._collect_items_for_save(specific_paths)
-        try:
-            self.store.bulk_upsert_async(queue_data)
-        except Exception as e:
-            log(f"Database save failed: {e}", level="error", category="database")
+        # Snapshot and submit under one mutex hold so executor order matches
+        # snapshot order.
+        with QMutexLocker(self.mutex):
+            queue_data = self._collect_items_for_save(specific_paths)
+            try:
+                self.store.bulk_upsert_async(queue_data)
+            except Exception as e:
+                log(f"Database save failed: {e}", level="error", category="database")
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
         """Convert item to dictionary for storage"""
@@ -1729,13 +1731,18 @@ class QueueManager(QObject):
         can't be relied on: this runs on ShutdownWorker's thread (the GUI
         thread's timer can't be stopped or awaited from here), and a save
         requested from a worker thread may not have reached the GUI thread
-        yet. bulk_upsert_ordered runs behind any async save still queued, so
-        an older snapshot can't overwrite this one.
+        yet. The snapshot is taken and submitted to the store's executor
+        under the mutex (so submission order matches snapshot order and an
+        older queued async save can't overwrite this one), then we wait for
+        it to finish outside the mutex.
         """
         try:
-            self.store.bulk_upsert_ordered(self._collect_items_for_save())
+            with QMutexLocker(self.mutex):
+                future = self.store.submit_upsert_ordered(self._collect_items_for_save())
+            if future is not None:
+                future.result(timeout=30)
         except Exception as e:
-            log(f"Final queue save failed: {e}", level="error", category="database")
+            log(f"Final queue save failed or timed out: {e}", level="error", category="database")
 
         self._scan_worker_running = False
         try:

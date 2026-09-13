@@ -816,12 +816,16 @@ class TestShutdown:
 
     def test_shutdown_saves_queue(self, queue_manager, gallery_dir, mock_store):
         """Test that shutdown saves pending changes."""
+        from src.storage.queue_manager import _normalize_path
+        path = _normalize_path(gallery_dir)
         queue_manager.add_item(gallery_dir)
 
         queue_manager.shutdown()
 
         # Should have saved
-        assert mock_store.bulk_upsert_ordered.called
+        mock_store.submit_upsert_ordered.assert_called_once()
+        saved = mock_store.submit_upsert_ordered.call_args[0][0]
+        assert path in [d['path'] for d in saved]
 
     def test_shutdown_stops_scan_worker(self, queue_manager):
         """Test that shutdown stops scan worker."""
@@ -1395,10 +1399,39 @@ class TestMainThreadMarshalling:
         path = self._add(queue_manager, "/fake/thr1_shutdown", QUEUE_STATE_INCOMPLETE)
         # e.g. the save was requested from a worker thread: no timer exists yet
         queue_manager._pending_save_timer = None
-        mock_store.bulk_upsert_ordered.reset_mock()
+        mock_store.submit_upsert_ordered.reset_mock()
 
         queue_manager.shutdown()
 
-        mock_store.bulk_upsert_ordered.assert_called_once()
-        saved = mock_store.bulk_upsert_ordered.call_args[0][0]
+        mock_store.submit_upsert_ordered.assert_called_once()
+        saved = mock_store.submit_upsert_ordered.call_args[0][0]
         assert path in [d['path'] for d in saved]
+
+    def test_save_submits_while_holding_mutex(self, queue_manager, mock_store):
+        path = self._add(queue_manager, "/fake/thr1_atomic_save", QUEUE_STATE_READY)
+        held = []
+
+        def record(_data):
+            acquired = queue_manager.mutex.tryLock()
+            if acquired:
+                queue_manager.mutex.unlock()
+            held.append(not acquired)
+
+        mock_store.bulk_upsert_async.side_effect = record
+        queue_manager.save_persistent_queue([path])
+        assert held == [True]
+
+    def test_shutdown_submits_while_holding_mutex(self, queue_manager, mock_store):
+        self._add(queue_manager, "/fake/thr1_atomic_shutdown", QUEUE_STATE_READY)
+        held = []
+
+        def record(_data):
+            acquired = queue_manager.mutex.tryLock()
+            if acquired:
+                queue_manager.mutex.unlock()
+            held.append(not acquired)
+            return None
+
+        mock_store.submit_upsert_ordered.side_effect = record
+        queue_manager.shutdown()
+        assert held == [True]

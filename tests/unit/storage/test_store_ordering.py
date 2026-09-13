@@ -1,6 +1,7 @@
 """A final ordered save must not be overwritten by an older queued async save."""
 
 import threading
+import time
 
 import pytest
 
@@ -32,6 +33,8 @@ def test_bulk_upsert_ordered_runs_after_queued_async_saves(store):
     saver = threading.Thread(
         target=lambda: store.bulk_upsert_ordered([_gallery('incomplete')]))
     saver.start()
+    time.sleep(0.2)
+    assert saver.is_alive()  # must still be queued behind the held worker
     gate.set()
     saver.join(10)
 
