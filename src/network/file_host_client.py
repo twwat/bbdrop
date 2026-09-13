@@ -22,6 +22,7 @@ from src.core.engine import AtomicCounter
 from src.proxy.pycurl_adapter import PyCurlProxyAdapter
 from src.proxy.models import ProxyEntry
 from src.core.constants import CHROME_UA as _CHROME_UA
+from src.utils.format_utils import format_binary_size
 
 
 _K2S_ACCESS_VALUES = ("public", "premium", "private")
@@ -935,9 +936,12 @@ class FileHostClient:
         self.current_speed_bps = 0.0
 
         if self._log_callback:
-            size_mb = file_path.stat().st_size / (1024 * 1024) if file_path.exists() else 0
+            size = file_path.stat().st_size if file_path.exists() else 0
             md5_str = f" — MD5: {md5_hash}" if md5_hash else ""
-            self._log_callback(f"Uploading {file_path.name} ({size_mb:.1f} MB){md5_str}", "info")
+            self._log_callback(
+                f"Uploading '{get_clean_filename(file_path.name)}' ({format_binary_size(size)}){md5_str}",
+                "info",
+            )
 
         # Handle multi-step uploads (like RapidGator) with automatic token retry
         if self.config.upload_init_url:

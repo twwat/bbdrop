@@ -30,6 +30,7 @@ from src.proxy.models import ProxyContext
 from src.storage.database import QueueStore
 from src.utils.logger import log
 from src.utils.archive_manager import get_archive_manager
+from src.utils.format_utils import format_binary_size
 
 
 class FileHostWorker(QThread):
@@ -1113,8 +1114,8 @@ class FileHostWorker(QThread):
                 if len(archive_paths) > 1:
                     self._log(
                         f"Uploading part {part_idx + 1}/{len(archive_paths)} "
-                        f"({part_size / (1024*1024):.1f} MB): {archive_path.name}",
-                        level="info")
+                        f"({format_binary_size(part_size)}): '{get_clean_filename(archive_path.name)}'",
+                        level="debug")
 
                 # Persist file size before upload. MD5 handling:
                 #   - Hosts that embed the md5 in their init request (e.g.
