@@ -1555,7 +1555,6 @@ class FileHostConfigDialog(QDialog):
             return
 
         # Update UI to show testing
-        self.creds_test_btn.setEnabled(False)
         self.test_connection_btn.setEnabled(False)
         self.test_status_label.setText("Testing...")
         if self._test_dialog:

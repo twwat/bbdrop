@@ -1301,6 +1301,27 @@ def test_config_dialog_uses_storage_traffic_bar(qtbot, mock_host_config, mock_wo
     assert isinstance(dialog.storage_bar, StorageTrafficBar)
 
 
+class TestRunFullTestWithWorker:
+    """DLG-1: with the host enabled, Test must queue a worker test."""
+
+    def test_run_full_test_queues_worker_test(self, qtbot, mock_host_config,
+                                              mock_worker_manager, mock_main_widgets,
+                                              dialog_patches):
+        worker = create_mock_worker()
+        mock_worker_manager.get_worker.return_value = worker
+        dialog = FileHostConfigDialog(
+            None, "testhost", mock_host_config,
+            mock_main_widgets, mock_worker_manager
+        )
+        qtbot.addWidget(dialog)
+        dialog.get_credentials = Mock(return_value="user:pass")
+
+        dialog.run_full_test()
+
+        worker.queue_test_request.assert_called_once_with("user:pass")
+        assert not dialog.test_connection_btn.isEnabled()
+
+
 # ============================================================================
 # MAIN
 # ============================================================================
