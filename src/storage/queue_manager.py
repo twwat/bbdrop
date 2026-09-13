@@ -1738,8 +1738,11 @@ class QueueManager(QObject):
         """
         try:
             with QMutexLocker(self.mutex):
-                future = self.store.submit_upsert_ordered(self._collect_items_for_save())
-            if future is not None:
+                queue_data = self._collect_items_for_save()
+                future = self.store.submit_upsert_ordered(queue_data)
+            if future is None:
+                self.store.bulk_upsert(queue_data)  # executor gone: nothing queued to overtake
+            else:
                 future.result(timeout=30)
         except Exception as e:
             log(f"Final queue save failed or timed out: {e}", level="error", category="database")

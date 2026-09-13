@@ -1435,3 +1435,21 @@ class TestMainThreadMarshalling:
         mock_store.submit_upsert_ordered.side_effect = record
         queue_manager.shutdown()
         assert held == [True]
+
+    def test_shutdown_direct_write_happens_outside_mutex(self, queue_manager, mock_store):
+        path = self._add(queue_manager, "/fake/thr1_fallback", QUEUE_STATE_READY)
+        mock_store.submit_upsert_ordered.side_effect = None
+        mock_store.submit_upsert_ordered.return_value = None   # executor already shut down
+        held = []
+
+        def record(data):
+            acquired = queue_manager.mutex.tryLock()
+            if acquired:
+                queue_manager.mutex.unlock()
+            held.append(not acquired)
+
+        mock_store.bulk_upsert.side_effect = record
+        queue_manager.shutdown()
+
+        assert held == [False]
+        assert path in [d['path'] for d in mock_store.bulk_upsert.call_args[0][0]]

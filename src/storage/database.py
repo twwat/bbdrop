@@ -1265,20 +1265,22 @@ class QueueStore:
         """Queue an upsert behind every save already queued; return its Future.
 
         The executor has a single worker, so submission order is execution
-        order. If the executor has been shut down, writes directly and
-        returns None.
+        order. Returns None (writing nothing) if the executor has been shut
+        down — the caller must then write directly, outside any lock it holds.
         """
         items_list = [dict(it) for it in items]
         try:
             return self._executor.submit(self.bulk_upsert, items_list)
         except RuntimeError:  # executor already shut down
-            self.bulk_upsert(items_list)
             return None
 
     def bulk_upsert_ordered(self, items: Iterable[Dict[str, Any]], timeout: float = 30.0) -> None:
         """Blocking upsert that runs after every save already queued by bulk_upsert_async."""
-        future = self.submit_upsert_ordered(items)
-        if future is not None:
+        items_list = [dict(it) for it in items]
+        future = self.submit_upsert_ordered(items_list)
+        if future is None:
+            self.bulk_upsert(items_list)
+        else:
             future.result(timeout=timeout)
 
     def load_all_items(self) -> List[Dict[str, Any]]:
