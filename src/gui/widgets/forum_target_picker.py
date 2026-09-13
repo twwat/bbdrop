@@ -34,6 +34,17 @@ _PILL_COLORS = {
 }
 
 
+def _target_key(t: dict) -> tuple:
+    """Identity key for a target dict.
+
+    forum_targets is UNIQUE(forum_fk, kind, target_id) — a subforum and a
+    thread can share a target_id in the same forum (vBulletin id namespaces
+    are separate per kind) — so `kind` must be part of the key everywhere
+    targets are tracked, or colliding rows get folded into one.
+    """
+    return (t["forum_fk"], t["kind"], t["target_id"])
+
+
 class _FlowLayout(QLayout):
     """Wrapping horizontal layout. Children flow left-to-right and wrap
     onto a new row when they would exceed the container's width. Used so
@@ -193,10 +204,10 @@ class ForumTargetPicker(QWidget):
     # ------------------------------------------------------------------
 
     def _remove_target(self, target: dict) -> None:
-        key = (target["forum_fk"], target["target_id"])
+        key = _target_key(target)
         self._selected = [
             t for t in self._selected
-            if (t["forum_fk"], t["target_id"]) != key
+            if _target_key(t) != key
         ]
         self._refresh_pills()
         self.targets_changed.emit(list(self._selected))
@@ -223,10 +234,10 @@ class _TargetPickerPanel(QFrame):
     def __init__(self, conn, current: list[dict], parent=None):
         super().__init__(parent, Qt.WindowType.Popup)
         self._conn = conn
-        self._checked_keys = {(t["forum_fk"], t["target_id"]) for t in current}
+        self._checked_keys = {_target_key(t) for t in current}
         # Pre-selected targets by key: one the library no longer lists is
         # never rendered, so it can't be deselected and must survive _accept.
-        self._current_by_key = {(t["forum_fk"], t["target_id"]): t for t in current}
+        self._current_by_key = {_target_key(t): t for t in current}
         self._rendering = False
         self._all: list[dict] = []
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -295,7 +306,7 @@ class _TargetPickerPanel(QFrame):
                 item.setData(TARGET_KIND_ROLE, t["kind"])
                 item.setData(TARGET_TID_ROLE, t["target_id"])
                 self._list.addItem(item)
-                if (t["forum_fk"], t["target_id"]) in self._checked_keys:
+                if _target_key(t) in self._checked_keys:
                     item.setSelected(True)
         finally:
             self._rendering = False
@@ -321,7 +332,7 @@ class _TargetPickerPanel(QFrame):
             data = item.data(Qt.ItemDataRole.UserRole)
             if not data:
                 continue  # forum header row
-            key = (data["forum_fk"], data["target_id"])
+            key = _target_key(data)
             if item.isSelected():
                 self._checked_keys.add(key)
             else:
@@ -333,7 +344,7 @@ class _TargetPickerPanel(QFrame):
         library_keys = set()
         selected: list[dict] = []
         for t in self._all:
-            key = (t["forum_fk"], t["target_id"])
+            key = _target_key(t)
             library_keys.add(key)
             if key in self._checked_keys:
                 selected.append(t)
