@@ -596,3 +596,22 @@ class TestMediaTypeColumnClick:
         ctrl, mw, inner = controller
         ctrl.on_gallery_cell_clicked(0, GalleryTableWidget.COL_NAME)
         mw.gallery_table.preview_screenshot_sheet.assert_not_called()
+
+
+class TestUpdateGalleryTemplateLogging:
+
+    def test_logs_specific_debug_line(self):
+        mw = Mock()
+        mw.queue_manager.mutex = QMutex()
+        item = GalleryQueueItem(path="/g/Set 7")
+        item.name = "Set 7 Shower Time"
+        mw.queue_manager.items = {"/g/Set 7": item}
+        controller = GalleryTableController(mw)
+
+        with patch('src.gui.gallery_table_controller.log') as mock_log:
+            controller.update_gallery_template(0, "/g/Set 7", "Detailed", Mock())
+
+        assert (("Template for 'Set 7 Shower Time' changed to 'Detailed'",),
+                {'category': 'ui', 'level': 'debug'}) in \
+            [(c.args, c.kwargs) for c in mock_log.call_args_list]
+        assert not any(c.args == ("Template updated",) for c in mock_log.call_args_list)

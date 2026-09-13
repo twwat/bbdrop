@@ -2866,7 +2866,7 @@ class BBDropGUI(QMainWindow):
     def start_single_item(self, path: str):
         """Start a single item"""
         if self.queue_manager.start_item(path):
-            log(f"Started: {os.path.basename(path)}", level="info", category="queue")
+            log(f"Started: {os.path.basename(path)}", level="debug", category="queue")
             self._update_specific_gallery_display(path)
             # Update button counts after status change
             QTimer.singleShot(0, self.progress_tracker._update_button_counts)

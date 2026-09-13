@@ -449,9 +449,11 @@ class GalleryTableController(QObject):
             success = mw.queue_manager.store.update_item_template(gallery_path, new_template)
 
             # Update in-memory item
+            display_name = os.path.basename(gallery_path)
             with QMutexLocker(mw.queue_manager.mutex):
                 if gallery_path in mw.queue_manager.items:
                     mw.queue_manager.items[gallery_path].template_name = new_template
+                    display_name = mw.queue_manager.items[gallery_path].name or display_name
                     mw.queue_manager._inc_version()
 
             # Update the table cell display
@@ -461,7 +463,7 @@ class GalleryTableController(QObject):
             else:
                 log(f"No template item found at row {row}, column {GalleryTableWidget.COL_TEMPLATE}", category="ui", level="debug")
 
-            log(f"Template updated", category="ui", level="info")
+            log(f"Template for '{display_name}' changed to '{new_template}'", category="ui", level="debug")
 
             # Get the actual gallery item to check real status
             gallery_item = mw.queue_manager.get_item(gallery_path)

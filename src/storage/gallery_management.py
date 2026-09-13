@@ -151,7 +151,6 @@ def rename_all_unnamed_with_session(uploader: 'ImxToUploader') -> int:
         if ok:
             try:
                 if hasattr(uploader, 'worker_thread') and uploader.worker_thread is not None:
-                    log(f"Successfully renamed gallery '{gallery_id}' to '{intended_name}'", level="info", category="renaming")
                     try:
                         # Notify GUI to update Renamed column if available
                         if hasattr(uploader.worker_thread, 'gallery_renamed'):

@@ -206,7 +206,8 @@ class TestRenameWorkerGalleryRename:
         worker.session.get.return_value = mock_edit_response
         worker.session.post.return_value = mock_rename_response
 
-        result = worker.rename_gallery_with_session("12345", "New Gallery Name")
+        with patch('src.processing.rename_worker.log') as mock_log:
+            result = worker.rename_gallery_with_session("12345", "New Gallery Name")
 
         assert result is True
         worker.session.get.assert_called_with("https://imx.to/user/gallery/edit?id=12345")
@@ -217,6 +218,9 @@ class TestRenameWorkerGalleryRename:
                 'submit_new_gallery': 'Rename Gallery'
             }
         )
+        mock_log.assert_any_call(
+            "IMX: Renamed gallery '12345' to 'New Gallery Name'",
+            category="renaming", level="info")
 
     @patch('threading.Thread')
     @patch('src.processing.rename_worker.get_credential')

@@ -539,7 +539,7 @@ class RenameWorker(QObject):
             response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
 
             if response.status_code == 200:
-                log(f"IMX: Successfully renamed gallery '{gallery_id}' to '{new_name}'", category="renaming", level="info")
+                log(f"IMX: Renamed gallery '{gallery_id}' to '{new_name}'", category="renaming", level="info")
                 return True
             else:
                 log(f"Rename failed (HTTP {response.status_code})", level="debug", category="renaming")
