@@ -825,3 +825,62 @@ class TestProxyResolverTorSupport:
         # Category override should win over global Tor
         assert result is not None
         assert result.host == "filepool.proxy"
+
+
+class TestProxyResolverUnsetGlobalDefault:
+    """PRX-1: an unset global default must not cancel category/service pools.
+
+    On a fresh install the global-default key is unset; the Proxy tab shows
+    "No proxy" for it without storing anything. A category or per-host pool
+    the user sets must still be used.
+    """
+
+    @staticmethod
+    def _pool(pool_id, host):
+        from src.proxy.models import ProxyEntry
+        pool = ProxyPool(name=pool_id, id=pool_id)
+        pool.enabled = True
+        pool.proxies = [ProxyEntry(host=host, port=8080, proxy_type=ProxyType.HTTP)]
+        return pool
+
+    def _resolver(self, assignment, pool):
+        storage = MagicMock()
+        storage.get_global_default_pool.return_value = None
+        storage.get_use_os_proxy.return_value = False
+        storage.get_pool_assignment.side_effect = assignment
+        storage.load_pool.return_value = pool
+        rotator = MagicMock()
+        rotator.get_next_proxy.return_value = pool.proxies[0]
+        return ProxyResolver(storage=storage, rotator=rotator)
+
+    def test_category_pool_used_when_global_default_unset(self):
+        pool = self._pool("cat-pool", "cat.proxy")
+        resolver = self._resolver(
+            lambda category, service_id=None: None if service_id else "cat-pool", pool)
+
+        result = resolver.resolve(ProxyContext(category="file_hosts", service_id="rapidgator"))
+
+        assert result is not None
+        assert result.host == "cat.proxy"
+
+    def test_service_pool_used_when_global_default_unset(self):
+        pool = self._pool("svc-pool", "svc.proxy")
+        resolver = self._resolver(
+            lambda category, service_id=None: "svc-pool" if service_id else None, pool)
+
+        result = resolver.resolve(ProxyContext(category="file_hosts", service_id="rapidgator"))
+
+        assert result is not None
+        assert result.host == "svc.proxy"
+
+    def test_resolve_agrees_with_effective_proxy_info(self):
+        pool = self._pool("cat-pool", "cat.proxy")
+        resolver = self._resolver(
+            lambda category, service_id=None: None if service_id else "cat-pool", pool)
+        context = ProxyContext(category="file_hosts", service_id="rapidgator")
+
+        info = resolver.get_effective_proxy_info(context)
+        result = resolver.resolve(context)
+
+        assert info['source'] == 'category'
+        assert result is not None

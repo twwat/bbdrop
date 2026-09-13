@@ -65,13 +65,16 @@ class ProxyResolver:
         Resolve proxy for a given context.
 
         Resolution hierarchy:
-        0. Legacy guard: global_default_pool unset → direct (old radio-button state)
         1. Category special values (__direct__, __os_proxy__, __tor__)
         2. Service pool assignment (e.g., file_hosts/rapidgator -> pool or special)
         3. Category pool assignment (e.g., file_hosts -> "Main Pool")
         4. Global default (pool or special value)
         5. Legacy fallback: use_os_proxy boolean
         6. None (direct connection)
+
+        An unset global default only means "no global proxy" — it does not
+        cancel category/service assignments (the Proxy tab and
+        get_effective_proxy_info both treat those as active).
 
         Args:
             context: ProxyContext with category and service_id
@@ -80,14 +83,6 @@ class ProxyResolver:
             ProxyEntry if proxy should be used, None for direct connection
         """
         service_key = f"{context.category}/{context.service_id}" if context.service_id else context.category
-
-        # 0. Legacy guard: if global default was never set (None), no proxy is
-        #    configured at all.  Return direct immediately.  This matches the old
-        #    radio-button "No proxy" behavior and prevents stale service/category
-        #    assignments from leaking through.
-        global_pool = self._storage.get_global_default_pool()
-        if not global_pool and not self._storage.get_use_os_proxy():
-            return None
 
         # 1. Check category-level assignment (special values short-circuit)
         cat_pool_id = self._storage.get_pool_assignment(context.category)
@@ -115,6 +110,7 @@ class ProxyResolver:
                     return proxy
 
         # 4. Check global default
+        global_pool = self._storage.get_global_default_pool()
         if global_pool:
             if global_pool in _SPECIAL_VALUES:
                 return self._resolve_special_value(global_pool)
