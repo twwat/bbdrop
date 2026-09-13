@@ -350,8 +350,10 @@ class TestQueueFileHostUpload:
     @patch('os.path.exists', return_value=True)
     def test_calls_store_add_file_host_upload(self, mock_exists, controller, mock_main_window):
         """Verify _queue_file_host_upload calls store.add_file_host_upload."""
+        host = Mock()
+        host.name = "Filedot"
         mock_config = Mock()
-        mock_config.get_host.return_value = Mock()
+        mock_config.get_host.return_value = host
 
         with patch('src.gui.file_host_controller.log'), \
              patch('src.core.file_host_config.get_config_manager', return_value=mock_config), \
@@ -378,6 +380,85 @@ class TestQueueFileHostUpload:
 
         MockMsgBox.warning.assert_called_once()
         mock_main_window.queue_manager.store.add_file_host_upload.assert_not_called()
+
+    def _queue(self, controller, host_display="Filedot"):
+        host = Mock()
+        host.name = host_display
+        cfg = Mock()
+        cfg.get_host.return_value = host
+        with patch('src.gui.file_host_controller.log') as mock_log, \
+             patch('src.core.file_host_config.get_config_manager', return_value=cfg), \
+             patch('PyQt6.QtWidgets.QMessageBox'):
+            controller._queue_file_host_upload("/test/gallery", "filedot", host_display)
+        return mock_log
+
+    @patch('os.path.exists', return_value=True)
+    def test_logs_single_queued_line(self, mock_exists, controller, mock_main_window):
+        with patch.object(controller, '_describe_queued_upload', return_value="'Set.zip'"):
+            mock_log = self._queue(controller)
+
+        messages = [c.args[0] for c in mock_log.call_args_list]
+        assert messages == ["Filedot: Queued 'Set.zip' (upload_id=42)"]
+
+    def test_describe_predicts_name_when_not_cached(self, controller, mock_main_window):
+        mock_main_window.queue_manager.store.get_pending_file_host_uploads.return_value = [
+            {'id': 41, 'gallery_fk': 1, 'gallery_name': 'Other'},
+            {'id': 42, 'gallery_fk': 2328, 'gallery_name': 'Nubiles (Vivi) Set'},
+        ]
+        am = Mock()
+        am.predict_archive_name.return_value = "Nubiles Vivi Set.zip"
+        am.get_cached_paths.return_value = []
+        with patch('src.utils.archive_manager.get_archive_manager', return_value=am), \
+             patch('src.utils.paths.load_user_defaults', return_value={'archive_format': 'zip'}):
+            desc = controller._describe_queued_upload("/test/gallery", "filedot", 42)
+
+        assert desc == "'Nubiles Vivi Set.zip'"
+        am.predict_archive_name.assert_called_once_with(2328, 'Nubiles (Vivi) Set', 'zip')
+        am.get_cached_paths.assert_called_once_with(2328)
+
+    def test_describe_uses_cached_file_name_and_total_size(self, controller, mock_main_window, tmp_path):
+        """A cached archive is what the worker will send, whatever the prediction says."""
+        from src.utils.format_utils import format_binary_size
+        part1 = tmp_path / "bbdrop_2328_Set.z01"
+        part1.write_bytes(b"x" * 3000)
+        final = tmp_path / "bbdrop_2328_Set.zip"
+        final.write_bytes(b"x" * 1000)
+        mock_main_window.queue_manager.store.get_pending_file_host_uploads.return_value = [
+            {'id': 42, 'gallery_fk': 2328, 'gallery_name': 'Set'},
+        ]
+        am = Mock()
+        am.predict_archive_name.return_value = "Predicted.7z"
+        am.get_cached_paths.return_value = [part1, final]
+        with patch('src.utils.archive_manager.get_archive_manager', return_value=am), \
+             patch('src.utils.paths.load_user_defaults', return_value={}):
+            desc = controller._describe_queued_upload("/test/gallery", "filedot", 42)
+
+        assert desc == f"'Set.z01' ({format_binary_size(4000)})"
+
+    def test_describe_single_file_uses_its_name_and_size(self, controller, tmp_path):
+        from src.utils.format_utils import format_binary_size
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x" * 2048)
+
+        desc = controller._describe_queued_upload(str(video), "filedot", 42)
+
+        assert desc == f"'clip.mp4' ({format_binary_size(2048)})"
+
+    def test_describe_falls_back_to_folder_name_on_error(self, controller, mock_main_window):
+        mock_main_window.queue_manager.store.get_pending_file_host_uploads.side_effect = \
+            RuntimeError("db locked")
+
+        with patch('src.gui.file_host_controller.log'):
+            desc = controller._describe_queued_upload("/test/My Gallery", "filedot", 42)
+
+        assert desc == "'My Gallery'"
+
+    def test_describe_falls_back_when_row_not_found(self, controller, mock_main_window):
+        mock_main_window.queue_manager.store.get_pending_file_host_uploads.return_value = []
+
+        desc = controller._describe_queued_upload("/test/My Gallery", "filedot", 42)
+
+        assert desc == "'My Gallery'"
 
 
 class TestRefreshFileHostWidgetsErrorHandling:

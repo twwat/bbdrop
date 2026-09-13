@@ -235,11 +235,11 @@ class FileHostController(QObject):
 
         from src.core.file_host_config import get_config_manager
         config_manager = get_config_manager()
-        if not config_manager.get_host(host_name):
+        host_config = config_manager.get_host(host_name)
+        if not host_config:
             QMessageBox.warning(self._main_window, "Error", f"Host configuration not found: {host_name}")
             return
 
-        log(f"Queueing manual upload to {host_name} for {os.path.basename(gallery_path)}", level="info", category="file_hosts")
         # Manual single-host queue: no family designation needed. If this host is
         # in a backend family, the worker's pre-upload family-mirror path will
         # dedup via sibling md5s automatically (see src/processing/file_host_workers.py).
@@ -248,11 +248,56 @@ class FileHostController(QObject):
             host_name=host_name,
             status='pending'
         )
-        log(f"Queued manual upload (upload_id={upload_id}) for {os.path.basename(gallery_path)} to {host_name}", level="info", category="file_hosts")
+        log(f"{host_config.name}: Queued "
+            f"{self._describe_queued_upload(gallery_path, host_name, upload_id)} "
+            f"(upload_id={upload_id})", level="info", category="file_hosts")
         self._main_window.worker_signal_handler._update_filehost_queue_for_host(host_name)
         self._main_window._update_specific_gallery_display(gallery_path)
         QMessageBox.information(self._main_window, "Upload Queued",
             f"Gallery queued for upload to {display_name}.\nThe upload will begin shortly.")
+
+    def _describe_queued_upload(self, gallery_path: str, host_name: str,
+                                upload_id: Optional[int]) -> str:
+        """Quoted name of the file the host will receive, plus size if known.
+
+        The archive usually doesn't exist yet at queue time, so the name is
+        predicted from the same row data the worker will read (gallery_fk and
+        galleries.name — never item.db_id, which can diverge). Size is shown
+        only for a single file or an archive already built for another host.
+        Never raises: logging must not block queueing.
+        """
+        from src.utils.format_utils import format_binary_size
+        fallback = f"'{os.path.basename(os.path.normpath(gallery_path))}'"
+        try:
+            if os.path.isfile(gallery_path):
+                return f"{fallback} ({format_binary_size(os.path.getsize(gallery_path))})"
+
+            from src.utils.archive_manager import get_archive_manager
+            from src.utils.paths import load_user_defaults
+
+            rows = self._main_window.queue_manager.store.get_pending_file_host_uploads(host_name)
+            row = next((r for r in rows if r.get('id') == upload_id), None)
+            if row is None:
+                return fallback
+
+            archive_manager = get_archive_manager()
+            gallery_fk = row['gallery_fk']
+            name = archive_manager.predict_archive_name(
+                gallery_fk, row.get('gallery_name'),
+                load_user_defaults().get('archive_format', 'zip'),
+            )
+            cached = archive_manager.get_cached_paths(gallery_fk)
+            if cached:
+                # The worker reuses a cached archive whatever the current
+                # settings, so its real filename beats the prediction.
+                from src.network.file_host_client import get_clean_filename
+                size = sum(p.stat().st_size for p in cached)
+                return f"'{get_clean_filename(cached[0].name)}' ({format_binary_size(size)})"
+            return f"'{name}'"
+        except Exception as e:
+            log(f"Could not describe queued upload for {gallery_path}: {e}",
+                level="debug", category="file_hosts")
+            return fallback
 
     def _live_check_file_host(self, gallery_path: str, host_name: str, display_name: str, parent_dialog=None):
         """Perform a live online status check for a single file host upload."""
