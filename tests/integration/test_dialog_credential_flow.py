@@ -73,8 +73,18 @@ class TestDialogCredentialFlow:
     TEST_KEY = "file_host_DIALOG_TEST_credentials"
 
     @pytest.fixture(autouse=True)
-    def cleanup(self):
-        """Clean up test credentials."""
+    def cleanup(self, monkeypatch):
+        """Clean up test credentials.
+
+        These tests never actually persist TEST_KEY (get_credential/
+        set_credential are mocked per-test below), so this is defensive
+        cleanup only -- but remove_credential() still calls the real
+        keyring.delete_password internally. Mock it here, same pattern as
+        tests/unit/test_credential_migration.py, so cleanup never touches
+        the real keyring backend (the session-wide guard in conftest.py
+        blocks writes to keys outside its allowed test prefix).
+        """
+        monkeypatch.setattr('keyring.delete_password', Mock())
         remove_credential(self.TEST_KEY)
         yield
         remove_credential(self.TEST_KEY)
