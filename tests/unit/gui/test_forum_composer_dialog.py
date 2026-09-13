@@ -42,9 +42,11 @@ def _setup(conn) -> list[int]:
         "VALUES('T','user',0)",
     )
     tab_id = conn.execute("SELECT id FROM tabs WHERE name='T'").fetchone()[0]
-    # Use v2 multi-destination API (tab_posting_destinations table)
+    # Use v2 multi-destination API (tab_posting_destinations table). kind is
+    # forum_targets/destination vocabulary ("subforum"/"thread"); "reply"
+    # (legacy tab_posting_config vocabulary) maps to "thread".
     fp.add_tab_destination(
-        conn, tab_id=tab_id, forum_fk=fid, kind="reply",
+        conn, tab_id=tab_id, forum_fk=fid, kind="thread",
         target_id="111", body_template_name="Default",
     )
     conn.execute(

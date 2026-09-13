@@ -55,10 +55,12 @@ def _setup(conn):
         update_mode="whole", manual_edit_handling="skip_alert",
         stale_triggers=["upload"], enabled=True,
     )
-    # Populate new v2 tables used by the current controller
+    # Populate new v2 tables used by the current controller. kind here is
+    # forum_targets/destination vocabulary ("subforum"/"thread"); "reply"
+    # (legacy tab_posting_config vocabulary above) maps to "thread".
     fp.add_tab_destination(
         conn, tab_id=tab_id, forum_fk=fid,
-        target_id="111", kind="reply", body_template_name="Default",
+        target_id="111", kind="thread", body_template_name="Default",
     )
     fp.set_tab_posting_settings(conn, tab_id=tab_id, trigger_mode="manual", enabled=True)
     conn.execute(

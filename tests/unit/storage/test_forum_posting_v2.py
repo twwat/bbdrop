@@ -64,13 +64,13 @@ def test_tab_posting_destinations_unique_constraint(conn):
     forum_id = _make_forum(conn)
     conn.execute(
         "INSERT INTO tab_posting_destinations(tab_id,forum_fk,target_id,kind)"
-        " VALUES(?,?,'99','reply')", (tab_id, forum_id)
+        " VALUES(?,?,'99','thread')", (tab_id, forum_id)
     )
     conn.commit()
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute(
             "INSERT INTO tab_posting_destinations(tab_id,forum_fk,target_id,kind)"
-            " VALUES(?,?,'99','reply')", (tab_id, forum_id)
+            " VALUES(?,?,'99','thread')", (tab_id, forum_id)
         )
         conn.commit()
 
@@ -150,20 +150,20 @@ def _seed(conn):
 def test_add_and_list_tab_destinations(conn):
     _seed(conn)
     pk = fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
-                                target_id="42", kind="reply",
+                                target_id="42", kind="thread",
                                 body_template_name="default")
     assert isinstance(pk, int) and pk > 0
     dests = fp.list_tab_destinations(conn, tab_id=2)
     assert len(dests) == 1
     assert dests[0]["target_id"] == "42"
-    assert dests[0]["kind"] == "reply"
+    assert dests[0]["kind"] == "thread"
 
 
 @pytest.mark.unit
 def test_remove_tab_destination(conn):
     _seed(conn)
     pk = fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
-                                target_id="42", kind="reply",
+                                target_id="42", kind="thread",
                                 body_template_name="default")
     fp.remove_tab_destination(conn, pk)
     assert fp.list_tab_destinations(conn, tab_id=2) == []
@@ -173,7 +173,7 @@ def test_remove_tab_destination(conn):
 def test_clear_tab_destinations(conn):
     _seed(conn)
     fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
-                           target_id="42", kind="reply")
+                           target_id="42", kind="thread")
     fp.clear_tab_destinations(conn, tab_id=2)
     assert fp.list_tab_destinations(conn, tab_id=2) == []
 
@@ -199,7 +199,7 @@ def test_tab_posting_settings_defaults_to_none_when_unset(conn):
 def test_get_effective_destinations_tab_only(conn):
     _seed(conn)
     fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
-                           target_id="42", kind="reply",
+                           target_id="42", kind="thread",
                            body_template_name="default")
     dests = fp.get_effective_destinations(conn, gallery_fk=2)
     assert len(dests) == 1
@@ -221,10 +221,10 @@ def test_get_effective_destinations_add_override(conn):
     )
     conn.commit()
     fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
-                           target_id="42", kind="reply",
+                           target_id="42", kind="thread",
                            body_template_name="default")
     fp.upsert_gallery_destination(conn, gallery_fk=2, forum_fk=2,
-                                  target_id="99", kind="new_thread",
+                                  target_id="99", kind="subforum",
                                   body_template_name="default", action="add")
     dests = fp.get_effective_destinations(conn, gallery_fk=2)
     assert len(dests) == 2
@@ -235,10 +235,10 @@ def test_get_effective_destinations_add_override(conn):
 def test_get_effective_destinations_remove_override(conn):
     _seed(conn)
     fp.add_tab_destination(conn, tab_id=2, forum_fk=2,
-                           target_id="42", kind="reply",
+                           target_id="42", kind="thread",
                            body_template_name="default")
     fp.upsert_gallery_destination(conn, gallery_fk=2, forum_fk=2,
-                                  target_id="42", kind="reply",
+                                  target_id="42", kind="thread",
                                   body_template_name="default", action="remove")
     assert fp.get_effective_destinations(conn, gallery_fk=2) == []
 
