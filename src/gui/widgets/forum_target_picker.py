@@ -216,7 +216,7 @@ class ForumTargetPicker(QWidget):
 
 
 class _TargetPickerPanel(QFrame):
-    """Popup panel with search + grouped checkbox list across all forums."""
+    """Popup panel with search + grouped multi-select list across all forums."""
 
     targets_selected = pyqtSignal(list)
 
@@ -224,6 +224,10 @@ class _TargetPickerPanel(QFrame):
         super().__init__(parent, Qt.WindowType.Popup)
         self._conn = conn
         self._checked_keys = {(t["forum_fk"], t["target_id"]) for t in current}
+        # Pre-selected targets by key: one the library no longer lists is
+        # never rendered, so it can't be deselected and must survive _accept.
+        self._current_by_key = {(t["forum_fk"], t["target_id"]): t for t in current}
+        self._rendering = False
         self._all: list[dict] = []
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.resize(380, 320)
@@ -241,6 +245,7 @@ class _TargetPickerPanel(QFrame):
         self._list = QListWidget()
         self._list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         self._list.setItemDelegate(TargetKindDelegate(self._list))
+        self._list.itemSelectionChanged.connect(self._on_selection_changed)
         layout.addWidget(self._list, 1)
 
         btns = QHBoxLayout()
@@ -267,26 +272,33 @@ class _TargetPickerPanel(QFrame):
         self._render(self._all)
 
     def _render(self, targets: list[dict]):
-        self._list.clear()
-        current_forum: Optional[str] = None
-        for t in targets:
-            if t["forum_name"] != current_forum:
-                header = QListWidgetItem(t["forum_name"])
-                header.setFlags(Qt.ItemFlag.NoItemFlags)
-                f = header.font()
-                f.setBold(True)
-                header.setFont(f)
-                header.setForeground(QColor("#888888"))
-                self._list.addItem(header)
-                current_forum = t["forum_name"]
+        # clear() and the setSelected() calls below emit itemSelectionChanged.
+        # They mirror _checked_keys rather than user input, so
+        # _on_selection_changed must not fold them back in.
+        self._rendering = True
+        try:
+            self._list.clear()
+            current_forum: Optional[str] = None
+            for t in targets:
+                if t["forum_name"] != current_forum:
+                    header = QListWidgetItem(t["forum_name"])
+                    header.setFlags(Qt.ItemFlag.NoItemFlags)
+                    f = header.font()
+                    f.setBold(True)
+                    header.setFont(f)
+                    header.setForeground(QColor("#888888"))
+                    self._list.addItem(header)
+                    current_forum = t["forum_name"]
 
-            item = QListWidgetItem(t["name"])
-            item.setData(Qt.ItemDataRole.UserRole, t)
-            item.setData(TARGET_KIND_ROLE, t["kind"])
-            item.setData(TARGET_TID_ROLE, t["target_id"])
-            self._list.addItem(item)
-            if (t["forum_fk"], t["target_id"]) in self._checked_keys:
-                item.setSelected(True)
+                item = QListWidgetItem(t["name"])
+                item.setData(Qt.ItemDataRole.UserRole, t)
+                item.setData(TARGET_KIND_ROLE, t["kind"])
+                item.setData(TARGET_TID_ROLE, t["target_id"])
+                self._list.addItem(item)
+                if (t["forum_fk"], t["target_id"]) in self._checked_keys:
+                    item.setSelected(True)
+        finally:
+            self._rendering = False
 
     def _filter(self, text: str):
         q = text.lower()
@@ -296,13 +308,38 @@ class _TargetPickerPanel(QFrame):
         ]
         self._render(filtered)
 
-    def _accept(self):
-        selected: list[dict] = []
+    def _on_selection_changed(self) -> None:
+        """Fold the visible rows' selection into _checked_keys.
+
+        Rows hidden by the current search aren't in the list, so their keys
+        are left as they were.
+        """
+        if self._rendering:
+            return
         for i in range(self._list.count()):
             item = self._list.item(i)
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if not data:
+                continue  # forum header row
+            key = (data["forum_fk"], data["target_id"])
             if item.isSelected():
-                data = item.data(Qt.ItemDataRole.UserRole)
-                if data:
-                    selected.append(data)
+                self._checked_keys.add(key)
+            else:
+                self._checked_keys.discard(key)
+
+    def _accept(self):
+        # Build from _checked_keys, not the visible rows, so selections the
+        # current search hides are kept (library order, as before 380251d).
+        library_keys = set()
+        selected: list[dict] = []
+        for t in self._all:
+            key = (t["forum_fk"], t["target_id"])
+            library_keys.add(key)
+            if key in self._checked_keys:
+                selected.append(t)
+        selected.extend(
+            t for key, t in self._current_by_key.items()
+            if key in self._checked_keys and key not in library_keys
+        )
         self.targets_selected.emit(selected)
         self.close()

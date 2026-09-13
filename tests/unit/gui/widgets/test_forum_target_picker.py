@@ -120,45 +120,95 @@ def test_picker_panel_loads_targets(conn_with_targets):
     assert panel._list.count() == 3  # 1 forum header + 2 targets
 
 
+_THREAD_1 = {"forum_fk": 1, "forum_name": "Forum A",
+             "target_id": "10", "kind": "thread", "name": "Thread 1"}
+
+
+def _item_for(panel, target_id):
+    """The visible list row for target_id, or None if filtered out."""
+    from PyQt6.QtCore import Qt
+    for i in range(panel._list.count()):
+        item = panel._list.item(i)
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data and data.get("target_id") == target_id:
+            return item
+    return None
+
+
+def _accepted_ids(panel):
+    """Click 'Add selected' and return the emitted target_ids."""
+    emitted = []
+    panel.targets_selected.connect(emitted.append)
+    panel._accept()
+    assert len(emitted) == 1
+    return [t["target_id"] for t in emitted[0]]
+
+
 @pytest.mark.unit
 def test_picker_panel_premarks_current(conn_with_targets):
     from src.gui.widgets.forum_target_picker import _TargetPickerPanel
-    from PyQt6.QtCore import Qt
-    current = [{"forum_fk": 1, "target_id": "10"}]
-    panel = _TargetPickerPanel(conn_with_targets, current=current)
-    # Find the item with target_id "10" and confirm it's checked
-    for i in range(panel._list.count()):
-        item = panel._list.item(i)
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if data and data.get("target_id") == "10":
-            assert item.checkState() == Qt.CheckState.Checked
-            break
+    panel = _TargetPickerPanel(conn_with_targets,
+                               current=[{"forum_fk": 1, "target_id": "10"}])
+    item = _item_for(panel, "10")
+    assert item is not None
+    assert item.isSelected()
 
 
 @pytest.mark.unit
-def test_picker_panel_checked_keys_survive_filter(conn_with_targets):
-    """Checkbox state should persist across search/filter cycles."""
+def test_picker_panel_selection_survives_filter(conn_with_targets):
+    """A row the user selects stays selected across a search/clear cycle."""
     from src.gui.widgets.forum_target_picker import _TargetPickerPanel
-    from PyQt6.QtCore import Qt
     panel = _TargetPickerPanel(conn_with_targets, current=[])
-    # Find and check "Thread 1"
-    for i in range(panel._list.count()):
-        item = panel._list.item(i)
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if data and data.get("target_id") == "10":
-            item.setCheckState(Qt.CheckState.Checked)
-            break
-    # Filter list (Thread 1 disappears)
+    _item_for(panel, "10").setSelected(True)
+
     panel._filter("Sub")
-    # Clear filter (Thread 1 reappears)
+    assert _item_for(panel, "10") is None  # hidden by the search
     panel._filter("")
-    # Thread 1 should still be checked
-    found = False
-    for i in range(panel._list.count()):
-        item = panel._list.item(i)
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if data and data.get("target_id") == "10":
-            assert item.checkState() == Qt.CheckState.Checked, "Checked state lost after filter cycle"
-            found = True
-            break
-    assert found, "Thread 1 not found after filter cleared"
+
+    item = _item_for(panel, "10")
+    assert item is not None
+    assert item.isSelected(), "Selection lost after filter cycle"
+
+
+@pytest.mark.unit
+def test_picker_panel_accept_includes_selection_hidden_by_filter(conn_with_targets):
+    from src.gui.widgets.forum_target_picker import _TargetPickerPanel
+    panel = _TargetPickerPanel(conn_with_targets, current=[])
+    _item_for(panel, "10").setSelected(True)
+    panel._filter("Sub")                     # Thread 1 now hidden
+    _item_for(panel, "20").setSelected(True)
+
+    # Library order = fp.list_targets' ORDER BY kind, name: subforum first.
+    assert _accepted_ids(panel) == ["20", "10"]
+
+
+@pytest.mark.unit
+def test_picker_panel_accept_keeps_current_target_hidden_by_filter(conn_with_targets):
+    """The data-loss case: an already-configured target must survive a
+    search that hides it, then 'Add selected'."""
+    from src.gui.widgets.forum_target_picker import _TargetPickerPanel
+    panel = _TargetPickerPanel(conn_with_targets, current=[_THREAD_1])
+    panel._filter("Sub")
+
+    assert _accepted_ids(panel) == ["10"]
+
+
+@pytest.mark.unit
+def test_picker_panel_deselect_removes_target(conn_with_targets):
+    from src.gui.widgets.forum_target_picker import _TargetPickerPanel
+    panel = _TargetPickerPanel(conn_with_targets, current=[_THREAD_1])
+    _item_for(panel, "10").setSelected(False)
+
+    assert _accepted_ids(panel) == []
+
+
+@pytest.mark.unit
+def test_picker_panel_accept_keeps_current_target_missing_from_library(conn_with_targets):
+    """A configured target no longer in the library is never shown, so the
+    user can't have deselected it — it must not be silently dropped."""
+    from src.gui.widgets.forum_target_picker import _TargetPickerPanel
+    gone = {"forum_fk": 1, "forum_name": "Forum A",
+            "target_id": "99", "kind": "thread", "name": "Gone"}
+    panel = _TargetPickerPanel(conn_with_targets, current=[gone])
+
+    assert _accepted_ids(panel) == ["99"]
