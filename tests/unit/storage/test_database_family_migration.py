@@ -39,49 +39,71 @@ def _insert_raw(conn, gallery_path, host, status, **kwargs):
 class TestFamilyMigration:
     def test_blocked_by_upload_id_column_exists(self, tmp_db_path):
         store = QueueStore(str(tmp_db_path))
-        with sqlite3.connect(str(tmp_db_path)) as conn:
+        conn = sqlite3.connect(str(tmp_db_path))
+        try:
             info = _table_info(conn, "file_host_uploads")
             assert "blocked_by_upload_id" in info
+        finally:
+            # sqlite3.Connection.__exit__ only commits/rollbacks — it does NOT
+            # close the connection. On Windows the open handle blocks the
+            # TemporaryDirectory fixture's teardown (PermissionError WinError 32),
+            # so close explicitly.
+            conn.close()
 
     def test_dedup_only_column_exists_with_default_zero(self, tmp_db_path):
         store = QueueStore(str(tmp_db_path))
-        with sqlite3.connect(str(tmp_db_path)) as conn:
+        conn = sqlite3.connect(str(tmp_db_path))
+        try:
             info = _table_info(conn, "file_host_uploads")
             assert "dedup_only" in info
             # Default of 0 is represented as "0" in the dflt column
             assert info["dedup_only"]["dflt"] in ("0", 0)
+        finally:
+            conn.close()
 
     def test_blocked_status_is_accepted(self, tmp_db_path):
         store = QueueStore(str(tmp_db_path))
-        with sqlite3.connect(str(tmp_db_path)) as conn:
+        conn = sqlite3.connect(str(tmp_db_path))
+        try:
             upload_id = _insert_raw(conn, "/tmp/test_gallery", "fileboom", "blocked")
             conn.commit()
+        finally:
+            conn.close()
         assert upload_id is not None
-        with sqlite3.connect(str(tmp_db_path)) as conn:
+        conn = sqlite3.connect(str(tmp_db_path))
+        try:
             row = conn.execute(
                 "SELECT status FROM file_host_uploads WHERE id = ?", (upload_id,)
             ).fetchone()
             assert row[0] == "blocked"
+        finally:
+            conn.close()
 
     def test_existing_statuses_still_accepted(self, tmp_db_path):
         store = QueueStore(str(tmp_db_path))
-        with sqlite3.connect(str(tmp_db_path)) as conn:
+        conn = sqlite3.connect(str(tmp_db_path))
+        try:
             for status in ("pending", "uploading", "completed", "failed", "cancelled"):
                 upload_id = _insert_raw(
                     conn, f"/tmp/test_gallery_{status}", "rapidgator", status
                 )
                 conn.commit()
                 assert upload_id is not None, f"status={status} was rejected"
+        finally:
+            conn.close()
 
     def test_invalid_status_rejected(self, tmp_db_path):
         store = QueueStore(str(tmp_db_path))
-        with sqlite3.connect(str(tmp_db_path)) as conn:
+        conn = sqlite3.connect(str(tmp_db_path))
+        try:
             try:
                 _insert_raw(conn, "/tmp/test_gallery_invalid", "rapidgator", "totally_not_valid")
                 conn.commit()
                 inserted = True
             except sqlite3.IntegrityError:
                 inserted = False
+        finally:
+            conn.close()
         assert not inserted, "Invalid status should be rejected by CHECK constraint"
 
     def test_existing_rows_preserved_after_migration(self, tmp_db_path):
@@ -95,7 +117,8 @@ class TestFamilyMigration:
         assert legacy_id is not None
         # Re-open — schema init should be idempotent and preserve the row
         store2 = QueueStore(str(tmp_db_path))
-        with sqlite3.connect(str(tmp_db_path)) as conn:
+        conn = sqlite3.connect(str(tmp_db_path))
+        try:
             row = conn.execute(
                 "SELECT status, blocked_by_upload_id, dedup_only FROM file_host_uploads WHERE id = ?",
                 (legacy_id,),
@@ -103,3 +126,5 @@ class TestFamilyMigration:
             assert row[0] == "completed"
             assert row[1] is None  # new NULL column
             assert row[2] == 0  # new default column
+        finally:
+            conn.close()

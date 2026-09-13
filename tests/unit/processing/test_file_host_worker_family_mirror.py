@@ -1,4 +1,5 @@
 """Tests for FileHostWorker._try_family_mirror()."""
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -7,6 +8,12 @@ import pytest
 
 from src.storage.database import QueueStore
 from src.processing.file_host_workers import FileHostWorker
+
+
+def _np(path: str) -> str:
+    """Normalize a POSIX test literal to this platform's path form so it
+    matches what QueueStore.add_file_host_upload actually stores."""
+    return os.path.normpath(path)
 
 
 @pytest.fixture
@@ -58,7 +65,7 @@ def _seed_primary_parts(store, gallery_path, host, part_defs):
 
 class TestTryFamilyMirror:
     def test_single_part_success(self, worker, store, client):
-        path = "/tmp/mg1"
+        path = _np("/tmp/mg1")
         _seed_primary_parts(store, path, "keep2share", [(0, "m0", "gallery.zip")])
         secondary_id = store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
         row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
@@ -73,7 +80,7 @@ class TestTryFamilyMirror:
         assert fb_row["deduped"] == 1
 
     def test_split_archive_creates_mirror_part_rows(self, worker, store, client):
-        path = "/tmp/mg2"
+        path = _np("/tmp/mg2")
         _seed_primary_parts(
             store, path, "keep2share",
             [(0, "m0", "g.part0.zip"), (1, "m1", "g.part1.zip"), (2, "m2", "g.part2.zip")],
@@ -99,7 +106,7 @@ class TestTryFamilyMirror:
         assert part2["dedup_only"] == 1
 
     def test_dedup_miss_on_any_part_aborts(self, worker, store):
-        path = "/tmp/mg3"
+        path = _np("/tmp/mg3")
         _seed_primary_parts(
             store, path, "keep2share",
             [(0, "m0", "g.part0.zip"), (1, "m1", "g.part1.zip")],
@@ -118,7 +125,7 @@ class TestTryFamilyMirror:
         assert ok is False
 
     def test_empty_primary_set_returns_false(self, worker, store, client):
-        path = "/tmp/mg4"
+        path = _np("/tmp/mg4")
         store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
         row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
 
@@ -129,7 +136,7 @@ class TestTryFamilyMirror:
     def test_non_family_host_returns_false(self, worker, store, client):
         # Worker for a non-family host shouldn't mirror anything
         non_family_worker = FileHostWorker(host_id="rapidgator", queue_store=store)
-        path = "/tmp/mg5"
+        path = _np("/tmp/mg5")
         store.add_file_host_upload(path, "rapidgator", status="pending", part_number=0)
         row = store.get_pending_file_host_uploads(host_name="rapidgator")[0]
 
@@ -139,7 +146,7 @@ class TestTryFamilyMirror:
     def test_partial_mirror_failure_leaves_head_row_pending(self, worker, store):
         """When dedup succeeds for part 0 but fails for part 1, the head row
         must remain `pending` so the caller can fall through to full upload."""
-        path = "/tmp/mg_partial"
+        path = _np("/tmp/mg_partial")
         _seed_primary_parts(
             store, path, "keep2share",
             [(0, "m0", "g.part0.zip"), (1, "m1", "g.part1.zip")],
@@ -165,7 +172,7 @@ class TestTryFamilyMirror:
     def test_mirror_excludes_own_host_from_sibling_parts(self, worker, store, client):
         """If the worker's own host has a prior completed row, it should NOT
         be treated as a sibling part for mirroring purposes."""
-        path = "/tmp/mg_self"
+        path = _np("/tmp/mg_self")
         # Fileboom has a prior completed row (e.g., from a previous run)
         _seed_primary_parts(store, path, "fileboom", [(0, "m_fb", "g.zip")])
         # A new pending fileboom row is being processed now
@@ -181,7 +188,7 @@ class TestTryFamilyMirror:
         """If the coordinator's poller gave up, sibling parts will have NULL
         md5. The mirror must abort without calling try_create_by_hash so the
         worker falls through to a full upload."""
-        path = "/tmp/mg_no_md5"
+        path = _np("/tmp/mg_no_md5")
         # Seed a completed K2S row but with NO md5 (poller never populated it)
         uid = store.add_file_host_upload(
             path, "keep2share", status="completed", part_number=0
@@ -205,7 +212,7 @@ class TestWorkerUploadLoopFamilyBranch:
     def test_pre_upload_branch_short_circuits_on_mirror_success(
         self, worker, store, client, monkeypatch
     ):
-        path = "/tmp/lp1"
+        path = _np("/tmp/lp1")
         _seed_primary_parts(store, path, "keep2share", [(0, "m0", "g.zip")])
         store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
         row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
@@ -235,7 +242,7 @@ class TestWorkerUploadLoopFamilyBranch:
     def test_dedup_only_row_fails_terminally_on_mirror_miss(
         self, worker, store, monkeypatch
     ):
-        path = "/tmp/lp2"
+        path = _np("/tmp/lp2")
         # No primary rows exist — mirror will miss
         store.add_file_host_upload(
             path, "fileboom", status="pending", part_number=0, dedup_only=1
@@ -269,7 +276,7 @@ class TestWorkerUploadLoopFamilyBranch:
         self, worker, store, monkeypatch
     ):
         """host_gallery_settled must fire from finally block, even on exception."""
-        path = "/tmp/lp_exc"
+        path = _np("/tmp/lp_exc")
         store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
         row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
 

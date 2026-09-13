@@ -1,4 +1,5 @@
 """Tests for QueueStore family-aware query helpers."""
+import os
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -6,6 +7,12 @@ from pathlib import Path
 import pytest
 
 from src.storage.database import QueueStore
+
+
+def _np(path: str) -> str:
+    """Normalize a POSIX test literal to this platform's path form so it
+    matches what QueueStore.add_file_host_upload actually stores."""
+    return os.path.normpath(path)
 
 
 @pytest.fixture
@@ -25,7 +32,7 @@ def _set_md5_and_complete(store, upload_id, md5, file_name):
 
 class TestGetFamilyCompletedParts:
     def test_returns_completed_sibling_parts_ordered(self, store):
-        path = "/tmp/g"
+        path = _np("/tmp/g")
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
         a1 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=1)
         a2 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=2)
@@ -41,7 +48,7 @@ class TestGetFamilyCompletedParts:
         assert [p["file_name"] for p in parts] == ["part0.zip", "part1.zip", "part2.zip"]
 
     def test_ignores_non_completed_rows(self, store):
-        path = "/tmp/g2"
+        path = _np("/tmp/g2")
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
         store.add_file_host_upload(path, "keep2share", status="failed", part_number=1)
         store.add_file_host_upload(path, "keep2share", status="pending", part_number=2)
@@ -53,7 +60,7 @@ class TestGetFamilyCompletedParts:
         assert parts[0]["part_number"] == 0
 
     def test_only_within_family(self, store):
-        path = "/tmp/g3"
+        path = _np("/tmp/g3")
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
         r0 = store.add_file_host_upload(path, "rapidgator", status="completed", part_number=0)
         _set_md5_and_complete(store, a0, "m0", "part0.zip")
@@ -66,7 +73,7 @@ class TestGetFamilyCompletedParts:
 
     def test_returns_row_without_md5_for_refetch(self, store):
         """Rows without md5 are included so siblings can re-fetch from the API."""
-        path = "/tmp/g4"
+        path = _np("/tmp/g4")
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
         # Deliberately do NOT set md5_hash — sibling should still see this row
 
@@ -77,7 +84,7 @@ class TestGetFamilyCompletedParts:
 
     def test_prefers_row_with_md5_over_without(self, store):
         """When both rows exist for same part, prefer the one with md5."""
-        path = "/tmp/g4b"
+        path = _np("/tmp/g4b")
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
         b0 = store.add_file_host_upload(path, "fileboom", status="completed", part_number=0)
         # Only fileboom has md5
@@ -90,14 +97,14 @@ class TestGetFamilyCompletedParts:
         assert parts[0]["md5_hash"] == "fb_md5"
 
     def test_unknown_family_returns_empty(self, store):
-        path = "/tmp/g5"
+        path = _np("/tmp/g5")
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
         _set_md5_and_complete(store, a0, "m0", "part0.zip")
         gallery_fk = store.get_file_host_uploads(path)[0]["gallery_fk"]
         assert store.get_family_completed_parts(gallery_fk, "nonexistent") == []
 
     def test_prefers_highest_priority_host_when_multiple_succeeded(self, store):
-        path = "/tmp/g6"
+        path = _np("/tmp/g6")
         # Both K2S and FileBoom have completed uploads
         a0 = store.add_file_host_upload(path, "keep2share", status="completed", part_number=0)
         b0 = store.add_file_host_upload(path, "fileboom", status="completed", part_number=0)
@@ -162,7 +169,7 @@ class TestGetFileHostPendingStats:
     """get_file_host_pending_stats must count blocked rows alongside pending/uploading."""
 
     def test_counts_pending_and_uploading(self, store):
-        path = "/tmp/stats1"
+        path = _np("/tmp/stats1")
         store.add_file_host_upload(path, "keep2share", status="pending")
         uid = store.add_file_host_upload(path, "keep2share", status="pending", part_number=1)
         store.update_file_host_upload(uid, status="uploading")
@@ -171,7 +178,7 @@ class TestGetFileHostPendingStats:
 
     def test_blocked_rows_included_in_count(self, store):
         """A blocked secondary should count as queued work, not be invisible."""
-        path = "/tmp/stats2"
+        path = _np("/tmp/stats2")
         primary_id = store.add_file_host_upload(path, "keep2share", status="pending")
         store.add_file_host_upload(
             path, "fileboom", status="blocked", blocked_by_upload_id=primary_id
@@ -184,7 +191,7 @@ class TestGetFileHostPendingStats:
         assert fboom["files"] == 1
 
     def test_completed_and_failed_rows_excluded(self, store):
-        path = "/tmp/stats3"
+        path = _np("/tmp/stats3")
         cid = store.add_file_host_upload(path, "keep2share", status="pending")
         fid = store.add_file_host_upload(path, "keep2share", status="pending", part_number=1)
         store.update_file_host_upload(cid, status="completed")

@@ -5,6 +5,7 @@ HostFamilyCoordinator + FileHostWorker._try_family_mirror together.
 We do not run real QThreads; we simulate upload outcomes by directly
 calling store methods and the coordinator.
 """
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -15,6 +16,12 @@ from src.storage.database import QueueStore
 from src.storage.queue_manager import queue_file_host_uploads_for_gallery
 from src.processing.host_family_coordinator import HostFamilyCoordinator
 from src.processing.file_host_workers import FileHostWorker
+
+
+def _np(path: str) -> str:
+    """Normalize a POSIX test literal to this platform's path form so it
+    matches what QueueStore.add_file_host_upload actually stores."""
+    return os.path.normpath(path)
 
 
 @pytest.fixture
@@ -58,7 +65,7 @@ def _mock_success_client(urls_by_hash):
 
 class TestWithinRunSinglePart:
     def test_one_upload_two_dedups(self, store, coord):
-        path = "/tmp/int1"
+        path = _np("/tmp/int1")
         ids = queue_file_host_uploads_for_gallery(
             store, gallery_path=path,
             host_ids=["keep2share", "fileboom", "tezfiles"],
@@ -98,7 +105,7 @@ class TestWithinRunSinglePart:
 
 class TestCrossSessionRetrofit:
     def test_enable_fileboom_after_k2s_run(self, store, coord):
-        path = "/tmp/int_xs"
+        path = _np("/tmp/int_xs")
         # Day 1: K2S upload completed (seeded)
         ids = queue_file_host_uploads_for_gallery(
             store, path, ["keep2share"], family_dedup_enabled=True
@@ -129,7 +136,7 @@ class TestCrossSessionRetrofit:
 
 class TestPartialPrimaryFailure:
     def test_promotion_on_failure_triggers_retry_with_dedup_only(self, store, coord):
-        path = "/tmp/int_pf"
+        path = _np("/tmp/int_pf")
         ids = queue_file_host_uploads_for_gallery(
             store, path, ["keep2share", "fileboom", "tezfiles"], family_dedup_enabled=True
         )

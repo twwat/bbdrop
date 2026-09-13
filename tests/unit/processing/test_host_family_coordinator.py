@@ -1,4 +1,5 @@
 """Tests for HostFamilyCoordinator — drives the coordinator via host_gallery_settled emits."""
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,18 @@ from src.processing.host_family_coordinator import (
     HostFamilyCoordinator,
     _canonical_file_id_from_url,
 )
+
+
+def _np(path: str) -> str:
+    """Normalize a POSIX test literal to this platform's path form.
+
+    QueueStore.add_file_host_upload stores os.path.normpath(gallery_path);
+    get_file_host_uploads() looks up the raw string it's given. On Windows,
+    "/tmp/x" normalizes to "\\tmp\\x", so a test literal must be normalized
+    once at the point it's assigned to `path` so every later add/get call
+    (which reuses that same `path` variable) agrees.
+    """
+    return os.path.normpath(path)
 
 
 class TestCanonicalFileIdFromUrl:
@@ -82,7 +95,7 @@ def _row(store, gallery_path, host):
 
 class TestCoordinatorUnblockOnSuccess:
     def test_primary_success_unblocks_secondaries(self, store, coord):
-        path = "/tmp/c1"
+        path = _np("/tmp/c1")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom", "tezfiles"])
         # Mark primary completed
         store.update_file_host_upload(ids["keep2share"], status="completed", md5_hash="m0")
@@ -94,7 +107,7 @@ class TestCoordinatorUnblockOnSuccess:
         assert _row_status(store, path, "tezfiles") == "pending"
 
     def test_success_with_no_family_is_noop(self, store, coord):
-        path = "/tmp/c1b"
+        path = _np("/tmp/c1b")
         store.add_file_host_upload(path, "rapidgator", status="pending")
         gallery_fk = _row(store, path, "rapidgator")["gallery_fk"]
         coord.on_host_gallery_settled(gallery_fk, "rapidgator", True)
@@ -104,7 +117,7 @@ class TestCoordinatorUnblockOnSuccess:
 
 class TestCoordinatorPromoteOnFailure:
     def test_primary_failure_promotes_next_in_chain(self, store, coord):
-        path = "/tmp/c2"
+        path = _np("/tmp/c2")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom", "tezfiles"])
         store.update_file_host_upload(ids["keep2share"], status="failed")
         gallery_fk = _row(store, path, "keep2share")["gallery_fk"]
@@ -121,7 +134,7 @@ class TestCoordinatorPromoteOnFailure:
         assert tf["blocked_by_upload_id"] == fb["id"]
 
     def test_promoted_primary_success_retries_original_primary(self, store, coord):
-        path = "/tmp/c3"
+        path = _np("/tmp/c3")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom", "tezfiles"])
         gallery_fk = _row(store, path, "keep2share")["gallery_fk"]
 
@@ -144,7 +157,7 @@ class TestCoordinatorPromoteOnFailure:
         assert tf_row["status"] == "pending"
 
     def test_all_primaries_fail_leaves_all_failed(self, store, coord):
-        path = "/tmp/c4"
+        path = _np("/tmp/c4")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom", "tezfiles"])
         gallery_fk = _row(store, path, "keep2share")["gallery_fk"]
 
@@ -166,7 +179,7 @@ class TestCoordinatorPromoteOnFailure:
 
 class TestCoordinatorNoOpCases:
     def test_single_family_member_enabled_is_noop(self, store, coord):
-        path = "/tmp/c5"
+        path = _np("/tmp/c5")
         _add_family_rows(store, path, ["keep2share"])
         gallery_fk = _row(store, path, "keep2share")["gallery_fk"]
         coord.on_host_gallery_settled(gallery_fk, "keep2share", True)
@@ -196,7 +209,7 @@ class TestCoordinatorMd5Poller:
     def test_null_md5_with_url_schedules_poller_and_unblocks_on_landing(
         self, store, sync_coord
     ):
-        path = "/tmp/md5_poll1"
+        path = _np("/tmp/md5_poll1")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom", "tezfiles"])
         # Primary completes with NULL md5 but a real download URL
         store.update_file_host_upload(
@@ -223,7 +236,7 @@ class TestCoordinatorMd5Poller:
         assert _row_status(store, path, "tezfiles") == "pending"
 
     def test_poller_exhausted_unblocks_anyway(self, store, sync_coord):
-        path = "/tmp/md5_poll2"
+        path = _np("/tmp/md5_poll2")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom", "tezfiles"])
         store.update_file_host_upload(
             ids["keep2share"],
@@ -248,7 +261,7 @@ class TestCoordinatorMd5Poller:
         """Row has NULL md5 AND no download URL — the poller has nothing to
         query, so we unblock immediately instead of spawning it. Siblings
         will fall through to full upload."""
-        path = "/tmp/md5_poll3"
+        path = _np("/tmp/md5_poll3")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom"])
         store.update_file_host_upload(ids["keep2share"], status="completed")
         gallery_fk = _row(store, path, "keep2share")["gallery_fk"]
@@ -270,7 +283,7 @@ class TestCoordinatorMd5Poller:
         terminally. Instead the retry row gets blocked on the winner, and
         the poller unblocks it naturally when md5 lands.
         """
-        path = "/tmp/b1_retry"
+        path = _np("/tmp/b1_retry")
         ids = _add_family_rows(store, path, ["keep2share", "fileboom", "tezfiles"])
         gallery_fk = _row(store, path, "keep2share")["gallery_fk"]
 
@@ -326,7 +339,7 @@ class TestCoordinatorMd5Poller:
     def test_no_waiters_is_noop(self, store, sync_coord):
         """Primary succeeds but nothing is blocked on it — skip the poller
         entirely, even if md5 is NULL."""
-        path = "/tmp/md5_poll4"
+        path = _np("/tmp/md5_poll4")
         _add_family_rows(store, path, ["keep2share"])
         k2s_id = _row(store, path, "keep2share")["id"]
         store.update_file_host_upload(
