@@ -29,7 +29,7 @@ class TestFileHostWorkerInit:
 
         assert worker.host_id == "rapidgator"
         assert worker.queue_store == mock_queue_store
-        assert worker.log_prefix == "RapidGator Worker"
+        assert worker.log_prefix == "RapidGator"
         # Worker uses threading.Event objects for state management
         assert not worker._stop_event.is_set()  # Not stopped
         assert not worker._pause_event.is_set()  # Not paused
@@ -124,7 +124,7 @@ class TestFileHostWorkerLogging:
 
         log_spy.assert_called_once_with("info", "Test message")
         mock_log.assert_called_once_with(
-            "TestHost Worker: Test message",
+            "TestHost: Test message",
             level="info",
             category="file_hosts"
         )
@@ -606,7 +606,7 @@ class TestFileHostWorkerEdgeCases:
 
         worker = FileHostWorker("unknown_host", Mock())
 
-        assert worker.log_prefix == "unknown_host Worker"
+        assert worker.log_prefix == "unknown_host"
 
     @patch('src.processing.file_host_workers.get_config_manager')
     @patch('src.processing.file_host_workers.get_coordinator')

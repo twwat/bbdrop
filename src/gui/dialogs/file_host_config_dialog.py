@@ -1858,8 +1858,11 @@ class FileHostConfigDialog(QDialog):
             else:
                 lines = lines[-1000:]  # Fallback limit to prevent unbounded loading
 
-            # Filter for this worker's messages (limit to most recent 100)
-            worker_identifier = f"{self.host_config.name} Worker"
+            # Filter for this host's messages (limit to most recent 100).
+            # Must match FileHostWorker._log's "<name>: " prefix; anchored on
+            # the category tag so other modules' lines mentioning
+            # "<name>: " don't leak in.
+            worker_identifier = f"[file_hosts] {self.host_config.name}: "
             matching_lines = [line for line in lines if worker_identifier in line]
 
             # Take only last 100 (most recent) and insert in reverse order (newest first)

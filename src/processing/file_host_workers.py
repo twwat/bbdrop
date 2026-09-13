@@ -94,9 +94,9 @@ class FileHostWorker(QThread):
         self.archive_manager = get_archive_manager()
         self.settings = QSettings("BBDropUploader", "BBDropGUI")
 
-        # Get display name for logs (e.g., "RapidGator" instead of "rapidgator")
+        # Display name for logs (e.g., "RapidGator" instead of "rapidgator")
         host_config = self.config_manager.get_host(host_id)
-        self.log_prefix = f"{host_config.name} Worker" if host_config else f"{host_id} Worker"
+        self.log_prefix = host_config.name if host_config else host_id
 
         self._stop_event = threading.Event()  # Thread-safe stop signal
         self._pause_event = threading.Event()  # Thread-safe pause signal (set = paused)

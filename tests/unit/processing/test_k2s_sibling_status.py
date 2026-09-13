@@ -56,7 +56,7 @@ def _make_worker(tmp_path):
         host_id = "fileboom"
         _family_status = ""
         _hash_created_ts = 0.0
-        log_prefix = "FileBoom Worker"
+        log_prefix = "FileBoom"
 
         def __init__(self, qs):
             self.queue_store = qs
