@@ -961,6 +961,28 @@ class UploadWorker(QThread):
         except Exception:
             pass
 
+    def _restore_resume_state(self, item: GalleryQueueItem) -> None:
+        """Reload already-uploaded images from the DB when resuming after a restart.
+
+        The gallery loaders leave uploaded_files empty (for speed) but restore
+        gallery_id, so without this a resumed gallery re-uploads every image
+        into the existing host gallery.
+        """
+        if item.uploaded_files or not item.gallery_id or not (item.uploaded_images or 0):
+            return
+        try:
+            rows = self.queue_manager.store.get_uploaded_images(item.path)
+        except Exception as e:
+            log(f"Could not load resume state for {item.path}: {e}",
+                level="warning", category="uploads")
+            return
+        if not rows:
+            return
+        item.uploaded_files = {fname for fname, _ in rows}
+        item.uploaded_images_data = list(rows)
+        log(f"Resuming '{item.name}': {len(rows)} image(s) already uploaded",
+            level="info", category="uploads")
+
     def _run_upload_engine(self, item: GalleryQueueItem, thumbnail_size: int,
                            thumbnail_format: int, max_retries: int,
                            parallel_batch_size: int) -> dict:
@@ -973,6 +995,7 @@ class UploadWorker(QThread):
         folder_path = item.path
 
         # Resume support
+        self._restore_resume_state(item)
         already_uploaded = set(getattr(item, 'uploaded_files', set()))
         existing_gallery_id = (
             item.gallery_id
