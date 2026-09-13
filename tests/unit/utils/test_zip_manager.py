@@ -496,3 +496,60 @@ class TestBackwardCompat:
 
     def test_get_zip_manager_singleton(self):
         assert get_zip_manager() is get_zip_manager()
+
+
+class TestPredictArchiveName:
+
+    def test_named_zip_has_no_internal_prefix(self, manager):
+        assert manager.predict_archive_name(2328, "Nubiles 2026-09-05 Nika One") == \
+            "Nubiles 2026-09-05 Nika One.zip"
+
+    def test_7z_extension(self, manager):
+        assert manager.predict_archive_name(1, "Set", "7z") == "Set.7z"
+
+    def test_unknown_format_falls_back_to_zip(self, manager):
+        assert manager.predict_archive_name(1, "Set", "rar") == "Set.zip"
+
+    def test_sanitizes_like_generate_archive_name(self, manager):
+        name = "Nubiles 2026-09-05 Nika One (Vivi, Lilian Red, Lilian Summer, Liliana) - Set 7"
+        generated = manager._generate_archive_name(2328, name)
+        assert generated == f"bbdrop_2328_{manager.predict_archive_name(2328, name)[:-4]}"
+
+    def test_empty_name_uses_gallery_fallback(self, manager):
+        assert manager.predict_archive_name(99, "") == "bbdrop_gallery_99.zip"
+        assert manager.predict_archive_name(99, None) == "bbdrop_gallery_99.zip"
+        assert manager.predict_archive_name(99, "(),!") == "bbdrop_gallery_99.zip"
+
+
+class TestGetCachedPaths:
+
+    def test_miss_returns_empty(self, manager):
+        assert manager.get_cached_paths(1) == []
+
+    def test_hit_returns_paths_without_touching_refcount(self, manager, gallery_folder):
+        paths = manager.create_or_reuse_archive(7, gallery_folder, "Set")
+        assert manager.get_cached_paths(7) == paths
+        assert manager.archive_cache[7][1] == 1  # ref count unchanged
+
+    def test_missing_on_disk_returns_empty(self, manager, gallery_folder):
+        paths = manager.create_or_reuse_archive(7, gallery_folder, "Set")
+        paths[0].unlink()
+        assert manager.get_cached_paths(7) == []
+
+    def test_returns_a_copy(self, manager, gallery_folder):
+        manager.create_or_reuse_archive(7, gallery_folder, "Set")
+        manager.get_cached_paths(7).clear()
+        assert manager.get_cached_paths(7) != []
+
+    def test_does_not_wait_for_archive_lock(self, manager, gallery_folder):
+        """Called on the GUI thread; create_or_reuse_archive holds self.lock for
+        the whole build (minutes for a big 7z). Must not block on it."""
+        import threading
+        manager.create_or_reuse_archive(7, gallery_folder, "Set")
+        result = []
+        with manager.lock:  # simulate an archive build in progress
+            t = threading.Thread(target=lambda: result.append(manager.get_cached_paths(7)))
+            t.start()
+            t.join(timeout=1.0)
+            assert not t.is_alive(), "get_cached_paths blocked on ArchiveManager.lock"
+        assert result and result[0]

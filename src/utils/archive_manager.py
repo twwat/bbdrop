@@ -324,6 +324,37 @@ class ArchiveManager:
                 }
             return info
 
+    def predict_archive_name(
+        self, gallery_id: int, gallery_name: Optional[str], archive_format: str = 'zip'
+    ) -> str:
+        """Host-facing name the archive for this gallery will have.
+
+        Same as the temp filename minus the internal ``bbdrop_<id>_`` prefix
+        (what get_clean_filename() yields). Split archives are named by their
+        base name here, not their first part.
+        """
+        ext = '7z' if archive_format == '7z' else 'zip'
+        safe_name = self._safe_name(gallery_name)
+        if safe_name:
+            return f"{safe_name}.{ext}"
+        return f"bbdrop_gallery_{gallery_id}.{ext}"
+
+    def get_cached_paths(self, gallery_id: int) -> List[Path]:
+        """Paths of an already-built archive for this gallery, or [] if none.
+
+        Read-only: does not change the reference count. Deliberately lock-free:
+        called from the GUI thread, while create_or_reuse_archive holds
+        self.lock for the whole build. Cache values are tuples replaced whole,
+        never mutated, so a single dict.get() sees the old or the new entry.
+        """
+        entry = self.archive_cache.get(gallery_id)
+        if not entry:
+            return []
+        paths = entry[0]
+        if paths and all(p.exists() for p in paths):
+            return list(paths)
+        return []
+
     # --- Backward compatibility with ZIPManager API ---
 
     def create_or_reuse_zip(
@@ -349,14 +380,20 @@ class ArchiveManager:
 
     # --- Private creation methods ---
 
+    @staticmethod
+    def _safe_name(gallery_name: Optional[str]) -> str:
+        """Sanitize a gallery name for use in an archive filename ('' if nothing usable)."""
+        if not gallery_name:
+            return ""
+        return "".join(
+            c for c in gallery_name if c.isalnum() or c in (' ', '-', '_')
+        ).strip()[:50]
+
     def _generate_archive_name(self, gallery_id: int, gallery_name: Optional[str] = None) -> str:
         """Generate base archive name (without extension)."""
-        if gallery_name:
-            safe_name = "".join(
-                c for c in gallery_name if c.isalnum() or c in (' ', '-', '_')
-            ).strip()[:50]
-            if safe_name:
-                return f"bbdrop_{gallery_id}_{safe_name}"
+        safe_name = self._safe_name(gallery_name)
+        if safe_name:
+            return f"bbdrop_{gallery_id}_{safe_name}"
         return f"bbdrop_gallery_{gallery_id}"
 
     def _create_zip(self, folder_path: Path, base_name: str, compression: str) -> Path:
