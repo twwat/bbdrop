@@ -1281,29 +1281,34 @@ class QueueManager(QObject):
         except Exception as e:
             log(f"Save failed for {item.path}: {e}", level="error", category="database")
 
+    # Statuses worth persisting (transient uploading/validating states are not)
+    _PERSISTED_STATES = (
+        QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
+        QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
+        QUEUE_STATE_SCANNING, QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED,
+    )
+
+    def _collect_items_for_save(self, specific_paths: List[str] | None = None) -> List[dict]:
+        """Snapshot persistable items as dicts, under the mutex."""
+        with QMutexLocker(self.mutex):
+            if specific_paths:
+                items = [self.items[p] for p in specific_paths if p in self.items]
+            else:
+                items = list(self.items.values())
+            return [self._item_to_dict(item) for item in items
+                    if item.status in self._PERSISTED_STATES]
+
     def save_persistent_queue(self, specific_paths: List[str] | None = None):
         """Save queue state to database"""
         if self._batch_mode and specific_paths:
             self._batched_changes.update(specific_paths)
             return
 
-        with QMutexLocker(self.mutex):
-            if specific_paths:
-                items = [self.items[p] for p in specific_paths if p in self.items]
-            else:
-                items = list(self.items.values())
-
-            queue_data = []
-            for item in items:
-                if item.status in [QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
-                                  QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
-                                  QUEUE_STATE_SCANNING, QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED]:
-                    queue_data.append(self._item_to_dict(item))
-
-            try:
-                self.store.bulk_upsert_async(queue_data)
-            except Exception as e:
-                log(f"Database save failed: {e}", level="error", category="database")
+        queue_data = self._collect_items_for_save(specific_paths)
+        try:
+            self.store.bulk_upsert_async(queue_data)
+        except Exception as e:
+            log(f"Database save failed: {e}", level="error", category="database")
     
     def _item_to_dict(self, item: GalleryQueueItem) -> dict:
         """Convert item to dictionary for storage"""
@@ -1718,19 +1723,19 @@ class QueueManager(QObject):
     
     
     def shutdown(self):
-        """Shutdown queue manager"""
-        # Process any pending saves before shutting down
-        if self._pending_save_timer:
-            try:
-                if self._pending_save_timer.isActive():
-                    self._pending_save_timer.stop()
-                # Execute the save immediately if there was a pending one
-                self.save_persistent_queue()
-            except RuntimeError:
-                # Timer might be from another thread, just do a direct save
-                self.save_persistent_queue()
-            finally:
-                self._pending_save_timer = None
+        """Shutdown queue manager.
+
+        Ends with one blocking save of every item. A pending debounced save
+        can't be relied on: this runs on ShutdownWorker's thread (the GUI
+        thread's timer can't be stopped or awaited from here), and a save
+        requested from a worker thread may not have reached the GUI thread
+        yet. bulk_upsert_ordered runs behind any async save still queued, so
+        an older snapshot can't overwrite this one.
+        """
+        try:
+            self.store.bulk_upsert_ordered(self._collect_items_for_save())
+        except Exception as e:
+            log(f"Final queue save failed: {e}", level="error", category="database")
 
         self._scan_worker_running = False
         try:

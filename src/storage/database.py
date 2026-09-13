@@ -1261,6 +1261,21 @@ class QueueStore:
         future = self._executor.submit(self.bulk_upsert, items_list)
         future.add_done_callback(_on_done)
 
+    def bulk_upsert_ordered(self, items: Iterable[Dict[str, Any]], timeout: float = 30.0) -> None:
+        """Blocking upsert that runs after every save already queued by bulk_upsert_async.
+
+        The executor has a single worker, so submitting here keeps FIFO order:
+        an older async snapshot can't land after (and overwrite) this one.
+        Falls back to a direct write if the executor has been shut down.
+        """
+        items_list = [dict(it) for it in items]
+        try:
+            future = self._executor.submit(self.bulk_upsert, items_list)
+        except RuntimeError:  # executor already shut down
+            self.bulk_upsert(items_list)
+            return
+        future.result(timeout=timeout)
+
     def load_all_items(self) -> List[Dict[str, Any]]:
         with _ConnectionContext(self.db_path) as conn:
             _ensure_schema(conn)

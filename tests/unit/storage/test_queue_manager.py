@@ -821,7 +821,7 @@ class TestShutdown:
         queue_manager.shutdown()
 
         # Should have saved
-        assert mock_store.bulk_upsert_async.called or mock_store.bulk_upsert.called
+        assert mock_store.bulk_upsert_ordered.called
 
     def test_shutdown_stops_scan_worker(self, queue_manager):
         """Test that shutdown stops scan worker."""
@@ -1390,3 +1390,15 @@ class TestMainThreadMarshalling:
         qtbot.waitUntil(
             lambda: any(a[0] == path and a[2] == QUEUE_STATE_QUEUED for a in got),
             timeout=2000)
+
+    def test_shutdown_saves_all_items_synchronously(self, queue_manager, mock_store):
+        path = self._add(queue_manager, "/fake/thr1_shutdown", QUEUE_STATE_INCOMPLETE)
+        # e.g. the save was requested from a worker thread: no timer exists yet
+        queue_manager._pending_save_timer = None
+        mock_store.bulk_upsert_ordered.reset_mock()
+
+        queue_manager.shutdown()
+
+        mock_store.bulk_upsert_ordered.assert_called_once()
+        saved = mock_store.bulk_upsert_ordered.call_args[0][0]
+        assert path in [d['path'] for d in saved]
