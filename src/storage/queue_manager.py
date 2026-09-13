@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 
-from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, QSettings, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QMutex, QMutexLocker, QSettings, QTimer, Qt
 
 from src.storage.database import QueueStore
 from src.utils.paths import load_user_defaults
@@ -222,9 +222,15 @@ class QueueManager(QObject):
     scan_status_changed = pyqtSignal(int, int)  # queue_size, items_pending
     queue_loaded = pyqtSignal()
     log_message = pyqtSignal(str)
-    
+    # Internal: carries (callable, delay_ms) to the GUI thread. See _call_on_main.
+    _main_thread_call = pyqtSignal(object)
+
     def __init__(self):
         super().__init__()
+        # Queued, so the slot always runs on this object's (GUI) thread and
+        # never inline — callers may be holding self.mutex.
+        self._main_thread_call.connect(
+            self._run_main_thread_call, Qt.ConnectionType.QueuedConnection)
         self.items: Dict[str, GalleryQueueItem] = {}
         self.queue = Queue()
         self.mutex = QMutex()
@@ -518,16 +524,14 @@ class QueueManager(QObject):
             self._emit_scan_status()
 
             # Save to database immediately now that scan is complete and status is "ready"
-            from PyQt6.QtCore import QTimer
             # Capture the path in a closure-safe way
             saved_path = path
             # Save and then refresh the filter to show the item in the correct tab
             def save_and_refresh():
                 self.save_persistent_queue([saved_path])
                 # Emit a signal to refresh the tab filter after save
-                from PyQt6.QtCore import QTimer as QT2
-                QT2.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
-            QTimer.singleShot(0, save_and_refresh)
+                QTimer.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
+            self._call_on_main(save_and_refresh)
             self._inc_version()
             
         except Exception as e:
@@ -686,13 +690,11 @@ class QueueManager(QObject):
         self._emit_scan_status()
 
         # Persist and refresh (same pattern as image scan)
-        from PyQt6.QtCore import QTimer
         saved_path = path
         def save_and_refresh():
             self.save_persistent_queue([saved_path])
-            from PyQt6.QtCore import QTimer as QT2
-            QT2.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
-        QTimer.singleShot(0, save_and_refresh)
+            QTimer.singleShot(50, lambda: self.status_changed.emit(saved_path, "save_complete", "refresh_filter"))
+        self._call_on_main(save_and_refresh)
         self._inc_version()
 
     def _scan_images(self, path: str, files: List[str]) -> dict:
@@ -957,7 +959,7 @@ class QueueManager(QObject):
                     
                     # Emit status change signal
                     if hasattr(self, 'status_changed'):
-                        QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, item.status))
+                        self._call_on_main(lambda: self.status_changed.emit(path, old_status, item.status))
         
         self._schedule_debounced_save([path])
         self._inc_version()
@@ -1031,7 +1033,7 @@ class QueueManager(QObject):
                     
                     # Emit status change if changed
                     if hasattr(self, 'status_changed') and item.status != old_status:
-                        QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, item.status))
+                        self._call_on_main(lambda: self.status_changed.emit(path, old_status, item.status))
                     
                 except Exception as e:
                     self.mark_scan_failed(path, f"Additive rescan error: {e}")
@@ -1067,10 +1069,10 @@ class QueueManager(QObject):
                 
                 # Emit status change signal
                 if hasattr(self, 'status_changed'):
-                    QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, QUEUE_STATE_SCANNING))
+                    self._call_on_main(lambda: self.status_changed.emit(path, old_status, QUEUE_STATE_SCANNING))
                 
                 # Trigger full rescan
-                QTimer.singleShot(100, lambda: self._initiate_scan(path))
+                self._call_on_main(lambda: self._initiate_scan(path), delay_ms=100)
         
         self._inc_version()
     
@@ -1096,7 +1098,7 @@ class QueueManager(QObject):
             self.request_folder_scan(path)
         else:
             # Fallback: add to scan queue directly
-            QTimer.singleShot(0, lambda: self._add_to_scan_queue(path))
+            self._call_on_main(lambda: self._add_to_scan_queue(path))
     
     def _add_to_scan_queue(self, path: str):
         """Add path to existing scan queue without duplicating logic"""
@@ -1173,15 +1175,34 @@ class QueueManager(QObject):
                    self._status_counts.get(QUEUE_STATE_VALIDATING, 0))
         self.scan_status_changed.emit(queue_size, pending)
     
+    def _call_on_main(self, fn, delay_ms: int = 0) -> None:
+        """Run fn on the GUI thread, asynchronously, from any thread.
+
+        Don't use QTimer.singleShot for this: called from a worker thread
+        (threading.Thread or QThread.run) it never fires, because the timer
+        belongs to a thread with no event loop. A queued signal to this
+        GUI-thread object works everywhere, and from the GUI thread it
+        defers just like singleShot(0).
+        """
+        self._main_thread_call.emit((fn, delay_ms))
+
+    @pyqtSlot(object)
+    def _run_main_thread_call(self, payload) -> None:
+        fn, delay_ms = payload
+        if delay_ms > 0:
+            QTimer.singleShot(delay_ms, fn)  # fine here: we're on the GUI thread
+        else:
+            fn()
+
     def _schedule_debounced_save(self, paths: List[str]):
         """Schedule a debounced save to prevent overlapping database operations"""
-        from PyQt6.QtCore import QTimer, QThread, QCoreApplication
+        from PyQt6.QtCore import QThread, QCoreApplication
 
         # Check if we're on the main thread
         app = QCoreApplication.instance()
         if app and QThread.currentThread() != app.thread():
             # We're not on the main thread, defer to main thread
-            QTimer.singleShot(0, lambda: self._schedule_debounced_save(paths))
+            self._call_on_main(lambda: self._schedule_debounced_save(paths))
             return
 
         # Cancel any pending save
@@ -1624,7 +1645,7 @@ class QueueManager(QObject):
 
                 if old_status != status:
                     # Emit signal asynchronously to avoid timer conflicts
-                    QTimer.singleShot(0, lambda: self.status_changed.emit(path, old_status, status))
+                    self._call_on_main(lambda: self.status_changed.emit(path, old_status, status))
     
     def remove_item(self, path: str) -> bool:
         """Remove item from queue"""

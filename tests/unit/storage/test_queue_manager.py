@@ -1290,3 +1290,103 @@ class TestComprehensiveScanVideoItem:
             assert item.media_type == "video"
             assert item.scan_complete is True
             assert item.total_images == 1  # only video files counted
+
+
+class TestMainThreadMarshalling:
+    """THR-1: work deferred from worker threads must reach the GUI thread.
+
+    QTimer.singleShot called from a threading.Thread or inside QThread.run
+    never fires (the timer lives in a thread with no event loop).
+    """
+
+    @staticmethod
+    def _on_gui_thread():
+        from PyQt6.QtCore import QThread, QCoreApplication
+        return QThread.currentThread() == QCoreApplication.instance().thread()
+
+    @staticmethod
+    def _add(queue_manager, raw_path, status):
+        from src.storage.queue_manager import _normalize_path
+        path = _normalize_path(raw_path)
+        queue_manager.items[path] = GalleryQueueItem(path=path, status=status)
+        return path
+
+    def test_call_on_main_from_python_thread(self, queue_manager, qtbot):
+        ran = []
+        t = threading.Thread(target=lambda: queue_manager._call_on_main(
+            lambda: ran.append(self._on_gui_thread())))
+        t.start()
+        t.join()
+        qtbot.waitUntil(lambda: bool(ran), timeout=2000)
+        assert ran == [True]
+
+    def test_call_on_main_from_qthread_run(self, queue_manager, qtbot):
+        from PyQt6.QtCore import QThread
+        ran = []
+        on_gui = self._on_gui_thread
+
+        class Worker(QThread):
+            def run(self):
+                queue_manager._call_on_main(lambda: ran.append(on_gui()))
+
+        worker = Worker()
+        worker.start()
+        assert worker.wait(2000)
+        qtbot.waitUntil(lambda: bool(ran), timeout=2000)
+        assert ran == [True]
+
+    def test_call_on_main_from_gui_thread_is_deferred(self, queue_manager, qtbot):
+        ran = []
+        queue_manager._call_on_main(lambda: ran.append(True))
+        assert ran == []  # never inline: callers may hold self.mutex
+        qtbot.waitUntil(lambda: bool(ran), timeout=2000)
+
+    def test_call_on_main_honours_delay(self, queue_manager, qtbot):
+        ran = []
+        t = threading.Thread(target=lambda: queue_manager._call_on_main(
+            lambda: ran.append(True), delay_ms=50))
+        t.start()
+        t.join()
+        qtbot.waitUntil(lambda: bool(ran), timeout=2000)
+
+    def test_debounced_save_from_worker_thread_reaches_store(self, queue_manager, mock_store, qtbot):
+        path = self._add(queue_manager, "/fake/thr1_debounce", QUEUE_STATE_READY)
+        mock_store.bulk_upsert_async.reset_mock()
+
+        t = threading.Thread(target=lambda: queue_manager._schedule_debounced_save([path]))
+        t.start()
+        t.join()
+
+        qtbot.waitUntil(lambda: mock_store.bulk_upsert_async.called, timeout=2000)
+        saved = mock_store.bulk_upsert_async.call_args[0][0]
+        assert [d['path'] for d in saved] == [path]
+
+    def test_mark_scan_failed_from_worker_thread_is_saved(self, queue_manager, mock_store, qtbot):
+        path = self._add(queue_manager, "/fake/thr1_scanfail", QUEUE_STATE_SCANNING)
+        mock_store.bulk_upsert_async.reset_mock()
+
+        t = threading.Thread(target=lambda: queue_manager.mark_scan_failed(path, "boom"))
+        t.start()
+        t.join()
+
+        def saved_as_failed():
+            return any(
+                d['path'] == path and d['status'] == QUEUE_STATE_SCAN_FAILED
+                for call in mock_store.bulk_upsert_async.call_args_list
+                for d in call[0][0]
+            )
+        qtbot.waitUntil(saved_as_failed, timeout=2000)
+
+    def test_update_item_status_from_worker_thread_emits(self, queue_manager, qtbot):
+        path = self._add(queue_manager, "/fake/thr1_status", QUEUE_STATE_READY)
+        got = []
+        queue_manager.status_changed.connect(lambda *args: got.append(args))
+
+        t = threading.Thread(
+            target=lambda: queue_manager.update_item_status(path, QUEUE_STATE_QUEUED))
+        t.start()
+        t.join()
+
+        qtbot.waitUntil(
+            lambda: any(a[0] == path and a[2] == QUEUE_STATE_QUEUED for a in got),
+            timeout=2000)
