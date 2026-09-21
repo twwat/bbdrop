@@ -1153,6 +1153,19 @@ class FileHostWorker(QThread):
                         file_size=file_size,
                     )
 
+                # Announce this part starting with zero bytes sent. The pycurl
+                # progress callback restarts at 0 for every part, but nothing
+                # said so -- a consumer holding a per-(gallery, host) live byte
+                # count (the byte-weighted progress percent) would credit this
+                # part's freshly created row with the PREVIOUS part's final
+                # total, so the gallery percent jumped up and then fell back at
+                # every part boundary. Emitted directly rather than through
+                # on_progress so the 4/sec throttle can't swallow it.
+                self.upload_progress.emit(db_id, host_name, 0, part_size, 0.0, gallery_path)
+                # Drop the throttle state too, so this part's first real tick
+                # isn't held back by the previous part's emit timestamp.
+                self._cleanup_upload_throttle_state(db_id, host_name)
+
                 # Reset upload timing just before actual transfer
                 upload_start_time = time.time()
 
