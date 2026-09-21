@@ -556,7 +556,12 @@ class WorkerStatusWidget(QWidget):
 
         # Metrics store connection
         self._metrics_store = None
-        self._host_metrics_cache: Dict[str, Dict[str, Any]] = {}  # host_name -> metrics dict
+        self._host_metrics_cache: Dict[str, Dict[str, Any]] = {}  # host_id -> metrics dict
+        # Bytes moved by an in-flight file host transfer, keyed by host_id.
+        # MetricsStore only learns about them when the transfer lands, so the
+        # uploaded columns would sit still while queue (bytes) ticks down.
+        # Added on top of bytes_uploaded for display; never persisted.
+        self._inflight_bytes: Dict[str, int] = {}
 
         # UI references
         self.status_table: Optional[QTableWidget] = None
@@ -1112,7 +1117,7 @@ class WorkerStatusWidget(QWidget):
                         'all_time': self._metrics_store.get_aggregated_metrics(host_name, 'all_time'),
                     }
                     # Cache the metrics
-                    self._host_metrics_cache[host_name.lower()] = metrics
+                    self._host_metrics_cache[to_host_id(host_name)] = metrics
                 except Exception as e:
                     log(f"Error loading metrics for {host_name}: {e}", level="error", category="ui")
 
@@ -1137,8 +1142,13 @@ class WorkerStatusWidget(QWidget):
             metrics: Dict with period sub-dicts (session, today, all_time), each containing:
                      bytes_uploaded, files_uploaded, avg_speed, peak_speed, success_rate
         """
+        # metrics_store normalizes its inputs through to_host_id() before
+        # emitting, but normalize again here so the cache key matches what
+        # _metrics_cache_key() builds from a worker on the read side.
+        target = to_host_id(host_name)
+
         # Get existing cache or create empty
-        existing = self._host_metrics_cache.get(host_name.lower(), {})
+        existing = self._host_metrics_cache.get(target, {})
 
         # Merge new metrics with existing (preserves today/all_time if only session updated)
         merged = {
@@ -1148,16 +1158,81 @@ class WorkerStatusWidget(QWidget):
         }
 
         # Update cache
-        self._host_metrics_cache[host_name.lower()] = merged
+        self._host_metrics_cache[target] = merged
 
-        # Find worker for this host. metrics_store normalizes its inputs
-        # through to_host_id() before emitting, so host_name here is always
-        # a canonical host_id and we match purely on worker.host_id. Display
-        # names never enter the comparison.
-        target = to_host_id(host_name)
+        # This signal IS a transfer landing in MetricsStore, so whatever was
+        # in flight for the host is now counted in the figures above. Drop the
+        # overlay here (as well as on upload completed/failed) so the finished
+        # bytes can't be added twice.
+        self._inflight_bytes.pop(target, None)
+
+        # Find worker for this host. Resolved through _metrics_cache_key so
+        # this method and _refresh_metrics_for_host answer "which worker owns
+        # this host?" the same way -- two matchers for one question in
+        # adjacent methods is the shape of the bug this change fixes.
         for worker_id, worker in self._workers.items():
-            if (worker.host_id or '').lower() == target:
+            if self._metrics_cache_key(worker) == target:
                 self._update_worker_metrics(worker_id, merged)
+                break
+
+    @staticmethod
+    def _metrics_cache_key(worker: WorkerStatus) -> str:
+        """Cache key for a worker's metrics — always the canonical host_id.
+
+        Workers are registered with their display name as ``hostname``
+        ("IMX.to", "TurboImageHost"), while MetricsStore keys everything by
+        host_id ("imx", "turbo"). Keying off hostname here silently missed
+        for every host whose display name doesn't lowercase to its id, which
+        blanked those metric cells to em-dash on each table rebuild.
+        """
+        return to_host_id(worker.host_id or worker.hostname)
+
+    def _metric_value(self, worker: WorkerStatus, col_config: ColumnConfig,
+                      metrics: Optional[dict] = None) -> Any:
+        """Resolve one metric column's value for a worker.
+
+        Adds any in-flight file host bytes on top of ``bytes_uploaded`` so the
+        uploaded columns climb during a transfer. Counts, speeds and success
+        rates have no meaningful partial value, so they are left alone.
+        """
+        key = self._metrics_cache_key(worker)
+        if metrics is None:
+            metrics = self._host_metrics_cache.get(key, {})
+        period_data = metrics.get(col_config.period, {}) if col_config.period else {}
+        value = period_data.get(col_config.metric_key, 0)
+        if col_config.metric_key == 'bytes_uploaded':
+            value += self._inflight_bytes.get(key, 0)
+        return value
+
+    @pyqtSlot(str, int)
+    def set_inflight_bytes(self, host_id: str, uploaded_bytes: int):
+        """Record bytes moved so far by a host's in-flight transfer.
+
+        Args:
+            host_id: Host identifier (canonical id or display name)
+            uploaded_bytes: Bytes sent so far for the current transfer
+        """
+        key = to_host_id(host_id)
+        value = max(0, int(uploaded_bytes or 0))
+        if self._inflight_bytes.get(key) == value:
+            return
+        self._inflight_bytes[key] = value
+        self._refresh_metrics_for_host(key)
+
+    @pyqtSlot(str)
+    def clear_inflight_bytes(self, host_id: str):
+        """Drop a host's in-flight byte count (transfer finished or failed)."""
+        key = to_host_id(host_id)
+        if self._inflight_bytes.pop(key, None) is not None:
+            self._refresh_metrics_for_host(key)
+
+    def _refresh_metrics_for_host(self, host_id: str):
+        """Re-render metric cells for the worker owning this host_id."""
+        for worker_id, worker in self._workers.items():
+            if self._metrics_cache_key(worker) == host_id:
+                self._update_worker_metrics(
+                    worker_id, self._host_metrics_cache.get(host_id, {})
+                )
                 break
 
     def _update_worker_metrics(self, worker_id: str, metrics: dict):
@@ -1168,16 +1243,14 @@ class WorkerStatusWidget(QWidget):
             metrics: Metrics dict from MetricsStore with period sub-dicts
         """
         row = self._worker_row_map.get(worker_id)
-        if row is None:
+        worker = self._workers.get(worker_id)
+        if row is None or worker is None:
             return
 
         # Update each metric column
         for col_idx, col_config in enumerate(self._active_columns):
             if col_config.metric_key and col_config.period:
-                # This is a metric column - get the period sub-dict first
-                period_data = metrics.get(col_config.period, {})
-                # Then get the specific metric value from that period
-                value = period_data.get(col_config.metric_key, 0)
+                value = self._metric_value(worker, col_config, metrics)
 
                 # Format based on column type
                 if col_config.col_type == ColumnType.BYTES:
@@ -1663,9 +1736,7 @@ class WorkerStatusWidget(QWidget):
         elif col_config.metric_key:
             # Sort by metric value
             def get_metric_value(worker):
-                metrics = self._host_metrics_cache.get(worker.hostname.lower(), {})
-                period_data = metrics.get(col_config.period, {}) if col_config.period else {}
-                return period_data.get(col_config.metric_key, 0)
+                return self._metric_value(worker, col_config)
             return sorted(workers, key=get_metric_value, reverse=reverse)
         else:
             # Default sort
@@ -1895,12 +1966,8 @@ class WorkerStatusWidget(QWidget):
                     self.status_table.setCellWidget(row_idx, col_idx, storage_widget)
 
                 elif col_config.metric_key:
-                    # Metric column - get value from cache
-                    metrics = self._host_metrics_cache.get(worker.hostname.lower(), {})
-                    # Get the period sub-dict (session, today, or all_time)
-                    period_data = metrics.get(col_config.period, {}) if col_config.period else {}
-                    # Get the specific metric value from that period
-                    value = period_data.get(col_config.metric_key, 0)
+                    # Metric column - cached value plus any in-flight bytes
+                    value = self._metric_value(worker, col_config)
 
                     # Format value based on column type
                     if col_config.col_type == ColumnType.BYTES:
