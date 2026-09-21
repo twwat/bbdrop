@@ -186,7 +186,16 @@ class WorkerSignalHandler(QObject):
 
     def on_file_host_upload_started(self, db_id: int, host_name: str, gallery_path: str = ""):
         """Handle file host upload started - ASYNC to prevent blocking main thread."""
+        mw = self._mw
         gallery_path = self._seed_db_id_path(db_id, gallery_path)
+        # Zero the live byte count for the attempt that starts here. The
+        # completed/failed handlers normally clear it, but a retryable error
+        # puts the row back to 'pending' without emitting upload_failed and
+        # without calling record_transfer -- so the aborted attempt's bytes
+        # would otherwise linger and over-report until something else landed.
+        # (_on_filehost_worker_started does the same for the widget overlay.)
+        if mw is not None:
+            mw.progress_tracker.clear_file_host_live_bytes(gallery_path, host_name)
         # Defer UI refresh to avoid blocking signal emission
         QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
         # Update queue display for this host so bytes column populates immediately
@@ -216,8 +225,16 @@ class WorkerSignalHandler(QObject):
             # but we DO want the overall byte-weighted bar AND the gallery
             # row that owns this upload to move, so schedule a throttled
             # refresh (150ms coalesced singleshot).
+            mw = self._mw
             gallery_path = self._seed_db_id_path(db_id, gallery_path)
             if gallery_path:
+                # Feed the byte-weighted percent: the row's uploaded_bytes
+                # isn't written until the transfer lands, so without this the
+                # bar sits still and then jumps in one lump.
+                if mw is not None:
+                    mw.progress_tracker.set_file_host_live_bytes(
+                        gallery_path, host_name, uploaded_bytes
+                    )
                 self._rows_needing_refresh.add(gallery_path)
             self._request_refresh()
         except Exception as e:
@@ -288,11 +305,21 @@ class WorkerSignalHandler(QObject):
         """Handle file host upload completed - ASYNC to prevent blocking main thread."""
         mw = self._mw
         gallery_path = self._seed_db_id_path(db_id, gallery_path)
+        if mw is None:
+            # Window torn down while this completion was queued. Everything
+            # below dereferences it -- the dedup branch reaches
+            # _resolve_gallery_name and show_status_message outside any try.
+            return
+        # The row now carries its real uploaded_bytes — drop the live overlay
+        # so the finished transfer isn't counted twice.
+        mw.progress_tracker.clear_file_host_live_bytes(gallery_path, host_name)
         # Defer UI refresh to avoid blocking signal emission
-        # Use QTimer.singleShot(0) to schedule on next event loop iteration
-        QTimer.singleShot(0, lambda: mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
+        # Use QTimer.singleShot(0) to schedule on next event loop iteration.
+        # Re-check _mw inside each lambda: the window can be torn down between
+        # scheduling and firing, and an unguarded call raises into the event loop.
+        QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
         # Trigger artifact regeneration if auto-regenerate is enabled (non-blocking, after UI refresh)
-        QTimer.singleShot(100, lambda: mw.artifact_handler.auto_regenerate_for_db_id(db_id, gallery_path))
+        QTimer.singleShot(100, lambda: self._mw and self._mw.artifact_handler.auto_regenerate_for_db_id(db_id, gallery_path))
         # Update queue display for this host (event-driven, not polled)
         self._update_filehost_queue_for_host(host_name)
 
@@ -337,6 +364,9 @@ class WorkerSignalHandler(QObject):
         log(f"File host upload failed: {host_name} for gallery {db_id}: {error_message}",
             level="warning", category="file_hosts")
         gallery_path = self._seed_db_id_path(db_id, gallery_path)
+        # A failed transfer's live bytes are stale — the retry restarts at zero.
+        if self._mw is not None:
+            self._mw.progress_tracker.clear_file_host_live_bytes(gallery_path, host_name)
         # Defer UI refresh to avoid blocking signal emission
         QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
         # Update queue display for this host (event-driven, not polled)
@@ -588,6 +618,12 @@ class WorkerSignalHandler(QObject):
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
 
+        # Zero the overlay for the attempt starting here. A retryable error
+        # never emits upload_failed or calls record_transfer, so neither of
+        # the usual clear paths fires and the aborted attempt's bytes would
+        # keep inflating the uploaded columns.
+        mw.worker_status_widget.clear_inflight_bytes(host_name)
+
         worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
         mw.worker_status_widget.update_worker_status(
             worker_id=worker_id,
@@ -626,6 +662,10 @@ class WorkerSignalHandler(QObject):
             total_bytes=total
         )
 
+        # Climb the "uploaded" columns in step with queue (bytes) below.
+        # MetricsStore only learns about these bytes when the transfer lands.
+        mw.worker_status_widget.set_inflight_bytes(host_name, uploaded)
+
         # Update bytes_remaining in real-time: base (from last DB query) minus progress
         key = host_name.lower()
         base = self._filehost_base_bytes.get(key, 0)
@@ -646,6 +686,9 @@ class WorkerSignalHandler(QObject):
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
 
+        # record_transfer has the bytes now — drop the display overlay.
+        mw.worker_status_widget.clear_inflight_bytes(host_name)
+
         worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
         mw.worker_status_widget.update_worker_status(
             worker_id=worker_id,
@@ -662,6 +705,9 @@ class WorkerSignalHandler(QObject):
         mw = self._mw
         if not hasattr(mw, 'worker_status_widget'):
             return  # Widget disabled, skip update
+
+        # Nothing was recorded for a failed transfer — drop its in-flight bytes.
+        mw.worker_status_widget.clear_inflight_bytes(host_name)
 
         worker_id = f"filehost_{host_name.lower().replace(' ', '_')}"
         mw.worker_status_widget.update_worker_error(worker_id, error)

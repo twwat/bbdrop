@@ -53,6 +53,15 @@ class ProgressTracker(QObject):
         self._cached_stats: dict = {}
         self._stats_cache_time: float = 0.0
 
+        # Bytes moved so far by in-flight file host transfers, keyed by
+        # (normalized gallery path, host_name). file_host_uploads.uploaded_bytes
+        # is only written when a transfer lands, so without this the percent
+        # would sit still and then jump in one lump. Fed by the worker's
+        # progress signal, cleared on completion/failure, never persisted --
+        # rows are re-read from the DB on every refresh anyway, and writing at
+        # 4 Hz per host would fight the deferred-save design.
+        self._file_host_live_bytes: dict[Tuple[str, str], int] = {}
+
     def _get_cached_stats(self) -> dict:
         """Get cached statistics with periodic refresh (every 5 seconds).
 
@@ -78,6 +87,41 @@ class ProgressTracker(QObject):
         """Update both button counts and progress display together."""
         self._update_button_counts()
         self.update_progress_display()
+
+    @staticmethod
+    def _live_bytes_key(gallery_path: str, host_name: str) -> Tuple[str, str]:
+        """Key for the live-bytes overlay, tolerant of path separator drift.
+
+        Worker signals carry the path as stored in file_host_uploads (already
+        normpath'd on insert); queue items may hold either form.
+        """
+        return (os.path.normpath(gallery_path or ''), (host_name or '').lower())
+
+    def set_file_host_live_bytes(self, gallery_path: str, host_name: str,
+                                 uploaded_bytes: int) -> None:
+        """Record bytes sent so far by an in-flight file host transfer.
+
+        An unresolved path is ignored rather than stored: normpath('') is '.',
+        which would key a phantom entry that no clear could ever match up with
+        the real one.
+        """
+        if not gallery_path:
+            return
+        key = self._live_bytes_key(gallery_path, host_name)
+        self._file_host_live_bytes[key] = max(0, int(uploaded_bytes or 0))
+
+    def clear_file_host_live_bytes(self, gallery_path: str, host_name: str) -> None:
+        """Drop a transfer's live byte count (it completed or failed).
+
+        A clear with no resolved path would pop the phantom '.' key and leave
+        the real entry crediting that gallery for the rest of the session, so
+        it is a no-op instead.
+        """
+        if not gallery_path:
+            return
+        self._file_host_live_bytes.pop(
+            self._live_bytes_key(gallery_path, host_name), None
+        )
 
     def _get_file_host_rows(self, item_path: str) -> list:
         try:
@@ -163,7 +207,20 @@ class ProgressTracker(QObject):
             if row_deduped or row_status == 'completed':
                 total_bytes += effective_total
                 uploaded_bytes += effective_total
-            elif row_status in ('uploading', 'failed'):
+            elif row_status == 'uploading':
+                # An in-flight row's uploaded_bytes isn't written until the
+                # transfer lands, so prefer the live overlay when it's ahead.
+                # Only 'uploading' consults it: the failed handler clears the
+                # overlay, so a 'failed' row can never carry a live value.
+                live = self._file_host_live_bytes.get(
+                    self._live_bytes_key(
+                        getattr(item, 'path', ''), row.get('host_name', '')
+                    ),
+                    0,
+                )
+                total_bytes += effective_total
+                uploaded_bytes += min(max(row_uploaded, live), effective_total)
+            elif row_status == 'failed':
                 total_bytes += effective_total
                 uploaded_bytes += min(row_uploaded, effective_total)
             else:
