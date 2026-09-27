@@ -264,7 +264,10 @@ def shutdown_bbdrop_window(window):
 @pytest.fixture(autouse=True)
 def _disconnect_forum_controllers():
     """Disconnect every ForumController from the global bbcode_regenerated hub
-    after each test, so leaked handlers can't fire into later tests' closed DBs."""
+    after each test, so leaked handlers can't fire into later tests' closed DBs,
+    and stop any real posting worker left running (BBDropGUI starts one and only
+    stops it in closeEvent, which window tests replace)."""
+    from PyQt6.QtCore import QThread
     from src.gui.forum_controller import ForumController
 
     created = []
@@ -279,3 +282,6 @@ def _disconnect_forum_controllers():
     ForumController.__init__ = original_init
     for ctrl in created:
         ctrl.cleanup()
+        worker = getattr(ctrl, '_worker', None)
+        if isinstance(worker, QThread) and worker.isRunning():
+            ctrl.stop()

@@ -369,6 +369,10 @@ class TestFileOperations:
         """Test removing selected files with confirmation"""
         dialog = GalleryFileManagerDialog(str(temp_gallery_dir), mock_queue_manager)
         qtbot.addWidget(dialog)
+        # The dialog's FileScanner opens each image to validate it; deleting
+        # image_0.jpg while it's open fails on Windows (WinError 32).
+        qtbot.waitUntil(lambda: dialog.scanner is None or not dialog.scanner.isRunning(),
+                        timeout=5000)
 
         # Add item to list
         item = _make_tree_item("image_0.jpg")

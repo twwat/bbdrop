@@ -79,14 +79,10 @@ def test_concurrent_initialization():
         assert result['has_db_lock'], f"Thread {result['thread_id']} instance missing _db_lock"
         assert result['has_executor'], f"Thread {result['thread_id']} instance missing _executor"
 
-    # Verify first thread took longer (did initialization) and others returned quickly
-    sorted_results = sorted(results, key=lambda x: x['elapsed'])
-    sorted_results[0]['elapsed']
-
-    # First thread should have done initialization (takes >0.01s)
-    # Subsequent threads should return almost immediately (<0.01s typical)
-    fast_count = sum(1 for r in sorted_results[1:] if r['elapsed'] < 0.1)
-    assert fast_count >= 7, f"Expected at least 7 threads to return quickly, got {fast_count}"
+    # No wall-clock assertion here: under a loaded xdist run initialization can
+    # exceed any fixed threshold, and every thread queued behind the lock waits
+    # just as long. The same-instance + fully-initialized checks above are the
+    # correctness guarantees.
 
     # Cleanup
     store = MetricsStore.instance()
