@@ -419,7 +419,7 @@ class StatisticsDialog(QDialog):
             item = QTableWidgetItem("Unable to load file host statistics")
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._file_hosts_table.setItem(0, 0, item)
-            self._file_hosts_table.setSpan(0, 0, 1, 10)
+            self._file_hosts_table.setSpan(0, 0, 1, self._file_hosts_table.columnCount())
             return
 
         if not host_stats:
@@ -428,7 +428,7 @@ class StatisticsDialog(QDialog):
             item = QTableWidgetItem(f"No file host uploads for {period_name}")
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._file_hosts_table.setItem(0, 0, item)
-            self._file_hosts_table.setSpan(0, 0, 1, 10)
+            self._file_hosts_table.setSpan(0, 0, 1, self._file_hosts_table.columnCount())
             return
 
         # Sort hosts by files_uploaded descending

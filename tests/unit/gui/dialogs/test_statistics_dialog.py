@@ -205,50 +205,50 @@ class TestFileHostStatsLoading:
     def test_load_file_host_stats_columns(self, dialog, mock_metrics_store):
         """Test table has correct column headers."""
         table = dialog._file_hosts_table
-        assert table.columnCount() == 10
-        headers = [table.horizontalHeaderItem(i).text() for i in range(10)]
-        assert headers == ["Host", "Files", "Failed", "Deduped",
+        assert table.columnCount() == 11
+        headers = [table.horizontalHeaderItem(i).text() for i in range(11)]
+        assert headers == ["Host", "Files", "Success", "Fail", "Deduped",
                           "Uploaded", "Skipped (Dedup)", "Total",
-                          "Peak Speed", "Avg Speed", "Success"]
+                          "Peak Speed", "Avg Speed", "Success %"]
 
     def test_load_file_host_stats_files_count(self, dialog, mock_metrics_store):
-        """Test files uploaded count is displayed correctly."""
+        """Test total files count (uploaded + failed) is displayed correctly."""
         table = dialog._file_hosts_table
-        # Rapidgator row
+        # Rapidgator row, column 1 = total files (uploaded + failed)
         files_item = table.item(0, 1)
-        assert files_item.text() == "100"
+        assert files_item.text() == "105"  # 100 uploaded + 5 failed
 
     def test_load_file_host_stats_failed_count(self, dialog, mock_metrics_store):
         """Test files failed count is displayed correctly."""
         table = dialog._file_hosts_table
-        # Rapidgator row
-        failed_item = table.item(0, 2)
+        # Rapidgator row, column 3 = failed count
+        failed_item = table.item(0, 3)
         assert failed_item.text() == "5"
 
     def test_load_file_host_stats_data_size(self, dialog, mock_metrics_store):
         """Test data uploaded is formatted correctly."""
         table = dialog._file_hosts_table
-        # Rapidgator row has 1 GiB
-        data_item = table.item(0, 4)
+        # Rapidgator row has 1 GiB, column 5 = uploaded data size
+        data_item = table.item(0, 5)
         assert "GiB" in data_item.text() or "1.0" in data_item.text()
 
     def test_load_file_host_stats_peak_speed(self, dialog, mock_metrics_store):
         """Test peak speed is formatted correctly."""
         table = dialog._file_hosts_table
-        # Rapidgator peak: 5 MiB/s (stored as B/s, converted to KiB/s for display)
-        peak_item = table.item(0, 7)
+        # Rapidgator peak: 5 MiB/s (stored as B/s, converted to KiB/s for display), column 8 = peak speed
+        peak_item = table.item(0, 8)
         assert "MiB/s" in peak_item.text()
 
     def test_load_file_host_stats_avg_speed(self, dialog, mock_metrics_store):
         """Test average speed is formatted correctly."""
         table = dialog._file_hosts_table
-        avg_item = table.item(0, 8)
+        avg_item = table.item(0, 9)
         assert "MiB/s" in avg_item.text() or "KiB/s" in avg_item.text()
 
     def test_load_file_host_stats_success_rate(self, dialog, mock_metrics_store):
         """Test success rate is formatted as percentage."""
         table = dialog._file_hosts_table
-        rate_item = table.item(0, 9)
+        rate_item = table.item(0, 10)
         assert "%" in rate_item.text()
         assert "95.0" in rate_item.text()
 
@@ -516,9 +516,9 @@ class TestTimeframeFilter:
         dialog._timeframe_combo.setCurrentIndex(1)  # "This Session"
 
         table = dialog._file_hosts_table
-        # Session data has 10 files for rapidgator
+        # Session data has 10 uploaded + 1 failed = 11 total files for rapidgator
         files_item = table.item(0, 1)
-        assert files_item.text() == "10"
+        assert files_item.text() == "11"
 
     def test_empty_period_shows_message(self, qtbot, mock_qsettings):
         """Test empty period shows appropriate message."""
