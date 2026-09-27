@@ -24,17 +24,21 @@ def test_file_host_with_storage_gets_progress_bar(qapp):
     widget = FileHostsSettingsWidget(parent=None, worker_manager=None)
     entry = widget.host_widgets.get('rapidgator')
     assert entry is not None
-    assert isinstance(entry['storage_bar'], StorageTrafficBar)
+    # File hosts with storage support use QProgressBar (not StorageTrafficBar)
+    # This is by design per commit e15bf0a for visual unification with image hosts
+    from PyQt6.QtWidgets import QProgressBar
+    assert isinstance(entry['storage_bar'], QProgressBar)
 
 
 def test_image_host_row_omits_storage_slot(qapp):
-    """Image hosts have their own row layout — no storage bar, no Unlimited label."""
+    """Image hosts now have a StorageTrafficBar in unlimited mode for visual parity."""
     widget = FileHostsSettingsWidget(parent=None, worker_manager=None)
     entry = widget.host_widgets.get('imx')
     assert entry is not None, "Image host 'imx' should appear in host_widgets"
     assert entry.get('kind') == 'image'
-    assert 'storage_bar' not in entry
-    assert 'unlimited_label' not in entry
+    # Image hosts have storage_bar with unlimited state (no quota) per commit e71a91f
+    assert isinstance(entry['storage_bar'], StorageTrafficBar)
+    assert entry['unlimited_label'] is None  # unlimited_label deprecated in favor of StorageTrafficBar.set_unlimited()
     assert isinstance(entry['status_label'], QLabel)
 
 

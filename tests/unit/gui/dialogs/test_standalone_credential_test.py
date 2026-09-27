@@ -14,6 +14,10 @@ from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog
 from src.core.file_host_config import HostConfig
 
 
+# FileHostConfigDialog persists splitter state on close; keep it off the real registry
+pytestmark = pytest.mark.usefixtures("ini_qsettings")
+
+
 @pytest.fixture
 def mock_host_config():
     """Create a mock HostConfig object for testing"""

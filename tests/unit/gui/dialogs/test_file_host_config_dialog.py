@@ -162,6 +162,8 @@ def mock_qsettings(monkeypatch):
             pass
 
     monkeypatch.setattr('PyQt6.QtCore.QSettings', MockQSettings)
+    # The dialog binds QSettings at import; without this it hits the real registry
+    monkeypatch.setattr('src.gui.dialogs.file_host_config_dialog.QSettings', MockQSettings)
     yield MockQSettings
     settings_dict.clear()
 
@@ -203,7 +205,18 @@ def dialog_patches(mock_qsettings, monkeypatch):
                         mock_logger_instance = Mock()
                         mock_logger_instance.read_current_log = Mock(return_value="")
                         mock_logger.return_value = mock_logger_instance
+
                         yield
+
+@pytest.fixture
+def dialog_patches_with_storage(dialog_patches, mock_qsettings):
+    """dialog_patches plus cached storage values; the dialog only builds its
+    storage bar when a cached total exists."""
+    settings = mock_qsettings("BBDropUploader", "BBDropGUI")
+    settings.setValue("FileHosts/testhost/storage_total", "1073741824")  # 1 GiB
+    settings.setValue("FileHosts/testhost/storage_left", "536870912")    # 512 MiB
+    yield
+
 
 
 # ============================================================================
@@ -304,7 +317,8 @@ class TestFileHostConfigDialogInit:
 
         assert dialog.auto_retry_check.isChecked() is True
         assert dialog.max_retries_spin.value() == 3
-        assert dialog.max_connections_spin.value() == 5
+        # max_connections fixed at 1 per commit 50d32ea - concurrent uploads not yet configurable
+        assert dialog.max_connections_spin.value() == 1
         assert dialog.max_file_size_spin.value() == 0
 
     def test_buttons_initialized(self, qtbot, mock_host_config, mock_worker_manager,
@@ -330,7 +344,7 @@ class TestFileHostConfigDialogInit:
 
     def test_storage_bar_created_when_storage_tracking_enabled(self, qtbot, mock_host_config,
                                                                 mock_worker_manager, mock_main_widgets,
-                                                                dialog_patches):
+                                                                dialog_patches_with_storage):
         """Test storage bar is created when host supports storage tracking"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
@@ -437,8 +451,11 @@ class TestFormValidation:
         )
         qtbot.addWidget(dialog)
 
+        # Concurrent uploads fixed at 1 per commit 50d32ea - not yet user-configurable
         assert dialog.max_connections_spin.minimum() == 1
-        assert dialog.max_connections_spin.maximum() == 10
+        assert dialog.max_connections_spin.maximum() == 1
+        # Spinbox should also be disabled since it's not configurable
+        assert not dialog.max_connections_spin.isEnabled()
 
     def test_max_file_size_zero_means_no_limit(self, qtbot, mock_host_config, mock_worker_manager,
                                                 mock_main_widgets, dialog_patches):
@@ -537,22 +554,6 @@ class TestDirtyStateTracking:
         assert dialog.has_unsaved_changes
         assert dialog.apply_btn.isEnabled()
 
-    def test_max_connections_change_marks_dirty(self, qtbot, mock_host_config, mock_worker_manager,
-                                                 mock_main_widgets, dialog_patches):
-        """Test changing max connections marks form as dirty"""
-        dialog = FileHostConfigDialog(
-            None, "testhost", mock_host_config,
-            mock_main_widgets, mock_worker_manager
-        )
-        qtbot.addWidget(dialog)
-
-        assert not dialog.has_unsaved_changes
-
-        dialog.max_connections_spin.setValue(8)
-
-        assert dialog.has_unsaved_changes
-        assert dialog.apply_btn.isEnabled()
-
     def test_max_file_size_change_marks_dirty(self, qtbot, mock_host_config, mock_worker_manager,
                                                mock_main_widgets, dialog_patches):
         """Test changing max file size marks form as dirty"""
@@ -579,7 +580,8 @@ class TestSaveApplyActions:
 
     @patch('src.core.file_host_config.save_file_host_setting')
     def test_apply_saves_credentials(self, mock_save, qtbot, mock_host_config,
-                                     mock_worker_manager, mock_main_widgets, monkeypatch):
+                                     mock_worker_manager, mock_main_widgets, mock_qsettings,
+                                     monkeypatch):
         """Test Apply button saves credentials"""
         # Track set_credential calls
         set_cred_calls = []
@@ -1066,13 +1068,8 @@ class TestStorageDisplay:
     """Test storage bar display and updates"""
 
     def test_storage_bar_loads_from_cache(self, qtbot, mock_host_config, mock_worker_manager,
-                                          mock_main_widgets, dialog_patches):
+                                          mock_main_widgets, dialog_patches_with_storage):
         """Test storage bar loads cached values on init"""
-        # Set up mock settings with cached storage values
-        settings = QSettings("ImxUploader", "ImxUploadGUI")
-        settings.setValue("FileHosts/testhost/storage_total", "1073741824")  # 1 GB
-        settings.setValue("FileHosts/testhost/storage_left", "536870912")    # 512 MB
-
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
             mock_main_widgets, mock_worker_manager
@@ -1088,7 +1085,7 @@ class TestStorageDisplay:
 
     def test_storage_updated_signal_updates_bar(self, qtbot, mock_host_config,
                                                  mock_worker_manager, mock_main_widgets,
-                                                 dialog_patches):
+                                                 dialog_patches_with_storage):
         """Test storage_updated signal updates storage bar"""
         dialog = FileHostConfigDialog(
             None, "testhost", mock_host_config,
@@ -1289,7 +1286,7 @@ class TestBBCodeLinkFormatIntegration:
 
 
 def test_config_dialog_uses_storage_traffic_bar(qtbot, mock_host_config, mock_worker_manager,
-                                                  mock_main_widgets, dialog_patches):
+                                                  mock_main_widgets, dialog_patches_with_storage):
     """The file host config dialog embeds a StorageTrafficBar, not a raw QProgressBar."""
     from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog
     from src.gui.widgets.custom_widgets import StorageTrafficBar

@@ -1206,7 +1206,8 @@ class TestStorageTrafficBar:
     def test_initial_state_no_data(self, qtbot):
         w = StorageTrafficBar()
         qtbot.addWidget(w)
-        assert w.minimumHeight() == 24
+        # Height increased from 24 to 26 in commit e5ab40e to better accommodate text labels
+        assert w.minimumHeight() == 26
         assert not w.traffic_strip.isVisible()
 
     def test_update_storage_sets_main_bar(self, qtbot):

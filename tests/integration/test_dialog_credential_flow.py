@@ -11,6 +11,10 @@ from src.gui.dialogs.file_host_config_dialog import FileHostConfigDialog, Asteri
 from src.core.file_host_config import HostConfig
 
 
+# FileHostConfigDialog persists splitter state on close; keep it off the real registry
+pytestmark = pytest.mark.usefixtures("ini_qsettings")
+
+
 class TestAsteriskPasswordEdit:
     """Test the AsteriskPasswordEdit widget behavior."""
 

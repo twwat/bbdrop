@@ -686,3 +686,24 @@ class AssertionHelpers:
 def assert_helpers():
     """Provide assertion helpers."""
     return AssertionHelpers()
+
+
+@pytest.fixture
+def ini_qsettings(tmp_path, monkeypatch):
+    """Route QSettings to a per-test INI file instead of the real registry.
+
+    Covers call-time `from PyQt6.QtCore import QSettings` plus the file host
+    config dialog, which binds QSettings at import.
+    """
+    from PyQt6.QtCore import QSettings
+
+    path = str(tmp_path / "qsettings.ini")
+
+    class IniQSettings(QSettings):
+        def __init__(self, *args, **kwargs):
+            super().__init__(path, QSettings.Format.IniFormat)
+
+    monkeypatch.setattr('PyQt6.QtCore.QSettings', IniQSettings)
+    monkeypatch.setattr('src.gui.dialogs.file_host_config_dialog.QSettings', IniQSettings)
+    return IniQSettings
+

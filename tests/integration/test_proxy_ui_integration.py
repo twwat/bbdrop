@@ -20,12 +20,11 @@ def qapp():
 
 
 @pytest.fixture
-def clean_settings():
-    """Create clean QSettings for testing."""
-    settings = QSettings("bbdrop_test", "bbdrop_test")
-    settings.clear()
+def clean_settings(tmp_path):
+    """Per-test INI-backed QSettings. A shared registry key raced across
+    xdist workers: one test's clear() wiped another's pools mid-test."""
+    settings = QSettings(str(tmp_path / "proxy.ini"), QSettings.Format.IniFormat)
     yield settings
-    settings.clear()
 
 
 @pytest.fixture
