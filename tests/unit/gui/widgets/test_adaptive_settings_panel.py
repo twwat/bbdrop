@@ -229,9 +229,9 @@ class TestSetButtons:
 
         assert hasattr(panel, '_button_labels')
         assert panel._button_labels['settings'] == ' Settings'
-        assert panel._button_labels['credentials'] == ' Image Hosts'
+        assert panel._button_labels['hosts'] == ' Hosts'
         assert panel._button_labels['templates'] == ' Templates'
-        assert panel._button_labels['file_hosts'] == '  File Hosts'
+        assert panel._button_labels['files'] == '  Files'
         assert panel._button_labels['hooks'] == '  App Hooks'
         assert panel._button_labels['log_viewer'] == ' Logs'
         assert panel._button_labels['help'] == ' Docs'

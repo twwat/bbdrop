@@ -77,7 +77,8 @@ class TestRenameWorkerLogin:
         mock_get_cred.return_value = None
 
         with patch('src.network.cookies.get_firefox_cookies') as mock_ff_cookies, \
-             patch('src.network.cookies.load_cookies_from_file') as mock_load_cookies:
+             patch('src.network.cookies.load_cookies_from_file') as mock_load_cookies, \
+             patch('src.processing.rename_worker.load_session_cookies_from_keyring', return_value={}):
 
             mock_ff_cookies.return_value = {
                 'PHPSESSID': {
@@ -151,7 +152,8 @@ class TestRenameWorkerLogin:
 
         with patch('src.processing.rename_worker.decrypt_password', return_value='pass'), \
              patch('src.network.cookies.get_firefox_cookies', return_value={}), \
-             patch('src.network.cookies.load_cookies_from_file', return_value={}):
+             patch('src.network.cookies.load_cookies_from_file', return_value={}), \
+             patch('src.processing.rename_worker.load_session_cookies_from_keyring', return_value={}):
 
             worker = RenameWorker()
             worker.session = Mock()

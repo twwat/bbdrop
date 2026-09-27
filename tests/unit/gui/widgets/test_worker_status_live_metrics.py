@@ -198,9 +198,15 @@ class TestInflightBytesInUploadedColumns:
         assert _cell_text(widget, "filehost_rapidgator", 'bytes_session') == \
             format_bytes(500_000)
 
-    def test_metrics_reach_a_worker_registered_without_a_host_id(self, widget):
+    def test_metrics_reach_a_worker_registered_without_a_host_id(self, widget, monkeypatch):
         """Metric routing must resolve a worker the same way everywhere. A
         worker carrying only a display name is still that host."""
+        # The host registry is a lazily-filled module cache; if another test on
+        # this xdist worker filled it under a patched project root, 'IMX.to'
+        # isn't in it. Pin the entries this test depends on.
+        from src.core import host_registry
+        monkeypatch.setattr(host_registry, '_DISPLAY_NAMES', {'imx': 'IMX.to'})
+        monkeypatch.setattr(host_registry, '_REVERSE_LOOKUP', {'imx': 'imx', 'imx.to': 'imx'})
         _show_only(widget, 'hostname', 'bytes_session')
         widget.update_worker_status(
             worker_id="upload_worker_imx",

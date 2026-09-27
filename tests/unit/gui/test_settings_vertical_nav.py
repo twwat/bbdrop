@@ -54,5 +54,5 @@ class TestVerticalNavLayout:
 
         labels = [dialog.nav_list.item(i).text() for i in range(dialog.nav_list.count())]
         assert "General" in labels
-        assert "Image Hosts" in labels
+        assert "Hosts" in labels
         assert "BBCode templates" in labels

@@ -60,7 +60,7 @@ class TestPlaceholderEditorDialog:
             title="BBCode Link Format", placeholders=LINK_PLACEHOLDERS
         )
         qtbot.addWidget(dialog)
-        assert len(dialog._placeholder_buttons) == 6
+        assert len(dialog._placeholder_buttons) == 9
 
     def test_preview_updates_on_text_change(self, qtbot):
         dialog = PlaceholderEditorDialog(title="Test", placeholders=TEST_PLACEHOLDERS)

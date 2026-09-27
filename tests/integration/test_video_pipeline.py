@@ -77,9 +77,13 @@ class TestVideoPipelineSmoke:
 
         # Save to temp file
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-            sheet.save(f.name)
-            assert os.path.getsize(f.name) > 0
-            os.unlink(f.name)
+            temp_path = f.name
+        # Save after the handle is closed: Windows can't unlink an open file
+        try:
+            sheet.save(temp_path)
+            assert os.path.getsize(temp_path) > 0
+        finally:
+            os.unlink(temp_path)
 
     def test_video_strategy_integration(self, test_video):
         """Verify VideoStrategy works end-to-end."""

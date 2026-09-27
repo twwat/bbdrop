@@ -910,16 +910,8 @@ class TestAutoThemeDetection:
 
     def test_auto_detect_with_light_palette(self, qtbot, icon_manager):
         """Test auto-detection correctly identifies light theme."""
-        # Create mock palette with light window color
-        mock_palette = Mock(spec=QPalette)
-        mock_color = Mock()
-        mock_color.lightness.return_value = 200  # Light color
-        mock_palette.color.return_value = mock_color
-
-        mock_app = Mock(spec=QApplication)
-        mock_app.palette.return_value = mock_palette
-
-        with patch('PyQt6.QtWidgets.QApplication.instance', return_value=mock_app):
+        # Mock is_dark_mode to return False (light theme)
+        with patch('src.gui.theme_manager.is_dark_mode', return_value=False):
             # Use a light/dark pair icon to ensure theme is in cache key
             icon_manager.get_icon('status_uploading', theme_mode=None)
 
@@ -929,16 +921,8 @@ class TestAutoThemeDetection:
 
     def test_auto_detect_with_dark_palette(self, qtbot, icon_manager):
         """Test auto-detection correctly identifies dark theme."""
-        # Create mock palette with dark window color
-        mock_palette = Mock(spec=QPalette)
-        mock_color = Mock()
-        mock_color.lightness.return_value = 50  # Dark color
-        mock_palette.color.return_value = mock_color
-
-        mock_app = Mock(spec=QApplication)
-        mock_app.palette.return_value = mock_palette
-
-        with patch('PyQt6.QtWidgets.QApplication.instance', return_value=mock_app):
+        # Mock is_dark_mode to return True (dark theme)
+        with patch('src.gui.theme_manager.is_dark_mode', return_value=True):
             # Use a light/dark pair icon to ensure theme is in cache key
             icon_manager.get_icon('status_uploading', theme_mode=None)
 
