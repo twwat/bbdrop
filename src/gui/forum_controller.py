@@ -93,6 +93,15 @@ class ForumController(QObject):
         self._worker.stop()
         self._worker.wait(5000)
 
+    def cleanup(self) -> None:
+        """Disconnect from the global bbcode_regenerated hub; safe to call twice."""
+        try:
+            bbcode_regenerated_signal_hub.bbcode_regenerated.disconnect(
+                self._on_bbcode_regenerated
+            )
+        except (RuntimeError, TypeError):
+            pass
+
     # ----- public entry points -----
 
     def handle_gallery_uploaded(self, gallery_id: int) -> list[int]:

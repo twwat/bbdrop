@@ -259,3 +259,23 @@ def shutdown_bbdrop_window(window):
             window._loader_thread.wait(2000)
         except Exception:
             pass
+
+
+@pytest.fixture(autouse=True)
+def _disconnect_forum_controllers():
+    """Disconnect every ForumController from the global bbcode_regenerated hub
+    after each test, so leaked handlers can't fire into later tests' closed DBs."""
+    from src.gui.forum_controller import ForumController
+
+    created = []
+    original_init = ForumController.__init__
+
+    def tracking_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        created.append(self)
+
+    ForumController.__init__ = tracking_init
+    yield
+    ForumController.__init__ = original_init
+    for ctrl in created:
+        ctrl.cleanup()
