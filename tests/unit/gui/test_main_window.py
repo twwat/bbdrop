@@ -408,6 +408,39 @@ class TestBBDropGUIInitialization:
                         assert isinstance(window, QMainWindow)
 
     @patch('src.gui.main_window.QSettings')
+    def test_timers_die_with_window(self, mock_qsettings, qtbot, mock_dependencies):
+        """Window timers must not outlive the window. closeEvent only stops
+        them via ShutdownWorker, so a window destroyed any other way left a
+        parentless update_timer firing _tick into deleted widgets (access
+        violation that crashed whichever xdist test ran next)."""
+        from PyQt6 import sip
+        from PyQt6.QtCore import QCoreApplication, QEvent
+
+        mock_settings = Mock()
+        mock_settings.value.return_value = 0
+        mock_qsettings.return_value = mock_settings
+
+        with patch.object(BBDropGUI, 'setup_ui', _mock_setup_ui):
+            with patch.object(MenuManager, 'setup_menu_bar'):
+                with patch.object(BBDropGUI, 'setup_system_tray'):
+                    with patch.object(BBDropGUI, 'restore_settings'):
+                        window = BBDropGUI()
+
+        timers = [getattr(window, name) for name in (
+            'update_timer', '_background_update_timer', '_upload_animation_timer',
+            '_queue_stats_timer', 'memory_status_timer') if hasattr(window, name)]
+        assert timers, "expected the window to own timers"
+
+        window.closeEvent = lambda event: event.accept()
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+
+        assert sip.isdeleted(window)
+        alive = [t for t in timers if not sip.isdeleted(t)]
+        assert not alive, f"{len(alive)} timer(s) outlived the window"
+
+    @patch('src.gui.main_window.QSettings')
     def test_main_window_has_queue_manager(self, mock_qsettings, qtbot, mock_dependencies):
         """Test main window initializes queue manager"""
         mock_settings = Mock()

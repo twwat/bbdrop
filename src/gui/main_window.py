@@ -758,13 +758,13 @@ class BBDropGUI(QMainWindow):
         
         # Initialize background tab update system
         self._background_tab_updates = {}  # Track updates for non-visible tabs
-        self._background_update_timer = QTimer()
+        self._background_update_timer = QTimer(self)
         self._background_update_timer.timeout.connect(self.table_row_manager._process_background_tab_updates)
         self._background_update_timer.setSingleShot(True)
 
         # Uploading status icon animation (7 frames, 200ms each)
         self._upload_animation_frame = 0
-        self._upload_animation_timer = QTimer()
+        self._upload_animation_timer = QTimer(self)
         self._upload_animation_timer.timeout.connect(self.table_row_manager._advance_upload_animation)
         self._upload_animation_timer.start(200)  # Animate every 200ms
 
@@ -851,7 +851,7 @@ class BBDropGUI(QMainWindow):
         log(f"GUI loaded", level="info", category="ui")
 
         # Initialize update timer for automatic updates
-        self.update_timer = QTimer()
+        self.update_timer = QTimer(self)
         self._last_queue_version = self.queue_manager.get_version()
         def _tick():
             try:
@@ -1465,7 +1465,7 @@ class BBDropGUI(QMainWindow):
 
         # Start queue polling for worker status widget (updates Files Left and Remaining columns)
         if hasattr(self, 'worker_status_widget') and hasattr(self, 'queue_manager'):
-            self._queue_stats_timer = QTimer()
+            self._queue_stats_timer = QTimer(self)
             self._queue_stats_timer.timeout.connect(self.worker_signal_handler._update_worker_queue_stats)
             self._queue_stats_timer.start(2000)  # Poll every 2 seconds
 
@@ -1567,7 +1567,7 @@ class BBDropGUI(QMainWindow):
         )
 
         # Setup memory status update timer (extracted from old hosts panel build)
-        self.memory_status_timer = QTimer()
+        self.memory_status_timer = QTimer(self)
         self.memory_status_timer.timeout.connect(self._update_memory_status)
         self.memory_status_timer.start(1000)  # Update every 1 second
 
