@@ -827,6 +827,20 @@ class TestShutdown:
         saved = mock_store.submit_upsert_ordered.call_args[0][0]
         assert path in [d['path'] for d in saved]
 
+    def test_shutdown_saves_gallery_still_validating(self, queue_manager, gallery_dir, mock_store):
+        """A gallery added moments before shutdown, not yet picked up by the
+        scan worker, must still be saved rather than dropped."""
+        from src.storage.queue_manager import _normalize_path
+        path = _normalize_path(gallery_dir)
+        with patch.object(queue_manager._scan_queue, 'put'):
+            queue_manager.add_item(gallery_dir)
+        assert queue_manager.items[path].status == QUEUE_STATE_VALIDATING
+
+        queue_manager.shutdown()
+
+        saved = mock_store.submit_upsert_ordered.call_args[0][0]
+        assert path in [d['path'] for d in saved]
+
     def test_shutdown_stops_scan_worker(self, queue_manager):
         """Test that shutdown stops scan worker."""
         queue_manager.shutdown()

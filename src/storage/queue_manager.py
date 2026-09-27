@@ -1297,6 +1297,9 @@ class QueueManager(QObject):
         QUEUE_STATE_READY, QUEUE_STATE_QUEUED, QUEUE_STATE_PAUSED,
         QUEUE_STATE_COMPLETED, QUEUE_STATE_INCOMPLETE, QUEUE_STATE_FAILED,
         QUEUE_STATE_SCANNING, QUEUE_STATE_SCAN_FAILED, QUEUE_STATE_UPLOAD_FAILED,
+        # New galleries sit in VALIDATING until the scan worker picks them up;
+        # without it a shutdown in that window drops them from the queue.
+        QUEUE_STATE_VALIDATING,
     )
 
     def _collect_items_for_save(self, specific_paths: List[str] | None = None) -> List[dict]:
