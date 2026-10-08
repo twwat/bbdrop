@@ -16,7 +16,7 @@ from urllib.parse import urlencode
 from src.network.file_manager.client import (
     FileManagerCapabilities,
 )
-from src.network.file_manager.xfs_web_client import XFSWebFileManagerBase
+from src.network.file_manager.xfs_web_client import ROW_GAP, XFSWebFileManagerBase
 from src.utils.logger import log
 
 FILEDOT_CAPABILITIES = FileManagerCapabilities(
@@ -46,19 +46,21 @@ class FiledotFileManagerClient(XFSWebFileManagerBase):
     USES_CSRF_TOKEN = True
     PER_PAGE_MAX = 5000
 
+    # Filedot rotates its domain (.to, .xyz, .st, ...); the listing links
+    # file rows on whichever one is current, so accept any TLD.
     _FILE_ROW_RE = re.compile(
         r'<tr class="filerow">'
-        r'.*?name="file_id"\s+value="(\d+)"'
-        r'.*?<td class="filename">\s*<a[^>]+href="https?://filedot\.(?:to|xyz)/([a-zA-Z0-9]+)"[^>]*>'
-        r'\s*(.*?)\s*</a>'
-        r'.*?<td class="tdinfo">\s*([^<]+?)\s*</td>',
+        + ROW_GAP + r'name="file_id"\s+value="(\d+)"'
+        + ROW_GAP + r'<td class="filename">\s*<a[^>]+href="https?://filedot\.[a-z]{2,}/([a-zA-Z0-9]+)"[^>]*>'
+        r'\s*(' + ROW_GAP + r')\s*</a>'
+        + ROW_GAP + r'<td class="tdinfo">\s*([^<]+?)\s*</td>',
         re.DOTALL,
     )
     _FOLDER_ROW_RE = re.compile(
         r'<tr class="folderrow">'
-        r'.*?href="https?://filedot\.(?:to|xyz)/files\?fld_id=(\d+)"[^>]*>'
-        r'\s*(.*?)\s*</a>'
-        r'(?:.*?<td class="howfiles"[^>]*>(?:<img[^>]*>)?\s*(\d+)\s*</td>)?',
+        + ROW_GAP + r'href="https?://filedot\.[a-z]{2,}/files\?fld_id=(\d+)"[^>]*>'
+        r'\s*(' + ROW_GAP + r')\s*</a>'
+        r'(?:' + ROW_GAP + r'<td class="howfiles"[^>]*>(?:<img[^>]*>)?\s*(\d+)\s*</td>)?',
         re.DOTALL,
     )
     _TOKEN_RE = re.compile(r'token=([a-f0-9]{16,})', re.IGNORECASE)

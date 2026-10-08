@@ -13,7 +13,7 @@ import re
 from typing import List, Optional, Tuple
 
 from src.network.file_manager.client import FileManagerCapabilities
-from src.network.file_manager.xfs_web_client import XFSWebFileManagerBase
+from src.network.file_manager.xfs_web_client import ROW_GAP, XFSWebFileManagerBase
 
 FILESPACE_CAPABILITIES = FileManagerCapabilities(
     can_rename=True,
@@ -46,10 +46,10 @@ class FilespaceFileManagerClient(XFSWebFileManagerBase):
     # href="https://filespace.com/<code>">name</a> ... <TD align=right>size</TD>
     _FILE_ROW_RE = re.compile(
         r'<TR align=center class="hi">'
-        r'.*?name="file_id"\s+value="(\d+)"'
-        r'.*?href="https?://filespace\.com/([a-zA-Z0-9]+)"[^>]*>'
+        + ROW_GAP + r'name="file_id"\s+value="(\d+)"'
+        + ROW_GAP + r'href="https?://filespace\.com/([a-zA-Z0-9]+)"[^>]*>'
         r'\s*([^<]+?)\s*</a>'
-        r'.*?<TD align=right>\s*([^<]+?)\s*</TD>',
+        + ROW_GAP + r'<TD align=right>\s*([^<]+?)\s*</TD>',
         re.DOTALL | re.IGNORECASE,
     )
     # Folder row: <TR> ... <img alt="Folder"> ... href="?op=my_files&amp;fld_id=N">name</a>
@@ -59,7 +59,7 @@ class FilespaceFileManagerClient(XFSWebFileManagerBase):
         r'<TR>\s*(?:<!--.*?-->\s*)?<TD[^>]*>\s*<img[^>]*alt="Folder"[^>]*>\s*</TD>'
         r'\s*<TD[^>]*>\s*<a[^>]+href="\?op=my_files&amp;fld_id=(\d+)"[^>]*>'
         r'\s*(?:<b>)?\s*([^<]+?)\s*(?:</b>)?\s*</a>'
-        r'.*?<TD[^>]*>\s*(\d+)\s*files\s*</TD>',
+        + ROW_GAP + r'<TD[^>]*>\s*(\d+)\s*files\s*</TD>',
         re.DOTALL | re.IGNORECASE,
     )
 

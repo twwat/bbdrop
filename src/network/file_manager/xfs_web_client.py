@@ -46,6 +46,14 @@ from src.utils.logger import log
 # Shared regexes — same XFS /file_edit form layout on both hosts
 # ---------------------------------------------------------------------------
 
+# Lazy gap that cannot cross the end of the current table row. Listing-row
+# regexes must use this instead of a DOTALL ``.*?``: an unbounded gap lets a
+# row that doesn't fit the pattern backtrack across the whole remaining page
+# (quadratic or worse), and re holds the GIL throughout — a markup change on a
+# 5000-row page froze the entire app for hours. Case-insensitive patterns also
+# stop at ``</TR>``.
+ROW_GAP = r'(?:(?!</tr>).)*?'
+
 _FILE_EDIT_INPUT_RE = re.compile(
     r'<input[^>]*\bname="(?P<name>file_name|file_password|file_price)"'
     r'[^>]*\bvalue="(?P<value>[^"]*)"',
