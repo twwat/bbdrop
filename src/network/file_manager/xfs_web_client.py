@@ -104,9 +104,13 @@ class XFSWebFileManagerBase(FileManagerClient):
     """
 
     # ---- Subclass-provided class constants --------------------------------
+    HOST_ID: str = ""
     BASE_URL: str = ""
     LINK_PREFIX: str = ""
     USES_CSRF_TOKEN: bool = False
+    # Literal opening tag of a file row (matched case-insensitively). Used to
+    # count the rows on a page so rows _FILE_ROW_RE can't read get logged.
+    _FILE_ROW_START: str = ""
     _FILE_ROW_RE: re.Pattern = re.compile(r"$.")  # never matches
     _FOLDER_ROW_RE: re.Pattern = re.compile(r"$.")
     _STALE_TOKEN_MARKERS: tuple = ()
@@ -273,7 +277,52 @@ class XFSWebFileManagerBase(FileManagerClient):
             f"numeric_ids={len(self._file_code_to_numeric)})",
             level="debug", category="file_manager")
 
+        self._warn_unreadable_file_rows(page_html, folder_id, page)
+
         return folders, files
+
+    def _warn_unreadable_file_rows(self, page_html: str, folder_id: str, page: int) -> None:
+        """Log a warning naming the link domains of file rows _FILE_ROW_RE
+        couldn't read — the usual sign the host changed its domain or layout.
+
+        Logged once per client per set of domains, so a folder walk doesn't
+        repeat it for every folder.
+        """
+        if not self._FILE_ROW_START:
+            return
+        starts = [m.start() for m in re.finditer(
+            re.escape(self._FILE_ROW_START), page_html, re.IGNORECASE)]
+        if not starts:
+            return
+
+        unread_domains: Dict[str, int] = {}
+        unread = 0
+        for i, start in enumerate(starts):
+            end = starts[i + 1] if i + 1 < len(starts) else len(page_html)
+            row = page_html[start:end]
+            if self._FILE_ROW_RE.match(row):
+                continue
+            unread += 1
+            link = re.search(r'href="https?://([^/"]+)', row, re.IGNORECASE)
+            domain = link.group(1).lower() if link else "no link"
+            unread_domains[domain] = unread_domains.get(domain, 0) + 1
+
+        if not unread:
+            return
+        warned = self.__dict__.setdefault("_unreadable_row_warnings", set())
+        key = frozenset(unread_domains)
+        if key in warned:
+            return
+        warned.add(key)
+
+        from src.core.host_registry import get_display_name
+        domains = ", ".join(f"{d} ({n})" for d, n in
+                            sorted(unread_domains.items(), key=lambda kv: -kv[1]))
+        log(f"{get_display_name(self.HOST_ID)}: could not read {unread} of {len(starts)} "
+            f"file rows in folder {folder_id!r} page {page} — they link to {domains}. "
+            f"The host may have changed its domain or page layout; these files "
+            f"will be missing from listings and link scans.",
+            level="warning", category="file_manager")
 
     def _resolve_numeric_ids(
         self, file_codes: List[str]

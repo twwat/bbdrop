@@ -41,6 +41,7 @@ FILEDOT_CAPABILITIES = FileManagerCapabilities(
 class FiledotFileManagerClient(XFSWebFileManagerBase):
     """File manager for Filedot via web scraping."""
 
+    HOST_ID = "filedot"
     BASE_URL = "https://filedot.to"
     LINK_PREFIX = "https://filedot.to/"
     USES_CSRF_TOKEN = True
@@ -48,6 +49,7 @@ class FiledotFileManagerClient(XFSWebFileManagerBase):
 
     # Filedot rotates its domain (.to, .xyz, .st, ...); the listing links
     # file rows on whichever one is current, so accept any TLD.
+    _FILE_ROW_START = '<tr class="filerow">'
     _FILE_ROW_RE = re.compile(
         r'<tr class="filerow">'
         + ROW_GAP + r'name="file_id"\s+value="(\d+)"'

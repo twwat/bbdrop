@@ -37,6 +37,7 @@ FILESPACE_CAPABILITIES = FileManagerCapabilities(
 class FilespaceFileManagerClient(XFSWebFileManagerBase):
     """File manager for Filespace via web scraping."""
 
+    HOST_ID = "filespace"
     BASE_URL = "https://filespace.com"
     LINK_PREFIX = "https://filespace.com/"
     USES_CSRF_TOKEN = False
@@ -44,6 +45,7 @@ class FilespaceFileManagerClient(XFSWebFileManagerBase):
 
     # File row: <TR align=center class="hi"> ... file_id value="\d+" ...
     # href="https://filespace.com/<code>">name</a> ... <TD align=right>size</TD>
+    _FILE_ROW_START = '<TR align=center class="hi">'
     _FILE_ROW_RE = re.compile(
         r'<TR align=center class="hi">'
         + ROW_GAP + r'name="file_id"\s+value="(\d+)"'

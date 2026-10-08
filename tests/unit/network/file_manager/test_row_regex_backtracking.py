@@ -97,3 +97,47 @@ def test_filespace_unmatched_rows_do_not_backtrack_across_page():
 
     assert files == []
     assert elapsed < 1.0, f"row regex took {elapsed:.1f}s on 400 unmatched rows"
+
+
+def test_filedot_logs_unreadable_rows_with_their_domain():
+    c = _bare(FiledotFileManagerClient)
+    html = _filedot_row(1, "https://filedot.to/goodcode1") + "".join(
+        _filedot_row(10 + i, f"https://fdot.cc/newcode{i}") for i in range(3)
+    )
+
+    with patch("src.network.file_manager.xfs_web_client.log") as mock_log:
+        _folders, files, _elapsed = _timed_scrape(c, html)
+
+    assert [f.id for f in files] == ["goodcode1"]
+    warnings = [call for call in mock_log.call_args_list
+                if call.kwargs.get("level") == "warning"]
+    assert len(warnings) == 1
+    message = warnings[0].args[0]
+    assert "Filedot" in message
+    assert "3 of 4" in message
+    assert "fdot.cc" in message
+
+
+def test_unreadable_row_warning_is_logged_once_per_client():
+    c = _bare(FiledotFileManagerClient)
+    html = _filedot_row(10, "https://fdot.cc/newcode")
+
+    with patch("src.network.file_manager.xfs_web_client.log") as mock_log:
+        _timed_scrape(c, html)
+        _timed_scrape(c, html)
+
+    warnings = [call for call in mock_log.call_args_list
+                if call.kwargs.get("level") == "warning"]
+    assert len(warnings) == 1
+
+
+def test_fully_readable_page_logs_no_warning():
+    c = _bare(FilespaceFileManagerClient)
+    html = _filespace_row(7000, "https://filespace.com/abc123")
+
+    with patch("src.network.file_manager.xfs_web_client.log") as mock_log:
+        _folders, files, _elapsed = _timed_scrape(c, html)
+
+    assert [f.id for f in files] == ["abc123"]
+    assert not [call for call in mock_log.call_args_list
+                if call.kwargs.get("level") == "warning"]
