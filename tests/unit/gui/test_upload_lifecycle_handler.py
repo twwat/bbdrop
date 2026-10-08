@@ -169,7 +169,20 @@ class TestOnGalleryFailed:
             handler.on_gallery_failed("/test/gallery", "Something broke")
 
         mock_main_window.notification_manager.notify.assert_called_once_with(
-            'gallery_failed', detail="Something broke"
+            'gallery_failed', detail="gallery — Something broke"
+        )
+
+    @patch('src.gui.upload_lifecycle_handler.QTimer')
+    def test_failure_detail_truncates_error_not_name(self, mock_timer, handler, mock_main_window):
+        """The 80-char cap applies to the error text, not the gallery name."""
+        item = GalleryQueueItem(path="/test/My Set")
+        mock_main_window.queue_manager.items = {"/test/My Set": item}
+
+        with patch('src.gui.upload_lifecycle_handler.log'):
+            handler.on_gallery_failed("/test/My Set", "e" * 200)
+
+        mock_main_window.notification_manager.notify.assert_called_once_with(
+            'gallery_failed', detail="My Set — " + "e" * 80
         )
 
     @patch('src.gui.upload_lifecycle_handler.QTimer')
@@ -558,3 +571,21 @@ class TestHandleGalleryRenamedBackground:
             handler._handle_gallery_renamed_background("gal123")
 
         mock_main_window._set_renamed_cell_icon.assert_not_called()
+
+
+class TestGalleryDoneNotification:
+    """gallery_completed carries the gallery name for Discord and toasts."""
+
+    def test_completed_notification_includes_gallery_name(self):
+        mw = Mock()
+        item = GalleryQueueItem(path="/test/My Set")
+        item.status = "completed"
+        mw.queue_manager.get_item.return_value = item
+        mw.queue_manager.store.get_file_host_uploads.return_value = []
+        handler = UploadLifecycleHandler(mw)
+
+        handler.maybe_notify_gallery_done("/test/My Set")
+
+        mw.notification_manager.notify.assert_called_once_with(
+            'gallery_completed', detail="My Set"
+        )

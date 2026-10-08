@@ -456,7 +456,8 @@ class UploadLifecycleHandler(QObject):
 
         self._fired_completion_notifications.add(path)
         if hasattr(mw, 'notification_manager'):
-            mw.notification_manager.notify('gallery_completed')
+            mw.notification_manager.notify(
+                'gallery_completed', detail=os.path.basename(path))
 
     def on_ext_fields_updated(self, path: str, ext_fields: dict):
         """Handle ext fields update from external hooks"""
@@ -612,4 +613,5 @@ class UploadLifecycleHandler(QObject):
 
         # Fire notification
         if hasattr(mw, 'notification_manager'):
-            mw.notification_manager.notify('gallery_failed', detail=error_message[:80])
+            mw.notification_manager.notify(
+                'gallery_failed', detail=f"{gallery_name} — {error_message[:80]}")
