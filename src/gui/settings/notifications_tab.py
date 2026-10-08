@@ -6,11 +6,12 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QLabel, QPushButton, QSlider, QComboBox, QGridLayout,
-    QSizePolicy, QFileDialog,
+    QSizePolicy, QFileDialog, QLineEdit, QApplication,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from src.gui.widgets.info_button import InfoButton
+from src.services.discord_webhook import DiscordWebhookSender
 from src.services.notification_manager import NOTIFICATION_EVENTS, _EVENT_DEFAULTS
 from src.utils.logger import log
 
@@ -24,6 +25,7 @@ class NotificationsTab(QWidget):
         super().__init__(parent)
         self._manager = notification_manager
         self._event_rows: dict[str, dict] = {}
+        self._discord_checks: dict[str, QCheckBox] = {}
         self._available_sounds = self._scan_sounds()
         self._setup_ui()
         self.load_settings()
@@ -170,6 +172,120 @@ class NotificationsTab(QWidget):
         boxes_layout.addWidget(self._alert_box)
 
         root.addLayout(boxes_layout, 1)
+        root.addWidget(self._build_discord_box())
+
+    # ------------------------------------------------------------------
+    # Discord box
+    # ------------------------------------------------------------------
+
+    def _build_discord_box(self) -> QGroupBox:
+        box = QGroupBox("Discord")
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
+
+        enable_row = QHBoxLayout()
+        self.discord_enable = QCheckBox("Enable Discord Notifications")
+        self.discord_enable.toggled.connect(self._on_discord_toggled)
+        enable_row.addWidget(self.discord_enable)
+        enable_row.addWidget(InfoButton(
+            "<b>Discord Notifications</b><br>"
+            "Post a message to a Discord channel when an event happens. "
+            "To set it up in Discord: open the channel's settings &rarr; "
+            "<b>Integrations</b> &rarr; <b>Webhooks</b> &rarr; "
+            "<b>New Webhook</b> &rarr; <b>Copy Webhook URL</b>, then paste "
+            "it below and press <b>Send test message</b>.<br><br>"
+            "Anyone with the webhook URL can post to that channel, so keep "
+            "it private. BBDrop stores it encrypted in your system keyring, "
+            "not in the settings file."
+        ))
+        enable_row.addStretch()
+        layout.addLayout(enable_row)
+
+        self._discord_content = QWidget()
+        content = QVBoxLayout(self._discord_content)
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+
+        url_row = QHBoxLayout()
+        url_row.addWidget(QLabel("Webhook URL:"))
+        self.discord_url = QLineEdit()
+        self.discord_url.setEchoMode(QLineEdit.EchoMode.Password)
+        self.discord_url.setPlaceholderText("https://discord.com/api/webhooks/...")
+        self.discord_url.textChanged.connect(self._on_discord_url_changed)
+        url_row.addWidget(self.discord_url, 1)
+        self.discord_test_btn = QPushButton("Send test message")
+        self.discord_test_btn.clicked.connect(self._send_discord_test)
+        url_row.addWidget(self.discord_test_btn)
+        content.addLayout(url_row)
+
+        self.discord_status = QLabel("")
+        self.discord_status.setWordWrap(True)
+        content.addWidget(self.discord_status)
+
+        events_grid = QGridLayout()
+        events_grid.setHorizontalSpacing(12)
+        events_grid.setVerticalSpacing(4)
+        for i, event_id in enumerate(NOTIFICATION_EVENTS):
+            display_name, description, _ = NOTIFICATION_EVENTS[event_id]
+            chk = QCheckBox(display_name)
+            chk.setToolTip(description)
+            chk.toggled.connect(self._emit_dirty)
+            events_grid.addWidget(chk, i // 2, i % 2)
+            self._discord_checks[event_id] = chk
+        content.addLayout(events_grid)
+
+        note = QLabel("Gallery names are sent to Discord. File paths and "
+                      "links are not.")
+        note.setEnabled(False)
+        content.addWidget(note)
+
+        layout.addWidget(self._discord_content)
+        return box
+
+    def _discord_url_text(self) -> str:
+        return self.discord_url.text().strip()
+
+    def _set_discord_status(self, text: str, error: bool = True):
+        self.discord_status.setStyleSheet(
+            "color: #c0392b;" if error else "color: #27ae60;")
+        self.discord_status.setText(text)
+
+    def _update_discord_validity(self):
+        url = self._discord_url_text()
+        valid = DiscordWebhookSender.is_valid_url(url)
+        if url and not valid:
+            self._set_discord_status(
+                "That doesn't look like a Discord webhook URL (it should "
+                "start with https://discord.com/api/webhooks/).")
+        else:
+            self._set_discord_status("")
+        self.discord_test_btn.setEnabled(
+            valid and self.discord_enable.isChecked())
+
+    def _on_discord_toggled(self, enabled: bool):
+        self._discord_content.setEnabled(enabled)
+        self._update_discord_validity()
+        self.dirty.emit()
+
+    def _on_discord_url_changed(self, _text: str):
+        self._update_discord_validity()
+        self.dirty.emit()
+
+    def _send_discord_test(self):
+        url = self._discord_url_text()
+        self.discord_test_btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            ok, reason = DiscordWebhookSender().send_test(url)
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.discord_test_btn.setEnabled(True)
+        if ok:
+            self._set_discord_status(
+                "Test message sent - check your Discord channel.", error=False)
+        else:
+            self._set_discord_status(reason)
 
     # ------------------------------------------------------------------
     # Row builders
@@ -374,6 +490,12 @@ class NotificationsTab(QWidget):
             for event_id in NOTIFICATION_EVENTS:
                 cfg = self._manager.get_event_settings(event_id)
                 self._apply_config(event_id, cfg)
+            self.discord_enable.setChecked(
+                bool(self._manager._settings.get('discord_enabled', False)))
+            self.discord_url.setText(self._manager.get_discord_webhook_url())
+            for event_id, chk in self._discord_checks.items():
+                chk.setChecked(
+                    self._manager.get_event_settings(event_id).get('discord', False))
         else:
             self.audio_enable.setChecked(False)
             self.alert_enable.setChecked(False)
@@ -385,12 +507,18 @@ class NotificationsTab(QWidget):
                     'sound_file': '',
                     'toast': defaults.get('toast', False),
                 })
+            self.discord_enable.setChecked(False)
+            self.discord_url.setText('')
+            for chk in self._discord_checks.values():
+                chk.setChecked(False)
 
         for ctrl in all_controls:
             ctrl.blockSignals(False)
 
         self._audio_content.setEnabled(self.audio_enable.isChecked())
         self._alert_content.setEnabled(self.alert_enable.isChecked())
+        self._discord_content.setEnabled(self.discord_enable.isChecked())
+        self._update_discord_validity()
         for event_id in self._event_rows:
             self._on_sound_toggled(
                 event_id, self._event_rows[event_id]['sound_check'].isChecked()
@@ -424,6 +552,10 @@ class NotificationsTab(QWidget):
         row['alert_check'].setChecked(cfg.get('toast', False))
 
     def save_settings(self) -> bool:
+        url = self._discord_url_text()
+        if url and not DiscordWebhookSender.is_valid_url(url):
+            self._update_discord_validity()
+            return False
         if self._manager is None:
             log("Cannot save notification settings: manager not available",
                 level="warning", category="settings")
@@ -432,6 +564,13 @@ class NotificationsTab(QWidget):
             self._manager._settings['enabled'] = (
                 self.audio_enable.isChecked() or self.alert_enable.isChecked()
             )
+            # Only touch the keyring when the URL actually changed.
+            if (url != self._manager.get_discord_webhook_url()
+                    and not self._manager.set_discord_webhook_url(url)):
+                self._set_discord_status(
+                    "Could not store the webhook URL in the system keyring.")
+                return False
+            self._manager._settings['discord_enabled'] = self.discord_enable.isChecked()
             for event_id, row in self._event_rows.items():
                 sound_on = (
                     self.audio_enable.isChecked()
@@ -458,6 +597,7 @@ class NotificationsTab(QWidget):
                     'volume': row['volume_slider'].value() / 100.0,
                     'sound_file': sound_file,
                     'toast': toast_on,
+                    'discord': self._discord_checks[event_id].isChecked(),
                 })
             self._manager.save_settings()
             return True
@@ -486,12 +626,18 @@ class NotificationsTab(QWidget):
                 'sound_file': '',
                 'toast': defaults.get('toast', False),
             })
+        self.discord_enable.setChecked(False)
+        self.discord_url.setText('')
+        for chk in self._discord_checks.values():
+            chk.setChecked(False)
 
         for ctrl in all_controls:
             ctrl.blockSignals(False)
 
         self._audio_content.setEnabled(False)
         self._alert_content.setEnabled(False)
+        self._discord_content.setEnabled(False)
+        self._update_discord_validity()
         for event_id in self._event_rows:
             self._on_sound_toggled(
                 event_id, self._event_rows[event_id]['sound_check'].isChecked()
@@ -504,6 +650,8 @@ class NotificationsTab(QWidget):
 
     def _get_all_controls(self) -> list:
         controls = [self.audio_enable, self.alert_enable]
+        controls.extend([self.discord_enable, self.discord_url])
+        controls.extend(self._discord_checks.values())
         for row in self._event_rows.values():
             controls.extend([
                 row['sound_check'],
