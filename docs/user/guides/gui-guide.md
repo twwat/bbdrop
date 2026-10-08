@@ -110,6 +110,16 @@ Each event can have sound, toast, or both toggled independently. Click the brows
 
 Toast notifications appear from the system tray icon.
 
+### Discord notifications
+
+BBDrop can post a message to a Discord channel when an event you choose happens (for example **Gallery Failed** or **Queue Finished**), so you can check progress from your phone. It uses a Discord *webhook*, so no bot is needed.
+
+1. In Discord, open the channel's settings and go to **Integrations > Webhooks > New Webhook**, then click **Copy Webhook URL**.
+2. In BBDrop open **Settings > Notifications**, tick **Enable Discord Notifications** and paste the URL.
+3. Press **Send test message** to confirm it works, tick the events you want, and save.
+
+Discord notifications are off by default. Messages contain the event and the gallery name (plus a short error text for failures), never file paths or links. The webhook URL is stored encrypted in your system keyring, like BBDrop's other credentials, not in the settings file. Anyone who has the URL can post to that channel, so keep it private.
+
 ---
 
 ## Disk Space Monitoring

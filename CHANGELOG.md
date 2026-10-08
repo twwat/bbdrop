@@ -4,6 +4,15 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+- **Discord notifications**: post a message to a Discord channel via webhook when selected events occur (Settings > Notifications)
+- Gallery name is now included in "Gallery completed" and "Gallery failed" notifications
+
+### Fixed
+- Per-event notification settings (sound, volume, desktop alert) were saved but reset to defaults on every restart
+
 ## [0.9.9] - 2026-04-21 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.8...v0.9.9))
 
 ### Added
