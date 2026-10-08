@@ -218,13 +218,15 @@ class NotificationManager:
     def load_settings(self) -> None:
         """Load notification settings from INI file.
 
-        Reads keys with ``notifications_`` prefix from load_user_defaults().
-        Falls back to hardcoded defaults when the INI has no values.
+        Reads the [NOTIFICATIONS] INI section (as ``notifications_`` keys),
+        overlaid on load_user_defaults(). Falls back to hardcoded defaults
+        when the INI has no values.
         """
         try:
             defaults = load_user_defaults()
         except Exception:
             defaults = {}
+        defaults = {**defaults, **_read_notifications_section()}
 
         self._settings['enabled'] = _bool(
             defaults.get('notifications_enabled', True)
@@ -303,6 +305,26 @@ class NotificationManager:
         """Get the default built-in sound file path for an event."""
         _, _, default_file = NOTIFICATION_EVENTS.get(event_id, ('', '', ''))
         return os.path.join(self._sounds_dir, default_file)
+
+
+def _read_notifications_section() -> dict:
+    """Return the [NOTIFICATIONS] INI section keyed as ``notifications_<key>``.
+
+    ``load_user_defaults()`` only reads [DEFAULTS], so without this overlay
+    everything ``save_settings()`` wrote is ignored on the next start.
+    """
+    if read_config is None:
+        return {}
+    try:
+        config = read_config()
+    except Exception:
+        return {}
+    if 'NOTIFICATIONS' not in config:
+        return {}
+    return {
+        f'notifications_{key}': value
+        for key, value in config['NOTIFICATIONS'].items()
+    }
 
 
 def _bool(val) -> bool:
