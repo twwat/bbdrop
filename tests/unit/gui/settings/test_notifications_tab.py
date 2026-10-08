@@ -172,3 +172,25 @@ def test_works_without_a_manager(qtbot):
     qtbot.addWidget(widget)
     assert widget.discord_enable.isChecked() is False
     assert widget.save_settings() is False
+
+
+def test_previews_never_post_to_discord(tab, manager):
+    """Previewing a sound/alert must not send a real (fake-looking) failure."""
+    manager._discord = MagicMock()
+    manager._play_sound = MagicMock()
+    manager._settings['discord_enabled'] = True
+    manager.update_event_settings('gallery_failed', {'discord': True})
+
+    tab._preview_alert('gallery_failed')
+    tab._preview_sound('gallery_failed')
+
+    manager._discord.send.assert_not_called()
+    # the user's real setting is restored afterwards
+    assert manager.get_event_settings('gallery_failed')['discord'] is True
+
+
+def test_invalid_url_with_discord_off_does_not_block_other_settings(tab, manager):
+    tab.discord_url.setText("https://evil.com/x")      # Discord box is unticked
+    assert tab.save_settings() is True
+    manager._store.assert_not_called()
+    manager.save_settings.assert_called_once()

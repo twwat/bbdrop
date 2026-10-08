@@ -6,6 +6,7 @@ in ~/.bbdrop/bbdrop.ini under [NOTIFICATIONS].
 """
 
 import os
+import re
 import time
 from typing import Optional, Dict, Any
 
@@ -116,10 +117,30 @@ _DISCORD_MESSAGES = {
 _DISCORD_CREDENTIAL_KEY = 'discord_webhook_url'
 
 
+_REDACT_URL_RE = re.compile(r'''https?://[^\s<>"']*[^\s<>"'.,;:!?)\]]''')
+_REDACT_WIN_PATH_RE = re.compile(
+    r'''(?<!\w)(?:[A-Za-z]:[\\/]|\\\\[^\s\\/]+[\\/])[^'"<>|*?\r\n]*''')
+_REDACT_UNIX_PATH_RE = re.compile(r'''(?<![\w:/.])/(?:[^\s/'"]+/)+[^\s'"]*''')
+
+
+def _redact_for_discord(text: str) -> str:
+    """Strip local paths (keep the last component) and links from error text.
+
+    The Discord box and docs promise file paths and links are never sent, but
+    worker error messages embed them (e.g. "Gallery folder not found: <path>").
+    """
+    text = _REDACT_URL_RE.sub('[link]', text)
+    text = _REDACT_WIN_PATH_RE.sub(
+        lambda m: re.split(r'[\\/]', m.group(0).rstrip('\\/'))[-1], text)
+    text = _REDACT_UNIX_PATH_RE.sub(
+        lambda m: m.group(0).rstrip('/').rsplit('/', 1)[-1], text)
+    return text
+
+
 def _format_discord_message(event_type: str, detail: str = '') -> str:
     with_detail, without_detail = _DISCORD_MESSAGES.get(event_type, ('', ''))
     if detail:
-        return with_detail.replace('{detail}', detail)
+        return with_detail.replace('{detail}', _redact_for_discord(detail))
     return without_detail
 
 
@@ -425,14 +446,16 @@ def _read_notifications_section() -> dict:
         return {}
     try:
         config = read_config()
+        if 'NOTIFICATIONS' not in config:
+            return {}
+        # raw=True: no %-interpolation, so a path like C:\100%\x.wav in a
+        # hand-edited INI is read as-is instead of stopping startup.
+        return {
+            f'notifications_{key}': value
+            for key, value in config.items('NOTIFICATIONS', raw=True)
+        }
     except Exception:
         return {}
-    if 'NOTIFICATIONS' not in config:
-        return {}
-    return {
-        f'notifications_{key}': value
-        for key, value in config['NOTIFICATIONS'].items()
-    }
 
 
 def _bool(val) -> bool:

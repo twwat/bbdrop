@@ -442,6 +442,7 @@ class NotificationsTab(QWidget):
                 'volume': volume,
                 'sound_file': sound_file if is_custom else '',
                 'toast': False,
+                'discord': False,   # a preview must never post to Discord
             })
             if not is_custom:
                 import src.services.notification_manager as nm
@@ -468,6 +469,7 @@ class NotificationsTab(QWidget):
                 'volume': 0,
                 'sound_file': '',
                 'toast': True,
+                'discord': False,   # a preview must never post to Discord
             })
             self._manager.notify(event_id, detail='(preview)')
         finally:
@@ -553,9 +555,12 @@ class NotificationsTab(QWidget):
 
     def save_settings(self) -> bool:
         url = self._discord_url_text()
-        if url and not DiscordWebhookSender.is_valid_url(url):
+        url_invalid = bool(url) and not DiscordWebhookSender.is_valid_url(url)
+        if url_invalid and self.discord_enable.isChecked():
             self._update_discord_validity()
             return False
+        # With Discord off, a leftover bad URL must not block saving the
+        # sound/alert settings; it is simply not stored.
         if self._manager is None:
             log("Cannot save notification settings: manager not available",
                 level="warning", category="settings")
@@ -565,7 +570,8 @@ class NotificationsTab(QWidget):
                 self.audio_enable.isChecked() or self.alert_enable.isChecked()
             )
             # Only touch the keyring when the URL actually changed.
-            if (url != self._manager.get_discord_webhook_url()
+            if (not url_invalid
+                    and url != self._manager.get_discord_webhook_url()
                     and not self._manager.set_discord_webhook_url(url)):
                 self._set_discord_status(
                     "Could not store the webhook URL in the system keyring.")

@@ -183,3 +183,34 @@ class TestWebhookUrl:
     def test_get_url_returns_empty_when_nothing_stored(self, mgr):
         with patch(f'{CRED}.get_credential', return_value=''):
             assert mgr.get_discord_webhook_url() == ''
+
+
+class TestPrivacyRedaction:
+    """The UI and docs promise file paths and links are never sent."""
+
+    @pytest.mark.parametrize("detail,expected", [
+        (r"Set 7 — Gallery folder not found: C:\Users\Jimbo\Pictures\Set 7 (x82)",
+         "Set 7 — Gallery folder not found: Set 7 (x82)"),
+        ("Set — Gallery folder not found: /home/jimbo/pics/Set 7",
+         "Set — Gallery folder not found: Set 7"),
+        (r"Set — cannot read \\nas\share\pics\a.jpg now",
+         "Set — cannot read a.jpg now"),
+        (r"Set — No such file: 'C:\Users\Jimbo\a.jpg'",
+         "Set — No such file: 'a.jpg'"),
+        ("Set — failed to POST https://api.example.com/upload?key=abc: timeout",
+         "Set — failed to POST [link]: timeout"),
+        ("Set — see http://host/x.", "Set — see [link]."),
+        ("Set — Connection timeout", "Set — Connection timeout"),
+        ("Set — 5/10 images failed and/or timed out",
+         "Set — 5/10 images failed and/or timed out"),
+    ])
+    def test_paths_and_links_are_redacted(self, mgr, detail, expected):
+        mgr.notify('gallery_failed', detail=detail)
+        mgr._discord.send.assert_called_once_with(f'❌ Gallery failed: {expected}')
+
+    def test_toast_text_is_not_redacted(self, mgr):
+        mgr._settings['enabled'] = True
+        mgr._event_settings['gallery_failed'] = _event_cfg(toast=True)
+        detail = r"Set — not found: C:\Users\Jimbo\Set"
+        mgr.notify('gallery_failed', detail=detail)
+        mgr._show_toast.assert_called_once_with('gallery_failed', detail)

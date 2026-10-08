@@ -27,3 +27,16 @@ def test_saved_disabled_state_survives_reload(clean_notifications_ini):
     first.save_settings()
 
     assert NotificationManager(tray_icon=None)._settings['enabled'] is False
+
+
+def test_percent_in_hand_edited_ini_does_not_stop_startup(clean_notifications_ini):
+    from src.services.notification_manager import NotificationManager
+    from src.utils.paths import get_config_path
+
+    with open(get_config_path(), 'a', encoding='utf-8') as f:
+        f.write("\n[NOTIFICATIONS]\n")
+        f.write(r"queue_finished_sound_file = C:\100%\x.wav" + "\n")
+
+    mgr = NotificationManager(tray_icon=None)   # must not raise
+
+    assert mgr.get_event_settings('queue_finished')['sound_file'] == r'C:\100%\x.wav'
