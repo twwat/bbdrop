@@ -4,32 +4,73 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
-
-### Added
-- **Discord notifications**: post a message to a Discord channel via webhook when selected events occur (Settings > Notifications)
-- Gallery name is now included in "Gallery completed" and "Gallery failed" notifications
-
-### Fixed
-- Per-event notification settings (sound, volume, desktop alert) were saved but reset to defaults on every restart
-
-## [0.9.9] - 2026-04-21 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.8...v0.9.9))
+## [0.9.9] - 2026-10-14 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.8...v0.9.9))
 
 ### Added
 - **Forum posting system**: Post gallery BBCode to vBulletin forums with per-forum authentication, templating, and cooldown enforcement
   - Forum Manager to add/edit forums, manage targets (subforums/threads) by pasting URLs
-  - Per-gallery posting config with template selection and optional title override
-  - Per-gallery posting override to post to different forums/targets on demand
-  - Manual post composer for custom body/title edits before posting
-  - Automatic post updates when BBCode regenerates (stale-post detection with configurable modes)
+  - Multiple destinations per tab and per gallery: each destination picks its own forum target and post template
+  - Target picker with pill-style multi-select, search, and URL-based "add new"
+  - Post composer for one or many galleries and destinations, with editable title/body before posting
+  - **Post** toolbar button quick-posts selected completed galleries to all configured destinations (opens the composer when none are set)
+  - Forum status column shows one coloured pill per destination (posted, stale, queued, failed); click a pill to open the composer
+  - Automatic post updates when BBCode regenerates, with a global posting policy (update mode, manual-edit handling, stale triggers) in Settings
   - Stale Posts dialog for batch reviewing and updating posts whose BBCode has changed
-  - Right-click context menu: "Post to forum…", "Posting override…", and "Update post" (when applicable)
 - **Forums settings tab**: Dedicated settings page with favicon caching, fit-to-content lists, bulk URL paste for targets
-- **Settings tab stability**: String keys for settings tabs prevent misalignment when tabs are reordered or inserted
 - **BBCode regeneration hooks**: Manual BBCode saves, template edits, and link format changes now automatically stale-flag affected forum posts
+- **Discord notifications**: Post a message to a Discord channel via webhook when selected events occur (Settings > Notifications)
+  - Gallery name is now included in "Gallery completed" and "Gallery failed" notifications
+- **Per-tab default template**: Each tab can set the gallery BBCode template applied to galleries added to it; the tab context-menu item "Posting…" is now "Tab Settings…"
+- **`[flag]` template tag**: Insert country flags in templates by country name or code
+- **File name placeholders**: `#fileName#`, `#fileBaseName#` and `#fileExt#` for file host link formats, highlighted in the placeholder editor
+- **Minimal download links**: Advanced Settings option to shorten file host URLs in BBCode (Rapidgator: `rg.to/file/<id>`)
+- **Link Scanner: Filedot and Filespace**: Account walk and availability checks for both hosts; files removed by Filespace admins are marked unavailable
+- **K2S family hash uploads**: Worker status shows "waiting for MD5", "creating from hash" and "hash created" while Keep2Share/FileBoom/TezFiles mirror an upload
+- **Live file host progress**: Gallery and overall progress bars now move as bytes go out instead of jumping when each file lands
+- **Bold transfer speed**: Worker status shows the live speed in bold while uploading
+- **XFS session check**: Filedot/Filespace sessions are validated before upload and re-logged in when expired, instead of uploading anonymously or failing late
+- **`BBDROP_BASE_PATH`**: Environment variable to override the data directory
+- File Manager logs listing rows the Filedot/Filespace scraper can't read (e.g. a new domain) instead of silently dropping them
+- Orphaned temporary archives are cleaned up at startup; archives are kept for auto-retry instead of being re-zipped
+
+### Changed
+- **BBCode stored in the database**: Gallery BBCode now lives in the database (schema v19+); older on-disk BBCode files are found under any past naming scheme, imported, and renamed automatically
+- **Statistics file host columns**: Now Files (total attempts) / Success / Fail / Success %
+- **Posting override removed**: The "Posting override…" dialog and context-menu item are replaced by the composer
+- **Clearer upload logs**: File host lines name the file the host actually receives; one Queued line per upload; one IMX rename line; noisy per-image and poll-dump logs removed
+- Template `#tokens#` are matched case-insensitively, so older host configs keep working
+- Queue-finished notification fires once per run, after file host uploads have settled
+- Dependencies: Pillow 12.3.0 and cryptography 50.0.1 (security fixes), splitzip 0.3.0
 
 ### Fixed
+- **Resume re-uploaded everything**: Resuming a gallery after a restart re-uploaded every image into the existing host gallery
+- **Galleries lost at shutdown**: Galleries added just before closing could vanish from the queue
+- **Dropped queue saves**: Saves and status updates triggered from worker threads (post-scan, scan failure, hook fields, stop) silently never happened
+- **Proxy pools ignored**: File Hosts and per-host proxy pools were bypassed when no global default was set, so uploads went out on the real IP while the UI showed the pool as active
+- **Credential migration**: Already-encrypted credentials could be encrypted a second time, destroying the saved value
+- **Dead file host links**: Filedot/Filespace uploads rejected with `undef` were reported as successful with broken links; they now retry
+- **Lost `#galleryLink#`**: BBCode auto-regeneration after file host uploads wiped the gallery link; video covers were also lost on regen
+- **`#fileName#` prefix**: Links showed the internal `bbdrop_<id>_` archive prefix
+- **UI freezes**: BBCode auto-regeneration, Link Scanner logins (up to ~90s), and Filedot listing pages (hours, after a domain change) no longer block the GUI
+- **Link Scanner**: Cancels on dashboard close, skips unreachable hosts and `..` rows, surfaces load errors, and uses a browser User-Agent for K2S
+- **Split archives**: Single video files now respect split archive settings and no longer fail to split; progress no longer jumps back at each part boundary
+- **K2S traffic**: Traffic display no longer stuck on "Resetting…"
+- **Statistics**: Today/all-time file counts were undercounted (most visibly IMX); inflated peak speeds from deduplicated uploads are reset; deduplicated uploads record bytes saved
+- **Worker table**: Metric cells blanked out for IMX and Turbo; status rows mismatched host names; speed no longer forced to zero during file host uploads
+- **Bandwidth display**: Decays smoothly instead of snapping to zero
+- **Turbo**: Single-image uploads (e.g. video screenshot sheets) returned no links
+- **Pixhost**: Galleries could be left silently unfinalized
+- **File host Test button**: Did nothing for enabled hosts
+- **File host rows**: Rows, logos and BBCode regeneration could go stale when a gallery's predicted ID differed from its saved ID
+- **Notification settings**: Per-event sound, volume and desktop alert settings reset to defaults on every restart
+- **Templates**: "Set template to" context menu repaired; placeholders insert into the focused field (title or body)
+- **Forum**: Composer pre-renders BBCode into the body and applies body edits; target picker keeps selections across search and filter changes
+- **Tabs**: Tabs settings dialog no longer resets the last active tab; deleting a tab can no longer orphan a gallery
+- **Data directory**: Fallback paths now follow the configured data directory instead of `~/.bbdrop`
 - **BBCode link format editor**: No longer reopens after closing
+- Settings tabs no longer misalign when tabs are reordered or inserted
+- Shutdown no longer leaves timers running against a closed main window
+- Crash when a file host poll had no upload ID
 
 ## [0.9.8] - 2026-04-19 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.7...v0.9.8))
 
