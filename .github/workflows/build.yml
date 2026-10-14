@@ -228,7 +228,7 @@ jobs:
 
       - name: Build Windows Installer (exe)
         if: runner.os == 'Windows'
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.9
         with:
           path: bbdrop.iss
 
