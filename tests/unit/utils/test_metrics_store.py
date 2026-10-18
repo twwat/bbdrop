@@ -106,3 +106,50 @@ class TestFilesCountPersistence:
         row = _db_row(store, "imx", "all_time")
         assert session["files_uploaded"] == 69 + 93 + 77
         assert row["files_uploaded"] == session["files_uploaded"]
+
+
+class TestAverageSpeedPeriods:
+    """avg_speed for every period is bytes / transfer time over that period.
+
+    Regression: today/all_time avg was a rolling window of this process's
+    transfers only, so after one upload in a new session 'avg speed (all
+    time)' showed exactly the session value instead of the historical one.
+    """
+
+    MB = 1024 * 1024
+
+    def test_all_time_avg_includes_history_after_restart(self, store):
+        # History: 100 MB in 100 s (1 MB/s)
+        store.record_transfer(host_name="rapidgator", bytes_uploaded=100 * self.MB,
+                              transfer_time=100.0, success=True)
+        store.flush()
+
+        # Restart: fresh instance on the same DB, empty in-memory caches
+        db_path = store._get_db_path()
+        store.close()
+        MetricsStore._instance = None
+        fresh = MetricsStore()
+        try:
+            emitted = []
+            fresh.signals.host_metrics_updated.connect(
+                lambda host, m: emitted.append(m))
+            # This session: 10 MB in 1 s (10 MB/s)
+            fresh.record_transfer(host_name="rapidgator", bytes_uploaded=10 * self.MB,
+                                  transfer_time=1.0, success=True)
+            m = emitted[-1]
+            assert m["session"]["avg_speed"] == pytest.approx(10 * self.MB)
+            assert m["all_time"]["avg_speed"] == pytest.approx(110 * self.MB / 101.0)
+            assert m["today"]["avg_speed"] == pytest.approx(110 * self.MB / 101.0)
+        finally:
+            fresh.close()
+
+    def test_session_avg_covers_whole_session(self, store):
+        emitted = []
+        store.signals.host_metrics_updated.connect(lambda host, m: emitted.append(m))
+        # 11 transfers: first is slow and large, would fall out of a last-10 window
+        store.record_transfer(host_name="filedot", bytes_uploaded=100 * self.MB,
+                              transfer_time=100.0, success=True)
+        for _ in range(10):
+            store.record_transfer(host_name="filedot", bytes_uploaded=10 * self.MB,
+                                  transfer_time=1.0, success=True)
+        assert emitted[-1]["session"]["avg_speed"] == pytest.approx(200 * self.MB / 110.0)

@@ -448,7 +448,7 @@ class MetricsStore:
         if transfer_time <= 0:
             transfer_time = 0.001  # Avoid division by zero
 
-        # Calculate average speed in bytes/second (for rolling average tracking)
+        # This transfer's average speed in bytes/second (peak fallback below)
         avg_speed = bytes_uploaded / transfer_time if transfer_time > 0 else 0
 
         # Determine peak speed to use for this transfer
@@ -476,7 +476,6 @@ class MetricsStore:
                     'total_transfer_time': 0.0,
                     'peak_speed': 0.0,
                     'peak_speed_date': None,
-                    'speeds': [],  # Rolling window for average calculation
                 }
 
             cache = self._session_cache[host_name]
@@ -501,17 +500,9 @@ class MetricsStore:
                 cache['peak_speed'] = speed
                 cache['peak_speed_date'] = now_str
 
-            # Keep rolling window of average speeds for avg calculation (last 10)
-            # Note: Use avg_speed (bytes/time) for rolling average, not peak speed
-            cache['speeds'].append(avg_speed)
-            if len(cache['speeds']) > 10:
-                cache['speeds'] = cache['speeds'][-10:]
-
-            # Calculate average speed from rolling window
-            if cache['speeds']:
-                cache['avg_speed'] = sum(cache['speeds']) / len(cache['speeds'])
-            else:
-                cache['avg_speed'] = 0.0
+            # Average over the whole period: total bytes / total transfer time,
+            # the same formula get_aggregated_metrics uses for DB periods.
+            cache['avg_speed'] = self._period_avg_speed(cache)
 
             # Update today_cache (initialize empty if not present)
             if host_name not in self._today_cache:
@@ -527,7 +518,6 @@ class MetricsStore:
                         'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
                         'peak_speed': db_metrics.get('peak_speed', 0.0),
                         'peak_speed_date': db_metrics.get('peak_speed_date'),
-                        'speeds': [],
                         'avg_speed': db_metrics.get('avg_speed', 0.0)
                     }
                 else:
@@ -540,7 +530,6 @@ class MetricsStore:
                         'total_transfer_time': 0.0,
                         'peak_speed': 0.0,
                         'peak_speed_date': None,
-                        'speeds': [],
                         'avg_speed': 0.0
                     }
 
@@ -557,14 +546,7 @@ class MetricsStore:
             if not deduped and speed > today_cache['peak_speed']:
                 today_cache['peak_speed'] = speed
                 today_cache['peak_speed_date'] = now_str
-            # Use avg_speed for rolling average, not peak
-            today_cache['speeds'].append(avg_speed)
-            if len(today_cache['speeds']) > 10:
-                today_cache['speeds'] = today_cache['speeds'][-10:]
-            if today_cache['speeds']:
-                today_cache['avg_speed'] = sum(today_cache['speeds']) / len(today_cache['speeds'])
-            else:
-                today_cache['avg_speed'] = 0.0
+            today_cache['avg_speed'] = self._period_avg_speed(today_cache)
 
             # Update all_time_cache (initialize empty if not present)
             if host_name not in self._all_time_cache:
@@ -580,7 +562,6 @@ class MetricsStore:
                         'total_transfer_time': db_metrics.get('total_transfer_time', 0.0),
                         'peak_speed': db_metrics.get('peak_speed', 0.0),
                         'peak_speed_date': db_metrics.get('peak_speed_date'),
-                        'speeds': [],
                         'avg_speed': db_metrics.get('avg_speed', 0.0)
                     }
                 else:
@@ -593,7 +574,6 @@ class MetricsStore:
                         'total_transfer_time': 0.0,
                         'peak_speed': 0.0,
                         'peak_speed_date': None,
-                        'speeds': [],
                         'avg_speed': 0.0
                     }
 
@@ -610,14 +590,7 @@ class MetricsStore:
             if not deduped and speed > all_time_cache['peak_speed']:
                 all_time_cache['peak_speed'] = speed
                 all_time_cache['peak_speed_date'] = now_str
-            # Use avg_speed for rolling average, not peak
-            all_time_cache['speeds'].append(avg_speed)
-            if len(all_time_cache['speeds']) > 10:
-                all_time_cache['speeds'] = all_time_cache['speeds'][-10:]
-            if all_time_cache['speeds']:
-                all_time_cache['avg_speed'] = sum(all_time_cache['speeds']) / len(all_time_cache['speeds'])
-            else:
-                all_time_cache['avg_speed'] = 0.0
+            all_time_cache['avg_speed'] = self._period_avg_speed(all_time_cache)
 
             # Copy all three caches for signal emission
             metrics_copy = self._format_metrics(cache)
@@ -655,7 +628,7 @@ class MetricsStore:
         'files_uploaded': 0, 'files_failed': 0, 'files_deduped': 0,
         'total_transfer_time': 0.0,
         'peak_speed': 0.0, 'peak_speed_date': None,
-        'speeds': [], 'avg_speed': 0.0,
+        'avg_speed': 0.0,
     }
 
     def _ensure_cache(
@@ -670,8 +643,7 @@ class MetricsStore:
             db = self.get_aggregated_metrics(host_name, period)
             store[host_name] = {
                 **self._EMPTY_CACHE,
-                **{k: db.get(k, self._EMPTY_CACHE[k]) for k in self._EMPTY_CACHE
-                   if k not in ('speeds',)},
+                **{k: db.get(k, self._EMPTY_CACHE[k]) for k in self._EMPTY_CACHE},
             }
         return store[host_name]
 
@@ -717,6 +689,11 @@ class MetricsStore:
             })
         except Exception as e:
             logger.debug(f"Failed to emit dedup metrics signal: {e}")
+
+    @staticmethod
+    def _period_avg_speed(cache: Dict[str, Any]) -> float:
+        """Average speed (bytes/s) over a period's accumulated totals."""
+        return cache['bytes_uploaded'] / max(0.001, cache['total_transfer_time'])
 
     def _format_metrics(self, cache: Dict[str, Any]) -> Dict[str, Any]:
         """Format cache data into a clean metrics dict."""
