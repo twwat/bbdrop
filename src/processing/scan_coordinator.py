@@ -14,7 +14,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Callable, Tuple
+from typing import Dict, List, Any, Optional, Callable, Set, Tuple
 
 from src.network.thumbnail_checker import ThumbnailChecker
 from src.network.k2s_file_checker import K2SFileChecker
@@ -51,14 +51,21 @@ class HostScanJob:
     # For RapidGator: each gallery has 'db_id', 'download_urls' (list)
 
 
-def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
-    """Load decrypted credentials/tokens and authenticated FileHostClient
-    instances for hosts the scanner can check.
+def _host_label(host_id: str) -> str:
+    """Display name used as the 'Host: message' log prefix."""
+    from src.core.host_registry import get_display_name
+    return get_display_name(host_id)
 
-    For K2S-family hosts (api_key auth), the decrypted credential IS the
-    access token. For RapidGator (token_login), tries the token cache first,
-    then falls back to login. For XFS-web hosts (filedot/filespace), builds
-    live FileHostClient instances with session login.
+
+def _load_file_host_credentials(
+    host_ids: Set[str],
+) -> tuple[Dict[str, str], Dict[str, Any]]:
+    """Load auth tokens and authenticated FileHostClient instances for the
+    given hosts only — hosts not being scanned are never logged in to.
+
+    K2S-family and RapidGator tokens come from the file-manager factory's
+    loader (keyring / token cache / RapidGator login). XFS-web hosts
+    (filedot/filespace) get live FileHostClient instances with session login.
 
     Returns:
         (credentials, xfs_clients):
@@ -70,57 +77,34 @@ def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
     credentials: Dict[str, str] = {}
     xfs_clients: Dict[str, Any] = {}
 
+    token_hosts = host_ids & (K2S_FAMILY_HOSTS | {'rapidgator'})
+    if token_hosts:
+        from src.network.file_manager.factory import load_auth_token
+        for host_id in sorted(token_hosts):
+            token = load_auth_token(host_id)
+            if token:
+                credentials[host_id] = token
+
+    xfs_hosts = host_ids & XFS_WEB_FAMILY_HOSTS
+    if not xfs_hosts:
+        return credentials, xfs_clients
+
     try:
         from src.utils.credentials import get_credential, decrypt_password
     except ImportError:
         log("Credentials module not available", level="error", category="scanner")
         return credentials, xfs_clients
 
-    # K2S-family: api_key auth — decrypted credential IS the token
-    for host_id in K2S_FAMILY_HOSTS:
-        encrypted = get_credential(f'file_host_{host_id}_credentials')
-        if encrypted:
-            try:
-                decrypted = decrypt_password(encrypted)
-                if decrypted:
-                    credentials[host_id] = decrypted
-            except Exception as e:
-                log(f"Failed to decrypt {host_id} credentials: {e}",
-                    level="warning", category="scanner")
-
-    # RapidGator: token_login auth — try cached token first
-    try:
-        from src.network.token_cache import get_token_cache
-        token_cache = get_token_cache()
-        cached_token = token_cache.get_token('rapidgator')
-        if cached_token:
-            credentials['rapidgator'] = cached_token
-        else:
-            # Try to login with stored credentials
-            encrypted = get_credential('file_host_rapidgator_credentials')
-            if encrypted:
-                decrypted = decrypt_password(encrypted)
-                if decrypted:
-                    from src.core.file_host_config import get_config_manager
-                    config_mgr = get_config_manager()
-                    rg_config = config_mgr.get_host('rapidgator')
-                    if rg_config:
-                        from src.network.file_host_client import FileHostClient
-                        client = FileHostClient(rg_config, credentials=decrypted, host_id='rapidgator')
-                        if client.auth_token:
-                            credentials['rapidgator'] = client.auth_token
-    except Exception as e:
-        log(f"Failed to get rapidgator token: {e}", level="warning", category="scanner")
-
     # XFS-web hosts: session-based — build a live FileHostClient and stash it
-    for host_id in XFS_WEB_FAMILY_HOSTS:
+    for host_id in sorted(xfs_hosts):
+        label = _host_label(host_id)
         encrypted = get_credential(f'file_host_{host_id}_credentials')
         if not encrypted:
             continue
         try:
             decrypted = decrypt_password(encrypted)
         except Exception as e:
-            log(f"Failed to decrypt {host_id} credentials: {e}",
+            log(f"{label}: Failed to decrypt credentials: {e}",
                 level="warning", category="scanner")
             continue
         if not decrypted:
@@ -132,7 +116,7 @@ def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
             config_mgr = get_config_manager()
             host_cfg = config_mgr.get_host(host_id)
             if not host_cfg:
-                log(f"No config for {host_id}", level="warning", category="scanner")
+                log(f"{label}: No host config", level="warning", category="scanner")
                 continue
             client = FileHostClient(
                 host_cfg, AtomicCounter(),
@@ -141,12 +125,12 @@ def _load_file_host_credentials() -> tuple[Dict[str, str], Dict[str, Any]]:
             # Login is performed in __init__ when requires_auth + credentials
             # are present; verify the cookie jar is populated as a sanity check.
             if not client.cookie_jar:
-                log(f"{host_id} login did not yield session cookies — skipping",
+                log(f"{label}: Login did not yield session cookies — skipping",
                     level="warning", category="scanner")
                 continue
             xfs_clients[host_id] = client
         except Exception as e:
-            log(f"Failed to build {host_id} client: {e}",
+            log(f"{label}: Failed to build client: {e}",
                 level="warning", category="scanner")
 
     return credentials, xfs_clients
@@ -174,6 +158,11 @@ class ScanCoordinator:
         self._store = store
         self._connection_limiter = connection_limiter
         self._credentials = credentials or {}
+        # Injected credentials are used as-is; otherwise each file host's
+        # credentials are loaded the first time a scan covers that host
+        # (the dashboard reuses one coordinator for many scans).
+        self._credentials_injected = bool(credentials)
+        self._credential_hosts_loaded: Set[str] = set()
         self._rename_worker = rename_worker
         self._progress_callback = progress_callback
         self._completion_callback = completion_callback
@@ -264,16 +253,6 @@ class ScanCoordinator:
                 self._completion_callback(summary)
 
         try:
-            # Load credentials and XFS-web clients on the worker thread (these
-            # perform blocking network logins; must never run on the GUI
-            # thread). Skipped if credentials were injected at construction.
-            if not self._credentials:
-                self._credentials, xfs = _load_file_host_credentials()
-                self._xfs_clients.update(xfs)
-
-            if self._cancelled.is_set():
-                return
-
             imx_job = self._build_imx_job(image_galleries)
             image_jobs = self._build_image_host_jobs(image_galleries)
             file_jobs = self._build_file_host_jobs(file_uploads)
@@ -284,8 +263,25 @@ class ScanCoordinator:
                 _send_completion({'total_hosts': 0, 'total_galleries': 0, 'elapsed': 0})
                 return
 
-            log(f"Starting scan: {len(all_jobs)} host jobs ({len(image_jobs)} image, {len(file_jobs)} file)",
-                level="info", category="scanner")
+            # Load credentials and XFS-web clients on the worker thread (these
+            # perform blocking network logins; must never run on the GUI
+            # thread), and only for file hosts this scan covers that earlier
+            # scans haven't loaded. Skipped if credentials were injected.
+            if not self._credentials_injected:
+                to_load = ({job.host_id for job in file_jobs}
+                           - self._credential_hosts_loaded)
+                if to_load:
+                    creds, xfs = _load_file_host_credentials(to_load)
+                    self._credentials.update(creds)
+                    self._xfs_clients.update(xfs)
+                    self._credential_hosts_loaded |= to_load
+
+            if self._cancelled.is_set():
+                return
+
+            for job in all_jobs:
+                log(f"{_host_label(job.host_id)}: Scanning {len(job.galleries)} galleries",
+                    level="info", category="scanner")
 
             with ThreadPoolExecutor(max_workers=len(all_jobs), thread_name_prefix="scan") as executor:
                 future_to_job = {}
@@ -301,12 +297,16 @@ class ScanCoordinator:
                         results = future.result()
                         all_results.extend(results)
                     except Exception as e:
-                        log(f"Scan job failed for {job.host_id}: {e}", level="error", category="scanner")
+                        log(f"{_host_label(job.host_id)}: Scan job failed: {e}", level="error", category="scanner")
 
             if all_results and not self._cancelled.is_set():
                 self._store.bulk_upsert_scan_results(all_results)
-                log(f"Wrote {len(all_results)} scan results to database",
-                    level="info", category="scanner")
+                written: Dict[str, int] = {}
+                for result in all_results:
+                    written[result[2]] = written.get(result[2], 0) + 1
+                for host_id, count in written.items():
+                    log(f"{_host_label(host_id)}: Wrote {count} scan results to database",
+                        level="info", category="scanner")
 
             elapsed = time.time() - start_time
             k2s_total = (sum(self._k2s_storage_by_host.values())
@@ -348,10 +348,10 @@ class ScanCoordinator:
         elif job.host_id in XFS_WEB_FAMILY_HOSTS:
             return self._run_xfs_web_job(job)
         elif job.host_id in UNSUPPORTED_FILE_HOSTS:
-            log(f"No checker implemented for {job.host_id} yet", level="info", category="scanner")
+            log(f"{_host_label(job.host_id)}: No checker implemented yet", level="info", category="scanner")
             return []
         else:
-            log(f"No checker for host {job.host_id}, skipping", level="warning", category="scanner")
+            log(f"{_host_label(job.host_id)}: No checker for this host, skipping", level="warning", category="scanner")
             return []
 
     def _run_image_host_job(self, job: HostScanJob) -> List[Tuple]:
@@ -412,7 +412,7 @@ class ScanCoordinator:
         api_base = K2S_API_BASES.get(job.host_id, '')
         token = self._credentials.get(job.host_id, '')
         if not api_base or not token:
-            log(f"Missing API config or credentials for {job.host_id}",
+            log(f"{_host_label(job.host_id)}: Missing API config or credentials",
                 level="warning", category="scanner")
             return []
 
@@ -423,13 +423,13 @@ class ScanCoordinator:
         with self._k2s_lock:
             inventory = self._k2s_inventory_by_host.get(job.host_id)
             if inventory is None:
-                log(f"Walking {job.host_id} account folders",
+                log(f"{_host_label(job.host_id)}: Walking account folders",
                     level="info", category="scanner")
                 all_files = checker.get_all_files()
                 inventory = {f['id']: f for f in all_files}
                 self._k2s_inventory_by_host[job.host_id] = inventory
                 self._k2s_storage_by_host[job.host_id] = checker.calc_storage_used(all_files)
-                log(f"{job.host_id} folder walk complete: {len(all_files)} files, "
+                log(f"{_host_label(job.host_id)}: Folder walk complete: {len(all_files)} files, "
                     f"{self._k2s_storage_by_host[job.host_id]} bytes used",
                     level="info", category="scanner")
 
@@ -476,7 +476,7 @@ class ScanCoordinator:
     def _run_rapidgator_job(self, job: HostScanJob) -> List[Tuple]:
         token = self._credentials.get('rapidgator', '')
         if not token:
-            log("Missing credentials for rapidgator", level="warning", category="scanner")
+            log("Rapidgator: Missing credentials", level="warning", category="scanner")
             return []
 
         checker = RapidgatorFileChecker(auth_token=token)
@@ -523,7 +523,7 @@ class ScanCoordinator:
         """Check filedot/filespace galleries via authenticated folder walk."""
         fhc = self._xfs_clients.get(job.host_id)
         if fhc is None:
-            log(f"No authenticated client for {job.host_id} — skipping",
+            log(f"{_host_label(job.host_id)}: No authenticated client — skipping",
                 level="warning", category="scanner")
             return []
 
@@ -539,7 +539,7 @@ class ScanCoordinator:
             )
             fm = FilespaceFileManagerClient(file_host_client=fhc)
         else:
-            log(f"Unknown XFS-web host {job.host_id}",
+            log(f"{_host_label(job.host_id)}: Unknown XFS-web host",
                 level="error", category="scanner")
             return []
 
@@ -549,12 +549,12 @@ class ScanCoordinator:
         with self._xfs_lock:
             inventory = self._xfs_inventory_by_host.get(job.host_id)
             if inventory is None:
-                log(f"Walking {job.host_id} account folders",
+                log(f"{_host_label(job.host_id)}: Walking account folders",
                     level="info", category="scanner")
                 try:
                     inventory = checker.walk_account(cancel_event=self._cancelled)
                 except Exception as e:
-                    log(f"{job.host_id} folder walk failed: {e}",
+                    log(f"{_host_label(job.host_id)}: Folder walk failed: {e}",
                         level="error", category="scanner")
                     return []
                 if self._cancelled.is_set():
@@ -564,7 +564,7 @@ class ScanCoordinator:
                     checker.calc_storage_used(inventory)
                 )
                 log(
-                    f"{job.host_id} folder walk complete: {len(inventory)} files, "
+                    f"{_host_label(job.host_id)}: Folder walk complete: {len(inventory)} files, "
                     f"{self._xfs_storage_by_host[job.host_id]} bytes used",
                     level="info", category="scanner",
                 )
@@ -625,12 +625,12 @@ class ScanCoordinator:
         to per-thumbnail HEAD requests.
         """
         if not self._rename_worker:
-            log("No RenameWorker available for IMX scan — skipping", level="warning", category="scanner")
+            log("IMX.to: No RenameWorker available — skipping scan", level="warning", category="scanner")
             return []
 
         rw = self._rename_worker
         if not getattr(rw, 'login_successful', False):
-            log("RenameWorker not authenticated — skipping IMX scan", level="warning", category="scanner")
+            log("IMX.to: RenameWorker not authenticated — skipping scan", level="warning", category="scanner")
             return []
 
         # Build galleries_data in the format _perform_status_check expects
@@ -656,7 +656,7 @@ class ScanCoordinator:
         try:
             raw_results = rw._perform_status_check(galleries_data)
         except Exception as e:
-            log(f"IMX moderate check failed: {e}", level="error", category="scanner")
+            log(f"IMX.to: Moderate check failed: {e}", level="error", category="scanner")
             return []
 
         imx_online = sum(1 for r in raw_results.values() if r.get('online', 0) > 0

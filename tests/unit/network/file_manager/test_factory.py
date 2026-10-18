@@ -59,7 +59,7 @@ def test_factory_accepts_filespace_with_client():
 def test_factory_api_hosts_unchanged():
     """API-key hosts (keep2share, katfile) still work without file_host_client."""
     with patch(
-        "src.network.file_manager.factory._load_auth_token",
+        "src.network.file_manager.factory.load_auth_token",
         return_value="fake_token",
     ):
         k2s_client = create_file_manager_client("keep2share")
@@ -67,3 +67,18 @@ def test_factory_api_hosts_unchanged():
 
         katfile_client = create_file_manager_client("katfile")
         assert katfile_client is not None
+
+
+def test_rapidgator_login_fallback_builds_client():
+    """With no cached token, the RG login fallback must construct a real
+    FileHostClient (autospec enforces the constructor signature)."""
+    from src.network.file_manager.factory import load_auth_token
+    with patch("src.network.token_cache.get_token_cache") as gtc, \
+         patch("src.utils.credentials.get_credential", return_value="enc"), \
+         patch("src.utils.credentials.decrypt_password", return_value="u:p"), \
+         patch("src.core.file_host_config.get_config_manager"), \
+         patch("src.network.file_host_client.FileHostClient",
+               autospec=True) as FHC:
+        gtc.return_value.get_token.return_value = None
+        FHC.return_value.auth_token = "tok"
+        assert load_auth_token("rapidgator") == "tok"

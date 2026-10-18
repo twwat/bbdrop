@@ -261,3 +261,73 @@ class TestScanCoordinatorIMXRouting:
             {'db_id': 1, 'image_host_id': 'turbo', 'thumb_urls': ['u1']},
         ]
         assert coord._build_imx_job(galleries) is None
+
+
+class TestScanCredentialScope:
+    """Credential loading / host logins happen only for hosts being scanned."""
+
+    def _run(self, image_galleries, file_uploads):
+        coord = ScanCoordinator(store=MagicMock(), connection_limiter=MagicMock())
+        with patch('src.processing.scan_coordinator._load_file_host_credentials',
+                   return_value=({}, {})) as loader, \
+             patch.object(coord, '_run_job', return_value=[]):
+            coord._run_scan(image_galleries, file_uploads)
+        return loader
+
+    def test_imx_only_scan_loads_no_file_host_credentials(self):
+        loader = self._run(
+            [{'db_id': 1, 'image_host_id': 'imx', 'image_urls': ['u']}], [])
+        loader.assert_not_called()
+
+    def test_file_scan_loads_only_scanned_hosts(self):
+        loader = self._run([], [
+            {'gallery_fk': 1, 'host_name': 'keep2share', 'file_id': 'f1',
+             'download_url': 'u1'},
+        ])
+        loader.assert_called_once_with({'keep2share'})
+
+    def test_reused_coordinator_loads_newly_scanned_hosts(self):
+        """The dashboard keeps one coordinator for many scans; a later scan of
+        a different host must still load that host's credentials."""
+        coord = ScanCoordinator(store=MagicMock(), connection_limiter=MagicMock())
+
+        def upload(host):
+            return {'gallery_fk': 1, 'host_name': host, 'file_id': 'f',
+                    'download_url': 'u'}
+
+        with patch('src.processing.scan_coordinator._load_file_host_credentials',
+                   side_effect=lambda hosts: ({h: 'tok' for h in hosts}, {})) as loader, \
+             patch.object(coord, '_run_job', return_value=[]):
+            coord._run_scan([], [upload('keep2share')])
+            coord._run_scan([], [upload('keep2share'), upload('rapidgator')])
+        assert [c.args[0] for c in loader.call_args_list] == [
+            {'keep2share'}, {'rapidgator'}]
+        assert coord._credentials == {'keep2share': 'tok', 'rapidgator': 'tok'}
+
+    def test_loader_skips_hosts_not_requested(self):
+        from src.processing.scan_coordinator import _load_file_host_credentials
+        with patch('src.network.file_manager.factory.load_auth_token',
+                   return_value='tok') as load_token, \
+             patch('src.network.file_host_client.FileHostClient') as FHC:
+            creds, xfs = _load_file_host_credentials({'keep2share'})
+        assert creds == {'keep2share': 'tok'}
+        assert xfs == {}
+        load_token.assert_called_once_with('keep2share')
+        FHC.assert_not_called()
+
+
+class TestScanLogHostPrefix:
+    """Scanner log lines name the host as 'Host: message'."""
+
+    def test_start_and_write_lines_name_each_host(self):
+        store = MagicMock()
+        coord = ScanCoordinator(store=store, connection_limiter=MagicMock())
+        result = (1, 'image', 'imx', 'online', 1, 1, 0, None)
+        with patch('src.processing.scan_coordinator.log') as mock_log, \
+             patch.object(coord, '_run_job', return_value=[result]):
+            coord._run_scan(
+                [{'db_id': 1, 'image_host_id': 'imx', 'image_urls': ['u']}], [])
+        messages = [c.args[0] for c in mock_log.call_args_list]
+        assert 'IMX.to: Scanning 1 galleries' in messages
+        assert 'IMX.to: Wrote 1 scan results to database' in messages
+        assert not any(m.startswith('Starting scan') for m in messages)

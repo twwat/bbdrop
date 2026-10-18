@@ -127,12 +127,14 @@ def test_completion_fires_even_when_credential_load_raises():
         "src.processing.scan_coordinator._load_file_host_credentials",
         side_effect=RuntimeError("keyring exploded"),
     ):
+        # Credentials are only loaded for scanned file hosts, so the scan
+        # needs a file-host job to reach the loader.
         coord._run_scan(
-            image_galleries=[
-                {"db_id": 1, "host_id": "imx", "path": "/g",
-                 "thumb_urls": ["https://imx.to/a.jpg"]},
+            image_galleries=[],
+            file_uploads=[
+                {"gallery_fk": 1, "host_name": "filedot", "file_id": "abc",
+                 "download_url": "https://filedot.to/abc"},
             ],
-            file_uploads=[],
         )
 
     # Completion fired despite the exception (minimal summary from the

@@ -61,7 +61,7 @@ def create_file_manager_client(
     # (k2s family, rapidgator, katfile). Session-based hosts short-
     # circuited above via the SESSION_HOSTS guard.
     if not auth_token and host_id not in SESSION_HOSTS:
-        auth_token = _load_auth_token(host_id)
+        auth_token = load_auth_token(host_id)
     if not auth_token and host_id not in SESSION_HOSTS:
         raise ValueError(f"No credentials available for {host_id}")
 
@@ -95,7 +95,7 @@ def create_file_manager_client(
     raise ValueError(f"No file manager client for host: {host_id}")
 
 
-def _load_auth_token(host_id: str) -> Optional[str]:
+def load_auth_token(host_id: str) -> Optional[str]:
     """Load and decrypt auth token from OS keyring.
 
     For K2S-family and Katfile (api_key auth), the decrypted credential IS the token.
@@ -111,7 +111,8 @@ def _load_auth_token(host_id: str) -> Optional[str]:
         if encrypted:
             return decrypt_password(encrypted)
     except Exception as e:
-        log(f"Failed to load credentials for {host_id}: {e}",
+        from src.core.host_registry import get_display_name
+        log(f"{get_display_name(host_id)}: Failed to load credentials: {e}",
             level="warning", category="file_manager")
 
     return None
@@ -145,11 +146,13 @@ def _load_rapidgator_token() -> Optional[str]:
             return None
 
         from src.network.file_host_client import FileHostClient
-        client = FileHostClient(rg_config, credentials=decrypted, host_id="rapidgator")
+        from src.core.engine import AtomicCounter
+        client = FileHostClient(rg_config, AtomicCounter(),
+                                credentials=decrypted, host_id="rapidgator")
         if client.auth_token:
             return client.auth_token
     except Exception as e:
-        log(f"Failed to get rapidgator token: {e}",
+        log(f"Rapidgator: Failed to get token: {e}",
             level="warning", category="file_manager")
 
     return None
