@@ -281,31 +281,45 @@ class MetricsStore:
         return self._peak_validators[host_name]
 
     def _cap_unrealistic_peaks(self) -> None:
-        """One-shot reset of peak_speed on rows polluted by the pre-fix
-        dedup path (which fed bytes_uploaded / millisecond hash-check
-        time into the peak comparison). Targets rows that recorded any
-        dedup. Gated by a settings key so it runs exactly once."""
+        """One-shot resets of peak_speed on rows known to hold bogus peaks.
+        Each is gated by its own settings key so it runs exactly once."""
+        # Pre-fix dedup path fed bytes_uploaded / millisecond hash-check
+        # time into the peak comparison. Targets rows that recorded any dedup.
+        self._one_shot_peak_reset(
+            'peak_speed_dedup_reset_v1', "files_deduped > 0", (),
+            "polluted by the pre-fix dedup path",
+        )
+        # An old migration clamped impossible peaks to exactly the validator
+        # backstop instead of clearing them, so a value at the backstop is
+        # that clamp marker, never a measurement.
+        self._one_shot_peak_reset(
+            'peak_speed_clamp_reset_v1', "peak_speed >= ?",
+            (PeakSpeedValidator.MAX_REALISTIC_KBPS * 1024,),
+            "clamped to the impossible-speed backstop",
+        )
+
+    def _one_shot_peak_reset(self, key: str, where: str, params: tuple,
+                             reason: str) -> None:
         with self._db_lock:
             conn = self._connect()
             try:
                 done = conn.execute(
-                    "SELECT 1 FROM settings_kv WHERE key='peak_speed_dedup_reset_v1'"
+                    "SELECT 1 FROM settings_kv WHERE key=?", (key,)
                 ).fetchone() if self._settings_table_exists(conn) else None
                 if done:
                     return
-                cursor = conn.execute("""
+                cursor = conn.execute(f"""
                     UPDATE host_metrics
                     SET peak_speed = 0, peak_speed_date = NULL
-                    WHERE files_deduped > 0
-                """)
-                self._mark_one_shot_done(conn, 'peak_speed_dedup_reset_v1')
+                    WHERE {where}
+                """, params)
+                self._mark_one_shot_done(conn, key)
                 if cursor.rowcount > 0:
                     logger.info(
-                        f"Reset peak_speed on {cursor.rowcount} row(s) "
-                        f"polluted by the pre-fix dedup path"
+                        f"Reset peak_speed on {cursor.rowcount} row(s) {reason}"
                     )
             except Exception as e:
-                logger.warning(f"Failed to reset polluted peak speeds: {e}")
+                logger.warning(f"Failed to reset polluted peak speeds ({key}): {e}")
             finally:
                 conn.close()
 
@@ -463,6 +477,15 @@ class MetricsStore:
 
         # Use validated observed peak if available, otherwise fall back to average
         speed = validated_peak_bytes_per_sec if validated_peak_bytes_per_sec is not None else avg_speed
+
+        # The bytes/time fallback is unvalidated: a near-zero transfer_time
+        # turns it into terabytes per second. Never let that become a peak.
+        if speed > PeakSpeedValidator.MAX_REALISTIC_KBPS * 1024:
+            logger.warning(
+                f"Ignoring impossible speed for {host_name} peak: "
+                f"{bytes_uploaded} bytes in {transfer_time:.3f}s"
+            )
+            speed = 0.0
 
         # Update session cache
         with self._cache_lock:

@@ -10,7 +10,7 @@ almost nothing while 'session' looked right.
 import pytest
 from unittest.mock import patch
 
-from src.utils.metrics_store import MetricsStore
+from src.utils.metrics_store import MetricsStore, PeakSpeedValidator
 
 
 @pytest.fixture
@@ -153,3 +153,77 @@ class TestAverageSpeedPeriods:
             store.record_transfer(host_name="filedot", bytes_uploaded=10 * self.MB,
                                   transfer_time=1.0, success=True)
         assert emitted[-1]["session"]["avg_speed"] == pytest.approx(200 * self.MB / 110.0)
+
+
+class TestImpossiblePeaks:
+    """peak_speed must never hold a value at or above the physical-sanity
+    backstop (PeakSpeedValidator.MAX_REALISTIC_KBPS).
+
+    Regression: a Feb 2026 migration clamped bogus peaks to exactly the
+    backstop instead of clearing them, leaving IMX showing a permanent
+    "12,800 MiB/s" all-time peak. And the bytes/time fallback in
+    record_transfer skipped the backstop entirely.
+    """
+
+    CAP = PeakSpeedValidator.MAX_REALISTIC_KBPS * 1024  # bytes/s
+
+    def _peaks(self, store, host_name):
+        conn = store._connect()
+        try:
+            return [r["peak_speed"] for r in conn.execute(
+                "SELECT peak_speed FROM host_metrics WHERE host_name = ? "
+                "ORDER BY id", (host_name,))]
+        finally:
+            conn.close()
+
+    def test_startup_clears_clamped_peaks_keeps_real_ones(self, store):
+        conn = store._connect()
+        try:
+            conn.executemany(
+                "INSERT INTO host_metrics (host_name, bytes_uploaded, "
+                "total_transfer_time, peak_speed, peak_speed_date, "
+                "period_type, period_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    ("imx", 5169152, 0.09, self.CAP, None, "daily", "2026-02-02"),
+                    ("imx", 34600197567, 1619.2, self.CAP, "2026-02-25 18:09:49", "all_time", None),
+                    ("imx", 526449611, 22.2, 64365948.35, "2026-09-19 11:54:02", "all_time", None),
+                ],
+            )
+            # Simulate a DB from before this fix: reset not yet run
+            conn.execute("DELETE FROM settings_kv WHERE key='peak_speed_clamp_reset_v1'")
+        finally:
+            conn.close()
+
+        # Restart on the same DB
+        store.close()
+        MetricsStore._instance = None
+        fresh = MetricsStore()
+        try:
+            assert self._peaks(fresh, "imx") == [0, 0, pytest.approx(64365948.35)]
+            all_time = fresh.get_aggregated_metrics("imx", "all_time")
+            assert all_time["peak_speed"] == pytest.approx(64365948.35)
+            assert all_time["peak_speed_date"] == "2026-09-19 11:54:02"
+        finally:
+            fresh.close()
+
+    def test_impossible_bytes_over_time_does_not_set_peak(self, store):
+        emitted = []
+        store.signals.host_metrics_updated.connect(lambda host, m: emitted.append(m))
+        # Zero transfer time with no observed peak: bytes/time fallback
+        # would read as terabytes per second.
+        store.record_transfer(host_name="imx", bytes_uploaded=20 * 1024 ** 3,
+                              transfer_time=0.0, success=True, files_count=6)
+        store.flush()
+
+        for period in ("session", "today", "all_time"):
+            assert emitted[-1][period]["peak_speed"] == 0
+        assert self._peaks(store, "imx") == [0, 0]
+        # The bytes and files still count
+        assert _db_row(store, "imx", "daily")["bytes_uploaded"] == 20 * 1024 ** 3
+        assert _db_row(store, "imx", "daily")["files_uploaded"] == 6
+
+    def test_realistic_peak_still_recorded(self, store):
+        store.record_transfer(host_name="imx", bytes_uploaded=100 * 1024 * 1024,
+                              transfer_time=2.0, success=True)
+        store.flush()
+        assert self._peaks(store, "imx") == [pytest.approx(50 * 1024 * 1024)] * 2
