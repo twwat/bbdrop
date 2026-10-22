@@ -107,7 +107,8 @@ class TestHashDedupTokenField:
         mock_curl.setopt.side_effect = fake_setopt
         mock_curl.getinfo.return_value = 200
 
-        with patch('pycurl.Curl', return_value=mock_curl):
+        with patch('pycurl.Curl', return_value=mock_curl), \
+                patch.object(client, '_wait_for_hash_copy', return_value=True):
             result = client.try_create_by_hash("d41d8cd98f00b204e9800998ecf8427e", "test.zip")
 
         # Key assertion: the field must be "access_token", NOT "auth_token"
@@ -180,8 +181,12 @@ class TestHashDedupResponses:
         mock_curl.setopt.side_effect = fake_setopt
         mock_curl.getinfo.return_value = 200
 
-        with patch('pycurl.Curl', return_value=mock_curl):
+        with patch('pycurl.Curl', return_value=mock_curl), \
+                patch.object(client, '_wait_for_hash_copy', return_value=True) as wait:
             result = client.try_create_by_hash("aabbccdd", "archive.rar")
+
+        # Only reported once getFilesInfo confirms the new file exists.
+        wait.assert_called_once_with("https://api.keep2share.cc/v2", "file999")
 
         assert result is not None
         assert result["status"] == "success"
@@ -361,3 +366,217 @@ class TestHashDedupAccessField:
             client.try_create_by_hash("aabbccdd", "file.zip")
 
         assert captured_body.get("access") == "private"
+
+
+def _curl_factory(responses_by_endpoint):
+    """Build a pycurl.Curl replacement that answers per endpoint.
+
+    `responses_by_endpoint` maps an endpoint suffix ("createFileByHash",
+    "getFilesInfo", "deleteFiles") to a list of JSON bodies served in order;
+    the last body repeats once the list runs out. Returns (factory, calls),
+    where calls records (endpoint, request_body) for every perform().
+    """
+    calls = []
+    served = {k: 0 for k in responses_by_endpoint}
+
+    def make_curl():
+        state = {}
+        curl = MagicMock()
+
+        def setopt(opt, val):
+            if opt == pycurl.URL:
+                state["url"] = val
+            elif opt == pycurl.POSTFIELDS:
+                state["body"] = val
+            elif opt == pycurl.WRITEDATA:
+                state["buf"] = val
+
+        def perform():
+            endpoint = state["url"].rsplit("/", 1)[-1]
+            calls.append((endpoint, json.loads(state.get("body") or "{}")))
+            bodies = responses_by_endpoint[endpoint]
+            body = bodies[min(served[endpoint], len(bodies) - 1)]
+            served[endpoint] += 1
+            if isinstance(body, Exception):
+                raise body
+            state["buf"].write(json.dumps(body).encode())
+
+        curl.setopt.side_effect = setopt
+        curl.perform.side_effect = perform
+        curl.getinfo.return_value = 202
+        return curl
+
+    return make_curl, calls
+
+
+ACCEPTED = {"status": "success", "id": "user42", "link": "https://fboom.me/file/9b29053e83d75"}
+STUB = {"files": [{"id": "9b29053e83d75", "name": "", "md5": "", "is_available": False}]}
+REAL = {"files": [{"id": "9b29053e83d75", "name": "g.zip", "md5": "aabbccdd", "is_available": True}]}
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    monkeypatch.setattr("src.network.file_host_client.time.sleep", lambda s: None)
+
+
+class TestHashCopyVerification:
+    """createFileByHash's 202 'success' only means the request was accepted.
+
+    The copy is built afterwards and on some hosts (Keep2Share always,
+    FileBoom sometimes) it stays an empty stub forever. The client must not
+    report a hash hit until getFilesInfo shows the file.
+    """
+
+    def test_stub_that_never_appears_is_not_reported_as_created(
+            self, k2s_config, bandwidth_counter, no_sleep):
+        k2s_config.delete_url = "https://api.keep2share.cc/v2/deleteFiles"
+        k2s_config.delete_body_json = True
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+        logs = []
+        client._log_callback = lambda msg, level: logs.append((msg, level))
+        factory, calls = _curl_factory({
+            "createFileByHash": [ACCEPTED],
+            "getFilesInfo": [STUB],
+            "deleteFiles": [{"status": "success", "deleted": 1}],
+        })
+
+        with patch("pycurl.Curl", side_effect=factory), \
+                patch("src.network.file_host_client._k2s_hash_copy_wait_seconds",
+                      return_value=30):
+            result = client.try_create_by_hash("aabbccdd", "g.zip")
+
+        assert result is None  # caller falls through to a real upload
+        assert not any("file created without upload" in m for m, _ in logs)
+        assert any("never appeared" in m and lvl == "warning" for m, lvl in logs)
+        info_calls = [b for ep, b in calls if ep == "getFilesInfo"]
+        assert len(info_calls) == 10
+        assert info_calls[0]["ids"] == ["9b29053e83d75"]
+        # The empty stub is cleaned up so it doesn't litter the account.
+        delete_calls = [b for ep, b in calls if ep == "deleteFiles"]
+        assert delete_calls and delete_calls[0]["ids"] == ["9b29053e83d75"]
+
+    def test_copy_that_appears_is_reported(self, k2s_config, bandwidth_counter, no_sleep):
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+        logs = []
+        client._log_callback = lambda msg, level: logs.append((msg, level))
+        factory, calls = _curl_factory({
+            "createFileByHash": [ACCEPTED],
+            "getFilesInfo": [STUB, STUB, REAL],
+        })
+
+        with patch("pycurl.Curl", side_effect=factory):
+            result = client.try_create_by_hash("aabbccdd", "g.zip")
+
+        assert result["status"] == "success"
+        assert result["url"] == "https://fboom.me/file/9b29053e83d75"
+        assert [ep for ep, _ in calls].count("getFilesInfo") == 3
+        assert any("file created without upload" in m for m, _ in logs)
+
+    def test_poll_errors_are_retried(self, k2s_config, bandwidth_counter, no_sleep):
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+        factory, calls = _curl_factory({
+            "createFileByHash": [ACCEPTED],
+            "getFilesInfo": [pycurl.error(28, "timeout"), REAL],
+        })
+
+        with patch("pycurl.Curl", side_effect=factory):
+            result = client.try_create_by_hash("aabbccdd", "g.zip")
+
+        assert result is not None
+
+    def test_delete_failure_still_falls_through(self, k2s_config, bandwidth_counter, no_sleep):
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+        factory, _ = _curl_factory({
+            "createFileByHash": [ACCEPTED],
+            "getFilesInfo": [STUB],
+        })
+
+        with patch("pycurl.Curl", side_effect=factory), \
+                patch.object(client, "delete_file", side_effect=ValueError("no delete")):
+            result = client.try_create_by_hash("aabbccdd", "g.zip")
+
+        assert result is None
+
+
+class TestHashCopyWaitSetting:
+    """How long to wait for a hash copy is [Advanced]
+    k2s_family/hash_copy_wait_seconds, not a hardcoded number."""
+
+    def _read(self, tmp_path, ini_text=None):
+        from src.network.file_host_client import _k2s_hash_copy_wait_seconds
+        ini = tmp_path / "bbdrop.ini"
+        if ini_text is not None:
+            ini.write_text(ini_text, encoding="utf-8")
+        with patch("src.utils.paths.get_config_path", return_value=str(ini)):
+            return _k2s_hash_copy_wait_seconds()
+
+    def test_default_when_unset(self, tmp_path):
+        from src.network.file_host_client import HASH_COPY_WAIT_DEFAULT_SEC
+        assert self._read(tmp_path) == HASH_COPY_WAIT_DEFAULT_SEC
+        assert self._read(tmp_path, "[Advanced]\n") == HASH_COPY_WAIT_DEFAULT_SEC
+
+    def test_reads_configured_value(self, tmp_path):
+        assert self._read(
+            tmp_path, "[Advanced]\nk2s_family/hash_copy_wait_seconds = 120\n") == 120
+
+    def test_garbage_falls_back_to_default(self, tmp_path):
+        from src.network.file_host_client import HASH_COPY_WAIT_DEFAULT_SEC
+        assert self._read(
+            tmp_path, "[Advanced]\nk2s_family/hash_copy_wait_seconds = soon\n"
+        ) == HASH_COPY_WAIT_DEFAULT_SEC
+
+    def test_out_of_range_is_clamped(self, tmp_path):
+        from src.network.file_host_client import (
+            HASH_COPY_WAIT_MAX_SEC, HASH_COPY_WAIT_MIN_SEC)
+        assert self._read(
+            tmp_path, "[Advanced]\nk2s_family/hash_copy_wait_seconds = 99999\n"
+        ) == HASH_COPY_WAIT_MAX_SEC
+        assert self._read(
+            tmp_path, "[Advanced]\nk2s_family/hash_copy_wait_seconds = 0\n"
+        ) == HASH_COPY_WAIT_MIN_SEC
+
+    def test_poll_count_follows_setting(self, k2s_config, bandwidth_counter, no_sleep):
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+        factory, calls = _curl_factory({
+            "createFileByHash": [ACCEPTED],
+            "getFilesInfo": [STUB],
+        })
+
+        with patch("pycurl.Curl", side_effect=factory), \
+                patch("src.network.file_host_client._k2s_hash_copy_wait_seconds",
+                      return_value=9), \
+                patch.object(client, "delete_file"):
+            assert client.try_create_by_hash("aabbccdd", "g.zip") is None
+
+        # 9s at one check every 3s
+        assert [ep for ep, _ in calls].count("getFilesInfo") == 3
+
+    def test_setting_is_in_advanced_tab(self):
+        from src.gui.settings.advanced_tab import ADVANCED_SETTINGS
+        from src.network.file_host_client import (
+            HASH_COPY_WAIT_DEFAULT_SEC, HASH_COPY_WAIT_MAX_SEC, HASH_COPY_WAIT_MIN_SEC)
+        row = next(s for s in ADVANCED_SETTINGS
+                   if s["key"] == "k2s_family/hash_copy_wait_seconds")
+        assert row["type"] == "int"
+        assert (row["default"], row["min"], row["max"]) == (
+            HASH_COPY_WAIT_DEFAULT_SEC, HASH_COPY_WAIT_MIN_SEC, HASH_COPY_WAIT_MAX_SEC)
+
+    def test_stop_ends_the_wait(self, k2s_config, bandwidth_counter, no_sleep):
+        client = _make_client(k2s_config, bandwidth_counter, auth_token="tok")
+        client.should_stop_func = lambda: True
+        logs = []
+        client._log_callback = lambda msg, level: logs.append((msg, level))
+        factory, calls = _curl_factory({
+            "createFileByHash": [ACCEPTED],
+            "getFilesInfo": [STUB],
+        })
+
+        with patch("pycurl.Curl", side_effect=factory), \
+                patch("src.network.file_host_client._k2s_hash_copy_wait_seconds",
+                      return_value=600), \
+                patch.object(client, "delete_file") as mock_delete:
+            assert client.try_create_by_hash("aabbccdd", "g.zip") is None
+
+        assert [ep for ep, _ in calls].count("getFilesInfo") == 0
+        assert not any("never appeared" in m for m, _ in logs)
+        mock_delete.assert_called_once_with("9b29053e83d75")

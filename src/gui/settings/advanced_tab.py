@@ -9,6 +9,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 
+from src.network.file_host_client import (
+    HASH_COPY_WAIT_DEFAULT_SEC, HASH_COPY_WAIT_MAX_SEC, HASH_COPY_WAIT_MIN_SEC,
+)
+
 # Schema for advanced settings.
 #
 # Each setting has: key, description, default, type, and optional constraints.
@@ -173,6 +177,18 @@ ADVANCED_SETTINGS = [
         "default": "public",
         "type": "choice",
         "choices": ["public", "premium", "private"],
+    },
+    {
+        "key": "k2s_family/hash_copy_wait_seconds",
+        "description": (
+            "Seconds to wait for a K2S / FileBoom / TezFiles hash copy "
+            "(file the host already has) to actually appear before "
+            "giving up and uploading the file normally."
+        ),
+        "default": HASH_COPY_WAIT_DEFAULT_SEC,
+        "type": "int",
+        "min": HASH_COPY_WAIT_MIN_SEC,
+        "max": HASH_COPY_WAIT_MAX_SEC,
     },
 ]
 

@@ -1462,6 +1462,8 @@ class FileHostWorker(QThread):
         # Probe every sibling part. Any miss aborts immediately — we only
         # commit if the whole set lands.
         part_results: list = []  # list of (part_number, md5, file_name, file_size, result)
+        # Lets Stop cut short the wait for each hash copy to appear.
+        client.should_stop_func = lambda: self._should_stop_current or self._stop_event.is_set()
         try:
             for part in sibling_parts:
                 if self._should_stop_current or self._stop_event.is_set():

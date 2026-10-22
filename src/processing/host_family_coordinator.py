@@ -29,13 +29,15 @@ exactly one shared poll per family upload.
 import threading
 import time
 from typing import Dict, Optional
-from urllib.parse import urlparse
 
 from PyQt6.QtCore import QObject, pyqtSlot
 
 from src.core.constants import HOST_FAMILY_PRIORITY
 from src.core.file_host_config import get_host_family, is_family_dedup_enabled
-from src.network.file_host_client import FileHostClient
+from src.network.file_host_client import (
+    FileHostClient,
+    canonical_file_id_from_url as _canonical_file_id_from_url,
+)
 from src.storage.database import QueueStore
 from src.utils.logger import log
 
@@ -47,25 +49,6 @@ K2S_MD5_INITIAL_DELAY_SEC = 12
 K2S_MD5_BACKOFF_BASE_SEC = 10
 K2S_MD5_MAX_BACKOFF_SEC = 60
 K2S_MD5_MAX_ATTEMPTS = 4  # total attempts (1 initial + 3 retries)
-
-
-def _canonical_file_id_from_url(download_url: Optional[str]) -> Optional[str]:
-    """Extract the canonical file id from a K2S-family download URL.
-
-    K2S-family URLs have the form `https://<host>/file/{id}/{filename}`.
-    `getFilesInfo` expects that `{id}` segment — NOT the user-facing file_id
-    returned in the upload response (which, for K2S, is `user_file_id`).
-    """
-    if not download_url:
-        return None
-    try:
-        path_segments = urlparse(download_url).path.strip('/').split('/')
-    except Exception:
-        return None
-    for i, segment in enumerate(path_segments):
-        if segment == 'file' and i + 1 < len(path_segments):
-            return path_segments[i + 1] or None
-    return None
 
 
 def _unblock_family_waiters(

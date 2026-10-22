@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List, Tuple, Union
 from io import BytesIO
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from src.core.file_host_config import HostConfig
 from src.core.engine import AtomicCounter
@@ -84,6 +84,102 @@ def _k2s_default_upload_access() -> str:
         return "public"
     value = raw.strip().lower()
     return value if value in _K2S_ACCESS_VALUES else "public"
+
+
+# createFileByHash answers 202 Accepted and builds the copy asynchronously.
+# Live probes (2026-10) showed the copy filling in within ~1-15s where it
+# works, and staying an empty stub forever where it doesn't (Keep2Share
+# always, FileBoom some of the time). How long to wait before giving up is
+# [Advanced] k2s_family/hash_copy_wait_seconds; this is how often to check.
+HASH_COPY_POLL_INTERVAL_SEC = 3
+HASH_COPY_WAIT_DEFAULT_SEC = 60
+HASH_COPY_WAIT_MIN_SEC = HASH_COPY_POLL_INTERVAL_SEC
+HASH_COPY_WAIT_MAX_SEC = 600
+
+
+def _k2s_hash_copy_wait_seconds() -> int:
+    """Return how long to wait for a createFileByHash copy to appear.
+
+    Reads ``[Advanced] k2s_family/hash_copy_wait_seconds``, clamped to
+    HASH_COPY_WAIT_MIN_SEC..HASH_COPY_WAIT_MAX_SEC. Missing or unparseable
+    values give HASH_COPY_WAIT_DEFAULT_SEC.
+    """
+    import configparser
+    from src.utils.paths import get_config_path
+
+    cfg = configparser.ConfigParser()
+    config_file = get_config_path()
+    if not os.path.exists(config_file):
+        return HASH_COPY_WAIT_DEFAULT_SEC
+    try:
+        cfg.read(config_file, encoding="utf-8")
+        raw = cfg.get("Advanced", "k2s_family/hash_copy_wait_seconds", fallback=None)
+        value = int(raw) if raw is not None else HASH_COPY_WAIT_DEFAULT_SEC
+    except (configparser.Error, ValueError):
+        return HASH_COPY_WAIT_DEFAULT_SEC
+    return max(HASH_COPY_WAIT_MIN_SEC, min(HASH_COPY_WAIT_MAX_SEC, value))
+
+
+def canonical_file_id_from_url(download_url: Optional[str]) -> Optional[str]:
+    """Extract the canonical file id from a K2S-family download URL.
+
+    K2S-family URLs have the form `https://<host>/file/{id}/{filename}`.
+    `getFilesInfo` expects that `{id}` segment — NOT the user-facing file_id
+    returned in the upload response (which, for K2S, is `user_file_id`).
+    """
+    if not download_url:
+        return None
+    try:
+        path_segments = urlparse(download_url).path.strip('/').split('/')
+    except Exception:
+        return None
+    for i, segment in enumerate(path_segments):
+        if segment == 'file' and i + 1 < len(path_segments):
+            return path_segments[i + 1] or None
+    return None
+
+
+def _k2s_get_file_info(
+    api_base: str,
+    auth_token: str,
+    file_id: str,
+    configure_curl: Callable[[Any], None],
+    timeout: int = 15,
+) -> Optional[Dict[str, Any]]:
+    """POST getFilesInfo for one file and return its entry (None if absent).
+
+    `configure_curl` applies SSL, proxy and user agent to the handle.
+    Raises pycurl.error / json.JSONDecodeError on transport or parse failure.
+    """
+    body = json.dumps({
+        "access_token": auth_token,
+        "ids": [file_id],
+        "extended_info": True,
+    })
+    curl = pycurl.Curl()
+    buf = BytesIO()
+    try:
+        configure_curl(curl)
+        curl.setopt(pycurl.URL, f"{api_base}/getFilesInfo")
+        curl.setopt(pycurl.POST, 1)
+        curl.setopt(pycurl.POSTFIELDS, body)
+        curl.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
+        curl.setopt(pycurl.WRITEDATA, buf)
+        curl.setopt(pycurl.TIMEOUT, timeout)
+        curl.perform()
+        data = json.loads(buf.getvalue().decode('utf-8', errors='replace'))
+    finally:
+        curl.close()
+    files = data.get("files") or []
+    return files[0] if files else None
+
+
+def _hash_copy_is_real(info: Optional[Dict[str, Any]]) -> bool:
+    """True once a createFileByHash copy has actually materialized.
+
+    A stub that never completes reports no name/md5 and is_available false.
+    """
+    return bool(info and info.get("is_available") and (info.get("md5") or info.get("name")))
 
 
 class SessionExpiredError(ValueError):
@@ -565,12 +661,6 @@ class FileHostClient:
                 pass
 
         api_base = config.upload_init_url.rsplit('/', 1)[0]
-        info_url = f"{api_base}/getFilesInfo"
-        body = json.dumps({
-            "access_token": auth_token,
-            "ids": [file_id],
-            "extended_info": True,
-        })
 
         # Resolve proxy for this host (same as FileHostWorker._create_client)
         proxy = None
@@ -588,35 +678,24 @@ class FileHostClient:
         except Exception:
             pass  # Direct connection if proxy resolution fails
 
-        curl = pycurl.Curl()
-        buf = BytesIO()
-        try:
+        def _configure(curl):
             curl.setopt(pycurl.SSL_VERIFYPEER, 1)
             curl.setopt(pycurl.SSL_VERIFYHOST, 2)
             curl.setopt(pycurl.CAINFO, certifi.where())
             if proxy:
                 PyCurlProxyAdapter.configure_proxy(curl, proxy)
-            curl.setopt(pycurl.URL, info_url)
             curl.setopt(pycurl.USERAGENT, _CHROME_UA)
-            curl.setopt(pycurl.POST, 1)
-            curl.setopt(pycurl.POSTFIELDS, body)
-            curl.setopt(pycurl.HTTPHEADER, ["Content-Type: application/json"])
-            curl.setopt(pycurl.WRITEDATA, buf)
-            curl.setopt(pycurl.TIMEOUT, 15)
-            curl.perform()
-            data = json.loads(buf.getvalue().decode('utf-8', errors='replace'))
+
+        try:
+            info = _k2s_get_file_info(api_base, auth_token, file_id, _configure)
         except (pycurl.error, json.JSONDecodeError) as e:
             if log_callback:
                 log_callback(f"getFilesInfo({host_id}) failed for {file_id}: {e}", "warning")
             return None
-        finally:
-            curl.close()
 
-        files = data.get("files") or []
-        if not files:
+        if not info:
             return None
-        md5 = files[0].get("md5") or ""
-        return md5 or None
+        return info.get("md5") or None
 
     def _get_clean_filename(self, filename: str) -> str:
         """Extract clean filename without internal ID prefix."""
@@ -1302,6 +1381,20 @@ class FileHostClient:
             if status == 'success' and http_code in (200, 201, 202):
                 file_id = data.get('id', '')
                 link = data.get('link', '')
+                # "success" only means the host accepted the request; the copy
+                # is built afterwards and sometimes never appears. Don't claim
+                # a file exists until getFilesInfo shows it.
+                info_id = canonical_file_id_from_url(link) or file_id
+                if not info_id or not self._wait_for_hash_copy(api_base, info_id):
+                    if self._stop_requested():
+                        self._discard_hash_stub(info_id)
+                        return None
+                    if self._log_callback:
+                        self._log_callback(
+                            f"Hash copy accepted but the file never appeared on "
+                            f"{self.config.name} — uploading normally", "warning")
+                    self._discard_hash_stub(info_id)
+                    return None
                 if self._log_callback:
                     self._log_callback(
                         f"Hash match found — file created without upload: {link}", "info")
@@ -1338,6 +1431,43 @@ class FileHostClient:
             return None
         finally:
             curl.close()
+
+    def _wait_for_hash_copy(self, api_base: str, file_id: str) -> bool:
+        """Poll getFilesInfo until a createFileByHash copy materializes."""
+        def _configure(curl):
+            self._configure_ssl(curl)
+            self._configure_proxy(curl)
+            curl.setopt(pycurl.USERAGENT, self._USER_AGENT)
+
+        attempts = -(-_k2s_hash_copy_wait_seconds() // HASH_COPY_POLL_INTERVAL_SEC)
+        for _ in range(attempts):
+            if self._stop_requested():
+                return False
+            time.sleep(HASH_COPY_POLL_INTERVAL_SEC)
+            try:
+                info = _k2s_get_file_info(
+                    api_base, self.auth_token or "", file_id, _configure)
+            except (pycurl.error, json.JSONDecodeError) as e:
+                if self._log_callback:
+                    self._log_callback(f"getFilesInfo failed for {file_id}: {e}", "debug")
+                continue
+            if _hash_copy_is_real(info):
+                return True
+        return False
+
+    def _stop_requested(self) -> bool:
+        return bool(self.should_stop_func and self.should_stop_func())
+
+    def _discard_hash_stub(self, file_id: str) -> None:
+        """Best-effort delete of a hash copy that never materialized."""
+        if not file_id:
+            return
+        try:
+            self.delete_file(file_id)
+        except Exception as e:
+            if self._log_callback:
+                self._log_callback(
+                    f"Could not delete empty hash stub {file_id}: {e}", "debug")
 
     def _upload_multistep(self, file_path: Path, md5_hash: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Perform multi-step upload (init → upload → poll).
