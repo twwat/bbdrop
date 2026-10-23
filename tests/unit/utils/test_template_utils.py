@@ -301,3 +301,132 @@ class TestFilenamePlaceholderCaseInsensitivity:
 
         assert _sub_token('#fileName#', 'fileName', r'Odd\1Name.zip') == r'Odd\1Name.zip'
         assert _sub_token('#fileName#', 'fileName', r'A\g<0>B') == r'A\g<0>B'
+
+
+# ---------------------------------------------------------------------------
+# Characterization: the BBCode output must not change when the link
+# collection is split out of the formatter.
+# ---------------------------------------------------------------------------
+
+def _row(host, part, url, status='completed', file_name='', file_size=None):
+    return {'host_name': host, 'status': status, 'download_url': url,
+            'part_number': part, 'file_name': file_name, 'file_size': file_size}
+
+
+def _config_with(minimal=False):
+    import configparser
+    cfg = configparser.ConfigParser()
+    cfg['Advanced'] = {'file_hosts/minimal_links': 'true' if minimal else 'false'}
+    return cfg
+
+
+@pytest.fixture
+def link_env():
+    """Patch host config, per-host format and the minimal-links setting."""
+    names = {'rapidgator': 'Rapidgator', 'tezfiles': 'TezFiles'}
+    formats = {}
+    with patch('src.utils.template_utils.get_config_manager') as cm, \
+         patch('src.utils.template_utils.get_file_host_setting',
+               side_effect=lambda host, key, kind: formats.get(host, '')), \
+         patch('src.utils.paths.read_config', return_value=_config_with()) as rc:
+        hosts = {}
+        for host_id, name in names.items():
+            hc = Mock()
+            hc.name = name
+            hosts[host_id] = hc
+        cm.return_value.hosts = hosts
+        yield {'formats': formats, 'read_config': rc}
+
+
+class TestBBCodeLinkOutputUnchanged:
+    FMT = "[url=#link#]#hostName# - #partLabel# #fileName# (#fileSize#)[/url]"
+
+    def _run(self, rows):
+        from src.utils.template_utils import get_file_host_links_for_template
+        store = Mock()
+        store.get_file_host_uploads.return_value = rows
+        return get_file_host_links_for_template(store, "/g")
+
+    def test_multi_part_host_and_single_part_host(self, link_env):
+        link_env['formats'].update(rapidgator=self.FMT, tezfiles=self.FMT)
+        rows = [
+            _row('rapidgator', 2, 'https://rapidgator.net/file/c', file_name='bbdrop_7_G.part3.rar', file_size=1024),
+            _row('rapidgator', 0, 'https://rapidgator.net/file/a', file_name='G.part1.rar', file_size=2048),
+            _row('tezfiles', 0, 'https://tezfiles.com/file/z', file_name='G.zip', file_size=None),
+            _row('rapidgator', 1, 'https://rapidgator.net/file/b', file_name='G.part2.rar', file_size=1024),
+        ]
+        assert self._run(rows) == (
+            "[url=https://rapidgator.net/file/a]Rapidgator - Part 1 G.part1.rar (2.0 KiB)[/url]\n"
+            "[url=https://rapidgator.net/file/b]Rapidgator - Part 2 G.part2.rar (1.0 KiB)[/url]\n"
+            "[url=https://rapidgator.net/file/c]Rapidgator - Part 3 G.part3.rar (1.0 KiB)[/url]\n"
+            "[url=https://tezfiles.com/file/z]TezFiles G.zip ()[/url]"
+        )
+
+    def test_no_format_gives_raw_urls(self, link_env):
+        rows = [_row('rapidgator', 0, ' https://rapidgator.net/file/a ')]
+        assert self._run(rows) == "https://rapidgator.net/file/a"
+
+    def test_minimal_links(self, link_env):
+        link_env['read_config'].return_value = _config_with(minimal=True)
+        rows = [_row('rapidgator', 0, 'https://rapidgator.net/file/abc/name.rar.html')]
+        assert self._run(rows) == "https://rg.to/file/abc"
+
+    def test_incomplete_and_blank_rows_excluded(self, link_env):
+        rows = [
+            _row('rapidgator', 0, 'https://rapidgator.net/file/a', status='failed'),
+            _row('tezfiles', 0, '   '),
+            _row('tezfiles', 1, 'https://tezfiles.com/file/ok'),
+        ]
+        assert self._run(rows) == "https://tezfiles.com/file/ok"
+
+    def test_unknown_host_is_capitalized(self, link_env):
+        link_env['formats']['katfile'] = "#hostName#: #link#"
+        rows = [_row('katfile', 0, 'https://katfile.com/x')]
+        assert self._run(rows) == "Katfile: https://katfile.com/x"
+
+
+class TestCollectFileHostLinks:
+    def _collect(self, rows, host_id=None):
+        from src.utils.template_utils import collect_file_host_links
+        store = Mock()
+        store.get_file_host_uploads.return_value = rows
+        return collect_file_host_links(store, "/g", host_id=host_id)
+
+    def test_groups_by_host_in_first_row_order(self, link_env):
+        hosts = self._collect([
+            _row('tezfiles', 0, 'https://tezfiles.com/file/z'),
+            _row('rapidgator', 0, 'https://rapidgator.net/file/a'),
+        ])
+        assert [(h.host_id, h.host_name) for h in hosts] == [
+            ('tezfiles', 'TezFiles'), ('rapidgator', 'Rapidgator')]
+
+    def test_parts_sorted(self, link_env):
+        hosts = self._collect([
+            _row('rapidgator', 2, 'u2'), _row('rapidgator', 0, 'u0'), _row('rapidgator', 1, 'u1'),
+        ])
+        assert [p.part_number for p in hosts[0].parts] == [0, 1, 2]
+        assert [p.url for p in hosts[0].parts] == ['u0', 'u1', 'u2']
+
+    def test_host_filter(self, link_env):
+        hosts = self._collect([
+            _row('tezfiles', 0, 'https://tezfiles.com/file/z'),
+            _row('rapidgator', 0, 'https://rapidgator.net/file/a'),
+        ], host_id='rapidgator')
+        assert [h.host_id for h in hosts] == ['rapidgator']
+
+    def test_minimal_url_applied(self, link_env):
+        link_env['read_config'].return_value = _config_with(minimal=True)
+        hosts = self._collect([_row('rapidgator', 0, 'https://rapidgator.net/file/abc/x.html')])
+        assert hosts[0].parts[0].url == 'https://rg.to/file/abc'
+
+    def test_clean_file_name(self, link_env):
+        hosts = self._collect([_row('rapidgator', 0, 'u', file_name='/tmp/bbdrop_12_G.rar', file_size=5)])
+        part = hosts[0].parts[0]
+        assert (part.file_name, part.file_size) == ('G.rar', 5)
+
+    def test_db_error_returns_empty(self, link_env):
+        import sqlite3
+        from src.utils.template_utils import collect_file_host_links
+        store = Mock()
+        store.get_file_host_uploads.side_effect = sqlite3.Error("locked")
+        assert collect_file_host_links(store, "/g") == []
