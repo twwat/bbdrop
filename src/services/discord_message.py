@@ -202,31 +202,23 @@ def split_message(text: str, limit: int = MAX_CONTENT) -> List[str]:
     return [c for c in chunks if c.strip()]
 
 
-def gallery_fields(item, rows: List[dict], queue_store, failed_host: str = '') -> dict:
+def gallery_fields(item, queue_store, failed_hosts=()) -> dict:
     """Placeholder values for a finished gallery's message.
 
-    ``rows`` are the gallery's file host rows; ``failed_host`` is a host whose
-    failure has been signalled but may not be written to its row yet.
+    ``failed_hosts`` are the host ids that ended failed (from
+    settled_failed_hosts); their completed parts are left out of the links
+    so a half-uploaded archive is never offered as a download.
     """
-    failed = []
-    for row in rows:
-        if row.get('status') == 'failed' and not row.get('deduped'):
-            failed.append(row.get('host_name', ''))
-    if failed_host:
-        failed.append(failed_host)
-    failed_names = []
-    for host in failed:
-        name = get_display_name(host) if host else ''
-        if name and name not in failed_names:
-            failed_names.append(name)
-
+    failed = set(failed_hosts)
+    hosts = [h for h in collect_file_host_links(queue_store, item.path)
+             if h.host_id not in failed]
     return {
         'gallery_name': item.name or os.path.basename(item.path),
         'picture_count': str(item.uploaded_images or item.total_images),
         'folder_size': format_binary_size(item.total_size) if item.total_size else '',
         'gallery_link': item.gallery_url or '',
-        'host_links': format_host_links(collect_file_host_links(queue_store, item.path)),
-        'failed_hosts': ', '.join(failed_names),
+        'host_links': format_host_links(hosts),
+        'failed_hosts': ', '.join(get_display_name(h) for h in failed_hosts),
     }
 
 

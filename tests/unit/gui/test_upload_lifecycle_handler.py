@@ -604,8 +604,9 @@ def _done_handler(rows, wants_discord=False):
     return UploadLifecycleHandler(mw), mw
 
 
-def _fh_row(host, status, deduped=0):
-    return {'host_name': host, 'status': status, 'deduped': deduped}
+def _fh_row(host, status, deduped=0, part=0, dedup_only=0):
+    return {'host_name': host, 'status': status, 'deduped': deduped,
+            'part_number': part, 'dedup_only': dedup_only}
 
 
 class TestGalleryDoneSettled:
@@ -622,6 +623,22 @@ class TestGalleryDoneSettled:
         handler, mw = _done_handler([_fh_row('rapidgator', 'completed'),
                                      _fh_row('keep2share', status)])
         handler.maybe_notify_gallery_done("/test/My Set")
+        mw.notification_manager.notify.assert_not_called()
+
+    def test_orphan_later_part_does_not_block_later_recheck(self):
+        # Part 2 of katfile failed: only its head row is written 'failed'.
+        handler, mw = _done_handler([_fh_row('rapidgator', 'completed'),
+                                     _fh_row('katfile', 'failed', part=0),
+                                     _fh_row('katfile', 'uploading', part=1)])
+        handler.maybe_notify_gallery_done("/test/My Set")
+        mw.notification_manager.notify.assert_called_once()
+
+    def test_waits_for_family_hash_retry(self):
+        with patch('src.core.file_host_settlement.is_family_dedup_enabled',
+                   return_value=True):
+            handler, mw = _done_handler([_fh_row('keep2share', 'completed'),
+                                         _fh_row('tezfiles', 'uploading')])
+            handler.maybe_notify_gallery_done("/test/My Set", failed_host='tezfiles')
         mw.notification_manager.notify.assert_not_called()
 
     def test_failed_host_param_settles_row_still_marked_uploading(self):

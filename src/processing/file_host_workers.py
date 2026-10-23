@@ -802,13 +802,17 @@ class FileHostWorker(QThread):
             # This row exists solely to leverage a sibling's md5.  If the
             # mirror missed it means the backend doesn't have the file yet
             # — no fallback to a full upload.
+            error_msg = "family dedup retry could not mirror sibling md5"
             self.queue_store.update_file_host_upload(
                 upload_id,
                 status="failed",
-                error_message="family dedup retry could not mirror sibling md5",
+                error_message=error_msg,
                 finished_ts=int(time.time()),
             )
             self.host_gallery_settled.emit(db_id, host_name, False)
+            # Report it like any terminal failure, after the write, so the GUI
+            # re-checks gallery completion: this retry may be the last row.
+            self.upload_failed.emit(db_id, host_name, error_msg, gallery_path)
             return
 
         # Full upload path: wrap the existing call + aggregate emit in try/finally

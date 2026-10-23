@@ -196,26 +196,23 @@ class TestGalleryFields:
         item.total_size = 3 * 1024 * 1024
         return item
 
-    def _fields(self, rows, failed_host=''):
+    def _fields(self, failed_hosts=(), links=None):
         from unittest.mock import Mock, patch
         from src.services.discord_message import gallery_fields
-        links = [_host('rapidgator', 'Rapidgator', 'https://rg.to/file/a')]
+        if links is None:
+            links = [_host('rapidgator', 'Rapidgator', 'https://rg.to/file/a')]
         with patch('src.services.discord_message.collect_file_host_links',
                    return_value=links) as collect, \
              patch('src.services.discord_message.get_display_name',
                    side_effect=lambda h: self.NAMES.get(h, h)):
             store = Mock()
-            fields = gallery_fields(self._item(), rows, store, failed_host=failed_host)
+            fields = gallery_fields(self._item(), store, failed_hosts=failed_hosts)
         collect.assert_called_once_with(store, '/pics/Summer Set')
         return fields
 
     def test_gallery_fields(self):
         from src.utils.format_utils import format_binary_size
-        rows = [
-            {'host_name': 'rapidgator', 'status': 'completed', 'deduped': 0},
-            {'host_name': 'keep2share', 'status': 'failed', 'deduped': 0},
-        ]
-        assert self._fields(rows) == {
+        assert self._fields(failed_hosts=['keep2share']) == {
             'gallery_name': 'Summer Set',
             'picture_count': '12',
             'folder_size': format_binary_size(3 * 1024 * 1024),
@@ -224,18 +221,16 @@ class TestGalleryFields:
             'failed_hosts': 'Keep2Share',
         }
 
-    def test_gallery_fields_adds_failed_host_once(self):
-        rows = [
-            {'host_name': 'keep2share', 'status': 'failed', 'deduped': 0},
-            {'host_name': 'keep2share', 'status': 'failed', 'deduped': 0},
-            {'host_name': 'tezfiles', 'status': 'uploading', 'deduped': 0},
-        ]
-        assert self._fields(rows, failed_host='tezfiles')['failed_hosts'] == 'Keep2Share, TezFiles'
-        assert self._fields(rows, failed_host='keep2share')['failed_hosts'] == 'Keep2Share'
+    def test_failed_host_names_are_display_names_in_order(self):
+        fields = self._fields(failed_hosts=['tezfiles', 'keep2share'])
+        assert fields['failed_hosts'] == 'TezFiles, Keep2Share'
 
-    def test_deduped_failed_row_is_not_a_failure(self):
-        rows = [{'host_name': 'keep2share', 'status': 'failed', 'deduped': 1}]
-        assert self._fields(rows)['failed_hosts'] == ''
+    def test_failed_host_parts_are_not_listed_as_links(self):
+        links = [_host('rapidgator', 'Rapidgator', 'https://rg.to/file/a'),
+                 _host('tezfiles', 'TezFiles', 'https://tezfiles.com/p1')]
+        fields = self._fields(failed_hosts=['tezfiles'], links=links)
+        assert fields['host_links'] == '[Rapidgator](https://rg.to/file/a)'
+        assert fields['failed_hosts'] == 'TezFiles'
 
 
 class TestFilehostFields:

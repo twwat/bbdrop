@@ -263,10 +263,21 @@ class TestWorkerUploadLoopFamilyBranch:
         worker.host_gallery_settled.connect(
             lambda gid, host, success: settled_events.append((gid, host, success))
         )
+        failed_events = []
+
+        def on_failed(gid, host, error, gallery_path):
+            status = next(r for r in store.get_file_host_uploads(path)
+                          if r["host_name"] == "fileboom")["status"]
+            failed_events.append((gid, host, gallery_path, status, bool(error)))
+
+        worker.upload_failed.connect(on_failed)
         worker._process_single_pending_row(row, client)
 
         assert archive_mgr_called == []
         assert settled_events == [(row["gallery_fk"], "fileboom", False)]
+        # Reported as a failure, after the row is written, so the GUI's
+        # gallery completion check sees it as final.
+        assert failed_events == [(row["gallery_fk"], "fileboom", path, "failed", True)]
         final = next(
             r for r in store.get_file_host_uploads(path) if r["host_name"] == "fileboom"
         )

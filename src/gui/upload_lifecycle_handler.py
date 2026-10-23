@@ -420,13 +420,13 @@ class UploadLifecycleHandler(QObject):
     def maybe_notify_gallery_done(self, path: str, failed_host: str = ''):
         """Fire gallery_completed notification once all work has settled.
 
-        Work = image host upload + every file host row for the gallery.
-        A file host row has settled when it is `deduped`, or its status is
-        `completed` or `failed` (terminal: a retry writes the row back to
-        `pending`). Pending/uploading rows delay the notification; the
-        re-checks from the file host completed/failed handlers fire it once
-        they settle. `failed_host` counts that host's rows as settled: the
-        worker emits upload_failed before it writes status='failed'.
+        Work = image host upload + every file host for the gallery; see
+        settled_failed_hosts for when a host has settled (completed, or
+        failed with no K2S-family hash retry to come). Unsettled hosts delay
+        the notification; the re-checks from the file host completed/failed
+        handlers fire it once they settle. `failed_host` is the host whose
+        upload_failed is being handled: the worker emits it before it writes
+        status='failed'.
 
         Guarded by `_fired_completion_notifications` so a gallery only
         notifies once per session.
@@ -448,15 +448,10 @@ class UploadLifecycleHandler(QObject):
                 level="warning", category="ui")
             rows = []
 
-        if rows:
-            all_settled = all(
-                bool(row.get('deduped'))
-                or row.get('status') in ('completed', 'failed')
-                or (failed_host and row.get('host_name') == failed_host)
-                for row in rows
-            )
-            if not all_settled:
-                return
+        from src.core.file_host_settlement import settled_failed_hosts
+        failed_hosts = settled_failed_hosts(rows, failed_host=failed_host)
+        if failed_hosts is None:
+            return
 
         self._fired_completion_notifications.add(path)
         if hasattr(mw, 'notification_manager'):
@@ -464,8 +459,8 @@ class UploadLifecycleHandler(QObject):
             if mw.notification_manager.wants_discord('gallery_completed'):
                 from src.services.discord_message import gallery_fields
                 try:
-                    fields = gallery_fields(item, rows, mw.queue_manager.store,
-                                            failed_host=failed_host)
+                    fields = gallery_fields(item, mw.queue_manager.store,
+                                            failed_hosts=failed_hosts)
                 except Exception as e:
                     log(f"Failed to build Discord gallery message fields: {e}",
                         level="warning", category="notifications")
