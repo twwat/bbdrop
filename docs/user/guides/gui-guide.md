@@ -118,7 +118,33 @@ BBDrop can post a message to a Discord channel when an event you choose happens 
 2. In BBDrop open **Settings > Notifications**, tick **Enable Discord Notifications** and paste the URL.
 3. Press **Send test message** to confirm it works, tick the events you want, and save.
 
-Discord notifications are off by default. Messages contain the event and the gallery name (plus a short error text for failures), never file paths or links. The webhook URL is stored encrypted in your system keyring, like BBDrop's other credentials, not in the settings file. Anyone who has the URL can post to that channel, so keep it private.
+Discord notifications are off by default. The webhook URL is stored encrypted in your system keyring, like BBDrop's other credentials, not in the settings file. Anyone who has the URL can post to that channel, so keep it private.
+
+#### Choosing what a message says
+
+Every event has an **Edit…** button next to its checkbox. It opens an editor for that event's message, with buttons that insert placeholders and a preview of how the message will look in Discord. Messages use the same `#placeholder#` and `[if x]…[else]…[/if]` syntax as BBCode templates, but are written in Discord formatting (`**bold**`, `[text](link)`).
+
+- **Reset to default** puts back the built-in message.
+- **Use preset with links** (Gallery Completed and File Host Upload Completed) fills in a message with the gallery link and download links.
+- **Send sample to Discord** posts the preview to your channel so you can see it for real.
+
+To get **one post per gallery with all its links**, tick only **Gallery Completed** and choose **Use preset with links** in its editor.
+
+| Placeholder | Available in | Value |
+|---|---|---|
+| `#galleryName#` | gallery and file host events | Gallery name |
+| `#pictureCount#`, `#folderSize#` | Gallery Completed | Images uploaded, total size |
+| `#galleryLink#` | Gallery Completed, file host events | Image host gallery link |
+| `#hostLinks#` | Gallery Completed | Every finished file host link, one line per host |
+| `#failedHosts#` | Gallery Completed | File hosts that failed (empty if none) |
+| `#hostName#` | file host events | File host name |
+| `#hostLink#` | File Host Upload Completed | That host's link(s) |
+| `#error#` | Gallery Failed, File Host Upload Failed | Error message |
+| `#detail#` | Queue Finished, File Host Ready, Disk Space Warning | Extra detail, if any |
+
+The default messages contain gallery and host names but no links. Links are only sent if you add them to a message, and file paths are never sent (they are removed from error messages too). Gallery names are sent exactly as written; characters like `*` or `_` in a name will not change the formatting.
+
+**Gallery Completed** is posted once the image upload and every file host for that gallery have finished, including hosts that failed; failed hosts are listed in `#failedHosts#`. A long message is split across several posts at line breaks, never in the middle of a link. Discord does not show preview cards for links unless you tick **Show link previews**.
 
 ---
 
