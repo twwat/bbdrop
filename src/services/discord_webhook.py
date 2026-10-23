@@ -22,6 +22,9 @@ QUEUE_MAX = 50
 REQUEST_TIMEOUT = 10
 MAX_RETRY_WAIT = 30.0
 DEFAULT_RETRY_WAIT = 2.0
+# Message flag that stops Discord unfurling links into preview cards.
+SUPPRESS_EMBEDS = 4
+TEST_MESSAGE = "✅ BBDrop test message — Discord notifications are working."
 
 _URL_RE = re.compile(
     r'https://(?:(?:canary\.|ptb\.)?discord\.com|discordapp\.com)'
@@ -29,12 +32,15 @@ _URL_RE = re.compile(
 )
 
 
-def _payload(message: str) -> dict:
-    return {
+def _payload(message: str, suppress_embeds: bool = False) -> dict:
+    payload = {
         "content": message[:MAX_CONTENT],
         # An empty parse list stops @everyone, @here and user/role pings.
         "allowed_mentions": {"parse": []},
     }
+    if suppress_embeds:
+        payload["flags"] = SUPPRESS_EMBEDS
+    return payload
 
 
 def _retry_after(response) -> float:
@@ -83,26 +89,32 @@ class DiscordWebhookSender:
 
     # -- sending -------------------------------------------------------
 
-    def send(self, message: str) -> None:
+    def send(self, message: str, suppress_embeds: bool = False) -> None:
         """Queue a message; returns immediately."""
         if not self._url:
             return
         self._ensure_thread()
         try:
-            self._queue.put_nowait(message)
+            self._queue.put_nowait((message, suppress_embeds))
         except queue.Full:
             log("Discord notification dropped: send queue is full",
                 level="warning", category="notifications")
 
-    def send_test(self, url: Optional[str] = None) -> Tuple[bool, str]:
-        """Post a test message now. ``url=None`` tests the stored URL."""
+    def send_test(self, url: Optional[str] = None, message: Optional[str] = None,
+                  suppress_embeds: bool = True) -> Tuple[bool, str]:
+        """Post a message now and report the outcome. Blocks on the network.
+
+        ``url=None`` tests the stored URL; ``message=None`` sends the standard
+        test text.
+        """
         target = (self._url if url is None else url).strip()
         if not self.is_valid_url(target):
             return False, "That is not a Discord webhook URL"
         try:
             response = self._post(
                 target,
-                json=_payload("✅ BBDrop test message — Discord notifications are working."),
+                json=_payload(TEST_MESSAGE if message is None else message,
+                              suppress_embeds),
                 timeout=REQUEST_TIMEOUT,
             )
         except requests.RequestException as e:
@@ -137,25 +149,25 @@ class DiscordWebhookSender:
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                message = self._queue.get(timeout=0.2)
+                message, suppress_embeds = self._queue.get(timeout=0.2)
             except queue.Empty:
                 continue
             try:
-                self._deliver(message)
+                self._deliver(message, suppress_embeds)
             except Exception as e:  # never let one message kill the thread
                 log(f"Discord notification failed ({type(e).__name__})",
                     level="warning", category="notifications")
             finally:
                 self._queue.task_done()
 
-    def _deliver(self, message: str) -> None:
+    def _deliver(self, message: str, suppress_embeds: bool = False) -> None:
         url = self._url
         if not url:
             return
-        status, retry_after = self._post_once(url, message)
+        status, retry_after = self._post_once(url, message, suppress_embeds)
         if status == 429:
             self._sleep(min(retry_after, MAX_RETRY_WAIT))
-            status, _ = self._post_once(url, message)
+            status, _ = self._post_once(url, message, suppress_embeds)
             if status == 429:
                 log("Discord notification dropped: rate limited twice",
                     level="warning", category="notifications")
@@ -164,9 +176,10 @@ class DiscordWebhookSender:
             log(f"Discord rejected a notification (HTTP {status})",
                 level="warning", category="notifications")
 
-    def _post_once(self, url: str, message: str) -> Tuple[Optional[int], float]:
+    def _post_once(self, url: str, message: str,
+                   suppress_embeds: bool = False) -> Tuple[Optional[int], float]:
         try:
-            response = self._post(url, json=_payload(message),
+            response = self._post(url, json=_payload(message, suppress_embeds),
                                   timeout=REQUEST_TIMEOUT)
         except requests.RequestException as e:
             log(f"Could not reach Discord ({type(e).__name__})",

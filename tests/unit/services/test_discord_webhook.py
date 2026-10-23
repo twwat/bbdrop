@@ -252,3 +252,33 @@ class TestSendTest:
         assert (ok, reason) == (False, "Could not reach Discord")
         assert "SECRETTOKEN" not in str(log.call_args_list)
         assert "SECRETTOKEN" not in reason
+
+
+class TestEmbedSuppression:
+    def test_payload_flags_only_when_suppressing(self):
+        from src.services.discord_webhook import SUPPRESS_EMBEDS, _payload
+        assert SUPPRESS_EMBEDS == 4
+        assert _payload('x', suppress_embeds=True)['flags'] == 4
+        assert 'flags' not in _payload('x')
+        for p in (_payload('x'), _payload('x', suppress_embeds=True)):
+            assert p['allowed_mentions'] == {'parse': []}
+
+    def test_send_can_suppress_embeds(self):
+        sender, post, _ = make()
+        sender.send('a', suppress_embeds=True)
+        sender.send('b')
+        drain(sender)
+        assert post.calls[0][1]['flags'] == 4
+        assert 'flags' not in post.calls[1][1]
+
+    def test_send_test_custom_message(self):
+        sender, post, _ = make()
+        assert sender.send_test(URL, message='hello') == (True, '')
+        assert post.calls[0][1]['content'] == 'hello'
+        assert post.calls[0][1]['flags'] == 4
+
+    def test_send_test_default_message_and_previews(self):
+        sender, post, _ = make()
+        sender.send_test(URL, suppress_embeds=False)
+        assert 'test message' in post.calls[0][1]['content']
+        assert 'flags' not in post.calls[0][1]
