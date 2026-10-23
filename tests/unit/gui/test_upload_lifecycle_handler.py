@@ -169,7 +169,8 @@ class TestOnGalleryFailed:
             handler.on_gallery_failed("/test/gallery", "Something broke")
 
         mock_main_window.notification_manager.notify.assert_called_once_with(
-            'gallery_failed', detail="gallery — Something broke"
+            'gallery_failed', detail="gallery — Something broke",
+            fields={'gallery_name': 'gallery', 'error': 'Something broke'},
         )
 
     @patch('src.gui.upload_lifecycle_handler.QTimer')
@@ -182,7 +183,8 @@ class TestOnGalleryFailed:
             handler.on_gallery_failed("/test/My Set", "e" * 200)
 
         mock_main_window.notification_manager.notify.assert_called_once_with(
-            'gallery_failed', detail="My Set — " + "e" * 80
+            'gallery_failed', detail="My Set — " + "e" * 80,
+            fields={'gallery_name': 'My Set', 'error': "e" * 200},
         )
 
     @patch('src.gui.upload_lifecycle_handler.QTimer')
@@ -582,10 +584,69 @@ class TestGalleryDoneNotification:
         item.status = "completed"
         mw.queue_manager.get_item.return_value = item
         mw.queue_manager.store.get_file_host_uploads.return_value = []
+        mw.notification_manager.wants_discord.return_value = False
         handler = UploadLifecycleHandler(mw)
 
         handler.maybe_notify_gallery_done("/test/My Set")
 
         mw.notification_manager.notify.assert_called_once_with(
-            'gallery_completed', detail="My Set"
+            'gallery_completed', detail="My Set", fields=None
         )
+
+
+def _done_handler(rows, wants_discord=False):
+    mw = Mock()
+    item = GalleryQueueItem(path="/test/My Set", name="My Set")
+    item.status = "completed"
+    mw.queue_manager.get_item.return_value = item
+    mw.queue_manager.store.get_file_host_uploads.return_value = rows
+    mw.notification_manager.wants_discord.return_value = wants_discord
+    return UploadLifecycleHandler(mw), mw
+
+
+def _fh_row(host, status, deduped=0):
+    return {'host_name': host, 'status': status, 'deduped': deduped}
+
+
+class TestGalleryDoneSettled:
+    """gallery_completed fires once every file host row has settled."""
+
+    def test_failed_row_no_longer_blocks(self):
+        handler, mw = _done_handler([_fh_row('rapidgator', 'completed'),
+                                     _fh_row('keep2share', 'failed')])
+        handler.maybe_notify_gallery_done("/test/My Set")
+        mw.notification_manager.notify.assert_called_once()
+
+    @pytest.mark.parametrize("status", ["pending", "uploading"])
+    def test_unsettled_row_still_blocks(self, status):
+        handler, mw = _done_handler([_fh_row('rapidgator', 'completed'),
+                                     _fh_row('keep2share', status)])
+        handler.maybe_notify_gallery_done("/test/My Set")
+        mw.notification_manager.notify.assert_not_called()
+
+    def test_failed_host_param_settles_row_still_marked_uploading(self):
+        # upload_failed is emitted before the worker writes status='failed'.
+        handler, mw = _done_handler([_fh_row('rapidgator', 'completed'),
+                                     _fh_row('keep2share', 'uploading')],
+                                    wants_discord=True)
+        with patch('src.services.discord_message.collect_file_host_links', return_value=[]), \
+             patch('src.services.discord_message.get_display_name',
+                   side_effect=lambda h: {'keep2share': 'Keep2Share'}.get(h, h)):
+            handler.maybe_notify_gallery_done("/test/My Set", failed_host='keep2share')
+        mw.notification_manager.notify.assert_called_once()
+        kwargs = mw.notification_manager.notify.call_args.kwargs
+        assert kwargs['fields']['failed_hosts'] == 'Keep2Share'
+        assert kwargs['fields']['gallery_name'] == 'My Set'
+
+    def test_fires_once(self):
+        handler, mw = _done_handler([_fh_row('keep2share', 'failed')])
+        handler.maybe_notify_gallery_done("/test/My Set")
+        handler.maybe_notify_gallery_done("/test/My Set", failed_host='keep2share')
+        assert mw.notification_manager.notify.call_count == 1
+
+    def test_no_field_reads_when_discord_off(self):
+        handler, mw = _done_handler([_fh_row('rapidgator', 'completed')])
+        with patch('src.services.discord_message.collect_file_host_links') as collect:
+            handler.maybe_notify_gallery_done("/test/My Set")
+        collect.assert_not_called()
+        assert mw.notification_manager.notify.call_args.kwargs['fields'] is None

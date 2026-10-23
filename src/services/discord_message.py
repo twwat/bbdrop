@@ -9,12 +9,15 @@ here and inserted as-is.
 Pure Python, no Qt: imported by NotificationManager and the settings tab.
 """
 
+import os
 import re
 from typing import Dict, List
 
+from src.core.host_registry import get_display_name
 from src.services.discord_webhook import MAX_CONTENT
+from src.utils.format_utils import format_binary_size
 from src.utils.templates import _camel_to_snake, process_conditionals
-from src.utils.template_utils import HostLinks
+from src.utils.template_utils import HostLinks, collect_file_host_links
 
 PLACEHOLDER_NAMES = frozenset({
     'galleryName', 'pictureCount', 'folderSize', 'galleryLink', 'hostLinks',
@@ -197,3 +200,31 @@ def split_message(text: str, limit: int = MAX_CONTENT) -> List[str]:
     if current is not None:
         chunks.append(current)
     return [c for c in chunks if c.strip()]
+
+
+def gallery_fields(item, rows: List[dict], queue_store, failed_host: str = '') -> dict:
+    """Placeholder values for a finished gallery's message.
+
+    ``rows`` are the gallery's file host rows; ``failed_host`` is a host whose
+    failure has been signalled but may not be written to its row yet.
+    """
+    failed = []
+    for row in rows:
+        if row.get('status') == 'failed' and not row.get('deduped'):
+            failed.append(row.get('host_name', ''))
+    if failed_host:
+        failed.append(failed_host)
+    failed_names = []
+    for host in failed:
+        name = get_display_name(host) if host else ''
+        if name and name not in failed_names:
+            failed_names.append(name)
+
+    return {
+        'gallery_name': item.name or os.path.basename(item.path),
+        'picture_count': str(item.uploaded_images or item.total_images),
+        'folder_size': format_binary_size(item.total_size) if item.total_size else '',
+        'gallery_link': item.gallery_url or '',
+        'host_links': format_host_links(collect_file_host_links(queue_store, item.path)),
+        'failed_hosts': ', '.join(failed_names),
+    }
