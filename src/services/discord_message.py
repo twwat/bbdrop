@@ -228,3 +228,23 @@ def gallery_fields(item, rows: List[dict], queue_store, failed_host: str = '') -
         'host_links': format_host_links(collect_file_host_links(queue_store, item.path)),
         'failed_hosts': ', '.join(failed_names),
     }
+
+
+def filehost_fields(item, host_id: str, queue_store, gallery_path: str,
+                    error: str = '') -> dict:
+    """Placeholder values for one file host's completed or failed upload.
+
+    ``item`` may be None (gallery no longer in the queue). The host's links
+    are read only for a success.
+    """
+    host_link = ''
+    if not error:
+        host_link = format_host_links(
+            collect_file_host_links(queue_store, gallery_path, host_id=host_id))
+    return {
+        'gallery_name': (item.name if item else '') or os.path.basename(gallery_path),
+        'host_name': get_display_name(host_id),
+        'gallery_link': (item.gallery_url if item else '') or '',
+        'host_link': host_link,
+        'error': error,
+    }

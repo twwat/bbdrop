@@ -236,3 +236,42 @@ class TestGalleryFields:
     def test_deduped_failed_row_is_not_a_failure(self):
         rows = [{'host_name': 'keep2share', 'status': 'failed', 'deduped': 1}]
         assert self._fields(rows)['failed_hosts'] == ''
+
+
+class TestFilehostFields:
+    def _fields(self, item, error=''):
+        from unittest.mock import Mock, patch
+        from src.services.discord_message import filehost_fields
+        links = [_host('rapidgator', 'Rapidgator', 'https://rg.to/file/a')]
+        store = Mock()
+        with patch('src.services.discord_message.collect_file_host_links',
+                   return_value=links) as collect, \
+             patch('src.services.discord_message.get_display_name',
+                   return_value='Rapidgator'):
+            fields = filehost_fields(item, 'rapidgator', store, '/pics/Set', error=error)
+        return fields, collect, store
+
+    def _item(self):
+        from src.storage.queue_manager import GalleryQueueItem
+        item = GalleryQueueItem(path='/pics/Set', name='My Set')
+        item.gallery_url = 'https://imx.to/g/abc'
+        return item
+
+    def test_filehost_fields_success(self):
+        fields, collect, store = self._fields(self._item())
+        collect.assert_called_once_with(store, '/pics/Set', host_id='rapidgator')
+        assert fields == {
+            'gallery_name': 'My Set', 'host_name': 'Rapidgator',
+            'gallery_link': 'https://imx.to/g/abc',
+            'host_link': '[Rapidgator](https://rg.to/file/a)', 'error': '',
+        }
+
+    def test_filehost_fields_error_has_no_link(self):
+        fields, collect, _ = self._fields(self._item(), error='quota')
+        collect.assert_not_called()
+        assert fields['host_link'] == '' and fields['error'] == 'quota'
+
+    def test_filehost_fields_without_item(self):
+        fields, _, _ = self._fields(None)
+        assert fields['gallery_name'] == 'Set'
+        assert fields['gallery_link'] == ''

@@ -351,7 +351,10 @@ class WorkerSignalHandler(QObject):
         # Fire notification
         mw = self._mw
         if hasattr(mw, 'notification_manager'):
-            mw.notification_manager.notify('filehost_upload_completed')
+            mw.notification_manager.notify(
+                'filehost_upload_completed',
+                fields=self._filehost_discord_fields(
+                    'filehost_upload_completed', host_name, gallery_path))
 
         # Image uploads usually finish before the file hosts do, so the
         # run-level check that ran back then would have been suppressed.
@@ -384,11 +387,43 @@ class WorkerSignalHandler(QObject):
 
         # Fire notification
         if hasattr(mw, 'notification_manager'):
-            mw.notification_manager.notify('filehost_upload_failed', detail=error_message[:80])
+            mw.notification_manager.notify(
+                'filehost_upload_failed', detail=error_message[:80],
+                fields=self._filehost_discord_fields(
+                    'filehost_upload_failed', host_name, gallery_path,
+                    error=error_message))
+
+        # A terminal failure can be the gallery's last outstanding row. This
+        # signal is emitted before the worker writes status='failed', so the
+        # check is told which host just failed.
+        if mw is not None and gallery_path:
+            try:
+                mw.upload_lifecycle_handler.maybe_notify_gallery_done(
+                    gallery_path, failed_host=host_name)
+            except Exception as e:
+                log(f"Error re-checking gallery completion after file host failure: {e}",
+                    level="warning", category="ui")
 
         # A terminal failure can be the last outstanding row for the run.
         # Re-check so the run still reports finished instead of going quiet.
         self._maybe_notify_queue_finished()
+
+    def _filehost_discord_fields(self, event_type: str, host_name: str,
+                                 gallery_path: str, error: str = ''):
+        """Discord message fields for a file host event, or None when Discord
+        is off for it (so nothing is read from the database)."""
+        mw = self._mw
+        if mw is None or not mw.notification_manager.wants_discord(event_type):
+            return None
+        from src.services.discord_message import filehost_fields
+        try:
+            item = mw.queue_manager.get_item(gallery_path) if gallery_path else None
+            return filehost_fields(item, host_name, mw.queue_manager.store,
+                                   gallery_path, error=error)
+        except Exception as e:
+            log(f"Failed to build Discord file host message fields: {e}",
+                level="warning", category="notifications")
+            return None
 
     def _resolve_gallery_name(self, db_id: int) -> str:
         """Resolve gallery display name from db_id via the file host controller's cache."""
