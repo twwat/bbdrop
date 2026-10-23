@@ -2,22 +2,29 @@
 
 import glob
 import os
+import threading
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QLabel, QPushButton, QSlider, QComboBox, QGridLayout,
-    QSizePolicy, QFileDialog, QLineEdit, QApplication, QDialog,
+    QSizePolicy, QFileDialog, QLineEdit, QDialog,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QObject, pyqtSignal
 
 from src.gui.dialogs.bbcode_link_format_dialog import PlaceholderEditorDialog
 from src.gui.widgets.info_button import InfoButton
 from src.services.discord_message import (
     DEFAULT_MESSAGES, EVENT_PLACEHOLDERS, LINK_PRESETS, preview_fields, render,
+    split_message,
 )
 from src.services.discord_webhook import DiscordWebhookSender
 from src.services.notification_manager import NOTIFICATION_EVENTS, _EVENT_DEFAULTS
 from src.utils.logger import log
+
+
+class _DiscordResultRelay(QObject):
+    """Carries a background Discord send's result back to the GUI thread."""
+    done = pyqtSignal(bool, str)
 
 
 class NotificationsTab(QWidget):
@@ -33,6 +40,7 @@ class NotificationsTab(QWidget):
         self._discord_edit_buttons: dict[str, QPushButton] = {}
         # Per-event Discord message; '' means the default message.
         self._discord_messages: dict[str, str] = {e: '' for e in NOTIFICATION_EVENTS}
+        self._open_editor = None   # the message editor while it is open
         self._available_sounds = self._scan_sounds()
         self._setup_ui()
         self.load_settings()
@@ -295,17 +303,65 @@ class NotificationsTab(QWidget):
     def _send_discord_test(self):
         url = self._discord_url_text()
         self.discord_test_btn.setEnabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            ok, reason = DiscordWebhookSender().send_test(url)
-        finally:
-            QApplication.restoreOverrideCursor()
-            self.discord_test_btn.setEnabled(True)
+        self._run_discord_send(url, None, self._on_discord_test_result)
+
+    def _on_discord_test_result(self, ok: bool, reason: str):
+        self.discord_test_btn.setEnabled(
+            DiscordWebhookSender.is_valid_url(self._discord_url_text())
+            and self.discord_enable.isChecked())
         if ok:
             self._set_discord_status(
                 "Test message sent - check your Discord channel.", error=False)
         else:
             self._set_discord_status(reason)
+
+    def _send_discord_sample(self, rendered: str):
+        """Post the editor's rendered preview (first chunk) to the typed webhook."""
+        dialog = self._open_editor
+        url = self._discord_url_text()
+        if not DiscordWebhookSender.is_valid_url(url):
+            if dialog is not None:
+                dialog.set_status("Enter a valid webhook URL first", error=True)
+            return
+        chunks = split_message(rendered)
+        if not chunks:
+            if dialog is not None:
+                dialog.set_status("The message is empty", error=True)
+            return
+        if dialog is not None:
+            dialog.set_status("Sending…", error=False)
+        # A sample is one post: only the first chunk of a long message.
+        self._run_discord_send(url, chunks[0], self._on_discord_sample_result)
+
+    def _on_discord_sample_result(self, ok: bool, reason: str):
+        dialog = self._open_editor
+        if dialog is None:
+            return
+        if ok:
+            dialog.set_status("Sample sent - check your Discord channel.", error=False)
+        else:
+            dialog.set_status(reason, error=True)
+
+    def _run_discord_send(self, url: str, message, on_done):
+        """Post via send_test on a background thread; on_done(ok, reason) runs
+        on the GUI thread. A send can block for up to ~20 s on a bad network."""
+        relay = _DiscordResultRelay(self)
+        relay.done.connect(on_done)
+        relay.done.connect(relay.deleteLater)
+        suppress = not self.discord_previews.isChecked()
+
+        def work():
+            try:
+                ok, reason = DiscordWebhookSender().send_test(
+                    url, message, suppress_embeds=suppress)
+            except Exception as e:
+                ok, reason = False, f"Could not send ({type(e).__name__})"
+            try:
+                relay.done.emit(ok, reason)
+            except RuntimeError:
+                pass   # the settings tab was closed mid-send
+
+        threading.Thread(target=work, name="DiscordSettingsSend", daemon=True).start()
 
     def _edit_discord_message(self, event_id: str):
         display_name = NOTIFICATION_EVENTS[event_id][0]
@@ -321,8 +377,14 @@ class NotificationsTab(QWidget):
             parent=self,
             presets=presets,
             preview_renderer=lambda text: render(text, sample),
+            sample_sender=self._send_discord_sample,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        self._open_editor = dialog
+        try:
+            accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        finally:
+            self._open_editor = None
+        if not accepted:
             return
         text = dialog.get_text().strip()
         # Storing '' for the default keeps the user on it if it later changes.

@@ -135,24 +135,44 @@ def test_load_reflects_manager_state(qtbot, manager):
     assert widget._discord_checks['gallery_failed'].isChecked() is False
 
 
-def test_test_button_sends_the_typed_url(tab):
+def test_test_button_sends_the_typed_url(qtbot, tab):
     tab.discord_enable.setChecked(True)
     tab.discord_url.setText(URL)
     with patch.object(DiscordWebhookSender, 'send_test',
                       return_value=(True, '')) as send_test:
         tab.discord_test_btn.click()
-    send_test.assert_called_once_with(URL)
+        qtbot.waitUntil(lambda: bool(tab.discord_status.text()), timeout=3000)
+    send_test.assert_called_once_with(URL, None, suppress_embeds=True)
     assert "sent" in tab.discord_status.text().lower()
 
 
-def test_test_button_shows_failure_reason(tab):
+def test_test_button_shows_failure_reason(qtbot, tab):
     tab.discord_enable.setChecked(True)
     tab.discord_url.setText(URL)
     with patch.object(DiscordWebhookSender, 'send_test',
                       return_value=(False, 'Could not reach Discord')):
         tab.discord_test_btn.click()
+        qtbot.waitUntil(lambda: bool(tab.discord_status.text()), timeout=3000)
     assert tab.discord_status.text() == 'Could not reach Discord'
     assert tab.discord_test_btn.isEnabled() is True
+
+
+def test_test_button_disabled_while_sending(qtbot, tab):
+    import threading
+    tab.discord_enable.setChecked(True)
+    tab.discord_url.setText(URL)
+    release = threading.Event()
+
+    def slow_send(*_args, **_kwargs):
+        release.wait(5)
+        return True, ''
+
+    with patch.object(DiscordWebhookSender, 'send_test', side_effect=slow_send):
+        tab.discord_test_btn.click()
+        assert tab.discord_test_btn.isEnabled() is False   # GUI thread not blocked
+        release.set()
+        qtbot.waitUntil(lambda: bool(tab.discord_test_btn.isEnabled()), timeout=3000)
+    assert "sent" in tab.discord_status.text().lower()
 
 
 def test_reset_to_defaults_turns_discord_off(qtbot, tab):
@@ -295,3 +315,33 @@ def test_load_reflects_stored_message(qtbot, manager):
     assert widget.discord_previews.isChecked() is True
     dialog_cls = _edit(widget, 'gallery_completed', 'x')
     assert dialog_cls.call_args.kwargs['initial_text'] == 'Stored'
+
+
+def test_edit_dialog_wires_sample_sender(tab):
+    dialog_cls = _edit(tab, 'gallery_completed', 'x')
+    assert dialog_cls.call_args.kwargs['sample_sender'] == tab._send_discord_sample
+
+
+def test_sample_sends_first_chunk_only(qtbot, tab):
+    tab.discord_enable.setChecked(True)
+    tab.discord_url.setText(URL)
+    tab._open_editor = MagicMock()
+    rendered = 'a' * 1500 + '\n' + 'b' * 1500
+    with patch.object(DiscordWebhookSender, 'send_test',
+                      return_value=(True, '')) as send_test:
+        tab._send_discord_sample(rendered)
+        qtbot.waitUntil(lambda: send_test.called and tab._open_editor.set_status.call_count >= 2,
+                        timeout=3000)
+    send_test.assert_called_once_with(URL, 'a' * 1500, suppress_embeds=True)
+    tab._open_editor.set_status.assert_called_with(
+        'Sample sent - check your Discord channel.', error=False)
+
+
+def test_sample_with_invalid_url_sends_nothing(tab):
+    tab.discord_url.setText('https://evil.com/x')
+    tab._open_editor = MagicMock()
+    with patch.object(DiscordWebhookSender, 'send_test') as send_test:
+        tab._send_discord_sample('hello')
+    send_test.assert_not_called()
+    tab._open_editor.set_status.assert_called_once_with(
+        'Enter a valid webhook URL first', error=True)
