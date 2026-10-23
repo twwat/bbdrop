@@ -40,8 +40,10 @@ def mgr():
 
 class TestDispatch:
     def test_discord_fires_when_master_switch_off(self, mgr):
-        mgr.notify('gallery_failed', detail='Set — boom')
-        mgr._discord.send.assert_called_once_with('❌ Gallery failed: Set — boom')
+        mgr.notify('gallery_failed', detail='Set — boom',
+                   fields={'gallery_name': 'Set', 'error': 'boom'})
+        mgr._discord.send.assert_called_once_with(
+            '❌ Gallery failed: Set — boom', suppress_embeds=True)
         mgr._show_toast.assert_not_called()
 
     def test_discord_is_not_debounced(self, mgr):
@@ -67,27 +69,92 @@ class TestDispatch:
         mgr.notify('nonexistent_event')
         mgr._discord.send.assert_not_called()
 
-    @pytest.mark.parametrize("event,detail,expected", [
-        ('queue_finished', '', '✅ BBDrop: all uploads complete'),
-        ('gallery_completed', 'My Set', '✅ Gallery uploaded: My Set'),
-        ('gallery_completed', '', '✅ Gallery uploaded'),
-        ('gallery_failed', 'My Set — timeout', '❌ Gallery failed: My Set — timeout'),
-        ('gallery_failed', '', '❌ Gallery failed'),
-        ('filehost_upload_completed', '', '✅ File host upload complete'),
-        ('filehost_upload_failed', 'quota', '❌ File host upload failed: quota'),
-        ('filehost_upload_failed', '', '❌ File host upload failed'),
-        ('filehost_spinup_complete', '', 'ℹ️ File host ready'),
-        ('disk_space_warning', 'Disk space: critical', '⚠️ Disk space: critical'),
-        ('disk_space_warning', '', '⚠️ Disk space is running low'),
+    @pytest.mark.parametrize("event,detail,fields,expected", [
+        ('queue_finished', '', None, '✅ BBDrop: all uploads complete'),
+        ('gallery_completed', 'My Set', {'gallery_name': 'My Set'},
+         '✅ Gallery uploaded: My Set'),
+        ('gallery_completed', '', None, '✅ Gallery uploaded'),
+        ('gallery_failed', 'My Set — timeout',
+         {'gallery_name': 'My Set', 'error': 'timeout'},
+         '❌ Gallery failed: My Set — timeout'),
+        ('gallery_failed', '', None, '❌ Gallery failed'),
+        ('filehost_upload_completed', '', None, '✅ File host upload complete'),
+        ('filehost_upload_completed', '',
+         {'host_name': 'Rapidgator', 'gallery_name': 'My Set'},
+         '✅ Rapidgator upload complete: My Set'),
+        ('filehost_upload_failed', 'quota',
+         {'host_name': 'Rapidgator', 'gallery_name': 'My Set', 'error': 'quota'},
+         '❌ Rapidgator upload failed: My Set — quota'),
+        ('filehost_upload_failed', '', None, '❌ File host upload failed'),
+        ('filehost_spinup_complete', '', None, 'ℹ️ File host ready'),
+        ('disk_space_warning', 'Disk space: critical', None,
+         '⚠️ Disk space\\: critical'),
+        ('disk_space_warning', '', None, '⚠️ Disk space is running low'),
     ])
-    def test_message_text(self, mgr, event, detail, expected):
-        mgr.notify(event, detail=detail)
-        mgr._discord.send.assert_called_once_with(expected)
+    def test_message_text(self, mgr, event, detail, fields, expected):
+        mgr.notify(event, detail=detail, fields=fields)
+        mgr._discord.send.assert_called_once_with(expected, suppress_embeds=True)
 
-    def test_detail_with_braces_is_kept_verbatim(self, mgr):
-        mgr.notify('gallery_completed', detail='My {detail} {0} set')
+    def test_name_with_braces_is_kept_verbatim(self, mgr):
+        mgr.notify('gallery_completed', fields={'gallery_name': 'My {detail} {0} set'})
         mgr._discord.send.assert_called_once_with(
-            '✅ Gallery uploaded: My {detail} {0} set')
+            '✅ Gallery uploaded: My {detail} {0} set', suppress_embeds=True)
+
+
+class TestTemplates:
+    def test_custom_template_used(self, mgr):
+        mgr._event_settings['gallery_completed']['discord_message'] = 'Done: #galleryName#'
+        mgr.notify('gallery_completed', fields={'gallery_name': 'A'})
+        mgr._discord.send.assert_called_once_with('Done: A', suppress_embeds=True)
+
+    def test_blank_custom_template_falls_back_to_default(self, mgr):
+        mgr._event_settings['gallery_completed']['discord_message'] = '   '
+        mgr.notify('gallery_completed', fields={'gallery_name': 'A'})
+        mgr._discord.send.assert_called_once_with(
+            '✅ Gallery uploaded: A', suppress_embeds=True)
+
+    def test_previews_setting_turns_suppression_off(self, mgr):
+        mgr._settings['discord_link_previews'] = True
+        mgr.notify('queue_finished')
+        mgr._discord.send.assert_called_once_with(
+            '✅ BBDrop: all uploads complete', suppress_embeds=False)
+
+    def test_long_message_sent_as_ordered_chunks(self, mgr):
+        mgr._event_settings['gallery_completed']['discord_message'] = 'Head\n#hostLinks#'
+        links = '\n'.join(f'[H{i}](https://h.com/{i:040d})' for i in range(60))
+        mgr.notify('gallery_completed', fields={'host_links': links})
+        sent = [c.args[0] for c in mgr._discord.send.call_args_list]
+        assert len(sent) == 2
+        assert sent[0].startswith('Head\n[H0]')
+        assert '\n'.join(sent) == 'Head\n' + links
+
+    def test_error_redacted_and_capped(self, mgr):
+        error = 'boom C:\\Users\\me\\x.zip ' + 'e' * 300
+        mgr._event_settings['gallery_failed']['discord_message'] = '#error#'
+        mgr.notify('gallery_failed', fields={'error': error})
+        sent = mgr._discord.send.call_args.args[0]
+        assert 'Users' not in sent
+        assert sent == ('boom x.zip ' + 'e' * 300)[:200]
+
+    @pytest.mark.parametrize("master,event,expected", [
+        (True, True, True), (True, False, False), (False, True, False), (False, False, False),
+    ])
+    def test_wants_discord(self, mgr, master, event, expected):
+        mgr._settings['discord_enabled'] = master
+        mgr._event_settings['gallery_completed']['discord'] = event
+        assert mgr.wants_discord('gallery_completed') is expected
+
+    def test_wants_discord_unknown_event(self, mgr):
+        assert mgr.wants_discord('nope') is False
+
+    @pytest.mark.parametrize("text", [
+        '100% done', 'a\\nb', 'line1\nline2', '\\', '%%', 'x\\\nz',
+    ])
+    def test_encode_decode_round_trip(self, text):
+        from src.services.notification_manager import _decode_ini_text, _encode_ini_text
+        encoded = _encode_ini_text(text)
+        assert '\n' not in encoded
+        assert _decode_ini_text(encoded) == text
 
 
 class TestPersistence:
@@ -150,6 +217,38 @@ class TestPersistence:
         assert m._settings['discord_enabled'] is False
 
 
+class TestTemplatePersistence:
+    def test_discord_message_round_trip(self, clean_notifications_ini):
+        text = '✅ #galleryName# 100%\nC:\\path \\n literal\n\n[if hostLinks]#hostLinks#[/if]'
+        with patch(f'{CRED}.get_credential', return_value=''):
+            first = NotificationManager(tray_icon=None)
+            first.update_event_settings('gallery_completed', {'discord_message': text})
+            first.save_settings()
+            second = NotificationManager(tray_icon=None)
+        assert second.get_event_settings('gallery_completed')['discord_message'] == text
+
+    def test_empty_message_removes_key(self, clean_notifications_ini):
+        from src.utils.paths import read_config
+        with patch(f'{CRED}.get_credential', return_value=''):
+            m = NotificationManager(tray_icon=None)
+            m.update_event_settings('gallery_completed', {'discord_message': 'X'})
+            m.save_settings()
+            m.update_event_settings('gallery_completed', {'discord_message': ''})
+            m.save_settings()
+            again = NotificationManager(tray_icon=None)
+        assert not read_config().has_option('NOTIFICATIONS', 'gallery_completed_discord_message')
+        assert again.get_event_settings('gallery_completed')['discord_message'] == ''
+
+    def test_link_previews_round_trip(self, clean_notifications_ini):
+        with patch(f'{CRED}.get_credential', return_value=''):
+            first = NotificationManager(tray_icon=None)
+            assert first._settings['discord_link_previews'] is False
+            first._settings['discord_link_previews'] = True
+            first.save_settings()
+            second = NotificationManager(tray_icon=None)
+        assert second._settings['discord_link_previews'] is True
+
+
 class TestWebhookUrl:
     def test_set_url_stores_encrypted_value_and_updates_sender(self, mgr):
         with patch(f'{CRED}.set_credential') as store:
@@ -205,8 +304,15 @@ class TestPrivacyRedaction:
          "Set — 5/10 images failed and/or timed out"),
     ])
     def test_paths_and_links_are_redacted(self, mgr, detail, expected):
-        mgr.notify('gallery_failed', detail=detail)
-        mgr._discord.send.assert_called_once_with(f'❌ Gallery failed: {expected}')
+        from src.services.discord_message import escape_markdown
+        mgr.notify('gallery_failed', detail=detail, fields={'error': detail})
+        mgr._discord.send.assert_called_once_with(
+            f'❌ Gallery failed — {escape_markdown(expected)}', suppress_embeds=True)
+
+    def test_detail_is_redacted(self, mgr):
+        mgr.notify('disk_space_warning', detail='see https://x.com/a now')
+        mgr._discord.send.assert_called_once_with(
+            '⚠️ see \\[link\\] now', suppress_embeds=True)
 
     def test_toast_text_is_not_redacted(self, mgr):
         mgr._settings['enabled'] = True

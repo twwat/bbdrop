@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any
 
 from PyQt6.QtWidgets import QSystemTrayIcon
 
+from src.services.discord_message import DEFAULT_MESSAGES, render, split_message
 from src.services.discord_webhook import DiscordWebhookSender
 from src.utils.credentials import (
     get_credential, set_credential, remove_credential,
@@ -94,27 +95,10 @@ _TOAST_MESSAGES = {
     'disk_space_warning':        ('BBDrop', 'Disk space is running low!'),
 }
 
-# Discord messages per event: (text with detail, text without detail).
-# ``{detail}`` is replaced with plain str.replace (never str.format) so a
-# gallery name containing braces cannot break the message.
-_DISCORD_MESSAGES = {
-    'queue_finished':            ('✅ BBDrop: all uploads complete',
-                                  '✅ BBDrop: all uploads complete'),
-    'gallery_completed':         ('✅ Gallery uploaded: {detail}',
-                                  '✅ Gallery uploaded'),
-    'gallery_failed':            ('❌ Gallery failed: {detail}',
-                                  '❌ Gallery failed'),
-    'filehost_upload_completed': ('✅ File host upload complete',
-                                  '✅ File host upload complete'),
-    'filehost_upload_failed':    ('❌ File host upload failed: {detail}',
-                                  '❌ File host upload failed'),
-    'filehost_spinup_complete':  ('ℹ️ File host ready',
-                                  'ℹ️ File host ready'),
-    'disk_space_warning':        ('⚠️ {detail}',
-                                  '⚠️ Disk space is running low'),
-}
-
 _DISCORD_CREDENTIAL_KEY = 'discord_webhook_url'
+
+# Longest error text a Discord message carries (after redaction).
+_DISCORD_ERROR_MAX = 200
 
 
 _REDACT_URL_RE = re.compile(r'''https?://[^\s<>"']*[^\s<>"'.,;:!?)\]]''')
@@ -137,19 +121,14 @@ def _redact_for_discord(text: str) -> str:
     return text
 
 
-def _format_discord_message(event_type: str, detail: str = '') -> str:
-    with_detail, without_detail = _DISCORD_MESSAGES.get(event_type, ('', ''))
-    if detail:
-        return with_detail.replace('{detail}', _redact_for_discord(detail))
-    return without_detail
-
-
 class NotificationManager:
     """Manages audio and toast notifications based on user preferences."""
 
     def __init__(self, tray_icon: Optional[QSystemTrayIcon] = None):
         self._tray_icon = tray_icon
-        self._settings: Dict[str, Any] = {'enabled': False, 'discord_enabled': False}
+        self._settings: Dict[str, Any] = {
+            'enabled': False, 'discord_enabled': False, 'discord_link_previews': False,
+        }
         self._event_settings: Dict[str, Dict[str, Any]] = {}
         self._sound_effects: Dict[str, Any] = {}  # str -> QSoundEffect
         self._last_fired_ts: Dict[str, float] = {}
@@ -158,7 +137,8 @@ class NotificationManager:
         self._discord = DiscordWebhookSender()
         self.load_settings()
 
-    def notify(self, event_type: str, detail: str = '') -> None:
+    def notify(self, event_type: str, detail: str = '',
+               fields: Optional[dict] = None) -> None:
         """Fire sound, toast and Discord notifications for an event if enabled.
 
         Must be called from the GUI thread — QSoundEffect playback and
@@ -167,6 +147,8 @@ class NotificationManager:
         Args:
             event_type: One of the keys from NOTIFICATION_EVENTS.
             detail: Optional extra text appended to the toast message.
+            fields: Optional snake_case values for the event's Discord
+                message placeholders (see discord_message.EVENT_PLACEHOLDERS).
         """
         event_cfg = self._event_settings.get(event_type)
         if event_cfg is None:
@@ -174,7 +156,7 @@ class NotificationManager:
 
         # Discord is independent of the audio/toast master switch and is not
         # debounced: every gallery should be reported.
-        self._send_discord(event_type, event_cfg, detail)
+        self._send_discord(event_type, event_cfg, detail, fields)
 
         if not self._settings.get('enabled', True):
             return
@@ -193,14 +175,31 @@ class NotificationManager:
         if event_cfg.get('toast', False):
             self._show_toast(event_type, detail)
 
-    def _send_discord(self, event_type: str, event_cfg: dict, detail: str) -> None:
-        if not self._settings.get('discord_enabled', False):
+    def wants_discord(self, event_type: str) -> bool:
+        """True if a Discord message would be sent for this event.
+
+        Callers check this before building message fields so nothing is read
+        from the database when Discord is off.
+        """
+        event_cfg = self._event_settings.get(event_type)
+        return bool(self._settings.get('discord_enabled', False)
+                    and event_cfg and event_cfg.get('discord', False))
+
+    def _send_discord(self, event_type: str, event_cfg: dict, detail: str,
+                      fields: Optional[dict] = None) -> None:
+        if not self.wants_discord(event_type):
             return
-        if not event_cfg.get('discord', False):
-            return
-        message = _format_discord_message(event_type, detail)
-        if message:
-            self._discord.send(message)
+        data = {'detail': detail, **(fields or {})}
+        # Error text embeds local paths and URLs; the settings box promises
+        # paths are never sent and links only when the user adds them.
+        data['detail'] = _redact_for_discord(str(data.get('detail') or ''))
+        data['error'] = _redact_for_discord(str(data.get('error') or ''))[:_DISCORD_ERROR_MAX]
+        template = event_cfg.get('discord_message', '')
+        if not template.strip():
+            template = DEFAULT_MESSAGES.get(event_type, '')
+        suppress = not self._settings.get('discord_link_previews', False)
+        for chunk in split_message(render(template, data)):
+            self._discord.send(chunk, suppress_embeds=suppress)
 
     def _get_debounce_ms(self) -> int:
         """Read the notification debounce window from the [Advanced] INI section."""
@@ -303,6 +302,9 @@ class NotificationManager:
         self._settings['discord_enabled'] = _bool(
             defaults.get('notifications_discord_enabled', False)
         )
+        self._settings['discord_link_previews'] = _bool(
+            defaults.get('notifications_discord_link_previews', False)
+        )
 
         for event_id in NOTIFICATION_EVENTS:
             event_defaults = _EVENT_DEFAULTS.get(event_id, {})
@@ -321,6 +323,8 @@ class NotificationManager:
                 'discord': _bool(defaults.get(
                     f'{prefix}discord', event_defaults.get('discord', False)
                 )),
+                'discord_message': _decode_ini_text(str(
+                    defaults.get(f'{prefix}discord_message', ''))),
             }
 
         try:
@@ -356,6 +360,9 @@ class NotificationManager:
         config['NOTIFICATIONS']['discord_enabled'] = str(
             self._settings.get('discord_enabled', False)
         )
+        config['NOTIFICATIONS']['discord_link_previews'] = str(
+            self._settings.get('discord_link_previews', False)
+        )
 
         for event_id, cfg in self._event_settings.items():
             prefix = f'{event_id}_'
@@ -374,6 +381,14 @@ class NotificationManager:
             config['NOTIFICATIONS'][f'{prefix}discord'] = str(
                 cfg.get('discord', False)
             )
+            # No key means "use the default", so later default changes reach
+            # everyone who never customised the message.
+            message = cfg.get('discord_message', '')
+            if message.strip():
+                config['NOTIFICATIONS'][f'{prefix}discord_message'] = (
+                    _encode_ini_text(message))
+            else:
+                config.remove_option('NOTIFICATIONS', f'{prefix}discord_message')
 
         with open(config_file, 'w', encoding='utf-8') as f:
             config.write(f)
@@ -456,6 +471,22 @@ def _read_notifications_section() -> dict:
         }
     except Exception:
         return {}
+
+
+def _encode_ini_text(text: str) -> str:
+    r"""Make multi-line text safe as one INI value (inverse: _decode_ini_text).
+
+    Backslashes and newlines become ``\\`` and ``\n``; ``%`` is doubled
+    because configparser refuses a lone ``%`` on write.
+    """
+    return text.replace('\\', '\\\\').replace('\n', '\\n').replace('%', '%%')
+
+
+def _decode_ini_text(text: str) -> str:
+    """Inverse of _encode_ini_text (the INI is read raw)."""
+    text = text.replace('%%', '%')
+    return re.sub(r'\\(\\|n)',
+                  lambda m: '\n' if m.group(1) == 'n' else '\\', text)
 
 
 def _bool(val) -> bool:
