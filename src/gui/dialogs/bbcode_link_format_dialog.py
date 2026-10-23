@@ -1,8 +1,11 @@
 """Placeholder editor dialog with syntax highlighting and insert buttons.
 
 Reusable editor for any template format that uses #placeholder# patterns.
-Used by file host BBCode link format and video contact sheet templates.
+Used by file host BBCode link format, video contact sheet templates and
+Discord notification messages.
 """
+
+from typing import Callable, Optional, Sequence
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QPushButton,
@@ -56,14 +59,25 @@ class PlaceholderEditorDialog(QDialog):
         placeholders: List of (placeholder, button_label, tooltip, preview_value) tuples.
         initial_text: Pre-populate the editor with this text.
         parent: Parent widget.
+        presets: (label, text) pairs; each adds a button that replaces the
+            editor text.
+        preview_renderer: When set, the preview shows preview_renderer(text)
+            instead of substituting the example values.
+        sample_sender: When set, adds a "Send sample to Discord" button that
+            calls sample_sender(<rendered preview>), plus a status line.
     """
 
-    def __init__(self, title: str, placeholders: list, initial_text: str = "", parent=None):
+    def __init__(self, title: str, placeholders: list, initial_text: str = "", parent=None,
+                 *, presets: Sequence[tuple] = (),
+                 preview_renderer: Optional[Callable[[str], str]] = None,
+                 sample_sender: Optional[Callable[[str], None]] = None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumSize(500, 350)
         self.resize(550, 380)
         self._placeholders = placeholders
+        self._preview_renderer = preview_renderer
+        self._sample_sender = sample_sender
 
         layout = QVBoxLayout(self)
 
@@ -122,6 +136,29 @@ class PlaceholderEditorDialog(QDialog):
         self.preview_label.setFont(QFont("monospace"))
         layout.addWidget(self.preview_label)
 
+        # --- Optional presets / sample row ---
+        self._preset_buttons = []
+        self.sample_button = None
+        self.status_label = None
+        if presets or sample_sender is not None:
+            action_row = QHBoxLayout()
+            for label, text in presets:
+                btn = QPushButton(label)
+                btn.clicked.connect(lambda _, t=text: self.editor.setPlainText(t))
+                action_row.addWidget(btn)
+                self._preset_buttons.append(btn)
+            action_row.addStretch()
+            if sample_sender is not None:
+                self.sample_button = QPushButton("Send sample to Discord")
+                self.sample_button.clicked.connect(
+                    lambda: self._sample_sender(self._rendered_text()))
+                action_row.addWidget(self.sample_button)
+            layout.addLayout(action_row)
+            if sample_sender is not None:
+                self.status_label = QLabel("")
+                self.status_label.setWordWrap(True)
+                layout.addWidget(self.status_label)
+
         # --- OK / Cancel ---
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -137,6 +174,21 @@ class PlaceholderEditorDialog(QDialog):
         """Return the current editor text."""
         return self.editor.toPlainText()
 
+    def set_status(self, text: str, error: bool = False) -> None:
+        """Show a status line under the sample button (no-op without one)."""
+        if self.status_label is None:
+            return
+        self.status_label.setStyleSheet("color: #c0392b;" if error else "color: #27ae60;")
+        self.status_label.setText(text)
+
+    def _rendered_text(self) -> str:
+        text = self.editor.toPlainText()
+        if self._preview_renderer is not None:
+            return self._preview_renderer(text)
+        for placeholder, _, _, example_value in self._placeholders:
+            text = text.replace(placeholder, example_value)
+        return text
+
     def _insert_placeholder(self, placeholder: str):
         """Insert a placeholder at the current cursor position."""
         cursor = self.editor.textCursor()
@@ -145,12 +197,7 @@ class PlaceholderEditorDialog(QDialog):
 
     def _update_preview(self):
         """Update the live preview with example placeholder values."""
-        text = self.editor.toPlainText()
-        if not text:
+        if not self.editor.toPlainText():
             self.preview_label.setText("(empty)")
             return
-
-        for placeholder, _, _, example_value in self._placeholders:
-            text = text.replace(placeholder, example_value)
-
-        self.preview_label.setText(text)
+        self.preview_label.setText(self._rendered_text())

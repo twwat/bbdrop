@@ -6,11 +6,15 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
     QLabel, QPushButton, QSlider, QComboBox, QGridLayout,
-    QSizePolicy, QFileDialog, QLineEdit, QApplication,
+    QSizePolicy, QFileDialog, QLineEdit, QApplication, QDialog,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
+from src.gui.dialogs.bbcode_link_format_dialog import PlaceholderEditorDialog
 from src.gui.widgets.info_button import InfoButton
+from src.services.discord_message import (
+    DEFAULT_MESSAGES, EVENT_PLACEHOLDERS, LINK_PRESETS, preview_fields, render,
+)
 from src.services.discord_webhook import DiscordWebhookSender
 from src.services.notification_manager import NOTIFICATION_EVENTS, _EVENT_DEFAULTS
 from src.utils.logger import log
@@ -26,6 +30,9 @@ class NotificationsTab(QWidget):
         self._manager = notification_manager
         self._event_rows: dict[str, dict] = {}
         self._discord_checks: dict[str, QCheckBox] = {}
+        self._discord_edit_buttons: dict[str, QPushButton] = {}
+        # Per-event Discord message; '' means the default message.
+        self._discord_messages: dict[str, str] = {e: '' for e in NOTIFICATION_EVENTS}
         self._available_sounds = self._scan_sounds()
         self._setup_ui()
         self.load_settings()
@@ -231,12 +238,25 @@ class NotificationsTab(QWidget):
             chk = QCheckBox(display_name)
             chk.setToolTip(description)
             chk.toggled.connect(self._emit_dirty)
-            events_grid.addWidget(chk, i // 2, i % 2)
+            events_grid.addWidget(chk, i // 2, (i % 2) * 2)
             self._discord_checks[event_id] = chk
+            edit_btn = QPushButton("Edit…")
+            edit_btn.setToolTip(f"Edit the Discord message for {display_name}")
+            edit_btn.clicked.connect(
+                lambda _, eid=event_id: self._edit_discord_message(eid))
+            events_grid.addWidget(edit_btn, i // 2, (i % 2) * 2 + 1)
+            self._discord_edit_buttons[event_id] = edit_btn
         content.addLayout(events_grid)
 
-        note = QLabel("Gallery names are sent to Discord. File paths and "
-                      "links are not.")
+        self.discord_previews = QCheckBox("Show link previews")
+        self.discord_previews.setToolTip(
+            "Let Discord expand links in messages into preview cards")
+        self.discord_previews.toggled.connect(self._emit_dirty)
+        content.addWidget(self.discord_previews)
+
+        note = QLabel("Messages contain gallery and host names. Links are only "
+                      "sent if you add them to a message. File paths are never sent.")
+        note.setWordWrap(True)
         note.setEnabled(False)
         content.addWidget(note)
 
@@ -286,6 +306,28 @@ class NotificationsTab(QWidget):
                 "Test message sent - check your Discord channel.", error=False)
         else:
             self._set_discord_status(reason)
+
+    def _edit_discord_message(self, event_id: str):
+        display_name = NOTIFICATION_EVENTS[event_id][0]
+        default = DEFAULT_MESSAGES[event_id]
+        presets = [("Reset to default", default)]
+        if event_id in LINK_PRESETS:
+            presets.append(("Use preset with links", LINK_PRESETS[event_id]))
+        sample = preview_fields(event_id)
+        dialog = PlaceholderEditorDialog(
+            f"Discord message — {display_name}",
+            EVENT_PLACEHOLDERS[event_id],
+            initial_text=self._discord_messages[event_id] or default,
+            parent=self,
+            presets=presets,
+            preview_renderer=lambda text: render(text, sample),
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        text = dialog.get_text().strip()
+        # Storing '' for the default keeps the user on it if it later changes.
+        self._discord_messages[event_id] = '' if text == default.strip() else text
+        self.dirty.emit()
 
     # ------------------------------------------------------------------
     # Row builders
@@ -496,8 +538,11 @@ class NotificationsTab(QWidget):
                 bool(self._manager._settings.get('discord_enabled', False)))
             self.discord_url.setText(self._manager.get_discord_webhook_url())
             for event_id, chk in self._discord_checks.items():
-                chk.setChecked(
-                    self._manager.get_event_settings(event_id).get('discord', False))
+                cfg = self._manager.get_event_settings(event_id)
+                chk.setChecked(cfg.get('discord', False))
+                self._discord_messages[event_id] = cfg.get('discord_message', '')
+            self.discord_previews.setChecked(
+                bool(self._manager._settings.get('discord_link_previews', False)))
         else:
             self.audio_enable.setChecked(False)
             self.alert_enable.setChecked(False)
@@ -513,6 +558,8 @@ class NotificationsTab(QWidget):
             self.discord_url.setText('')
             for chk in self._discord_checks.values():
                 chk.setChecked(False)
+            self._discord_messages = {e: '' for e in NOTIFICATION_EVENTS}
+            self.discord_previews.setChecked(False)
 
         for ctrl in all_controls:
             ctrl.blockSignals(False)
@@ -577,6 +624,7 @@ class NotificationsTab(QWidget):
                     "Could not store the webhook URL in the system keyring.")
                 return False
             self._manager._settings['discord_enabled'] = self.discord_enable.isChecked()
+            self._manager._settings['discord_link_previews'] = self.discord_previews.isChecked()
             for event_id, row in self._event_rows.items():
                 sound_on = (
                     self.audio_enable.isChecked()
@@ -604,6 +652,7 @@ class NotificationsTab(QWidget):
                     'sound_file': sound_file,
                     'toast': toast_on,
                     'discord': self._discord_checks[event_id].isChecked(),
+                    'discord_message': self._discord_messages[event_id],
                 })
             self._manager.save_settings()
             return True
@@ -636,6 +685,8 @@ class NotificationsTab(QWidget):
         self.discord_url.setText('')
         for chk in self._discord_checks.values():
             chk.setChecked(False)
+        self._discord_messages = {e: '' for e in NOTIFICATION_EVENTS}
+        self.discord_previews.setChecked(False)
 
         for ctrl in all_controls:
             ctrl.blockSignals(False)
@@ -656,7 +707,7 @@ class NotificationsTab(QWidget):
 
     def _get_all_controls(self) -> list:
         controls = [self.audio_enable, self.alert_enable]
-        controls.extend([self.discord_enable, self.discord_url])
+        controls.extend([self.discord_enable, self.discord_url, self.discord_previews])
         controls.extend(self._discord_checks.values())
         for row in self._event_rows.values():
             controls.extend([

@@ -194,3 +194,104 @@ def test_invalid_url_with_discord_off_does_not_block_other_settings(tab, manager
     assert tab.save_settings() is True
     manager._store.assert_not_called()
     manager.save_settings.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Per-event Discord message editing
+# ---------------------------------------------------------------------------
+
+from PyQt6.QtWidgets import QDialog, QLabel  # noqa: E402
+
+from src.services.discord_message import DEFAULT_MESSAGES, LINK_PRESETS  # noqa: E402
+
+DIALOG = 'src.gui.settings.notifications_tab.PlaceholderEditorDialog'
+
+
+def _edit(tab, event_id, text, accepted=True):
+    # The Edit buttons live in the Discord box, disabled until it is ticked.
+    tab.discord_enable.setChecked(True)
+    with patch(DIALOG) as dialog_cls:
+        dlg = dialog_cls.return_value
+        dlg.exec.return_value = (QDialog.DialogCode.Accepted if accepted
+                                 else QDialog.DialogCode.Rejected)
+        dlg.get_text.return_value = text
+        tab._discord_edit_buttons[event_id].click()
+    return dialog_cls
+
+
+def test_edit_button_per_event(tab):
+    assert set(tab._discord_edit_buttons) == set(NOTIFICATION_EVENTS)
+
+
+def test_edit_dialog_gets_event_presets(tab):
+    dialog_cls = _edit(tab, 'gallery_completed', 'x')
+    kwargs = dialog_cls.call_args.kwargs
+    assert kwargs['presets'] == [
+        ("Reset to default", DEFAULT_MESSAGES['gallery_completed']),
+        ("Use preset with links", LINK_PRESETS['gallery_completed']),
+    ]
+    assert kwargs['initial_text'] == DEFAULT_MESSAGES['gallery_completed']
+    assert '✅' in kwargs['preview_renderer'](DEFAULT_MESSAGES['gallery_completed'])
+    dialog_cls = _edit(tab, 'gallery_failed', 'x')
+    assert dialog_cls.call_args.kwargs['presets'] == [
+        ("Reset to default", DEFAULT_MESSAGES['gallery_failed'])]
+
+
+def test_edit_button_disabled_until_discord_enabled(tab):
+    assert tab._discord_edit_buttons['gallery_completed'].isEnabled() is False
+    tab.discord_enable.setChecked(True)
+    assert tab._discord_edit_buttons['gallery_completed'].isEnabled() is True
+
+
+def test_edit_saves_custom_message(qtbot, tab, manager):
+    tab.discord_enable.setChecked(True)
+    with qtbot.waitSignal(tab.dirty, timeout=1000):
+        _edit(tab, 'gallery_completed', '  Hi #galleryName#\n')
+    assert tab.save_settings() is True
+    assert manager.get_event_settings('gallery_completed')['discord_message'] == \
+        'Hi #galleryName#'
+
+
+def test_edit_back_to_default_stores_empty(tab, manager):
+    _edit(tab, 'gallery_completed', 'custom')
+    _edit(tab, 'gallery_completed', DEFAULT_MESSAGES['gallery_completed'] + '\n')
+    tab.save_settings()
+    assert manager.get_event_settings('gallery_completed')['discord_message'] == ''
+
+
+def test_edit_cancel_keeps_message(tab):
+    _edit(tab, 'gallery_completed', 'custom')
+    _edit(tab, 'gallery_completed', 'other', accepted=False)
+    assert tab._discord_messages['gallery_completed'] == 'custom'
+
+
+def test_previews_checkbox_saved(tab, manager):
+    assert tab.discord_previews.isChecked() is False
+    tab.discord_previews.setChecked(True)
+    tab.save_settings()
+    assert manager._settings['discord_link_previews'] is True
+
+
+def test_reset_clears_messages_and_previews(tab):
+    _edit(tab, 'gallery_completed', 'custom')
+    tab.discord_previews.setChecked(True)
+    tab.reset_to_defaults()
+    assert all(m == '' for m in tab._discord_messages.values())
+    assert tab.discord_previews.isChecked() is False
+
+
+def test_note_text(tab):
+    texts = [label.text() for label in tab.findChildren(QLabel)]
+    assert ("Messages contain gallery and host names. Links are only sent if you "
+            "add them to a message. File paths are never sent.") in texts
+
+
+def test_load_reflects_stored_message(qtbot, manager):
+    manager.update_event_settings('gallery_completed', {'discord_message': 'Stored'})
+    manager._settings['discord_link_previews'] = True
+    widget = NotificationsTab(notification_manager=manager)
+    qtbot.addWidget(widget)
+    assert widget._discord_messages['gallery_completed'] == 'Stored'
+    assert widget.discord_previews.isChecked() is True
+    dialog_cls = _edit(widget, 'gallery_completed', 'x')
+    assert dialog_cls.call_args.kwargs['initial_text'] == 'Stored'

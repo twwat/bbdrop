@@ -80,3 +80,47 @@ class TestPlaceholderEditorDialog:
         dialog = PlaceholderEditorDialog(title="Test", placeholders=TEST_PLACEHOLDERS)
         qtbot.addWidget(dialog)
         assert dialog.highlighter is not None
+
+
+class TestEditorExtensions:
+    """Optional presets, custom preview renderer and sample sender."""
+
+    def test_presets_replace_text(self, qtbot):
+        dialog = PlaceholderEditorDialog(
+            title="T", placeholders=TEST_PLACEHOLDERS, initial_text="old",
+            presets=[("Reset", "A #name#"), ("Links", "B")])
+        qtbot.addWidget(dialog)
+        assert [b.text() for b in dialog._preset_buttons] == ["Reset", "Links"]
+        dialog._preset_buttons[1].click()
+        assert dialog.get_text() == "B"
+        dialog._preset_buttons[0].click()
+        assert dialog.get_text() == "A #name#"
+
+    def test_preview_renderer_used(self, qtbot):
+        dialog = PlaceholderEditorDialog(
+            title="T", placeholders=TEST_PLACEHOLDERS, initial_text="abc #name#",
+            preview_renderer=lambda t: t.upper())
+        qtbot.addWidget(dialog)
+        assert dialog.preview_label.text() == "ABC #NAME#"
+
+    def test_no_sample_button_without_sender(self, qtbot):
+        dialog = PlaceholderEditorDialog(title="T", placeholders=TEST_PLACEHOLDERS)
+        qtbot.addWidget(dialog)
+        assert dialog.sample_button is None
+        assert dialog._preset_buttons == []
+
+    def test_sample_button_sends_rendered_preview(self, qtbot):
+        sent = []
+        dialog = PlaceholderEditorDialog(
+            title="T", placeholders=TEST_PLACEHOLDERS, initial_text="hi",
+            preview_renderer=lambda t: f"<{t}>", sample_sender=sent.append)
+        qtbot.addWidget(dialog)
+        dialog.sample_button.click()
+        assert sent == ["<hi>"]
+
+    def test_set_status(self, qtbot):
+        dialog = PlaceholderEditorDialog(
+            title="T", placeholders=TEST_PLACEHOLDERS, sample_sender=lambda t: None)
+        qtbot.addWidget(dialog)
+        dialog.set_status("Sample sent", error=False)
+        assert dialog.status_label.text() == "Sample sent"
