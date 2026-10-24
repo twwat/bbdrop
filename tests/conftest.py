@@ -20,6 +20,45 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def _route_qsettings_to_temp_ini():
+    """Swap PyQt6.QtCore.QSettings for an INI-backed subclass, process-wide.
+
+    NOT a fixture, and it must run before anything imports src: modules bind
+    `from PyQt6.QtCore import QSettings` at import, which happens during
+    collection, before any fixture. On 2026-10-24 a full run tried 816 writes
+    to the user's real registry, including TabManager resetting
+    last_active_tab to "Main" on every run (the app kept reopening on the
+    wrong tab), the Stats checker counters and the video sheet settings.
+
+    Every (organization, application) pair keeps its own file, so values a
+    test writes are still read back by other QSettings with the same names,
+    as they are against the registry. Explicit file paths pass through
+    unchanged, so ini_qsettings and similar per-test fixtures still work.
+    """
+    import atexit
+    from PyQt6 import QtCore
+
+    real = QtCore.QSettings
+    root = Path(tempfile.mkdtemp(prefix="bbdrop-qsettings-"))
+    atexit.register(shutil.rmtree, root, True)
+
+    class _TempIniQSettings(real):
+        def __init__(self, *args, **kwargs):
+            if len(args) >= 2 and isinstance(args[0], str) and isinstance(args[1], real.Format):
+                super().__init__(*args, **kwargs)   # QSettings(fileName, format)
+                return
+            names = [a for a in args if isinstance(a, str)]
+            org = names[0] if names else (QtCore.QCoreApplication.organizationName() or "default")
+            app = names[1] if len(names) > 1 else (QtCore.QCoreApplication.applicationName() or org)
+            safe = lambda s: "".join(c if c.isalnum() or c in "-_." else "_" for c in s)
+            super().__init__(str(root / safe(org) / f"{safe(app)}.ini"), real.Format.IniFormat)
+
+    QtCore.QSettings = _TempIniQSettings
+
+
+_route_qsettings_to_temp_ini()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _isolate_app_data_dir(tmp_path_factory, worker_id):
     """Point every app path at a throwaway directory for the whole session.

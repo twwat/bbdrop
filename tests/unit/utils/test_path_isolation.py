@@ -112,6 +112,27 @@ class TestSuiteWideIsolation:
             "BBDROP_BASE_PATH is unset during the run; isolation is not active"
         )
 
+    @pytest.mark.parametrize("args", [
+        (),
+        ("BBDropUploader", "TabManager"),
+        ("BBDropUploader", "BBDropGUI"),
+        ("BBDropUploader", "Stats"),
+    ])
+    def test_qsettings_never_reach_the_registry(self, args):
+        """On 2026-10-24 one full run tried 816 writes to the user's real
+        registry, among them TabManager's last_active_tab reset to "Main" on
+        every run, so the app kept reopening on the wrong tab. Native QSettings
+        must be unreachable from tests, including names bound at import."""
+        from PyQt6.QtCore import QSettings
+        from src.gui import tab_manager
+
+        for cls in (QSettings, tab_manager.QSettings):
+            s = cls(*args)
+            assert s.format() == QSettings.Format.IniFormat, (
+                f"QSettings{args} is native format: {s.fileName()}"
+            )
+            assert not s.fileName().upper().startswith("\\HKEY"), s.fileName()
+
 
 @pytest.mark.unit
 class TestNoHardcodedHomePaths:
