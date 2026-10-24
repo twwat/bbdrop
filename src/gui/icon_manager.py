@@ -33,7 +33,7 @@ class IconManager:
         'status_ready':         'status_ready.png', # Also used for status_idle
         'status_pending':       'status_queued.png',
         'status_incomplete':    'status_incomplete.png',
-        'status_hosts_failed':  'status_incomplete.png',  # images up, a file host failed
+        'status_hosts_incomplete':  'status_incomplete.png',  # images up, a file host failed or is switched off
         'status_scan_failed':   'status_scan_failed.png',
         'status_upload_failed': 'status_error.png',
         'status_error':         'status_error.png',
@@ -118,7 +118,7 @@ class IconManager:
         'status_ready': QStyle.StandardPixmap.SP_DialogOkButton,
         'status_pending': QStyle.StandardPixmap.SP_FileIcon,
         'status_incomplete': QStyle.StandardPixmap.SP_BrowserReload,
-        'status_hosts_failed': QStyle.StandardPixmap.SP_MessageBoxWarning,
+        'status_hosts_incomplete': QStyle.StandardPixmap.SP_MessageBoxWarning,
         'status_scanning': QStyle.StandardPixmap.SP_BrowserReload,
         'status_queued': QStyle.StandardPixmap.SP_FileIcon,
         'status_error': QStyle.StandardPixmap.SP_MessageBoxCritical,
@@ -608,7 +608,7 @@ class IconManager:
             'ready': 'Ready',
             'pending': 'Pending',
             'incomplete': 'Incomplete - Resume to continue',
-            'hosts_failed': 'Images uploaded, but a file host failed',
+            'hosts_incomplete': 'Images uploaded, but a file host failed or is switched off',
             'scanning': 'Scanning',
             'queued': 'Queued',
         }

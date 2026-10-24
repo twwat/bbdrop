@@ -9,7 +9,7 @@ image-count ratio.
 import os
 
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.gui.progress_tracker import ProgressTracker
 from src.storage.queue_manager import GalleryQueueItem
@@ -24,6 +24,13 @@ def _make_main_window(file_host_rows=None):
         return_value=file_host_rows or []
     )
     return mw
+
+
+_REAL_ENABLED_FILE_HOSTS = ProgressTracker._enabled_file_hosts
+
+
+# Every file host counts as switched on unless a test says otherwise.
+pytestmark = pytest.mark.usefixtures("all_file_hosts_enabled")
 
 
 @pytest.fixture
@@ -336,7 +343,7 @@ class TestComputeItemDisplay:
         assert effective == "completed"
         assert percent == 100
 
-    def test_failed_file_host_shows_hosts_failed(self, tracker):
+    def test_failed_file_host_shows_hosts_incomplete(self, tracker):
         """A 'failed' row is final (workers retry before writing it), so the
         gallery is done but not clean: never a checkmark, never a forever spinner."""
         tracker._main_window.queue_manager.store.get_file_host_uploads.return_value = [
@@ -353,20 +360,55 @@ class TestComputeItemDisplay:
         item.status = "completed"
         item.total_size = 1_000_000
         percent, effective = tracker.compute_item_display(item)
-        assert effective == "hosts_failed"
+        assert effective == "hosts_incomplete"
 
-    def test_failed_family_host_waits_for_hash_retry(self, tracker, monkeypatch):
-        """A failed FileBoom head row is retried from TezFiles' copy, so not final yet."""
-        monkeypatch.setattr(
-            "src.core.file_host_settlement.is_family_dedup_enabled", lambda: True)
+    def test_old_family_failure_is_not_waited_on(self, tracker):
+        """When a family hash retry is due, the coordinator flips the failed row to
+        pending at once; a row still 'failed' next to a finished sibling won't change."""
+        tracker._main_window.queue_manager.store.get_file_host_uploads.return_value = [
+            {"host_name": "keep2share", "status": "completed", "part_number": 0},
+            {"host_name": "tezfiles", "status": "failed", "part_number": 0},
+        ]
+        item = GalleryQueueItem(path="/g")
+        item.status = "completed"
+        _, effective = tracker.compute_item_display(item)
+        assert effective == "hosts_incomplete"
+
+    def test_family_hash_retry_row_shows_uploading(self, tracker):
         tracker._main_window.queue_manager.store.get_file_host_uploads.return_value = [
             {"host_name": "tezfiles", "status": "completed", "part_number": 0},
-            {"host_name": "fileboom", "status": "failed", "part_number": 0},
+            {"host_name": "fileboom", "status": "pending", "part_number": 0,
+             "dedup_only": 1},
         ]
         item = GalleryQueueItem(path="/g")
         item.status = "completed"
         _, effective = tracker.compute_item_display(item)
         assert effective == "uploading"
+
+    @pytest.mark.parametrize("row_status", ["pending", "uploading"])
+    def test_queued_for_switched_off_host_is_incomplete(self, tracker, monkeypatch, row_status):
+        """Nothing runs uploads for a disabled (or no longer existing) host."""
+        monkeypatch.setattr(ProgressTracker, "_enabled_file_hosts",
+                            lambda self: {"rapidgator"})
+        tracker._main_window.queue_manager.store.get_file_host_uploads.return_value = [
+            {"host_name": "rapidgator", "status": "completed", "part_number": 0},
+            {"host_name": "fileboom", "status": row_status, "part_number": 0},
+        ]
+        item = GalleryQueueItem(path="/g")
+        item.status = "completed"
+        _, effective = tracker.compute_item_display(item)
+        assert effective == "hosts_incomplete"
+
+    def test_failed_multipart_head_is_final_despite_orphan_part(self, tracker):
+        """A part-2 failure writes only the head row failed; the part row stays 'uploading'."""
+        tracker._main_window.queue_manager.store.get_file_host_uploads.return_value = [
+            {"host_name": "katfile", "status": "failed", "part_number": 0},
+            {"host_name": "katfile", "status": "uploading", "part_number": 1},
+        ]
+        item = GalleryQueueItem(path="/g")
+        item.status = "completed"
+        _, effective = tracker.compute_item_display(item)
+        assert effective == "hosts_incomplete"
 
 
 class TestDisplayStatus:
@@ -417,3 +459,31 @@ class TestDisplayStatus:
         items["/a"].status = "ready"
         assert tracker.display_status(items["/a"]) == "ready"
         store.get_file_host_uploads_for_paths.assert_not_called()
+
+
+class TestEnabledHostsChange:
+    def test_switching_a_host_on_rechecks_rows(self, monkeypatch):
+        monkeypatch.setattr(ProgressTracker, "_enabled_file_hosts", _REAL_ENABLED_FILE_HOSTS)
+        enabled = {"rapidgator": object()}
+        manager = MagicMock()
+        manager.get_enabled_hosts.side_effect = lambda: dict(enabled)
+        monkeypatch.setattr("src.core.file_host_config.get_config_manager", lambda: manager)
+        clock = [1000.0]
+        monkeypatch.setattr("src.gui.progress_tracker.time.time", lambda: clock[0])
+
+        mw = _make_main_window()
+        rows = [{"host_name": "fileboom", "status": "pending", "part_number": 0}]
+        mw.queue_manager.store.get_file_host_uploads_for_paths = MagicMock(
+            side_effect=lambda paths: {os.path.normpath(p): rows for p in paths})
+        item = GalleryQueueItem(path="/a")
+        item.status = "completed"
+        mw.queue_manager.items = {"/a": item}
+        tracker = ProgressTracker(mw)
+
+        assert tracker.display_status(item) == "hosts_incomplete"
+        enabled["fileboom"] = object()
+        clock[0] += 31
+        with patch("src.gui.progress_tracker.QTimer.singleShot") as single_shot:
+            assert tracker.display_status(item) == "uploading"
+        single_shot.assert_called_once_with(
+            0, mw.table_row_manager.refresh_all_status_icons)

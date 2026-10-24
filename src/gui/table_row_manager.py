@@ -73,7 +73,7 @@ class _Col:
 
 # Status text for statuses whose capitalized name doesn't read well.
 _STATUS_LABELS = {
-    'hosts_failed': 'File host failed',
+    'hosts_incomplete': 'File hosts incomplete',
 }
 
 
@@ -1423,6 +1423,7 @@ class TableRowManager(QObject):
                             item = mw.queue_manager.items[path]
                             self._set_status_cell_icon(row, item.status)
                             self._set_status_text_cell(row, item.status)
+                            self._set_finished_cell(row, item)
                             # Refresh Online IMX column colors (theme-aware)
                             self._update_imx_status_cell(row, item)
 

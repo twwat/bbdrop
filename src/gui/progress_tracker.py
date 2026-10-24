@@ -63,11 +63,14 @@ class ProgressTracker(QObject):
         self._file_host_live_bytes: dict[Tuple[str, str], int] = {}
 
         # What the row shows for image-host-completed galleries, keyed by path:
-        # 'uploading' until every file host settles, then 'completed' or
-        # 'hosts_failed'. Primed in one batch query, refreshed by
-        # compute_item_display whenever a file host event touches the row.
+        # 'uploading' while a file host is still working on it, then
+        # 'completed' or 'hosts_incomplete'. Primed in one batch query,
+        # refreshed by compute_item_display whenever a file host event touches
+        # the row, and re-primed when the set of enabled hosts changes.
         self._display_status: dict[str, str] = {}
         self._display_status_primed = False
+        self._enabled_hosts_cache: frozenset = frozenset()
+        self._enabled_hosts_checked = 0.0
 
     def _get_cached_stats(self) -> dict:
         """Get cached statistics with periodic refresh (every 5 seconds).
@@ -305,27 +308,67 @@ class ProgressTracker(QObject):
 
         return percent, effective_status
 
-    @staticmethod
-    def _settled_status(file_host_rows) -> str:
+    _ENABLED_HOSTS_TTL_SEC = 30.0
+
+    def _enabled_file_hosts(self):
+        """Ids of the file hosts that are switched on (only they have a running worker)."""
+        now = time.time()
+        if now - self._enabled_hosts_checked > self._ENABLED_HOSTS_TTL_SEC:
+            self._enabled_hosts_checked = now
+            try:
+                from src.core.file_host_config import get_config_manager
+                enabled = frozenset(get_config_manager().get_enabled_hosts())
+            except Exception as e:
+                log(f"Failed to read enabled file hosts: {e}", level="warning", category="ui")
+                enabled = self._enabled_hosts_cache
+            if enabled != self._enabled_hosts_cache:
+                # A host switched on or off changes which rows are still going.
+                was_known = self._display_status_primed
+                self._enabled_hosts_cache = enabled
+                self._display_status.clear()
+                self._display_status_primed = False
+                if was_known:
+                    # Redraw rows already on screen with the new answer.
+                    QTimer.singleShot(
+                        0, self._main_window.table_row_manager.refresh_all_status_icons)
+        return self._enabled_hosts_cache
+
+    def _settled_status(self, file_host_rows) -> str:
         """Row status for an image-host-completed gallery, from its file host rows.
 
-        Uses the same settlement rule as the gallery-completed notification.
-        Blocked rows are left out: they wait on a sibling's md5 and would
-        otherwise hold the gallery at "uploading" if that never arrives.
+        'uploading' only while a worker will actually do something: a queued or
+        running row on a switched-on host. A failed head row is final (workers
+        retry before writing 'failed', and a due family hash retry flips the
+        row back to pending at once). Rows left on a switched-off or removed
+        host, and failures, make the gallery 'hosts_incomplete'. Blocked rows
+        are left out: they wait on a sibling's md5 and would otherwise hold
+        the gallery at "uploading" if that never arrives.
         """
-        from src.core.file_host_settlement import settled_failed_hosts
-        rows = [r for r in file_host_rows or [] if r.get('status') != 'blocked']
-        failed_hosts = settled_failed_hosts(rows)
-        if failed_hosts is None:
-            return 'uploading'
-        return 'hosts_failed' if failed_hosts else 'completed'
+        enabled = self._enabled_file_hosts()
+        by_host: dict = {}
+        for row in file_host_rows or []:
+            if row.get('status') != 'blocked':
+                by_host.setdefault(row.get('host_name', ''), []).append(row)
+
+        incomplete = False
+        for host, rows in by_host.items():
+            if all(r.get('deduped') or r.get('status') in ('completed', 'cancelled')
+                   for r in rows):
+                continue
+            head = min(rows, key=lambda r: r.get('part_number', 0))
+            if head.get('status') != 'failed' and host in enabled and any(
+                    r.get('status') in ('pending', 'uploading') for r in rows):
+                return 'uploading'
+            incomplete = True
+        return 'hosts_incomplete' if incomplete else 'completed'
 
     def display_status(self, item) -> str:
-        """Status the row shows: 'completed' only once every file host has settled."""
+        """Status the row shows: 'completed' only once every file host has finished."""
         status = getattr(item, 'status', '')
         if status != 'completed':
             return status
         path = getattr(item, 'path', '')
+        self._enabled_file_hosts()  # may invalidate the cache
         if not self._display_status_primed:
             self._prime_display_status()
         shown = self._display_status.get(path)

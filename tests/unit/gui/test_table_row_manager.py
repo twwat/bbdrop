@@ -230,7 +230,7 @@ class TestRowShowsRealCompletion:
     @pytest.mark.parametrize("shown,text", [
         ("uploading", "Uploading"),
         ("completed", "Completed"),
-        ("hosts_failed", "File host failed"),
+        ("hosts_incomplete", "File hosts incomplete"),
     ])
     def test_status_text_follows_file_hosts(self, qapp, shown, text):
         trm, table, _, col = self._setup(qapp, shown)

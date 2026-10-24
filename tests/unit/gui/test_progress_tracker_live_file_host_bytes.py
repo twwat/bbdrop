@@ -15,6 +15,9 @@ from unittest.mock import MagicMock
 from src.gui.progress_tracker import ProgressTracker
 from src.storage.queue_manager import GalleryQueueItem
 
+# Uploads here belong to switched-on hosts.
+pytestmark = pytest.mark.usefixtures("all_file_hosts_enabled")
+
 
 @pytest.fixture
 def tracker():

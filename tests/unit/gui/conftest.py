@@ -285,3 +285,21 @@ def _disconnect_forum_controllers():
         worker = getattr(ctrl, '_worker', None)
         if isinstance(worker, QThread) and worker.isRunning():
             ctrl.stop()
+
+
+class _EveryHost:
+    """Container that reports every file host id as present."""
+
+    def __contains__(self, host):
+        return True
+
+
+@pytest.fixture
+def all_file_hosts_enabled(monkeypatch):
+    """Treat every file host as switched on for the row-status rule.
+
+    The isolated test config has no hosts enabled, which would make every
+    queued file host row look stranded.
+    """
+    from src.gui.progress_tracker import ProgressTracker
+    monkeypatch.setattr(ProgressTracker, "_enabled_file_hosts", lambda self: _EveryHost())
