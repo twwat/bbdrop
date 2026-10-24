@@ -169,13 +169,6 @@ class CompletionWorker(QThread):
                 format_binary_size(total_size, precision=1)
             except Exception:
                 pass
-            (queue_item.avg_width if queue_item and getattr(queue_item, 'avg_width', 0) else 0) or results.get('avg_width', 0)
-            (queue_item.avg_height if queue_item and getattr(queue_item, 'avg_height', 0) else 0) or results.get('avg_height', 0)
-            (queue_item.max_width if queue_item and getattr(queue_item, 'max_width', 0) else 0) or results.get('max_width', 0)
-            (queue_item.max_height if queue_item and getattr(queue_item, 'max_height', 0) else 0) or results.get('max_height', 0)
-            (queue_item.min_width if queue_item and getattr(queue_item, 'min_width', 0) else 0) or results.get('min_width', 0)
-            (queue_item.min_height if queue_item and getattr(queue_item, 'min_height', 0) else 0) or results.get('min_height', 0)
-
             # Get most common extension from uploaded images
             extensions = []
             for image_data in results.get('images', []):
@@ -386,13 +379,18 @@ class ArtifactHandler(QObject):
         with open(json_path, 'r', encoding='utf-8') as f:
             json_data = json.load(f)
 
-        # Debug: Log the stats section from JSON to diagnose 0x0 dimension issues
         stats = json_data.get('stats', {})
-        avg_width = stats.get('avg_width', 0)
-        avg_height = stats.get('avg_height', 0)
-        if avg_width == 0 or avg_height == 0:
-            log(f"Dimensions are 0 for gallery regeneration. "
-                f"JSON path: {json_path}, stats section: {stats}", category="fileio")
+        settings = json_data.get('settings', {})
+        dimension_keys = ('avg_width', 'avg_height', 'max_width', 'max_height',
+                          'min_width', 'min_height')
+        dimensions = {key: stats.get(key, 0) for key in dimension_keys}
+        # Older uploads wrote 0x0 into the JSON; the gallery record may know better.
+        if not (dimensions['avg_width'] and dimensions['avg_height']):
+            if getattr(item, 'avg_width', 0) and getattr(item, 'avg_height', 0):
+                dimensions = {key: getattr(item, key, 0) or 0 for key in dimension_keys}
+            else:
+                log(f"No stored dimensions for '{item.name}', BBCode will measure the folder",
+                    level="debug", category="fileio")
 
         # Reuse existing save_gallery_artifacts function with the new template.
         # It will handle BBCode generation, file saving, and JSON updates.
@@ -410,16 +408,21 @@ class ArtifactHandler(QObject):
                 or json_data['meta'].get('gallery_url', '')
             ),
             'images': json_data.get('images', []),
+            'total_images': stats.get('total_images', 0),
             'total_size': stats.get('total_size', 0),
             'successful_count': stats.get('successful_count', 0),
             'failed_count': stats.get('failed_count', 0),
             'failed_details': [(img.get('filename', ''), 'Previous failure') for img in json_data.get('failures', [])],
-            'avg_width': avg_width,
-            'avg_height': avg_height,
-            'max_width': stats.get('max_width', 0),
-            'max_height': stats.get('max_height', 0),
-            'min_width': stats.get('min_width', 0),
-            'min_height': stats.get('min_height', 0),
+            **dimensions,
+            # Upload-time stats and settings are only recorded once, at upload;
+            # carry them over so regeneration doesn't reset them.
+            'upload_time': stats.get('upload_time', 0),
+            'uploaded_size': stats.get('uploaded_size', 0),
+            'transfer_speed': (stats.get('transfer_speed_mb_s', 0) or 0) * 1024 * 1024,
+            'started_at': json_data['meta'].get('started_at'),
+            'thumbnail_size': settings.get('thumbnail_size'),
+            'thumbnail_format': settings.get('thumbnail_format'),
+            'parallel_batch_size': settings.get('parallel_batch_size'),
             # Preserve video fields so Video template renders correctly on regeneration
             'media_type': json_data['meta'].get('media_type', 'image'),
             'video_metadata': json_data.get('video_metadata') or {},

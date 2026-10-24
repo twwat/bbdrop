@@ -465,16 +465,19 @@ def save_gallery_artifacts(
     # Prepare template data from results for full bbcode
     total_size = results.get('total_size', 0)
     successful_images = results.get('successful_count', len(results.get('images', [])))
-    avg_width = int(results.get('avg_width', 0) or 0)
-    avg_height = int(results.get('avg_height', 0) or 0)
+    dimension_keys = ('avg_width', 'avg_height', 'max_width', 'max_height',
+                      'min_width', 'min_height')
+    dimensions = {key: results.get(key, 0) or 0 for key in dimension_keys}
 
-    # Fallback: Calculate from files if dimensions are missing
-    if (avg_width == 0 or avg_height == 0) and os.path.isdir(folder_path):
+    # Fallback: measure the folder if dimensions are missing, and keep the
+    # result in the JSON stats so later regenerations don't measure again.
+    if not (dimensions['avg_width'] and dimensions['avg_height']) and os.path.isdir(folder_path):
         from src.utils.sampling_utils import calculate_folder_dimensions
         calc = calculate_folder_dimensions(folder_path)
         if calc:
-            avg_width = int(calc.get('avg_width', 0))
-            avg_height = int(calc.get('avg_height', 0))
+            dimensions = {key: calc.get(key, 0) for key in dimension_keys}
+    avg_width = int(dimensions['avg_width'])
+    avg_height = int(dimensions['avg_height'])
 
     extension = "JPG"
     try:
@@ -696,12 +699,7 @@ def save_gallery_artifacts(
             'upload_time': results.get('upload_time', 0),
             'total_size': total_size,
             'uploaded_size': results.get('uploaded_size', 0),
-            'avg_width': results.get('avg_width', 0),
-            'avg_height': results.get('avg_height', 0),
-            'max_width': results.get('max_width', 0),
-            'max_height': results.get('max_height', 0),
-            'min_width': results.get('min_width', 0),
-            'min_height': results.get('min_height', 0),
+            **dimensions,
             'transfer_speed_mb_s': (results.get('transfer_speed', 0) / (1024*1024)) if results.get('transfer_speed', 0) else 0,
         },
         'images': results.get('images', []),
