@@ -10,7 +10,7 @@ import json
 import hashlib
 import threading
 import traceback
-from typing import Optional, Dict, Any
+from typing import AbstractSet, Any, Dict, Optional, Set
 
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QSettings
 
@@ -786,8 +786,11 @@ class FileHostWorker(QThread):
                 )
 
         mirror_succeeded = False
+        # Hashes the mirror already tried; the full upload must not wait on them again.
+        probed_md5s: Set[str] = set()
         if family and mirror_client is not None:
-            mirror_succeeded = self._try_family_mirror(row, mirror_client, family)
+            mirror_succeeded = self._try_family_mirror(
+                row, mirror_client, family, probed=probed_md5s)
 
         if mirror_succeeded:
             self._family_status = "hash_created"
@@ -829,6 +832,7 @@ class FileHostWorker(QThread):
                 gallery_name=row["gallery_name"],
                 host_name=host_name,
                 host_config=host_config,
+                skip_hash_md5s=probed_md5s,
             )
         finally:
             # Emit settled signal based on aggregate outcome for this (gallery, host).
@@ -852,7 +856,8 @@ class FileHostWorker(QThread):
         gallery_path: str,
         gallery_name: Optional[str],
         host_name: str,
-        host_config: HostConfig
+        host_config: HostConfig,
+        skip_hash_md5s: AbstractSet[str] = frozenset(),
     ):
         """Process a single file host upload.
 
@@ -863,6 +868,7 @@ class FileHostWorker(QThread):
             gallery_name: Gallery name
             host_name: Host name
             host_config: Host configuration
+            skip_hash_md5s: Sibling md5s already tried by the family mirror
         """
         self.current_upload_id = upload_id
         self.current_host = host_name
@@ -1069,14 +1075,8 @@ class FileHostWorker(QThread):
             family = get_host_family(host_name) if is_family_dedup_enabled() else None
             if family:
                 try:
-                    all_parts = self.queue_store.get_family_completed_parts(db_id, family)
-                    for p in all_parts:
-                        if p["host_name"] == host_name:
-                            continue
-                        pn = p["part_number"]
-                        md5 = p["md5_hash"]
-                        if md5 and pn not in sibling_md5_by_part:
-                            sibling_md5_by_part[pn] = md5
+                    sibling_md5_by_part = self._sibling_md5s_by_part(
+                        db_id, host_name, family, skip=skip_hash_md5s)
                     if sibling_md5_by_part:
                         self._log(
                             f"Family sibling md5s available for {host_name}: "
@@ -1390,7 +1390,22 @@ class FileHostWorker(QThread):
             self._log(f"Archive cleanup failed for gallery {db_id}: {e}",
                       level="warning")
 
-    def _try_family_mirror(self, row: dict, client, family) -> bool:
+    def _sibling_md5s_by_part(
+        self, db_id: int, host_name: str, family: str, skip: AbstractSet[str]
+    ) -> Dict[int, str]:
+        """Return {part_number: md5} from completed family siblings, minus ``skip``."""
+        by_part: Dict[int, str] = {}
+        for p in self.queue_store.get_family_completed_parts(db_id, family):
+            if p["host_name"] == host_name:
+                continue
+            md5 = p["md5_hash"]
+            if md5 and md5 not in skip and p["part_number"] not in by_part:
+                by_part[p["part_number"]] = md5
+        return by_part
+
+    def _try_family_mirror(
+        self, row: dict, client, family, probed: Optional[Set[str]] = None
+    ) -> bool:
         """Attempt to mirror a family primary's completed part set via hash dedup.
 
         Reads SIBLING primary's completed part rows from the DB (excluding the
@@ -1477,6 +1492,8 @@ class FileHostWorker(QThread):
                 # prefix; clean it before reuse in API calls and new rows.
                 file_name = get_clean_filename(part["file_name"] or "")
                 file_size = part.get("file_size")
+                if probed is not None:
+                    probed.add(md5)
                 result = client.try_create_by_hash(md5, file_name)
                 if not (result and result.get("status") == "success"):
                     return False

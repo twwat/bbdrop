@@ -239,6 +239,43 @@ class TestWorkerUploadLoopFamilyBranch:
         assert final["status"] == "completed"
         assert final["deduped"] == 1
 
+    def test_mirror_miss_is_not_retried_by_the_full_upload(
+        self, worker, store, monkeypatch
+    ):
+        """A hash the mirror already tried must not be tried again before uploading.
+
+        Each try waits ~60s for a copy that FileBoom never fills in, so a second
+        try doubled the wasted time (2026-10-24).
+        """
+        path = _np("/tmp/lp_once")
+        _seed_primary_parts(store, path, "keep2share", [(0, "m0", "g.zip")])
+        store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        client = MagicMock()
+        client.try_create_by_hash = MagicMock(return_value=None)  # miss
+        upload_kwargs = {}
+        monkeypatch.setattr(worker, "_process_upload",
+                            lambda **kw: upload_kwargs.update(kw))
+
+        worker._process_single_pending_row(row, client)
+
+        client.try_create_by_hash.assert_called_once_with("m0", "g.zip")
+        assert upload_kwargs["skip_hash_md5s"] == {"m0"}
+        assert worker._sibling_md5s_by_part(
+            row["gallery_fk"], "fileboom", "k2s", skip=upload_kwargs["skip_hash_md5s"]
+        ) == {}
+
+    def test_sibling_md5s_kept_when_mirror_never_tried_them(self, worker, store):
+        path = _np("/tmp/lp_untried")
+        _seed_primary_parts(store, path, "keep2share", [(0, "m0", "g.zip")])
+        store.add_file_host_upload(path, "fileboom", status="pending", part_number=0)
+        row = store.get_pending_file_host_uploads(host_name="fileboom")[0]
+
+        assert worker._sibling_md5s_by_part(
+            row["gallery_fk"], "fileboom", "k2s", skip=set()
+        ) == {0: "m0"}
+
     def test_dedup_only_row_fails_terminally_on_mirror_miss(
         self, worker, store, monkeypatch
     ):
