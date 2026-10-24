@@ -1090,6 +1090,10 @@ class TableRowManager(QObject):
             if hasattr(mw.gallery_table, 'tab_changed') and hasattr(mw.gallery_table, 'current_tab'):
                 mw.gallery_table.tab_changed.emit(mw.gallery_table.current_tab)
 
+        # Reopen the tab scrolled to where it was left at the last shutdown
+        if hasattr(mw.gallery_table, 'restore_scroll_position'):
+            mw.gallery_table.restore_scroll_position()
+
         # Ensure visible rows have widgets after filtering
         QTimer.singleShot(100, mw._on_table_scrolled)
 

@@ -120,6 +120,10 @@ class SettingsManager(QObject):
         # Save table column settings
         self.save_table_settings()
 
+        # Remember the gallery at the top of each tab for the next start
+        if hasattr(mw.gallery_table, 'save_scroll_positions'):
+            mw.gallery_table.save_scroll_positions()
+
         # Flush to disk immediately so settings survive abrupt exit
         settings.sync()
 

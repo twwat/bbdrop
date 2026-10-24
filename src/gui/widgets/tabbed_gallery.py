@@ -10,7 +10,7 @@ from typing import Optional, Set, Dict, List
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTabBar,
-    QMessageBox, QInputDialog, QMenu
+    QMessageBox, QInputDialog, QMenu, QAbstractItemView
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMimeData, QUrl, QPoint, QSettings
 from PyQt6.QtGui import (
@@ -155,6 +155,9 @@ class TabbedGalleryWidget(QWidget):
         # PER-TAB STATE ISOLATION: Each tab maintains independent state
         self._tab_states = {}  # Dict[tab_name, TabState] - stores per-tab state
         self._saving_state = False  # Flag to prevent recursion during state save/restore
+        self._pending_top_path = ""  # Gallery to scroll to the top once the filter finishes
+        self._filter_in_progress = False  # Filter still hiding rows in later timer slices
+        self._filter_generation = 0  # Bumped per filter run; older runs' leftover slices stop
 
         # Enhanced filter result caching system
         self._filter_cache = {}  # Cache filtered row visibility per tab
@@ -379,6 +382,9 @@ class TabbedGalleryWidget(QWidget):
         # Apply filter AFTER restoring state (preserves selections on hidden rows)
         self._apply_filter(tab_name)
 
+        # Scroll only once the other tabs' rows are hidden, or it lands elsewhere
+        self._scroll_to_saved_top(tab_name)
+
         self.tab_changed.emit(tab_name)
 
         # Update performance metrics
@@ -408,7 +414,8 @@ class TabbedGalleryWidget(QWidget):
                 'scroll_position': self.table.verticalScrollBar().value(),
                 'selected_rows': set(),
                 'current_row': self.table.currentRow(),
-                'horizontal_scroll': self.table.horizontalScrollBar().value()
+                'horizontal_scroll': self.table.horizontalScrollBar().value(),
+                'top_path': self._top_visible_path()
             }
 
             # Save selected row indices (only for visible rows in this tab)
@@ -481,6 +488,51 @@ class TabbedGalleryWidget(QWidget):
 
         finally:
             self._saving_state = False
+
+    def _top_visible_path(self) -> str:
+        """Gallery path of the row at the top of the viewport, or '' if none"""
+        row = self.table.rowAt(0)
+        item = self.table.item(row, GalleryTableWidget.COL_NAME) if row >= 0 else None
+        path = item.data(Qt.ItemDataRole.UserRole) if item else None
+        return path if isinstance(path, str) else ""
+
+    def _saved_top_path(self, tab_name: str) -> str:
+        """Top gallery from this session, else the one saved at the last shutdown"""
+        path = self._tab_states.get(tab_name, {}).get('top_path')
+        if not path and self.tab_manager:
+            path = self.tab_manager.get_scroll_anchor(tab_name)
+        return path if isinstance(path, str) else ""
+
+    def _scroll_to_saved_top(self, tab_name: str):
+        """Scroll the tab back to the gallery that was at the top when it was left"""
+        self._pending_top_path = self._saved_top_path(tab_name)
+        self._apply_pending_top()
+
+    def _apply_pending_top(self):
+        if not self._pending_top_path or self._filter_in_progress:
+            return
+        path, self._pending_top_path = self._pending_top_path, ""
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, GalleryTableWidget.COL_NAME)
+            if item and item.data(Qt.ItemDataRole.UserRole) == path:
+                if not self.table.isRowHidden(row):
+                    # The scroll range still fits the previous tab's rows until the
+                    # next layout pass; refresh it or the scroll stops short
+                    self.table.updateGeometries()
+                    self.table.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtTop)
+                return
+
+    def save_scroll_positions(self):
+        """Persist the top gallery of every tab so the next start opens there"""
+        if self.current_tab:
+            self._tab_states.setdefault(self.current_tab, {})['top_path'] = self._top_visible_path()
+        if self.tab_manager:
+            self.tab_manager.set_scroll_anchors(
+                {tab: state.get('top_path', '') for tab, state in self._tab_states.items()})
+
+    def restore_scroll_position(self):
+        """Scroll the current tab to where it was left; call once rows are loaded"""
+        self._scroll_to_saved_top(self.current_tab)
 
     def _on_selection_changed(self):
         """Auto-save selection state when it changes (prevents deselection on Start)"""
@@ -574,7 +626,12 @@ class TabbedGalleryWidget(QWidget):
         start_time = time.time()
         row_count = self.table.rowCount()
         pass  # Applying filter
-        
+
+        # This run supersedes any earlier one still finishing on timers
+        self._filter_generation += 1
+        generation = self._filter_generation
+        self._filter_in_progress = False
+
         if row_count == 0:
             return
         
@@ -616,7 +673,8 @@ class TabbedGalleryWidget(QWidget):
             if time.time() - start_time > TIME_BUDGET:
                 # Emergency fallback: process remaining rows in next frame
                 self._perf_metrics['emergency_fallbacks'] += 1
-                QTimer.singleShot(1, lambda: self._continue_filter_with_cache(row, row_count, tab_name, tab_paths_set, cache_key, visibility_map))
+                self._filter_in_progress = True
+                QTimer.singleShot(1, lambda: self._continue_filter_with_cache(row, row_count, tab_name, tab_paths_set, cache_key, visibility_map, generation))
                 return
 
             name_item = self.table.item(row, GalleryTableWidget.COL_NAME)
@@ -712,15 +770,19 @@ class TabbedGalleryWidget(QWidget):
         
         return tab_paths_set
         
-    def _continue_filter_with_cache(self, start_row, total_rows, tab_name, tab_paths_set, cache_key, visibility_map):
+    def _continue_filter_with_cache(self, start_row, total_rows, tab_name, tab_paths_set, cache_key, visibility_map, generation):
         """Continue filtering with caching support"""
+        if generation != self._filter_generation:
+            # A newer filter run (usually the user switching tabs) owns the rows now
+            return
+
         TIME_BUDGET = 0.006  # Smaller budget for continuation
         start_time = time.time()
         
         for row in range(start_row, total_rows):
             if time.time() - start_time > TIME_BUDGET:
                 # Schedule next batch if needed
-                QTimer.singleShot(1, lambda: self._continue_filter_with_cache(row, total_rows, tab_name, tab_paths_set, cache_key, visibility_map))
+                QTimer.singleShot(1, lambda: self._continue_filter_with_cache(row, total_rows, tab_name, tab_paths_set, cache_key, visibility_map, generation))
                 return
                 
             name_item = self.table.item(row, GalleryTableWidget.COL_NAME)
@@ -740,6 +802,9 @@ class TabbedGalleryWidget(QWidget):
         # Cache the completed result
         self._filter_cache[cache_key] = visibility_map
         self._filter_cache_timestamps[tab_name] = time.time()
+
+        self._filter_in_progress = False
+        self._apply_pending_top()
         
     def _cleanup_filter_cache(self):
         """Clean up old filter cache entries"""

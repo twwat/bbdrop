@@ -19,6 +19,7 @@ Architecture Principles:
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Dict, List, Optional, Tuple, Any, Set
 from dataclasses import dataclass, field
@@ -33,6 +34,7 @@ class TabPreferences:
     last_active_tab: str = "Main"
     hidden_tabs: Set[str] = field(default_factory=set)
     custom_display_order: Dict[str, int] = field(default_factory=dict)  # Tab name -> preferred order
+    scroll_anchors: Dict[str, str] = field(default_factory=dict)  # Tab name -> gallery path at the top
 
 
 @dataclass  
@@ -117,6 +119,17 @@ class TabManager(QObject):
         if tab_name and tab_name != self._preferences.last_active_tab:
             self._preferences.last_active_tab = tab_name
             self._settings.setValue("preferences/last_active_tab", tab_name)
+
+    def get_scroll_anchor(self, tab_name: str) -> str:
+        """Path of the gallery that was at the top of the tab's list when it was last left"""
+        return self._preferences.scroll_anchors.get(tab_name, "")
+
+    def set_scroll_anchors(self, anchors: Dict[str, str]) -> None:
+        """Remember the gallery at the top of each tab's list for the next start"""
+        self._preferences.scroll_anchors.update(
+            {tab: path for tab, path in anchors.items() if tab and path})
+        self._save_scroll_anchors()
+        self._settings.sync()
     
     
     # ----------------------------- Tab Information -----------------------------
@@ -463,6 +476,17 @@ class TabManager(QObject):
                 self._preferences.custom_display_order[name] = int(order)
             except (ValueError, AttributeError):
                 continue  # Skip malformed entries
+
+        # Gallery at the top of each tab's list
+        try:
+            anchors = json.loads(self._settings.value("preferences/scroll_anchors", "{}", type=str) or "{}")
+        except ValueError:
+            anchors = {}
+        self._preferences.scroll_anchors = {
+            str(k): v for k, v in anchors.items() if isinstance(v, str)} if isinstance(anchors, dict) else {}
+
+    def _save_scroll_anchors(self) -> None:
+        self._settings.setValue("preferences/scroll_anchors", json.dumps(self._preferences.scroll_anchors))
     
     def _apply_custom_ordering(self, tabs: List[TabInfo]) -> List[TabInfo]:
         """Apply custom user ordering to tab list"""
@@ -499,6 +523,11 @@ class TabManager(QObject):
             self._preferences.custom_display_order[new_name] = order
             order_items = [f"{name}:{order}" for name, order in self._preferences.custom_display_order.items()]
             self._settings.setValue("preferences/custom_tab_order", order_items)
+
+        # Update scroll anchor
+        if old_name in self._preferences.scroll_anchors:
+            self._preferences.scroll_anchors[new_name] = self._preferences.scroll_anchors.pop(old_name)
+            self._save_scroll_anchors()
     
     def _cleanup_tab_preferences(self, tab_name: str) -> None:
         """Clean up preferences for deleted tab"""
@@ -513,6 +542,10 @@ class TabManager(QObject):
             del self._preferences.custom_display_order[tab_name]
             order_items = [f"{name}:{order}" for name, order in self._preferences.custom_display_order.items()]
             self._settings.setValue("preferences/custom_tab_order", order_items)
+
+        # Remove scroll anchor
+        if self._preferences.scroll_anchors.pop(tab_name, None) is not None:
+            self._save_scroll_anchors()
     
     def _cleanup_orphaned_preferences(self) -> None:
         """Remove preferences for tabs that no longer exist"""
@@ -534,6 +567,13 @@ class TabManager(QObject):
                     del self._preferences.custom_display_order[name]
                 order_items = [f"{name}:{order}" for name, order in self._preferences.custom_display_order.items()]
                 self._settings.setValue("preferences/custom_tab_order", order_items)
+
+            # Clean up scroll anchors
+            orphaned_anchors = set(self._preferences.scroll_anchors) - valid_tab_names
+            if orphaned_anchors:
+                for name in orphaned_anchors:
+                    del self._preferences.scroll_anchors[name]
+                self._save_scroll_anchors()
             
             # Validate last active tab
             if self._preferences.last_active_tab not in valid_tab_names:
