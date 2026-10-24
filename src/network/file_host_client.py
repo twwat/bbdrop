@@ -242,10 +242,15 @@ class FileHostClient:
         self.proxy = proxy
 
         # Load timeout settings from INI (overrides JSON defaults)
+        from src.core.file_host_config import _HARDCODED_DEFAULTS
+        self.connect_timeout: int = _HARDCODED_DEFAULTS["connect_timeout"]
         if host_id:
             from src.core.file_host_config import get_file_host_setting
             inactivity_timeout = get_file_host_setting(host_id, "inactivity_timeout", "int")
             upload_timeout = get_file_host_setting(host_id, "upload_timeout", "int")
+            connect_timeout = get_file_host_setting(host_id, "connect_timeout", "int")
+            if connect_timeout:
+                self.connect_timeout = connect_timeout
 
             # Override config values if set in INI
             if inactivity_timeout is not None:
@@ -1821,7 +1826,9 @@ class FileHostClient:
         try:
             curl.setopt(pycurl.URL, get_server_url)
             curl.setopt(pycurl.WRITEDATA, response_buffer)
-            curl.setopt(pycurl.TIMEOUT, 10)
+            # A small JSON answer, but hosts can be slow to give it; a short
+            # fixed limit turned brief stalls into permanent upload failures.
+            curl.setopt(pycurl.TIMEOUT, self.connect_timeout)
             curl.setopt(pycurl.USERAGENT, _CHROME_UA)
 
             # Add auth headers if needed
