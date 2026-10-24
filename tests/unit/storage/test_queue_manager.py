@@ -179,6 +179,33 @@ class TestQueueManagerInitialization:
 
                 manager._scan_worker_running = False
 
+    def test_loaded_item_keeps_scanned_dimensions(self, mock_store, tmp_path):
+        """Dimensions from the DB reach the item the upload engine reads."""
+        gallery = os.path.normpath(str(tmp_path))
+        mock_store.load_all_items.return_value = [
+            {
+                'path': gallery,
+                'status': 'ready',
+                'added_time': int(time.time()),
+                'tab_name': 'Main',
+                'scan_complete': True,
+                'avg_width': 3600.0, 'avg_height': 2400.0,
+                'max_width': 3600.0, 'max_height': 2400.0,
+                'min_width': 2400.0, 'min_height': 1600.0,
+            }
+        ]
+
+        with patch('src.storage.queue_manager.QueueStore', return_value=mock_store):
+            with patch('src.storage.queue_manager.QSettings'):
+                manager = QueueManager()
+                item = manager.items[gallery]
+
+                assert (item.avg_width, item.avg_height) == (3600.0, 2400.0)
+                assert (item.max_width, item.max_height) == (3600.0, 2400.0)
+                assert (item.min_width, item.min_height) == (2400.0, 1600.0)
+
+                manager._scan_worker_running = False
+
     def test_scan_worker_started(self, queue_manager):
         """Test that scan worker thread is started."""
         assert queue_manager._scan_worker_running

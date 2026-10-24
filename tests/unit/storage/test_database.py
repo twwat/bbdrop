@@ -326,9 +326,16 @@ class TestGalleryCRUD:
         queue_store.bulk_upsert([item])
 
         items = queue_store.load_all_items()
-        # Note: dimensions not returned by load_all_items in current implementation
-        # This tests that they're stored without error
         assert len(items) == 1
+        # Dimensions must survive a reload: an item loaded without them
+        # uploads with 0x0 and its next save overwrites the scanned values.
+        loaded = items[0]
+        assert loaded['avg_width'] == 1920.5
+        assert loaded['avg_height'] == 1080.5
+        assert loaded['max_width'] == 3840.0
+        assert loaded['max_height'] == 2160.0
+        assert loaded['min_width'] == 1280.0
+        assert loaded['min_height'] == 720.0
 
     def test_load_all_items_empty(self, queue_store):
         """Test loading from empty database."""

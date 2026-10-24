@@ -1299,7 +1299,9 @@ class QueueStore:
                     g.ext1, g.ext2, g.ext3, g.ext4,
                     g.imx_status, g.imx_status_checked, g.image_host_id,
                     g.media_type, g.download_links,
-                    g.cover_source_path, g.cover_host_id, g.cover_status, g.cover_result
+                    g.cover_source_path, g.cover_host_id, g.cover_status, g.cover_result,
+                    g.avg_width, g.avg_height, g.max_width, g.max_height,
+                    g.min_width, g.min_height
                 FROM galleries g
                 ORDER BY g.insertion_order ASC, g.added_ts ASC
                 """
@@ -1346,6 +1348,12 @@ class QueueStore:
                     'cover_host_id': r[33] or None,
                     'cover_status': r[34] or 'none',
                     'cover_result': _safe_json_loads(r[35], None),
+                    'avg_width': float(r[36] or 0.0),
+                    'avg_height': float(r[37] or 0.0),
+                    'max_width': float(r[38] or 0.0),
+                    'max_height': float(r[39] or 0.0),
+                    'min_width': float(r[40] or 0.0),
+                    'min_height': float(r[41] or 0.0),
                     'uploaded_files': [],  # Load separately when needed, not in gallery list query
                 }
                 items.append(item)
