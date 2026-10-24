@@ -205,15 +205,8 @@ class UploadLifecycleHandler(QObject):
                 # still pending/uploading/failed (byte-weighted display).
                 mw.progress_tracker.refresh_row_display(path)
 
-                # Update finished time column
-                from src.gui.main_window import format_timestamp_for_display
-                finished_text, finished_tooltip = format_timestamp_for_display(item.finished_time)
-                finished_item = QTableWidgetItem(finished_text)
-                finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                finished_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if finished_tooltip:
-                    finished_item.setToolTip(finished_tooltip)
-                mw.gallery_table.setItem(matched_row, GalleryTableWidget.COL_FINISHED, finished_item)
+                # Update finished time column (blank while file hosts are still going)
+                mw.table_row_manager._set_finished_cell(matched_row, item)
 
                 # Compute and freeze final transfer speed for this item
                 try:
@@ -454,6 +447,16 @@ class UploadLifecycleHandler(QObject):
             return
 
         self._fired_completion_notifications.add(path)
+
+        # Every host has settled, so this is when the gallery finished — not
+        # when its images did. The row's finished cell shows it on its next refresh.
+        item.finished_time = time.time()
+        try:
+            mw.queue_manager.save_persistent_queue([path])
+        except Exception as e:
+            log(f"Failed to save finished time for {path}: {e}",
+                level="warning", category="ui")
+
         if hasattr(mw, 'notification_manager'):
             fields = None
             if mw.notification_manager.wants_discord('gallery_completed'):

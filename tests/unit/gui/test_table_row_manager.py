@@ -202,3 +202,53 @@ class TestUpdateImxStatusCell:
 
             call_args = mock_main_window.gallery_table.set_online_imx_status.call_args
             assert call_args[0][0] == row
+
+
+class TestRowShowsRealCompletion:
+    """Status text, animation and finished time all follow display_status()."""
+
+    def _setup(self, qapp, shown):
+        from PyQt6.QtWidgets import QTableWidget
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QTableWidgetItem
+        from src.gui.table_row_manager import _Col
+
+        mw = Mock()
+        mw._upload_animation_frame = 0
+        table = QTableWidget(1, 29)
+        mw.gallery_table = table
+        item = GalleryQueueItem(path="/test/gallery")
+        item.status = "completed"
+        item.finished_time = 1792846096
+        mw.queue_manager.items = {"/test/gallery": item}
+        mw.progress_tracker.display_status = Mock(return_value=shown)
+        name_item = QTableWidgetItem("gallery")
+        name_item.setData(Qt.ItemDataRole.UserRole, "/test/gallery")
+        table.setItem(0, _Col.NAME, name_item)
+        return TableRowManager(mw), table, item, _Col
+
+    @pytest.mark.parametrize("shown,text", [
+        ("uploading", "Uploading"),
+        ("completed", "Completed"),
+        ("hosts_failed", "File host failed"),
+    ])
+    def test_status_text_follows_file_hosts(self, qapp, shown, text):
+        trm, table, _, col = self._setup(qapp, shown)
+        trm._set_status_text_cell(0, "completed")
+        assert table.item(0, col.STATUS_TEXT).text() == text
+
+    def test_animation_includes_galleries_waiting_on_file_hosts(self, qapp):
+        trm, table, _, _ = self._setup(qapp, "uploading")
+        trm._set_status_cell_icon = Mock()
+        trm._advance_upload_animation()
+        trm._set_status_cell_icon.assert_called_once_with(0, "uploading")
+
+    def test_finished_cell_blank_until_file_hosts_finish(self, qapp):
+        trm, table, item, col = self._setup(qapp, "uploading")
+        trm._set_finished_cell(0, item)
+        assert table.item(0, col.FINISHED).text() == ""
+
+    def test_finished_cell_shows_time_once_done(self, qapp):
+        trm, table, item, col = self._setup(qapp, "completed")
+        trm._set_finished_cell(0, item)
+        assert table.item(0, col.FINISHED).text() != ""

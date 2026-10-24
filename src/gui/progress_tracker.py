@@ -62,6 +62,13 @@ class ProgressTracker(QObject):
         # 4 Hz per host would fight the deferred-save design.
         self._file_host_live_bytes: dict[Tuple[str, str], int] = {}
 
+        # What the row shows for image-host-completed galleries, keyed by path:
+        # 'uploading' until every file host settles, then 'completed' or
+        # 'hosts_failed'. Primed in one batch query, refreshed by
+        # compute_item_display whenever a file host event touches the row.
+        self._display_status: dict[str, str] = {}
+        self._display_status_primed = False
+
     def _get_cached_stats(self) -> dict:
         """Get cached statistics with periodic refresh (every 5 seconds).
 
@@ -287,26 +294,65 @@ class ProgressTracker(QObject):
         else:
             percent = int(getattr(item, 'progress', 0) or 0)
 
-        base_status = getattr(item, 'status', '')
-        effective_status = base_status
-        if base_status == 'completed' and file_host_rows:
-            # Cancelled/blocked rows count as terminal here even though they
-            # aren't 'done' in the success sense -- the gallery shouldn't
-            # stay stuck at "uploading" forever waiting on work that won't
-            # happen.
-            terminal_statuses = {'completed', 'cancelled', 'blocked'}
-            all_done = all(
-                bool(row.get('deduped')) or row.get('status') in terminal_statuses
-                for row in file_host_rows
-            )
-            if not all_done:
-                effective_status = 'uploading'
-                # Keep percent under 100 while work is still in flight so the
-                # bar doesn't look stuck-at-full with a spinner.
-                if percent >= 100:
-                    percent = 99
+        effective_status = getattr(item, 'status', '')
+        if effective_status == 'completed':
+            effective_status = self._settled_status(file_host_rows)
+            self._display_status[getattr(item, 'path', '')] = effective_status
+            # Keep percent under 100 while work is still in flight so the
+            # bar doesn't look stuck-at-full with a spinner.
+            if effective_status == 'uploading' and percent >= 100:
+                percent = 99
 
         return percent, effective_status
+
+    @staticmethod
+    def _settled_status(file_host_rows) -> str:
+        """Row status for an image-host-completed gallery, from its file host rows.
+
+        Uses the same settlement rule as the gallery-completed notification.
+        Blocked rows are left out: they wait on a sibling's md5 and would
+        otherwise hold the gallery at "uploading" if that never arrives.
+        """
+        from src.core.file_host_settlement import settled_failed_hosts
+        rows = [r for r in file_host_rows or [] if r.get('status') != 'blocked']
+        failed_hosts = settled_failed_hosts(rows)
+        if failed_hosts is None:
+            return 'uploading'
+        return 'hosts_failed' if failed_hosts else 'completed'
+
+    def display_status(self, item) -> str:
+        """Status the row shows: 'completed' only once every file host has settled."""
+        status = getattr(item, 'status', '')
+        if status != 'completed':
+            return status
+        path = getattr(item, 'path', '')
+        if not self._display_status_primed:
+            self._prime_display_status()
+        shown = self._display_status.get(path)
+        if shown is None:
+            shown = self._settled_status(self._get_file_host_rows(path))
+            self._display_status[path] = shown
+        return shown
+
+    def _prime_display_status(self) -> None:
+        """Fill the display status of every completed gallery in one query."""
+        self._display_status_primed = True
+        try:
+            items = list(self._main_window.queue_manager.items.values())
+        except Exception:
+            return
+        paths = [it.path for it in items if getattr(it, 'status', '') == 'completed']
+        if not paths:
+            return
+        try:
+            rows_by_path = self._main_window.queue_manager.store.\
+                get_file_host_uploads_for_paths(paths)
+        except Exception as e:
+            log(f"Failed to prime row display status: {e}", level="warning", category="ui")
+            return
+        for path in paths:
+            rows = rows_by_path.get(os.path.normpath(path), [])
+            self._display_status[path] = self._settled_status(rows)
 
     def refresh_row_display(self, path: str, file_host_rows=None):
         """Refresh the per-row progress bar, status icon/text, and action
@@ -343,6 +389,7 @@ class ProgressTracker(QObject):
         try:
             mw._set_status_cell_icon(row, effective_status)
             mw._set_status_text_cell(row, effective_status)
+            mw.table_row_manager._set_finished_cell(row, item)
         except Exception as e:
             log(f"Row status cell refresh failed for {path}: {e}",
                 level="warning", category="ui")

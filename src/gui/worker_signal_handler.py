@@ -200,6 +200,12 @@ class WorkerSignalHandler(QObject):
         QTimer.singleShot(0, lambda: self._mw and self._mw._refresh_file_host_widgets_for_db_id(db_id, gallery_path))
         # Update queue display for this host so bytes column populates immediately
         self._update_filehost_queue_for_host(host_name)
+        # A host starting on an already-completed gallery takes the row off
+        # "Completed" now, not at its first progress tick (a hash-copy wait
+        # sends none).
+        if mw is not None and gallery_path:
+            self._rows_needing_refresh.add(gallery_path)
+            self._request_refresh()
 
     def on_file_host_upload_progress(self, db_id: int, host_name: str,
                                       uploaded_bytes: int, total_bytes: int,

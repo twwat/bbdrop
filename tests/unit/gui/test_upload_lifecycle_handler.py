@@ -655,6 +655,24 @@ class TestGalleryDoneSettled:
         assert kwargs['fields']['failed_hosts'] == 'Keep2Share'
         assert kwargs['fields']['gallery_name'] == 'My Set'
 
+    def test_finished_time_is_when_the_last_host_settles(self):
+        handler, mw = _done_handler([_fh_row('rapidgator', 'completed')])
+        item = mw.queue_manager.get_item.return_value
+        item.finished_time = 1000.0  # stamped when the images finished
+        with patch('src.gui.upload_lifecycle_handler.time.time', return_value=5000.0):
+            handler.maybe_notify_gallery_done("/test/My Set")
+        assert item.finished_time == 5000.0
+        mw.queue_manager.save_persistent_queue.assert_called_once_with(["/test/My Set"])
+
+    def test_finished_time_untouched_while_a_host_is_going(self):
+        handler, mw = _done_handler([_fh_row('rapidgator', 'completed'),
+                                     _fh_row('fileboom', 'uploading')])
+        item = mw.queue_manager.get_item.return_value
+        item.finished_time = 1000.0
+        handler.maybe_notify_gallery_done("/test/My Set")
+        assert item.finished_time == 1000.0
+        mw.queue_manager.save_persistent_queue.assert_not_called()
+
     def test_fires_once(self):
         handler, mw = _done_handler([_fh_row('keep2share', 'failed')])
         handler.maybe_notify_gallery_done("/test/My Set")

@@ -6,6 +6,8 @@ cells so they reflect total work (image host + file host bytes) instead of
 image-count ratio.
 """
 
+import os
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -334,11 +336,12 @@ class TestComputeItemDisplay:
         assert effective == "completed"
         assert percent == 100
 
-    def test_failed_file_host_still_blocks_completed(self, tracker):
-        """Pin existing behavior: failed rows keep the gallery in
-        'uploading' because file host workers retry failed uploads."""
+    def test_failed_file_host_shows_hosts_failed(self, tracker):
+        """A 'failed' row is final (workers retry before writing it), so the
+        gallery is done but not clean: never a checkmark, never a forever spinner."""
         tracker._main_window.queue_manager.store.get_file_host_uploads.return_value = [
             {
+                "host_name": "filedot",
                 "status": "failed",
                 "total_bytes": 100_000_000,
                 "uploaded_bytes": 20_000_000,
@@ -350,4 +353,67 @@ class TestComputeItemDisplay:
         item.status = "completed"
         item.total_size = 1_000_000
         percent, effective = tracker.compute_item_display(item)
+        assert effective == "hosts_failed"
+
+    def test_failed_family_host_waits_for_hash_retry(self, tracker, monkeypatch):
+        """A failed FileBoom head row is retried from TezFiles' copy, so not final yet."""
+        monkeypatch.setattr(
+            "src.core.file_host_settlement.is_family_dedup_enabled", lambda: True)
+        tracker._main_window.queue_manager.store.get_file_host_uploads.return_value = [
+            {"host_name": "tezfiles", "status": "completed", "part_number": 0},
+            {"host_name": "fileboom", "status": "failed", "part_number": 0},
+        ]
+        item = GalleryQueueItem(path="/g")
+        item.status = "completed"
+        _, effective = tracker.compute_item_display(item)
         assert effective == "uploading"
+
+
+class TestDisplayStatus:
+    """display_status() is what every part of the row shows."""
+
+    def _tracker_with(self, rows_by_path):
+        mw = _make_main_window()
+        store = mw.queue_manager.store
+        # The real query keys its result by os.path.normpath(path).
+        store.get_file_host_uploads_for_paths = MagicMock(
+            side_effect=lambda paths: {os.path.normpath(p): rows_by_path.get(p, [])
+                                       for p in paths})
+        store.get_file_host_uploads = MagicMock(
+            side_effect=lambda p: rows_by_path.get(p, []))
+        items = {}
+        for path in rows_by_path:
+            item = GalleryQueueItem(path=path)
+            item.status = "completed"
+            items[path] = item
+        mw.queue_manager.items = items
+        return ProgressTracker(mw), items, store
+
+    def test_completed_with_pending_host_shows_uploading(self):
+        tracker, items, _ = self._tracker_with({
+            "/a": [{"host_name": "fileboom", "status": "pending"}],
+            "/b": [{"host_name": "fileboom", "status": "completed"}],
+        })
+        assert tracker.display_status(items["/a"]) == "uploading"
+        assert tracker.display_status(items["/b"]) == "completed"
+
+    def test_first_lookup_primes_all_rows_in_one_query(self):
+        tracker, items, store = self._tracker_with({"/a": [], "/b": [], "/c": []})
+        for item in items.values():
+            tracker.display_status(item)
+        store.get_file_host_uploads_for_paths.assert_called_once()
+        store.get_file_host_uploads.assert_not_called()
+
+    def test_refresh_updates_the_shown_status(self):
+        rows = {"/a": [{"host_name": "fileboom", "status": "uploading"}]}
+        tracker, items, _ = self._tracker_with(rows)
+        assert tracker.display_status(items["/a"]) == "uploading"
+        rows["/a"][0]["status"] = "completed"
+        tracker.compute_item_display(items["/a"])
+        assert tracker.display_status(items["/a"]) == "completed"
+
+    def test_non_completed_status_passes_through(self):
+        tracker, items, store = self._tracker_with({"/a": []})
+        items["/a"].status = "ready"
+        assert tracker.display_status(items["/a"]) == "ready"
+        store.get_file_host_uploads_for_paths.assert_not_called()

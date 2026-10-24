@@ -71,6 +71,12 @@ class _Col:
     FORUM_POST = 28
 
 
+# Status text for statuses whose capitalized name doesn't read well.
+_STATUS_LABELS = {
+    'hosts_failed': 'File host failed',
+}
+
+
 def format_timestamp_for_display(timestamp_value, include_seconds=False):
     """Format Unix timestamp for table display with optional tooltip.
 
@@ -278,14 +284,7 @@ class TableRowManager(QObject):
             added_item.setToolTip(added_tooltip)
         mw.gallery_table.setItem(row, _Col.ADDED, added_item)
 
-        # Finished time
-        finished_text, finished_tooltip = format_timestamp_for_display(item.finished_time)
-        finished_item = QTableWidgetItem(finished_text)
-        finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        finished_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        if finished_tooltip:
-            finished_item.setToolTip(finished_tooltip)
-        mw.gallery_table.setItem(row, _Col.FINISHED, finished_item)
+        self._set_finished_cell(row, item)
 
         # Size column with consistent binary formatting
         size_bytes = getattr(item, 'total_size', 0) or 0
@@ -483,7 +482,6 @@ class TableRowManager(QObject):
                 formatted_data = {}
                 formatted_data['order'] = str(item.db_id) if item.db_id else "0"
                 formatted_data['added_text'], formatted_data['added_tooltip'] = format_timestamp_for_display(item.added_time)
-                formatted_data['finished_text'], formatted_data['finished_tooltip'] = format_timestamp_for_display(item.finished_time)
                 return formatted_data
             except Exception as e:
                 log(f"format_row_data failed for row {row}: {e}", level="error", category="ui")
@@ -509,13 +507,7 @@ class TableRowManager(QObject):
                     added_item.setToolTip(formatted_data['added_tooltip'])
                 mw.gallery_table.setItem(row, _Col.ADDED, added_item)
 
-                # Finished time (column 7)
-                finished_item = QTableWidgetItem(formatted_data['finished_text'])
-                finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                finished_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                if formatted_data['finished_tooltip']:
-                    finished_item.setToolTip(formatted_data['finished_tooltip'])
-                mw.gallery_table.setItem(row, _Col.FINISHED, finished_item)
+                self._set_finished_cell(row, item)
 
                 # Apply minimal styling to uploaded count
                 uploaded_item = mw.gallery_table.item(row, _Col.UPLOADED)
@@ -1187,6 +1179,29 @@ class TableRowManager(QObject):
     # Status Icon Methods
     # =========================================================================
 
+    def _row_item(self, row: int):
+        """Return the queue item shown in a table row, or None."""
+        mw = self._main_window
+        try:
+            name_item = mw.gallery_table.item(row, _Col.NAME)
+            path = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+            return mw.queue_manager.items.get(path) if path else None
+        except Exception:
+            return None
+
+    def _row_display_status(self, row: int, status: str) -> str:
+        """Resolve 'completed' to what the row shows while file hosts are still going.
+
+        Every status cell write passes through here, so no caller can put a
+        checkmark on a gallery whose file hosts haven't finished.
+        """
+        if status != 'completed':
+            return status
+        item = self._row_item(row)
+        if item is None or item.status != 'completed':
+            return status
+        return self._main_window.progress_tracker.display_status(item)
+
     def _set_status_cell_icon(self, row: int, status: str):
         """Render the Status column as an icon only, without background/text.
 
@@ -1201,6 +1216,7 @@ class TableRowManager(QObject):
             log(f"_set_status_cell_icon: Invalid row {row}, table has {mw.gallery_table.rowCount()} rows", level="trace")
             return
 
+        status = self._row_display_status(row, status)
         try:
             # Check if this row is selected
             table_widget = getattr(mw.gallery_table, 'table', mw.gallery_table)
@@ -1222,6 +1238,19 @@ class TableRowManager(QObject):
         except Exception as e:
             log(f"Warning: Failed to set status icon for {status}: {e}", level="warning")
 
+    def _set_finished_cell(self, row: int, item) -> None:
+        """Finished time, left blank until every file host has finished too."""
+        finished_time = item.finished_time
+        if self._row_display_status(row, getattr(item, 'status', '')) == 'uploading':
+            finished_time = None
+        finished_text, finished_tooltip = format_timestamp_for_display(finished_time)
+        finished_item = QTableWidgetItem(finished_text)
+        finished_item.setFlags(finished_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        finished_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if finished_tooltip:
+            finished_item.setToolTip(finished_tooltip)
+        self._main_window.gallery_table.setItem(row, _Col.FINISHED, finished_item)
+
     def _set_status_text_cell(self, row: int, status: str):
         """Set the status text column with capitalized status string.
 
@@ -1236,8 +1265,9 @@ class TableRowManager(QObject):
             log(f"_set_status_text_cell: Invalid row {row}, table has {mw.gallery_table.rowCount()} rows", level="trace")
             return
 
+        status = self._row_display_status(row, status)
         try:
-            status_text = status.capitalize() if status else ""
+            status_text = _STATUS_LABELS.get(status) or (status.capitalize() if status else "")
             status_item = QTableWidgetItem(status_text)
             status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1459,7 +1489,9 @@ class TableRowManager(QObject):
                     path = name_item.data(Qt.ItemDataRole.UserRole)
                     if path and path in mw.queue_manager.items:
                         item = mw.queue_manager.items[path]
-                        if item.status == "uploading":
-                            self._set_status_cell_icon(row, item.status)
+                        # Includes galleries whose images are done but whose
+                        # file hosts are still going.
+                        if mw.progress_tracker.display_status(item) == "uploading":
+                            self._set_status_cell_icon(row, "uploading")
         except Exception as e:
             log(f"Upload animation update failed: {e}", level="warning", category="ui")

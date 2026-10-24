@@ -50,8 +50,8 @@ QProgressBar[status="failed"]            { border: 1px solid $colors.light.progr
 QProgressBar[status="failed"]::chunk     { background-color: $colors.light.progress.failed; }
 QProgressBar[status="uploading"]         { border: 1px solid $colors.light.progress.uploading_border; }
 QProgressBar[status="uploading"]::chunk  { background-color: $colors.light.progress.uploading; }
-QProgressBar[status="incomplete"]        { border: 1px solid $colors.light.progress.incomplete_border; }
-QProgressBar[status="incomplete"]::chunk { background-color: $colors.light.progress.incomplete; }
+QProgressBar[status="incomplete"], QProgressBar[status="hosts_failed"]        { border: 1px solid $colors.light.progress.incomplete_border; }
+QProgressBar[status="incomplete"]::chunk, QProgressBar[status="hosts_failed"]::chunk { background-color: $colors.light.progress.incomplete; }
 QProgressBar[status="ready"]             { border: 1px solid $colors.light.progress.ready_border; }
 QProgressBar[status="ready"]::chunk      { background-color: $colors.light.progress.ready; }
 
@@ -103,8 +103,8 @@ QProgressBar[status="failed"]            { border: 1px solid $colors.dark.progre
 QProgressBar[status="failed"]::chunk     { background-color: $colors.dark.progress.failed; }
 QProgressBar[status="uploading"]         { border: 1px solid $colors.dark.progress.uploading_border; }
 QProgressBar[status="uploading"]::chunk  { background-color: $colors.dark.progress.uploading; }
-QProgressBar[status="incomplete"]        { border: 1px solid $colors.dark.progress.incomplete_border; }
-QProgressBar[status="incomplete"]::chunk { background-color: $colors.dark.progress.incomplete; }
+QProgressBar[status="incomplete"], QProgressBar[status="hosts_failed"]        { border: 1px solid $colors.dark.progress.incomplete_border; }
+QProgressBar[status="incomplete"]::chunk, QProgressBar[status="hosts_failed"]::chunk { background-color: $colors.dark.progress.incomplete; }
 QProgressBar[status="ready"]             { border: 1px solid $colors.dark.progress.ready_border; }
 QProgressBar[status="ready"]::chunk      { background-color: $colors.dark.progress.ready; }
 
