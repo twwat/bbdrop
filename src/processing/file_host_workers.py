@@ -147,6 +147,9 @@ class FileHostWorker(QThread):
         self._family_status: str = ""
         self._hash_created_ts: float = 0.0
 
+        # Set while polling for a free upload slot, so the wait is logged once
+        self._waiting_for_slot = False
+
         # Thread-safe upload throttle state
         self._upload_throttle_state = {}  # {(db_id, host): {'last_emit': time, 'last_progress': (up, total)}}
         self._throttle_lock = threading.Lock()
@@ -640,6 +643,7 @@ class FileHostWorker(QThread):
                 pending_uploads = self.queue_store.get_pending_file_host_uploads(host_name=self.host_id)
 
                 if not pending_uploads:
+                    self._slot_wait_ended()
                     self._update_family_idle_status()
                     time.sleep(1.0)
                     continue
@@ -699,15 +703,14 @@ class FileHostWorker(QThread):
 
                 # Check if we can start upload (connection limits)
                 if not self.coordinator.can_start_upload(host_name):
-                    self._log(
-                        f"Connection limit reached for {host_name}, waiting...",
-                        level="debug")
+                    self._note_slot_wait(host_name)
                     time.sleep(1.0)
                     continue
 
                 # Acquire upload slot and process
                 try:
                     with self.coordinator.acquire_slot(db_id, host_name, timeout=5.0):
+                        self._slot_wait_ended()
                         self._process_single_pending_row(upload, host_config=host_config)
                 except TimeoutError:
                     self._log(
@@ -721,6 +724,27 @@ class FileHostWorker(QThread):
                 time.sleep(1.0)
 
         self._log("Worker stopped", level="info")
+
+    def _note_slot_wait(self, host_name: str) -> None:
+        """Log, once per wait, which limit is keeping this upload from starting."""
+        if self._waiting_for_slot:
+            return
+        active_hosts = [h for _, h in self.coordinator.get_active_uploads()]
+        if not active_hosts:
+            return  # A slot freed since the check; the next poll will take it
+        self._waiting_for_slot = True
+
+        mine = active_hosts.count(host_name)
+        if mine >= self.coordinator.per_host_limit:
+            reason = (f"{host_name} already has {mine} uploads running "
+                      f"(limit {self.coordinator.per_host_limit})")
+        else:
+            reason = (f"all {self.coordinator.global_limit} file host slots are in use "
+                      f"({', '.join(sorted(active_hosts))})")
+        self._log(f"Waiting for an upload slot: {reason}", level="debug")
+
+    def _slot_wait_ended(self) -> None:
+        self._waiting_for_slot = False
 
     def _get_or_create_archive(self, db_id, folder_path, gallery_name,
                                archive_format, compression, split_size_mb):

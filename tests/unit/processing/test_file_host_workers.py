@@ -676,3 +676,53 @@ class TestUploadSuccessMessage:
 
         assert msg == (f"Successfully uploaded 'Set.zip': https://h/x "
                        f"({format_binary_size(2048)}, deduplicated)")
+
+
+class TestSlotWaitLog:
+    """The worker polls for a free slot every second; it must say so once."""
+
+    @staticmethod
+    def _worker(active):
+        from src.processing.file_host_coordinator import FileHostCoordinator
+
+        coordinator = FileHostCoordinator(global_limit=3, per_host_limit=2)
+        coordinator.active_uploads = set(active)
+        with patch('src.processing.file_host_workers.get_config_manager') as cfg, \
+                patch('src.processing.file_host_workers.get_coordinator',
+                      return_value=coordinator), \
+                patch('src.processing.file_host_workers.get_archive_manager'), \
+                patch('src.processing.file_host_workers.QSettings'):
+            cfg.return_value.get_host.return_value = Mock(name="TezFiles")
+            worker = FileHostWorker("tezfiles", Mock())
+        worker._log = Mock()
+        return worker
+
+    def test_logs_once_per_wait_and_names_the_slot_holders(self):
+        worker = self._worker({(1, "rapidgator"), (2, "katfile"), (2, "filedot")})
+
+        for _ in range(5):
+            worker._note_slot_wait("tezfiles")
+
+        worker._log.assert_called_once_with(
+            "Waiting for an upload slot: all 3 file host slots are in use "
+            "(filedot, katfile, rapidgator)",
+            level="debug")
+
+    def test_logs_again_after_the_wait_ends(self):
+        worker = self._worker({(1, "rapidgator"), (2, "katfile"), (2, "filedot")})
+
+        worker._note_slot_wait("tezfiles")
+        worker._slot_wait_ended()
+        worker._note_slot_wait("tezfiles")
+
+        assert worker._log.call_count == 2
+
+    def test_names_the_per_host_limit_when_that_is_what_binds(self):
+        worker = self._worker({(1, "tezfiles"), (2, "tezfiles")})
+
+        worker._note_slot_wait("tezfiles")
+
+        worker._log.assert_called_once_with(
+            "Waiting for an upload slot: tezfiles already has 2 uploads running "
+            "(limit 2)",
+            level="debug")
