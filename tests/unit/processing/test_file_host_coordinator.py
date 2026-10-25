@@ -440,3 +440,54 @@ class TestFileHostCoordinatorIntegration:
                 with coordinator.acquire_slot(3, "host2"):
                     with coordinator.acquire_slot(4, "host2"):
                         assert coordinator.can_start_upload("host3")
+
+
+class TestLiveLimitChange:
+    """update_limits() while uploads are running must not mint extra slots."""
+
+    def test_release_after_limit_swap_does_not_inflate_new_semaphore(self):
+        coordinator = FileHostCoordinator(global_limit=2, per_host_limit=2)
+        with coordinator.acquire_slot(1, "host1"):
+            coordinator.update_limits(global_limit=2 + 1)
+        # New semaphore started at 3 and nobody took a slot from it
+        for _ in range(3):
+            assert coordinator.global_semaphore.acquire(blocking=False)
+        assert not coordinator.global_semaphore.acquire(blocking=False)
+
+
+class TestLoadConnectionLimits:
+    """[FILE_HOSTS] global_limit / per_host_limit in the INI."""
+
+    @staticmethod
+    def _write_ini(tmp_path, monkeypatch, body):
+        ini = tmp_path / "bbdrop.ini"
+        ini.write_text(body, encoding="utf-8")
+        monkeypatch.setattr("src.utils.paths.get_config_path", lambda: str(ini))
+
+    def test_defaults_when_keys_missing(self, tmp_path, monkeypatch):
+        from src.processing.file_host_coordinator import load_connection_limits
+        self._write_ini(tmp_path, monkeypatch, "[FILE_HOSTS]\nx = 1\n")
+        assert load_connection_limits() == (3, 2)
+
+    def test_reads_saved_values(self, tmp_path, monkeypatch):
+        from src.processing.file_host_coordinator import load_connection_limits
+        self._write_ini(tmp_path, monkeypatch, "[FILE_HOSTS]\nglobal_limit = 6\nper_host_limit = 4\n")
+        assert load_connection_limits() == (6, 4)
+
+    def test_clamps_out_of_range_and_junk(self, tmp_path, monkeypatch):
+        from src.processing.file_host_coordinator import load_connection_limits
+        self._write_ini(tmp_path, monkeypatch, "[FILE_HOSTS]\nglobal_limit = 99\nper_host_limit = abc\n")
+        assert load_connection_limits() == (10, 2)
+
+    def test_missing_file_gives_defaults(self, tmp_path, monkeypatch):
+        from src.processing.file_host_coordinator import load_connection_limits
+        monkeypatch.setattr("src.utils.paths.get_config_path", lambda: str(tmp_path / "nope.ini"))
+        assert load_connection_limits() == (3, 2)
+
+    def test_release_after_per_host_limit_swap_keeps_new_limit(self):
+        coordinator = FileHostCoordinator(global_limit=5, per_host_limit=2)
+        with coordinator.acquire_slot(1, "host1"):
+            coordinator.update_limits(per_host_limit=1)
+        new_sem = coordinator._get_host_semaphore("host1")
+        assert new_sem.acquire(blocking=False)
+        assert not new_sem.acquire(blocking=False)

@@ -9,6 +9,7 @@ import threading
 from typing import Dict, Optional, List, Set
 from contextlib import contextmanager
 
+from src.core.file_host_config import load_connection_limits
 from src.utils.logger import log
 
 
@@ -106,8 +107,11 @@ class FileHostCoordinator:
         """
         upload_key = (gallery_id, host_name)
 
-        # Acquire global slot
-        global_acquired = self.global_semaphore.acquire(timeout=timeout)
+        # Hold on to the semaphore we acquire: update_limits() may swap
+        # self.global_semaphore while this upload runs, and releasing the
+        # replacement would hand out a slot nobody took.
+        global_semaphore = self.global_semaphore
+        global_acquired = global_semaphore.acquire(timeout=timeout)
         if not global_acquired:
             raise TimeoutError(f"Could not acquire global upload slot within {timeout}s")
 
@@ -134,7 +138,7 @@ class FileHostCoordinator:
             if host_acquired:
                 host_semaphore.release()
 
-            self.global_semaphore.release()
+            global_semaphore.release()
 
             # Remove from active
             with self.active_uploads_lock:
@@ -254,7 +258,8 @@ def get_coordinator() -> FileHostCoordinator:
     if _coordinator is None:
         with _coordinator_lock:
             if _coordinator is None:
-                # Default limits - will be overridden from settings
-                _coordinator = FileHostCoordinator(global_limit=3, per_host_limit=2)
+                global_limit, per_host_limit = load_connection_limits()
+                _coordinator = FileHostCoordinator(
+                    global_limit=global_limit, per_host_limit=per_host_limit)
 
     return _coordinator

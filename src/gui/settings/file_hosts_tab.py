@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QCheckBox, QFrame, QProgressBar, QScrollArea, QGroupBox,
     QSpinBox, QMessageBox, QFileDialog, QDialog
 )
-from PyQt6.QtCore import pyqtSignal, QSettings, Qt, QTimer
+from PyQt6.QtCore import pyqtSignal, QSettings, QSignalBlocker, Qt, QTimer
 from PyQt6.QtGui import QFont, QPixmap
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -15,6 +15,13 @@ from src.utils.format_utils import format_binary_size
 from src.utils.logger import log
 from src.core.file_host_config import get_config_manager, HostConfig
 from src.gui.icon_manager import get_icon_manager
+from src.gui.widgets.info_button import InfoButton
+from src.core.file_host_config import (
+    DEFAULT_GLOBAL_LIMIT, DEFAULT_PER_HOST_LIMIT,
+    MAX_GLOBAL_LIMIT, MAX_PER_HOST_LIMIT,
+    load_connection_limits,
+)
+from src.processing.file_host_coordinator import get_coordinator
 
 
 class FileHostsSettingsWidget(QWidget):
@@ -68,6 +75,45 @@ class FileHostsSettingsWidget(QWidget):
         intro_label.setWordWrap(True)
         intro_label.setProperty("class", "tab-description")
         layout.addWidget(intro_label)
+
+        # Connection Limits Group (applied live to the FileHostCoordinator on save)
+        limits_group = QGroupBox("Connection Limits")
+        limits_layout = QFormLayout(limits_group)
+
+        limits_info_row = QHBoxLayout()
+        limits_info_row.addWidget(InfoButton(
+            "<b>Global limit:</b> Total concurrent uploads across ALL file "
+            "hosts combined. Prevents saturating your upload bandwidth.<br><br>"
+            "<b>Per-host limit:</b> Max concurrent uploads to a single host. "
+            "Some hosts rate-limit or ban accounts that open too many "
+            "connections.<br><br>"
+            "<b>Example:</b> global=3, per-host=2 means at most 3 uploads "
+            "total, but no single host gets more than 2 at once.<br><br>"
+            "Uploads already running finish normally; the new limits apply "
+            "to uploads that start after you save."
+        ))
+        limits_info_row.addStretch()
+        limits_layout.addRow(limits_info_row)
+
+        self.global_limit_spin = QSpinBox()
+        self.global_limit_spin.setRange(1, MAX_GLOBAL_LIMIT)
+        self.global_limit_spin.setValue(DEFAULT_GLOBAL_LIMIT)
+        self.global_limit_spin.setToolTip(
+            "Maximum total concurrent file host uploads across all hosts"
+        )
+        self.global_limit_spin.valueChanged.connect(lambda: self.settings_changed.emit())
+        limits_layout.addRow("Global upload limit:", self.global_limit_spin)
+
+        self.per_host_limit_spin = QSpinBox()
+        self.per_host_limit_spin.setRange(1, MAX_PER_HOST_LIMIT)
+        self.per_host_limit_spin.setValue(DEFAULT_PER_HOST_LIMIT)
+        self.per_host_limit_spin.setToolTip(
+            "Maximum concurrent uploads per individual host"
+        )
+        self.per_host_limit_spin.valueChanged.connect(lambda: self.settings_changed.emit())
+        limits_layout.addRow("Per-host limit:", self.per_host_limit_spin)
+
+        layout.addWidget(limits_group)
 
         # Image Hosts groupbox — mirrors file-host groupbox structure
         # (scroll area + inner container) so backgrounds / margins match.
@@ -1164,16 +1210,21 @@ class FileHostsSettingsWidget(QWidget):
 
 
     def load_settings(self, settings: dict):
-        """Refresh display from current config (display-only UI)."""
-        # File Hosts tab is display-only - all data loaded in _create_host_row()
-        # This method exists for compatibility but does nothing
-        pass
+        """Show the saved connection limits (host rows load themselves in _create_host_row())."""
+        for spin, key, default in (
+            (self.global_limit_spin, 'global_limit', DEFAULT_GLOBAL_LIMIT),
+            (self.per_host_limit_spin, 'per_host_limit', DEFAULT_PER_HOST_LIMIT),
+        ):
+            with QSignalBlocker(spin):
+                spin.setValue(settings.get(key, default))
 
     def get_settings(self) -> dict:
-        """Get settings (display-only UI returns empty)."""
-        # File Hosts tab is display-only - no settings to get
-        # All editing happens in config dialog
-        return {"global_limit": 3, "per_host_limit": 2, "hosts": {}}
+        """Get the connection limits (host rows are edited in the config dialog)."""
+        return {
+            "global_limit": self.global_limit_spin.value(),
+            "per_host_limit": self.per_host_limit_spin.value(),
+            "hosts": {},
+        }
 
     def load_from_config(self):
         """Load file hosts settings from INI and encrypted credentials from OS keyring."""
@@ -1191,16 +1242,15 @@ class FileHostsSettingsWidget(QWidget):
                 config.read(config_file, encoding='utf-8')
 
             # Prepare settings dict
+            global_limit, per_host_limit = load_connection_limits()
+            # Show the saved limits first: if the per-host loop below fails, the
+            # spinboxes must not be left at defaults for the next save to persist.
+            self.load_settings({'global_limit': global_limit, 'per_host_limit': per_host_limit})
             settings_dict = {
-                'global_limit': 3,
-                'per_host_limit': 2,
+                'global_limit': global_limit,
+                'per_host_limit': per_host_limit,
                 'hosts': {}
             }
-
-            # Load connection limits
-            if 'FILE_HOSTS' in config:
-                settings_dict['global_limit'] = config.getint('FILE_HOSTS', 'global_limit', fallback=3)
-                settings_dict['per_host_limit'] = config.getint('FILE_HOSTS', 'per_host_limit', fallback=2)
 
             # Load per-host settings
             config_manager = get_config_manager()
@@ -1269,6 +1319,11 @@ class FileHostsSettingsWidget(QWidget):
             # Write INI file
             with open(config_file, 'w', encoding='utf-8') as f:
                 config.write(f)
+
+            get_coordinator().update_limits(
+                global_limit=widget_settings['global_limit'],
+                per_host_limit=widget_settings['per_host_limit'],
+            )
 
         except Exception as e:
             log(f"Failed to save file hosts settings: {e}", level="warning", category="settings")

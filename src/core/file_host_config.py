@@ -10,7 +10,7 @@ Loads host configurations from JSON files in:
 import os
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Tuple, Union
 from dataclasses import dataclass, field
 from threading import Lock
 
@@ -611,6 +611,43 @@ def is_family_dedup_enabled() -> bool:
             )
         except (ValueError, configparser.Error):
             return True
+
+
+DEFAULT_GLOBAL_LIMIT = 3
+DEFAULT_PER_HOST_LIMIT = 2
+MAX_GLOBAL_LIMIT = 10
+MAX_PER_HOST_LIMIT = 5
+
+
+def load_connection_limits() -> Tuple[int, int]:
+    """Return (global_limit, per_host_limit) for concurrent file host uploads.
+
+    Reads [FILE_HOSTS] global_limit / per_host_limit from the INI. A missing
+    file, missing key or unparseable value gives the default; values are
+    clamped to the ranges the Hosts settings tab offers.
+    """
+    import configparser
+    import os
+    from src.utils.paths import get_config_path
+
+    config = configparser.ConfigParser()
+    config_file = get_config_path()
+    if os.path.exists(config_file):
+        with _ini_file_lock:
+            try:
+                config.read(config_file, encoding="utf-8")
+            except configparser.Error:
+                pass
+
+    def _read(key: str, default: int, maximum: int) -> int:
+        try:
+            value = config.getint("FILE_HOSTS", key, fallback=default)
+        except (ValueError, configparser.Error):
+            value = default
+        return max(1, min(maximum, value))
+
+    return (_read("global_limit", DEFAULT_GLOBAL_LIMIT, MAX_GLOBAL_LIMIT),
+            _read("per_host_limit", DEFAULT_PER_HOST_LIMIT, MAX_PER_HOST_LIMIT))
 
 
 def set_family_dedup_enabled(enabled: bool) -> None:
