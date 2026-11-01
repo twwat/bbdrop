@@ -82,6 +82,7 @@ from src.utils.paths import (
     migrate_from_imxup,
 )
 from src.utils.format_utils import timestamp
+from src.core.image_host_config import migrate_imx_thumbnail_size_ids
 
 # GitHub repository info for update checker
 GITHUB_OWNER = "twwat"
@@ -122,6 +123,7 @@ def main():
 
     # Migrate from old imxup installation if needed (first run after upgrade)
     migrate_from_imxup()
+    migrate_imx_thumbnail_size_ids()
 
     # Load user defaults
     user_defaults = load_user_defaults()

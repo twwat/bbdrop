@@ -119,6 +119,7 @@ from src.gui.worker_signal_handler import WorkerSignalHandler
 from src.gui.gallery_queue_controller import GalleryQueueController
 from src.gui.table_row_manager import TableRowManager
 from src.gui.settings_manager import SettingsManager
+from src.gui.thumbnail_size_combo import populate_thumbnail_size_combo
 from src.gui.theme_manager import ThemeManager
 from src.gui.menu_manager import MenuManager
 from src.gui.upload_lifecycle_handler import UploadLifecycleHandler
@@ -2315,10 +2316,7 @@ class BBDropGUI(QMainWindow):
             # Fixed mode (IMX): show combo
             if host_cfg and hasattr(host_cfg, 'thumbnail_sizes') and host_cfg.thumbnail_sizes:
                 saved = get_image_host_setting(host_id, 'thumbnail_size', 'int')
-                idx = (saved - 1) if saved and 1 <= saved <= self.thumbnail_size_combo.count() else 2
-                self.thumbnail_size_combo.blockSignals(True)
-                self.thumbnail_size_combo.setCurrentIndex(idx)
-                self.thumbnail_size_combo.blockSignals(False)
+                populate_thumbnail_size_combo(self.thumbnail_size_combo, host_cfg.thumbnail_sizes, saved)
             self.thumbnail_size_combo.setVisible(True)
             self._thumb_size_spinbox.setVisible(False)
 

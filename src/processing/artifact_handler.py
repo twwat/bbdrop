@@ -93,7 +93,8 @@ class CompletionWorker(QThread):
         # Read UI settings on GUI thread to avoid widget access from worker thread
         ui_settings = {}
         try:
-            ui_settings['thumbnail_size'] = gui_parent.thumbnail_size_combo.currentIndex() + 1
+            from src.gui.thumbnail_size_combo import selected_thumbnail_size_id
+            ui_settings['thumbnail_size'] = selected_thumbnail_size_id(gui_parent.thumbnail_size_combo)
             ui_settings['thumbnail_format'] = gui_parent.thumbnail_format_combo.currentIndex() + 1
         except Exception:
             # If reading fails, worker will use safe defaults

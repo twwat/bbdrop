@@ -307,8 +307,14 @@ class LayoutManager(QObject):
         # Row 1: Thumb Size — combo for fixed-size hosts (IMX), spinbox for variable (Turbo)
         qs_grid.addWidget(QLabel("<span style=\"font-weight: 600\">Thumb Size</span>:"), 1, 0)
         mw.thumbnail_size_combo = QComboBox()
-        mw.thumbnail_size_combo.addItems(["100x100", "180x180", "250x250", "300x300", "150x150"])
-        mw.thumbnail_size_combo.setCurrentIndex(defaults.get('thumbnail_size', 3) - 1)
+        from src.core.image_host_config import get_image_host_config_manager
+        from src.gui.thumbnail_size_combo import populate_thumbnail_size_combo
+        imx_cfg = get_image_host_config_manager().get_host('imx')
+        populate_thumbnail_size_combo(
+            mw.thumbnail_size_combo,
+            imx_cfg.thumbnail_sizes if imx_cfg is not None else [],
+            defaults.get('thumbnail_size', 3),
+        )
         mw.thumbnail_size_combo.currentIndexChanged.connect(mw.on_setting_changed)
         from PyQt6.QtWidgets import QSpinBox, QHBoxLayout as _HBox
         mw._thumb_size_spinbox = QSpinBox()

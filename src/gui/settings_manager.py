@@ -19,6 +19,7 @@ from PyQt6.QtCore import QObject
 
 from src.utils.logger import log
 from src.utils.paths import load_user_defaults, get_config_path
+from src.gui.thumbnail_size_combo import selected_thumbnail_size_id
 
 if TYPE_CHECKING:
     from src.gui.main_window import BBDropGUI
@@ -264,7 +265,7 @@ class SettingsManager(QObject):
 
         try:
             # Get current values from UI controls
-            thumbnail_size = mw.thumbnail_size_combo.currentIndex() + 1
+            thumbnail_size = selected_thumbnail_size_id(mw.thumbnail_size_combo)
             thumbnail_format = mw.thumbnail_format_combo.currentIndex() + 1
 
             # Max retries and batch size are only in comprehensive settings

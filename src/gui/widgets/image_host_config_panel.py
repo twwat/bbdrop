@@ -30,6 +30,10 @@ from src.utils.credentials import (
     remove_credential
 )
 from src.gui.widgets.info_button import InfoButton
+from src.gui.thumbnail_size_combo import (
+    populate_thumbnail_size_combo,
+    selected_thumbnail_size_id,
+)
 
 
 class ImageHostConfigPanel(QWidget):
@@ -563,11 +567,10 @@ class ImageHostConfigPanel(QWidget):
         else:
             # Fixed mode: use dropdown for predefined sizes
             self.thumbnail_size_combo = QComboBox()
-            for item in self.config.thumbnail_sizes:
-                self.thumbnail_size_combo.addItem(item["label"])
             current_size = get_image_host_setting(self.host_id, 'thumbnail_size', 'int')
-            if current_size and 1 <= current_size <= len(self.config.thumbnail_sizes):
-                self.thumbnail_size_combo.setCurrentIndex(current_size - 1)
+            populate_thumbnail_size_combo(
+                self.thumbnail_size_combo, self.config.thumbnail_sizes, current_size
+            )
             self.thumbnail_size_combo.currentIndexChanged.connect(self._mark_modified)
             layout.addWidget(self.thumbnail_size_combo, current_row, 1)
 
@@ -879,13 +882,13 @@ class ImageHostConfigPanel(QWidget):
         save_image_host_setting(self.host_id, 'max_upload_time', self.max_upload_time_spin.value())
         save_image_host_setting(self.host_id, 'max_file_size_mb', self.max_file_size_spin.value())
 
-        # Save thumbnail size - either slider value (variable) or combo index (fixed)
+        # Save thumbnail size - either slider value (variable) or size ID (fixed)
         if self.thumb_slider is not None:
             # Variable mode: save actual pixel value
             save_image_host_setting(self.host_id, 'thumbnail_size', self.thumb_slider.value())
         elif self.thumbnail_size_combo is not None:
-            # Fixed mode: save 1-based index
-            save_image_host_setting(self.host_id, 'thumbnail_size', self.thumbnail_size_combo.currentIndex() + 1)
+            # Fixed mode: save the host's size ID
+            save_image_host_setting(self.host_id, 'thumbnail_size', selected_thumbnail_size_id(self.thumbnail_size_combo))
 
         # Save thumbnail format (if available)
         if self.thumbnail_format_combo is not None:

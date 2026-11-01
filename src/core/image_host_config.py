@@ -202,6 +202,56 @@ def save_image_host_setting(host_id: str, key: str, value: Any) -> None:
             raise
 
 
+_IMX_SIZE_MIGRATION_KEY = "imx_thumbnail_size_ids_migrated"
+
+
+def migrate_imx_thumbnail_size_ids() -> bool:
+    """One-time rewrite of stored IMX thumbnail size ID 5 to 6.
+
+    The old combo stored a list position; position 5 was 150x150, which the
+    host now calls size ID 6 (ID 5 is the 600x600 cover size). Rewrites
+    [IMAGE_HOSTS] imx_thumbnail_size and legacy [DEFAULTS] thumbnail_size, then
+    sets [IMAGE_HOSTS] imx_thumbnail_size_ids_migrated = true so it never runs
+    again. Returns True when a value was rewritten.
+    """
+    from src.utils.paths import get_config_path
+
+    with _ini_file_lock:
+        ini_path = get_config_path()
+        if not os.path.exists(ini_path):
+            return False
+
+        cfg = configparser.ConfigParser()
+        cfg.read(ini_path, encoding='utf-8')
+
+        if cfg.has_option("IMAGE_HOSTS", _IMX_SIZE_MIGRATION_KEY):
+            return False
+
+        rewritten = []
+        for section, key in (("IMAGE_HOSTS", "imx_thumbnail_size"),
+                             ("DEFAULTS", "thumbnail_size")):
+            if cfg.has_option(section, key) and cfg.get(section, key).strip() == "5":
+                cfg.set(section, key, "6")
+                rewritten.append(f"[{section}] {key}")
+
+        if not cfg.has_section("IMAGE_HOSTS"):
+            cfg.add_section("IMAGE_HOSTS")
+        cfg.set("IMAGE_HOSTS", _IMX_SIZE_MIGRATION_KEY, "true")
+
+        try:
+            with open(ini_path, 'w', encoding='utf-8') as f:
+                cfg.write(f)
+        except Exception as e:
+            log(f"Error migrating IMX thumbnail size IDs: {e}",
+                level="error", category="image_hosts")
+            raise
+
+        if rewritten:
+            log(f"Migrated IMX thumbnail size ID 5 -> 6 in {', '.join(rewritten)}",
+                level="info", category="image_hosts")
+        return bool(rewritten)
+
+
 def is_image_host_enabled(host_id: str) -> bool:
     """Check if an image host is enabled.
 

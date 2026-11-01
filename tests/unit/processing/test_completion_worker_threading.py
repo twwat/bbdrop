@@ -30,7 +30,7 @@ class TestCompletionWorkerThreading(unittest.TestCase):
         # Create a mock gui_parent with combo controls
         gui_parent = Mock()
         gui_parent.thumbnail_size_combo = Mock()
-        gui_parent.thumbnail_size_combo.currentIndex = Mock(return_value=1)  # Returns index; we +1 it
+        gui_parent.thumbnail_size_combo.currentData = Mock(return_value=6)  # combo carries the IMX size ID (150x150)
         gui_parent.thumbnail_format_combo = Mock()
         gui_parent.thumbnail_format_combo.currentIndex = Mock(return_value=2)
         gui_parent.queue_manager = Mock()
@@ -54,7 +54,7 @@ class TestCompletionWorkerThreading(unittest.TestCase):
         # Verify ui_settings contains the read values
         self.assertIn('thumbnail_size', queued_ui_settings)
         self.assertIn('thumbnail_format', queued_ui_settings)
-        self.assertEqual(queued_ui_settings['thumbnail_size'], 2)  # index 1 + 1
+        self.assertEqual(queued_ui_settings['thumbnail_size'], 6)  # size ID, not list position
         self.assertEqual(queued_ui_settings['thumbnail_format'], 3)  # index 2 + 1
 
     def test_completion_worker_does_not_access_combo_widgets(self):
