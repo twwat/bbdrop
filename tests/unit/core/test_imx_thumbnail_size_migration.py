@@ -74,10 +74,21 @@ def test_marker_set_even_when_nothing_to_rewrite(ini_path):
     assert _read(ini_path).get("IMAGE_HOSTS", "imx_thumbnail_size_ids_migrated") == "true"
 
 
-def test_missing_ini_is_noop(ini_path):
+def test_missing_ini_gets_only_the_marker(ini_path):
     assert not os.path.exists(ini_path)
     assert migrate_imx_thumbnail_size_ids() is False
-    assert not os.path.exists(ini_path)
+    cfg = _read(ini_path)
+    assert cfg.sections() == ["IMAGE_HOSTS"]
+    assert dict(cfg.items("IMAGE_HOSTS")) == {"imx_thumbnail_size_ids_migrated": "true"}
+
+
+def test_fresh_install_cover_size_survives_next_start(ini_path):
+    from src.core.image_host_config import save_image_host_setting
+
+    assert migrate_imx_thumbnail_size_ids() is False  # first start, no INI yet
+    save_image_host_setting("imx", "thumbnail_size", 5)  # user picks 600x600 (Cover)
+    assert migrate_imx_thumbnail_size_ids() is False  # next start
+    assert _read(ini_path).get("IMAGE_HOSTS", "imx_thumbnail_size") == "5"
 
 
 def test_other_content_preserved(ini_path):

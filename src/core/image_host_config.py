@@ -212,17 +212,19 @@ def migrate_imx_thumbnail_size_ids() -> bool:
     host now calls size ID 6 (ID 5 is the 600x600 cover size). Rewrites
     [IMAGE_HOSTS] imx_thumbnail_size and legacy [DEFAULTS] thumbnail_size, then
     sets [IMAGE_HOSTS] imx_thumbnail_size_ids_migrated = true so it never runs
-    again. Returns True when a value was rewritten.
+    again. A missing INI is created holding only the marker. Returns True when
+    a value was rewritten.
     """
     from src.utils.paths import get_config_path
 
     with _ini_file_lock:
         ini_path = get_config_path()
-        if not os.path.exists(ini_path):
-            return False
 
         cfg = configparser.ConfigParser()
-        cfg.read(ini_path, encoding='utf-8')
+        # A missing INI still gets the marker: a fresh install that later picks
+        # the 600x600 cover size (ID 5) must not be rewritten to 6 on next start.
+        if os.path.exists(ini_path):
+            cfg.read(ini_path, encoding='utf-8')
 
         if cfg.has_option("IMAGE_HOSTS", _IMX_SIZE_MIGRATION_KEY):
             return False
