@@ -32,7 +32,7 @@ The status label next to API Key changes to show that a key is stored.
 
 ## Step 3: Enter your login credentials
 
-Login credentials are required for gallery renaming. Without them, all galleries are named "untitled gallery" on IMX.to.
+Login credentials are required for checking image status with the scanner and for renaming existing galleries. BBDrop names new galleries with your API key alone.
 
 1. Click **Set** next to the **Username** row. Enter your IMX.to username and click **OK**.
 2. Click **Set** next to the **Password** row. Enter your IMX.to password and click **OK**.
@@ -52,7 +52,7 @@ BBDrop verifies your API key and login credentials against the IMX.to servers. W
 
 In the **Thumbnails** section of the configuration dialog:
 
-1. Select a **Thumbnail size** from the dropdown. Available sizes are 100x100, 150x150, 180x180, 250x250 (default), and 300x300.
+1. Select a **Thumbnail size** from the dropdown. Available sizes are 100x100, 150x150, 180x180, 250x250 (default), 300x300, and 600x600 (Cover).
 2. Select a **Thumbnail format** from the dropdown. Options are Fixed width, Proportional (default), Square, and Fixed height.
 
 The thumbnail size and format control how image previews appear in your BBCode output.

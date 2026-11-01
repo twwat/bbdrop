@@ -896,8 +896,8 @@ Upload a folder as a gallery to the configured image host.
 **Parameters:**
 - `folder_path` (str): Path to folder containing images
 - `gallery_name` (Optional[str]): Gallery name (uses folder name if None)
-- `thumbnail_size` (int): Thumbnail size (1-5)
-- `thumbnail_format` (int): Thumbnail format (1-3)
+- `thumbnail_size` (int): Thumbnail size ID (1-6: 1=100, 6=150, 2=180, 3=250, 4=300, 5=600 px cover)
+- `thumbnail_format` (int): Thumbnail format (1-4: fixed width, proportional, square, fixed height)
 - `max_retries` (int): Maximum retry attempts for failed uploads
 - `parallel_batch_size` (int): Concurrent upload threads
 - `template_name` (str): BBCode template name

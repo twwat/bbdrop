@@ -59,18 +59,18 @@ All credentials are encrypted before being stored in your operating system's key
 
 ### Settings
 
-- **Thumbnail size** — Preset sizes: 100x100, 150x150, 180x180, 250x250 (default), 300x300
-- **Thumbnail format** — JPEG 70%, JPEG 90% (default), PNG, WebP
+- **Thumbnail size** — Preset sizes: 100x100, 150x150, 180x180, 250x250 (default), 300x300, 600x600 (Cover)
+- **Thumbnail format** — Fixed width, Proportional (default), Square, Fixed height
 - **Gallery visibility** — Public or private galleries
 
 ### Unnamed Galleries
 
-IMX.to creates galleries without names by default. BBDrop includes a **RenameWorker** that automatically renames galleries using the folder name after upload completes. This runs in the background and requires an active session.
+BBDrop names each new IMX.to gallery after its folder when it creates the gallery. Names can contain letters, digits, spaces and `- _ . , ( ) [ ]`, up to 100 characters; BBDrop removes anything else. If IMX.to rejects a name, the gallery uploads unnamed and the **RenameWorker** renames it in the background. This requires an active session.
 
 You can view and manage unnamed galleries from **Tools > Unnamed Galleries**.
 
 !!! important
-    Gallery renaming requires an active IMX.to session. If you're using API key authentication only, the RenameWorker will authenticate separately using your stored credentials.
+    Renaming an existing gallery requires an active IMX.to session, and so does checking image status with the scanner. Naming a new gallery only needs your API key.
 
 ## Per-Gallery Host Assignment
 

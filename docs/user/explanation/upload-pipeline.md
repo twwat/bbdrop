@@ -148,7 +148,7 @@ The engine checks for a `fetch_batch_results()` method on the client after the u
 
 ## Gallery renaming
 
-Gallery renaming is an IMX-specific concern. IMX creates galleries with auto-generated names, and a separate `RenameWorker` (QThread) handles renaming in the background to avoid blocking uploads. The engine checks `supports_gallery_rename()` on the client and only queues a rename if the host supports it. TurboImageHost and Pixhost set gallery names during creation, so they return `False` and no rename is attempted.
+Gallery renaming is an IMX-specific concern. BBDrop names a new IMX gallery in the same API request that creates it. If IMX rejects the name, the engine retries without one and queues a rename, so a bad folder name never fails an upload. A separate `RenameWorker` (QThread) handles those renames, the older backlog and manual renames in the background through the website session. The engine checks `supports_gallery_rename()` on the client and only queues a rename if the host supports it. TurboImageHost and Pixhost set gallery names during creation, so they return `False` and no rename is attempted.
 
 ---
 
