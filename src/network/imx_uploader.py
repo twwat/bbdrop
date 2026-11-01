@@ -234,13 +234,14 @@ class ImxToUploader(ImageHostClient):
             image_path (str): Path to the image file
             create_gallery (bool): Whether to create a new gallery
             gallery_id (str): ID of existing gallery to add image to
-            thumbnail_size (int): Thumbnail size (1=100x100, 2=180x180, 3=250x250, 4=300x300, 6=150x150)
+            thumbnail_size (int): IMX size ID (1=100px, 6=150px, 2=180px, 3=250px, 4=300px, 5=600px cover)
             thumbnail_format (int): Thumbnail format (1=Fixed width, 2=Proportional, 3=Square, 4=Fixed height)
             thread_session (requests.Session): Optional thread-local session for concurrent uploads
             progress_callback (callable): Optional callback(bytes_sent, total_bytes) for bandwidth tracking
+            gallery_name (str): Name for a newly created gallery; only sent with create_gallery
 
         Returns:
-            dict: API response
+            dict: normalized response; data also carries image_id and, when returned, gallery_name
         """
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found: {image_path}")
@@ -317,7 +318,10 @@ class ImxToUploader(ImageHostClient):
             ]
 
             if create_gallery:
-                form_data.append(('create_gallery', 'true'))
+                form_data.append(('create_gallery', '1'))
+                # gallery_name is only honoured together with create_gallery
+                if gallery_name:
+                    form_data.append(('gallery_name', gallery_name))
             if gallery_id:
                 form_data.append(('gallery_id', gallery_id))
 
@@ -344,20 +348,38 @@ class ImxToUploader(ImageHostClient):
 
             if status_code == 200:
                 json_response = json.loads(response_buffer.getvalue())
-                # IMX API natively returns {status, data: {image_url, thumb_url, gallery_id}}
+                # Current API: {status, message, data: {image_url, image_id, thumbnail_url,
+                # gallery_id?, gallery_name?, bbcode?}, warning?}. Older responses used
+                # 'thumb_url' and 'original_filename'; both are still accepted.
                 # Wrap through normalize_response() for standard contract compliance
                 data = json_response.get('data', {}) if isinstance(json_response.get('data'), dict) else {}
-                return self.normalize_response(
-                    status=json_response.get('status', 'error'),
+                status = json_response.get('status', 'error')
+                warning = json_response.get('warning')
+                if warning:
+                    log(f"IMX warning for {os.path.basename(image_path)}: {warning}",
+                        level="warning", category="uploads")
+                result = self.normalize_response(
+                    status=status,
                     image_url=data.get('image_url', ''),
-                    thumb_url=data.get('thumb_url', ''),
+                    thumb_url=data.get('thumbnail_url') or data.get('thumb_url', ''),
                     gallery_id=data.get('gallery_id'),
                     original_filename=data.get('original_filename', os.path.basename(image_path)),
                     bbcode=data.get('bbcode'),
+                    error=json_response.get('message') if status != 'success' else None,
                 )
+                result['data']['image_id'] = data.get('image_id', '')
+                if data.get('gallery_name'):
+                    result['data']['gallery_name'] = data['gallery_name']
+                return result
             else:
                 response_text = response_buffer.getvalue().decode('utf-8', errors='replace')
-                raise Exception(f"Upload failed with status code {status_code}: {response_text}")
+                # The API puts its reason in a JSON 'message'; prefer that over the raw body
+                try:
+                    parsed = json.loads(response_text)
+                    api_message = parsed.get('message') if isinstance(parsed, dict) else None
+                except ValueError:
+                    api_message = None
+                raise Exception(f"Upload failed with status code {status_code}: {api_message or response_text}")
 
         except pycurl.error as e:
             # pycurl error codes: 28=timeout, 7=connection failed, etc.
