@@ -1,5 +1,7 @@
 # tests/unit/processing/test_upload_worker_imx_covers.py
 """Worker-side routing of IMX covers through the engine's cover pass."""
+import os
+
 import pytest
 from unittest.mock import patch, MagicMock, Mock
 
@@ -283,10 +285,31 @@ class TestEngineCallSite:
 class TestOrderAndVideo:
     def test_merge_follows_cover_path_order(self):
         from src.processing.upload_workers import merge_cover_results
-        previous = [{'status': 'success', 'source_path': 'C:\\g\\b.jpg', 'bbcode': 'b'}]
+        previous = [{'status': 'success', 'source_path': 'C:/g/b.jpg', 'bbcode': 'b'}]
         new = [{'status': 'success', 'source_path': 'C:/g/a.jpg', 'bbcode': 'a'}]
+        # previous entries come first without ordering; the order list must put b before a
+        merged = merge_cover_results(previous, new, order=['C:/g/b.jpg', 'C:/g/a.jpg'])
+        assert [r['bbcode'] for r in merged] == ['b', 'a']
         merged = merge_cover_results(previous, new, order=['C:/g/a.jpg', 'C:/g/b.jpg'])
         assert [r['bbcode'] for r in merged] == ['a', 'b']
+
+    def test_merge_order_matches_other_spellings_of_the_same_path(self):
+        # The earlier success (listed FIRST in order) is spelled differently from the order entry.
+        # Unmatched entries sort last, so without normalised matching this would give ['a', 'b'].
+        from src.processing.upload_workers import merge_cover_results
+        previous = [{'status': 'success', 'source_path': 'C:/g/./b.jpg', 'bbcode': 'b'}]
+        new = [{'status': 'success', 'source_path': 'C:/g/a.jpg', 'bbcode': 'a'}]
+        merged = merge_cover_results(previous, new, order=['C:/g/b.jpg', 'C:/g/a.jpg'])
+        assert [r['bbcode'] for r in merged] == ['b', 'a']
+
+    @pytest.mark.skipif(os.name != 'nt', reason='backslash and case folding are only equivalent on Windows')
+    def test_merge_order_matches_backslash_and_case_spellings_on_windows(self):
+        from src.processing.upload_workers import merge_cover_results
+        bs = chr(92)
+        previous = [{'status': 'success', 'source_path': 'C:' + bs + 'G' + bs + 'B.jpg', 'bbcode': 'b'}]
+        new = [{'status': 'success', 'source_path': 'C:/g/a.jpg', 'bbcode': 'a'}]
+        merged = merge_cover_results(previous, new, order=['C:/g/b.jpg', 'C:/g/a.jpg'])
+        assert [r['bbcode'] for r in merged] == ['b', 'a']
 
     def test_video_item_on_imx_still_uploads_its_cover(self, worker):
         item = _item(media_type="video", cover_source_path="/tmp/test/cover.jpg")
