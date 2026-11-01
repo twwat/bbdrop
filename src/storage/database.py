@@ -1454,6 +1454,20 @@ class QueueStore:
             log(f"set_gallery_bbcode failed for {path}: {e}",
                 level="error", category="database")
 
+    def set_cover_result(self, path: str, cover_status: str, cover_result: Optional[list]) -> None:
+        """Write just the cover status and results of one gallery row (JSON, as the full upsert does)."""
+        if not path:
+            return
+        try:
+            with _ConnectionContext(self.db_path) as conn:
+                _ensure_schema(conn)
+                conn.execute(
+                    "UPDATE galleries SET cover_status = ?, cover_result = ? WHERE path = ?",
+                    (cover_status, json.dumps(cover_result) if cover_result is not None else None, path),
+                )
+        except Exception as e:
+            log(f"set_cover_result failed for {path}: {e}", level="error", category="database")
+
     def update_insertion_orders(self, ordered_paths: List[str]) -> None:
         if not ordered_paths:
             return

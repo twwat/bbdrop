@@ -283,7 +283,7 @@ class TestEngineCallSite:
 class TestOrderAndVideo:
     def test_merge_follows_cover_path_order(self):
         from src.processing.upload_workers import merge_cover_results
-        previous = [{'status': 'success', 'source_path': 'C:\g\b.jpg', 'bbcode': 'b'}]
+        previous = [{'status': 'success', 'source_path': 'C:\\g\\b.jpg', 'bbcode': 'b'}]
         new = [{'status': 'success', 'source_path': 'C:/g/a.jpg', 'bbcode': 'a'}]
         merged = merge_cover_results(previous, new, order=['C:/g/a.jpg', 'C:/g/b.jpg'])
         assert [r['bbcode'] for r in merged] == ['a', 'b']
@@ -328,3 +328,87 @@ def upload_cover_via(worker, item, client, gallery_id="gal123"):
     """Run worker._upload_cover with create_image_host_client returning ``client``."""
     with patch('src.processing.upload_workers.create_image_host_client', return_value=client):
         return worker._upload_cover(item, gallery_id=gallery_id)
+
+
+class TestReplacedCoverAndDurability:
+    def _run_with(self, worker, item, run_side_effect):
+        engine = MagicMock()
+        engine.run.side_effect = run_side_effect
+        with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
+             patch('src.processing.upload_workers.get_image_host_setting', side_effect=_host_setting()), \
+             patch('src.processing.upload_workers.UploadEngine', return_value=engine), \
+             patch.object(worker, '_restore_resume_state'), \
+             patch.object(worker, '_merge_resume_results', side_effect=lambda i, r, f: dict(r)):
+            worker.current_item = item
+            return engine, worker._run_upload_engine(item, 3, 2, 3, 4)
+
+    def test_current_cover_results_drops_replaced_covers(self):
+        from src.processing.upload_workers import current_cover_results
+        item = _item(cover_source_path="C:/g/new.jpg", cover_result=[
+            {'status': 'success', 'source_path': 'C:' + chr(92) + 'g' + chr(92) + 'old.jpg', 'bbcode': 'OLD'},
+            {'status': 'success', 'source_path': 'C:' + chr(92) + 'g' + chr(92) + 'new.jpg', 'bbcode': 'NEW'},
+        ])
+        assert [r['bbcode'] for r in current_cover_results(item)] == ['NEW']
+        assert current_cover_results(_item(cover_source_path=None, cover_result=item.cover_result)) == []
+
+    def test_replaced_cover_is_uploaded_and_old_one_not_posted(self, worker):
+        item = _item(cover_source_path="C:/g/new.jpg", cover_result=[
+            {'status': 'success', 'source_path': 'C:/g/old.jpg', 'bbcode': 'OLD'}])
+        new = [{'status': 'success', 'source_path': 'C:/g/new.jpg', 'bbcode': 'NEW'}]
+        engine, results = self._run_with(worker, item, lambda **kw: {'cover_result': new, 'images': []})
+        assert engine.run.call_args is not None
+        assert [r['bbcode'] for r in item.cover_result] == ['NEW']
+        assert [r['bbcode'] for r in results['cover_result']] == ['NEW']
+
+    def test_replaced_cover_already_done_is_reattached_without_the_old_one(self, worker):
+        item = _item(cover_source_path="C:/g/new.jpg", cover_result=[
+            {'status': 'success', 'source_path': 'C:/g/old.jpg', 'bbcode': 'OLD'},
+            {'status': 'success', 'source_path': 'C:/g/new.jpg', 'bbcode': 'NEW'}])
+        engine, results = self._run_with(worker, item, lambda **kw: {'images': []})
+        assert engine.run.call_args.kwargs['cover_files'] is None
+        assert [r['bbcode'] for r in results['cover_result']] == ['NEW']
+
+    def test_cover_is_on_the_item_and_in_the_database_while_run_is_going(self, worker):
+        item = _item(cover_source_path="C:/g/cover.jpg")
+        seen = {}
+        cover = {'status': 'success', 'source_path': 'C:/g/cover.jpg', 'bbcode': 'B'}
+
+        def fake_run(**kw):
+            kw['on_cover_uploaded'](dict(cover))
+            seen['during'] = list(item.cover_result or [])
+            seen['status'] = item.cover_status
+            seen['saved'] = worker.queue_manager.store.set_cover_result.call_args
+            return {'cover_result': [dict(cover)], 'images': []}
+
+        _, results = self._run_with(worker, item, fake_run)
+        assert seen['during'] == [cover] and seen['status'] == 'completed'
+        assert seen['saved'].args == ("/tmp/test", 'completed', [cover])
+        # The final merge after run() is idempotent
+        assert item.cover_result == [cover]
+        assert results['cover_result'] == [cover]
+
+    def test_cover_survives_run_raising_afterwards(self, worker):
+        item = _item(cover_source_path="C:/g/cover.jpg")
+        cover = {'status': 'success', 'source_path': 'C:/g/cover.jpg', 'bbcode': 'B'}
+
+        def fake_run(**kw):
+            kw['on_cover_uploaded'](dict(cover))
+            raise RuntimeError("killed during the images")
+
+        with pytest.raises(RuntimeError):
+            self._run_with(worker, item, fake_run)
+        assert item.cover_result == [cover]
+        worker.queue_manager.store.set_cover_result.assert_called_once()
+
+    def test_failing_database_write_does_not_break_the_callback(self, worker):
+        item = _item(cover_source_path="C:/g/cover.jpg")
+        worker.queue_manager.store.set_cover_result.side_effect = OSError("disk")
+        cover = {'status': 'success', 'source_path': 'C:/g/cover.jpg', 'bbcode': 'B'}
+
+        def fake_run(**kw):
+            kw['on_cover_uploaded'](dict(cover))
+            return {'images': []}
+
+        _, results = self._run_with(worker, item, fake_run)
+        assert item.cover_result == [cover]
+        assert results['cover_result'] == [cover]

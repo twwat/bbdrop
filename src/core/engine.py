@@ -28,6 +28,31 @@ from src.network.image_host_client import ImageHostClient
 COVER_THUMBNAIL_SIZE = 5
 
 
+def cover_result_from_response(response: Optional[Dict[str, Any]], path: str) -> Dict[str, Any]:
+    """Turn a normalized ``upload_image`` response into a per-cover result dict.
+
+    Success gives ``{'status': 'success', 'bbcode', 'image_url', 'thumb_url', 'source_path'}``
+    (BBCode built from the two URLs when the host sent none); anything else gives
+    ``{'status': 'failed', 'error', 'source_path'}``.
+    """
+    if not response or response.get('status') != 'success':
+        error = (response or {}).get('error') or f"API error: {response}"
+        return {'status': 'failed', 'error': str(error), 'source_path': path}
+    data = response.get('data') or {}
+    image_url = data.get('image_url') or ''
+    thumb_url = data.get('thumb_url') or ''
+    bbcode = data.get('bbcode') or ''
+    if not bbcode and image_url and thumb_url:
+        bbcode = f"[URL={image_url}][IMG]{thumb_url}[/IMG][/URL]"
+    return {
+        'status': 'success',
+        'bbcode': bbcode,
+        'image_url': image_url,
+        'thumb_url': thumb_url,
+        'source_path': path,
+    }
+
+
 class AtomicCounter:
     """Thread-safe byte counter for tracking upload progress across multiple threads."""
 
@@ -198,25 +223,11 @@ class UploadEngine:
         except Exception as e:
             return {'status': 'failed', 'error': f"Upload error: {e}", 'source_path': image_path}, False
 
-        if response.get('status') != 'success':
-            error = response.get('error') or f"API error: {response}"
-            return {'status': 'failed', 'error': str(error), 'source_path': image_path}, False
-
-        data = response.get('data') or {}
-        image_url = data.get('image_url') or ''
-        thumb_url = data.get('thumb_url') or ''
-        bbcode = data.get('bbcode') or ''
-        if not bbcode and image_url and thumb_url:
-            bbcode = f"[URL={image_url}][IMG]{thumb_url}[/IMG][/URL]"
-        result: Dict[str, Any] = {
-            'status': 'success',
-            'bbcode': bbcode,
-            'image_url': image_url,
-            'thumb_url': thumb_url,
-            'source_path': image_path,
-        }
+        result = cover_result_from_response(response, image_path)
+        if result['status'] != 'success':
+            return result, False
         if create:
-            result['gallery_id'] = data.get('gallery_id')
+            result['gallery_id'] = (response.get('data') or {}).get('gallery_id')
         return result, named
 
     def run(
@@ -247,6 +258,9 @@ class UploadEngine:
         on_progress: Optional[ProgressCallback] = None,
         should_soft_stop: Optional[SoftStopCallback] = None,
         on_image_uploaded: Optional[ImageUploadedCallback] = None,
+        # Called with each per-cover result as soon as it exists, so the caller can store it
+        # before the images finish. An exception raised by it is logged and ignored.
+        on_cover_uploaded: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
         if not os.path.exists(folder_path):
@@ -355,11 +369,20 @@ class UploadEngine:
         def maybe_soft_stopping() -> bool:
             return bool(should_soft_stop and should_soft_stop())
 
+        def record_cover(res: Dict[str, Any]) -> None:
+            """Keep a cover result and hand a copy to the caller's callback."""
+            cover_results.append(res)
+            if on_cover_uploaded:
+                try:
+                    on_cover_uploaded(dict(res))
+                except Exception as e:
+                    log(f"on_cover_uploaded callback failed: {e}", level="warning", category="uploads")
+
         def upload_cover(cover_path: str, target_gallery_id: Optional[str], create: bool) -> None:
             """Upload one cover, record its result, and adopt the gallery it created."""
             nonlocal gallery_id, named
             if not create and maybe_soft_stopping():
-                cover_results.append({'status': 'failed', 'error': 'Skipped: upload stopped', 'source_path': cover_path})
+                record_cover({'status': 'failed', 'error': 'Skipped: upload stopped', 'source_path': cover_path})
                 return
             started = time.time()
             res, cover_named = self._upload_cover_file(
@@ -371,7 +394,7 @@ class UploadEngine:
                 ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
             )
             created_id = res.pop('gallery_id', None)
-            cover_results.append(res)
+            record_cover(res)
             if res.get('status') == 'success':
                 log(f"Uploaded cover (in {time.time() - started:.3f}s): {cover_path}  ({res.get('image_url', '')})", category="uploads:file")
                 if create and created_id:

@@ -290,3 +290,66 @@ def test_soft_stop_skips_dedicated_gallery_covers(tmp_path):
     assert result['cover_result'][0]['status'] == 'failed'
     assert 'cover.jpg' not in [_name(c) for c in up.upload_image.call_args_list]
     assert result['gallery_id'] == 'gal1'
+
+
+# --- on_cover_uploaded -----------------------------------------------------------------
+
+def test_on_cover_uploaded_gets_each_result_in_order(tmp_path):
+    _folder(tmp_path, names=('cover.jpg', 'cover2.jpg', '001.jpg'))
+    up = _make_mock_uploader()
+    seen = []
+    _, result = _run(up, tmp_path, cover_files=['cover.jpg', 'cover2.jpg'],
+                     exclude_cover_files=['cover.jpg', 'cover2.jpg'],
+                     on_cover_uploaded=seen.append)
+
+    assert [os.path.basename(r['source_path']) for r in seen] == ['cover.jpg', 'cover2.jpg']
+    assert seen == result['cover_result']
+    assert all('gallery_id' not in r for r in seen)
+
+
+def test_on_cover_uploaded_fires_before_the_images(tmp_path):
+    _folder(tmp_path)
+    up = _make_mock_uploader()
+    image_calls_when_called = []
+    _run(up, tmp_path, cover_files=['cover.jpg'], exclude_cover_files=['cover.jpg'],
+         on_cover_uploaded=lambda r: image_calls_when_called.append(len(up.upload_image.call_args_list)))
+
+    # Only the cover itself had been uploaded when the callback ran
+    assert image_calls_when_called == [1]
+
+
+def test_on_cover_uploaded_gets_failures_too(tmp_path):
+    _folder(tmp_path)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = lambda *a, **k: (
+        {'status': 'error', 'error': 'bad cover'} if _name(MagicMock(args=a)) == 'cover.jpg' else _ok())
+    seen = []
+    _run(up, tmp_path, cover_files=['cover.jpg'], exclude_cover_files=['cover.jpg'],
+         on_cover_uploaded=seen.append)
+
+    assert len(seen) == 1 and seen[0]['status'] == 'failed' and seen[0]['error'] == 'bad cover'
+
+
+def test_raising_on_cover_uploaded_does_not_stop_the_gallery(tmp_path):
+    _folder(tmp_path)
+    up = _make_mock_uploader()
+
+    def boom(_res):
+        raise RuntimeError("callback broke")
+
+    _, result = _run(up, tmp_path, cover_files=['cover.jpg'], exclude_cover_files=['cover.jpg'],
+                     on_cover_uploaded=boom)
+
+    assert result['successful_count'] == 2
+    assert [r['status'] for r in result['cover_result']] == ['success']
+
+
+def test_cover_result_from_response_shapes():
+    from src.core.engine import cover_result_from_response
+    ok = cover_result_from_response(
+        {'status': 'success', 'data': {'image_url': 'I', 'thumb_url': 'T'}}, '/p/c.jpg')
+    assert ok == {'status': 'success', 'bbcode': '[URL=I][IMG]T[/IMG][/URL]',
+                  'image_url': 'I', 'thumb_url': 'T', 'source_path': '/p/c.jpg'}
+    assert cover_result_from_response({'status': 'error', 'error': 'no'}, '/p/c.jpg') == {
+        'status': 'failed', 'error': 'no', 'source_path': '/p/c.jpg'}
+    assert cover_result_from_response(None, '/p/c.jpg')['status'] == 'failed'

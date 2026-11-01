@@ -1066,6 +1066,9 @@ class QueueManager(QObject):
                 item.uploaded_files = set()  # CRITICAL: Clear the set of uploaded filenames
                 item.uploaded_images_data = []  # Clear uploaded image metadata
                 item.uploaded_bytes = 0  # Clear uploaded bytes counter
+                # The new gallery needs its covers again; stale results would mark them done
+                item.cover_result = None
+                item.cover_status = "pending" if item.cover_source_path else "none"
                 
                 log(f"{item.name or os.path.basename(path)}: Complete reset, starting fresh scan", category="scan")
                 
@@ -1084,9 +1087,16 @@ class QueueManager(QObject):
             except Exception as e:
                 log(f"Could not clear uploaded images for {path}: {e}",
                     level="warning", category="database")
+            # The rescan saves the item again, but clear the stored cover results now so
+            # an interruption before then cannot bring the old gallery's covers back.
+            try:
+                self.store.set_cover_result(path, self.items[path].cover_status, None)
+            except Exception as e:
+                log(f"Could not clear cover results for {path}: {e}",
+                    level="warning", category="database")
 
         self._inc_version()
-    
+
     def rescan_failed_folder(self, path: str):
         """Legacy method - redirect to additive rescan for scan failures"""
         # For backwards compatibility, redirect scan failures to additive rescan

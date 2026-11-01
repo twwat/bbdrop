@@ -570,6 +570,32 @@ class TestRetryOperations:
         assert queue_manager.items[gallery_dir].uploaded_images == 0
         assert len(queue_manager.items[gallery_dir].uploaded_files) == 0
 
+    def test_reset_gallery_complete_clears_cover_results(self, queue_manager, gallery_dir, mock_store):
+        """A reset gallery gets a new host gallery, so its covers must upload again."""
+        queue_manager.add_item(gallery_dir)
+        item = queue_manager.items[gallery_dir]
+        item.cover_source_path = os.path.join(gallery_dir, 'cover.jpg')
+        item.cover_result = [{'status': 'success', 'source_path': item.cover_source_path, 'bbcode': 'OLD'}]
+        item.cover_status = 'completed'
+
+        queue_manager.reset_gallery_complete(gallery_dir)
+
+        assert item.cover_result is None
+        assert item.cover_status == 'pending'
+        mock_store.set_cover_result.assert_called_once_with(gallery_dir, 'pending', None)
+
+    def test_reset_gallery_complete_without_cover_sets_status_none(self, queue_manager, gallery_dir):
+        queue_manager.add_item(gallery_dir)
+        item = queue_manager.items[gallery_dir]
+        item.cover_source_path = None
+        item.cover_result = [{'status': 'success', 'source_path': 'x', 'bbcode': 'OLD'}]
+        item.cover_status = 'completed'
+
+        queue_manager.reset_gallery_complete(gallery_dir)
+
+        assert item.cover_result is None
+        assert item.cover_status == 'none'
+
 
 class TestCustomFields:
     """Test custom field operations."""

@@ -15,7 +15,7 @@ from src.utils.templates import save_gallery_artifacts
 from src.network.image_host_factory import create_image_host_client
 from src.utils.logger import log
 from src.storage.queue_manager import GalleryQueueItem
-from src.core.engine import UploadEngine, AtomicCounter, COVER_THUMBNAIL_SIZE
+from src.core.engine import UploadEngine, AtomicCounter, COVER_THUMBNAIL_SIZE, cover_result_from_response
 from src.core.image_host_config import get_image_host_setting, get_image_host_config_manager, is_image_host_enabled, get_enabled_hosts
 from src.processing.hooks_executor import execute_gallery_hooks
 
@@ -38,6 +38,19 @@ def _norm_cover_path(path: str) -> str:
 def resolve_cover_host(item: GalleryQueueItem, settings_host: str) -> str:
     """Host that uploads this item's covers: item, then the settings default, then the gallery host."""
     return item.cover_host_id or settings_host or item.image_host_id or "imx"
+
+
+def current_cover_results(item: GalleryQueueItem) -> List[Dict[str, Any]]:
+    """The item's stored cover results that belong to its current cover paths.
+
+    "Set cover" changes ``cover_source_path`` without touching ``cover_result``, so a
+    result for a replaced cover must not be merged, re-attached or posted as ``#cover#``.
+    """
+    current = {_norm_cover_path(p) for p in (item.cover_source_path or '').split(';') if p.strip()}
+    return [
+        r for r in (item.cover_result or [])
+        if r.get('source_path') and _norm_cover_path(r['source_path']) in current
+    ]
 
 
 def imx_cover_plan(item: GalleryQueueItem, cover_host: str,
@@ -809,28 +822,15 @@ class UploadWorker(QThread):
 
         Used for galleries hosted elsewhere; IMX galleries get their covers from the engine.
         """
-        normalized = client.upload_image(
+        return cover_result_from_response(
+            client.upload_image(
+                path,
+                gallery_id=gallery_id or None,
+                thumbnail_size=COVER_THUMBNAIL_SIZE,
+                thumbnail_format=thumbnail_format,
+            ),
             path,
-            gallery_id=gallery_id or None,
-            thumbnail_size=COVER_THUMBNAIL_SIZE,
-            thumbnail_format=thumbnail_format,
         )
-        if not normalized or normalized.get('status') != 'success':
-            error = (normalized or {}).get('error') or 'Upload failed'
-            return {'status': 'failed', 'error': str(error), 'source_path': path}
-        data = normalized.get('data') or {}
-        image_url = data.get('image_url') or ''
-        thumb_url = data.get('thumb_url') or ''
-        bbcode = data.get('bbcode') or ''
-        if not bbcode and image_url and thumb_url:
-            bbcode = f"[URL={image_url}][IMG]{thumb_url}[/IMG][/URL]"
-        return {
-            'status': 'success',
-            'bbcode': bbcode,
-            'image_url': image_url,
-            'thumb_url': thumb_url,
-            'source_path': path,
-        }
 
     def _process_upload_results(self, item: GalleryQueueItem, results: Optional[Dict[str, Any]]):
         """Process upload results and update item status"""
@@ -1133,6 +1133,11 @@ class UploadWorker(QThread):
             if exclude_from_gallery:
                 exclude_covers = [os.path.basename(p) for p in item.cover_source_path.split(';') if p.strip()]
 
+        def on_cover_uploaded(res: dict):
+            # Store each cover as it lands: a kill during the images must not
+            # make the next start upload the same covers again.
+            self._store_cover_results(item, [res], persist=True)
+
         # -- IMX covers --------------------------------------------------------
         # The engine uploads them first, inside the gallery pass. imx_cover_plan is the
         # only host gate: Turbo/Pixhost galleries and non-IMX cover hosts get nothing.
@@ -1145,6 +1150,8 @@ class UploadWorker(QThread):
                 item, QSettings("BBDropUploader", "BBDropGUI").value('cover/host_id', '', type=str))
             imx_cover_host = item.image_host_id == 'imx' and cover_host == 'imx'
             if imx_cover_host:
+                # Drop results for covers that were replaced since the last run
+                item.cover_result = current_cover_results(item) or None
                 imx_covers, imx_cover_gallery = imx_cover_plan(
                     item, cover_host, get_image_host_setting('imx', 'cover_gallery', 'str') or "")
                 cover_thumbnail_format = get_image_host_setting('imx', 'cover_thumbnail_format', 'int') or 2
@@ -1168,14 +1175,13 @@ class UploadWorker(QThread):
             on_progress=on_progress,
             should_soft_stop=should_soft_stop,
             on_image_uploaded=on_image_uploaded,
+            on_cover_uploaded=on_cover_uploaded,
         )
 
-        # Keep the stored cover results: this run's, merged with earlier successes
+        # Keep the stored cover results: this run's, merged with earlier successes.
+        # Idempotent: the callback already merged each one as it arrived.
         if 'cover_result' in results:
-            item.cover_result = merge_cover_results(
-                item.cover_result, results['cover_result'],
-                order=[p for p in (item.cover_source_path or '').split(';') if p.strip()])
-            item.cover_status = cover_status_from_results(item.cover_result)
+            self._store_cover_results(item, results['cover_result'], persist=False)
 
         # Merge results from this run with previously uploaded images (resume)
         results = self._merge_resume_results(item, results, folder_path)
@@ -1186,6 +1192,23 @@ class UploadWorker(QThread):
             results = dict(results)
             results['cover_result'] = item.cover_result
         return results
+
+    def _store_cover_results(self, item: GalleryQueueItem, new: list, persist: bool) -> None:
+        """Merge ``new`` cover results into the item and refresh its cover status.
+
+        With ``persist`` the two cover columns are written straight to the database. The
+        queue's normal save skips items in the transient uploading state, and a gallery
+        row mid-upload is not worth a full upsert, so this is a targeted update.
+        """
+        item.cover_result = merge_cover_results(
+            current_cover_results(item), new,
+            order=[p for p in (item.cover_source_path or '').split(';') if p.strip()])
+        item.cover_status = cover_status_from_results(item.cover_result)
+        if persist:
+            try:
+                self.queue_manager.store.set_cover_result(item.path, item.cover_status, item.cover_result)
+            except Exception as e:
+                log(f"Could not save cover result for {item.path}: {e}", level="warning", category="cover")
 
     def _merge_resume_results(self, item: GalleryQueueItem,
                               results: dict, folder_path: str) -> dict:
