@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pycurl
 import pytest
 
+from src.core.image_host_config import get_image_host_config_manager
 from src.network.imx_uploader import ImxToUploader
 
 pytestmark = pytest.mark.unit
@@ -180,3 +181,33 @@ def test_non_200_raises_with_json_message(client, image):
 def test_non_200_non_json_falls_back_to_raw_body(client, image):
     with pytest.raises(Exception, match='502.*Bad Gateway'):
         run_upload(client, image, body=b'<html>Bad Gateway</html>', code=502)
+
+
+class TestSanitizeGalleryName:
+    def test_keeps_square_brackets(self, client):
+        assert client.sanitize_gallery_name('Set [HD] (2026)') == 'Set [HD] (2026)'
+
+    def test_drops_disallowed_and_collapses_spaces(self, client):
+        assert client.sanitize_gallery_name('A  &  B:  C') == 'A B C'
+
+    def test_accents_are_dropped(self, client):
+        assert client.sanitize_gallery_name('Café (2026)') == 'Caf (2026)'
+
+    def test_only_disallowed_becomes_untitled(self, client):
+        assert client.sanitize_gallery_name('♥♥♥') == 'untitled'
+
+    def test_empty_becomes_untitled(self, client):
+        assert client.sanitize_gallery_name('') == 'untitled'
+
+    def test_capped_at_100(self, client):
+        assert len(client.sanitize_gallery_name('x' * 150)) == 100
+
+    def test_cap_does_not_leave_trailing_space(self, client):
+        assert not client.sanitize_gallery_name(('ab ' * 40)).endswith(' ')
+
+
+def test_imx_config_has_size_5_and_name_cap():
+    cfg = get_image_host_config_manager().get_host('imx')
+    assert [s['id'] for s in cfg.thumbnail_sizes] == [1, 6, 2, 3, 4, 5]
+    assert cfg.thumbnail_sizes[-1]['label'] == '600x600 (Cover)'
+    assert cfg.gallery_name_max_length == 100

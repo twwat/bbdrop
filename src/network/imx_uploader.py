@@ -214,11 +214,12 @@ class ImxToUploader(ImageHostClient):
         return True
 
     def sanitize_gallery_name(self, name: str) -> str:
-        """IMX.to gallery name rules: alphanumeric, spaces, hyphens, dots, underscores, parens."""
+        """IMX.to gallery name rules: ASCII letters, digits, space, , . - _ ( ) [ ]; max 100 chars."""
         if not name:
             return 'untitled'
-        sanitized = re.sub(r'[^a-zA-Z0-9,\.\s\-_\(\)]', '', name)
+        sanitized = re.sub(r'[^A-Za-z0-9 ,.\-_()\[\]]', '', name)
         sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+        sanitized = sanitized[:100].strip()
         return sanitized or 'untitled'
 
     def upload_image(
