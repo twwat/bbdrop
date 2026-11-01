@@ -64,10 +64,11 @@ class TestCoverRouting:
         with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
              patch('src.processing.upload_workers.get_image_host_setting',
                    side_effect=_mock_host_setting()):
-            worker._upload_cover(item, gallery_id="gal123")
+            result = worker._upload_cover(item, gallery_id="gal123")
 
-        call_kwargs = worker.rename_worker.upload_cover.call_args[1]
-        assert call_kwargs.get('gallery_id') == "gal123"
+        # The engine uploads IMX covers inside the gallery pass; the worker does nothing
+        assert result is None
+        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_non_imx_gallery_imx_cover_with_explicit_cover_gallery(self, mock_rw_class):
@@ -86,14 +87,26 @@ class TestCoverRouting:
             cover_host_id="imx",
         )
 
+        mock_client = MagicMock(spec=ImageHostClient)
+        mock_client.upload_image.return_value = {
+            "status": "success",
+            "data": {"image_url": "img", "thumb_url": "thumb", "bbcode": "bb"},
+        }
+
         with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
              patch('src.processing.upload_workers.get_image_host_setting',
-                   side_effect=_mock_host_setting({'cover_gallery': 'my_cover_gallery'})):
+                   side_effect=_mock_host_setting({'cover_gallery': 'my_cover_gallery'})), \
+             patch('src.processing.upload_workers.create_image_host_client', return_value=mock_client):
             worker._upload_cover(item, gallery_id="turbo_gal_id")
 
-        call_kwargs = worker.rename_worker.upload_cover.call_args[1]
-        # Explicit cover_gallery takes priority over same-host fallback
-        assert call_kwargs.get('gallery_id') == "my_cover_gallery"
+        # Explicit cover_gallery takes priority over same-host fallback; IMX covers use size 5
+        mock_client.upload_image.assert_called_once_with(
+            "/tmp/test/cover.jpg",
+            gallery_id="my_cover_gallery",
+            thumbnail_size=5,
+            thumbnail_format=2,
+        )
+        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_non_imx_gallery_imx_cover_empty_cover_gallery(self, mock_rw_class):
@@ -112,13 +125,26 @@ class TestCoverRouting:
             cover_host_id="imx",
         )
 
+        mock_client = MagicMock(spec=ImageHostClient)
+        mock_client.upload_image.return_value = {
+            "status": "success",
+            "data": {"image_url": "img", "thumb_url": "thumb", "bbcode": "bb"},
+        }
+
         with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
              patch('src.processing.upload_workers.get_image_host_setting',
-                   side_effect=_mock_host_setting({'cover_gallery': ''})):
+                   side_effect=_mock_host_setting({'cover_gallery': ''})), \
+             patch('src.processing.upload_workers.create_image_host_client', return_value=mock_client):
             worker._upload_cover(item, gallery_id="turbo_gal_id")
 
-        call_kwargs = worker.rename_worker.upload_cover.call_args[1]
-        assert call_kwargs.get('gallery_id') == ""
+        # No cover_gallery and a different gallery host: no gallery id is passed
+        mock_client.upload_image.assert_called_once_with(
+            "/tmp/test/cover.jpg",
+            gallery_id=None,
+            thumbnail_size=5,
+            thumbnail_format=2,
+        )
+        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_same_host_turbo_routes_to_image_host_client(self, mock_rw_class):
@@ -183,11 +209,11 @@ class TestCoverRouting:
         with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings({'cover/host_id': ''})), \
              patch('src.processing.upload_workers.get_image_host_setting',
                    side_effect=_mock_host_setting()):
-            worker._upload_cover(item, gallery_id="gal456")
+            result = worker._upload_cover(item, gallery_id="gal456")
 
-        # cover_host_id defaults to image_host_id ("imx"), same host -> uses gallery_id
-        call_kwargs = worker.rename_worker.upload_cover.call_args[1]
-        assert call_kwargs.get('gallery_id') == "gal456"
+        # cover_host_id defaults to image_host_id ("imx"): the engine handles it
+        assert result is None
+        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_explicit_cover_gallery_overrides_same_host_fallback(self, mock_rw_class):
@@ -209,11 +235,11 @@ class TestCoverRouting:
         with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
              patch('src.processing.upload_workers.get_image_host_setting',
                    side_effect=_mock_host_setting({'cover_gallery': 'dedicated_covers'})):
-            worker._upload_cover(item, gallery_id="gal789")
+            result = worker._upload_cover(item, gallery_id="gal789")
 
-        call_kwargs = worker.rename_worker.upload_cover.call_args[1]
-        # Explicit cover_gallery should override same-host gallery_id fallback
-        assert call_kwargs.get('gallery_id') == "dedicated_covers"
+        # A dedicated cover gallery is also handled by the engine, not the worker
+        assert result is None
+        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_thumbnail_format_from_ini(self, mock_rw_class):
@@ -235,10 +261,11 @@ class TestCoverRouting:
         with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
              patch('src.processing.upload_workers.get_image_host_setting',
                    side_effect=_mock_host_setting({'cover_thumbnail_format': 5})):
-            worker._upload_cover(item, gallery_id="gal_fmt")
+            result = worker._upload_cover(item, gallery_id="gal_fmt")
 
-        call_kwargs = worker.rename_worker.upload_cover.call_args[1]
-        assert call_kwargs.get('thumbnail_format') == 5
+        # The thumbnail format reaches the engine through the call site, not here
+        assert result is None
+        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_non_imx_cover_passes_thumbnail_size(self, mock_rw_class):

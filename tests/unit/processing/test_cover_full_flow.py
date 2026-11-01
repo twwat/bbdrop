@@ -4,6 +4,7 @@
 from unittest.mock import patch, MagicMock, Mock
 
 from src.storage.queue_manager import GalleryQueueItem
+from tests.unit.processing.test_upload_worker_imx_covers import imx_api_client, upload_cover_via
 
 
 class TestCoverFullFlow:
@@ -116,10 +117,8 @@ class TestFullCoverFlowGalleryCompletion:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        # Cover upload fails: all paths return None
-        worker.rename_worker.upload_cover.return_value = None
+        # Cover upload fails: all paths return nothing
+        client = imx_api_client(return_value=None)
         worker.queue_manager = MagicMock()
         worker.gallery_completed = MagicMock()
         worker.gallery_failed = MagicMock()
@@ -132,7 +131,7 @@ class TestFullCoverFlowGalleryCompletion:
             name="gallery40",
             cover_source_path="/tmp/gallery40/cover1.jpg;/tmp/gallery40/cover2.jpg",
             cover_host_id="imx",
-            image_host_id="imx",
+            image_host_id="turbo",
         )
         item.start_time = 1000.0
         item.uploaded_bytes = 0
@@ -149,6 +148,7 @@ class TestFullCoverFlowGalleryCompletion:
 
         with patch('src.utils.metrics_store.get_metrics_store', return_value=None), \
              patch.object(worker, '_save_artifacts_for_result', return_value={}), \
+             patch('src.processing.upload_workers.create_image_host_client', return_value=client), \
              patch('src.processing.upload_workers.execute_gallery_hooks', return_value={}):
             worker._process_upload_results(item, results)
 
@@ -173,8 +173,6 @@ class TestFullCoverFlowGalleryCompletion:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
 
         cover_data_1 = {
             "status": "success",
@@ -188,17 +186,18 @@ class TestFullCoverFlowGalleryCompletion:
             "image_url": "https://imx.to/i/bbb",
             "thumb_url": "https://t.imx.to/t/bbb.jpg",
         }
-        worker.rename_worker.upload_cover.side_effect = [cover_data_1, cover_data_2]
+        client = imx_api_client(side_effect=[cover_data_1, cover_data_2])
 
         item = GalleryQueueItem(
             path="/tmp/gallery_covers",
             name="gallery_covers",
             cover_source_path="/tmp/gallery_covers/cover1.jpg;/tmp/gallery_covers/cover2.jpg",
             cover_host_id="imx",
+            image_host_id="turbo",
         )
 
         # Step 1: Call _upload_cover directly
-        result = worker._upload_cover(item, gallery_id="gal_abc")
+        result = upload_cover_via(worker, item, client, gallery_id="gal_abc")
 
         # Must return a list of 2 success dicts
         assert isinstance(result, list)
@@ -242,8 +241,6 @@ class TestFullCoverFlowGalleryCompletion:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
 
         # First cover succeeds, second fails with exception
         cover_success = {
@@ -252,19 +249,17 @@ class TestFullCoverFlowGalleryCompletion:
             "image_url": "https://imx.to/i/ok1",
             "thumb_url": "https://t.imx.to/t/ok1.jpg",
         }
-        worker.rename_worker.upload_cover.side_effect = [
-            cover_success,
-            RuntimeError("server 500"),
-        ]
+        client = imx_api_client(side_effect=[cover_success, RuntimeError("server 500")])
 
         item = GalleryQueueItem(
             path="/tmp/gallery_partial",
             name="gallery_partial",
             cover_source_path="/tmp/gallery_partial/cover1.jpg;/tmp/gallery_partial/cover2.jpg",
             cover_host_id="imx",
+            image_host_id="turbo",
         )
 
-        result = worker._upload_cover(item, gallery_id="gal_partial")
+        result = upload_cover_via(worker, item, client, gallery_id="gal_partial")
 
         # Should return list with 2 entries
         assert isinstance(result, list)
@@ -327,13 +322,11 @@ class TestFullCoverFlowGalleryCompletion:
             'gallery_name': 'gallery_partial',
         }
 
-        # Reset upload_cover to simulate partial again for _process_upload_results
-        worker.rename_worker.upload_cover.side_effect = [
-            cover_success,
-            RuntimeError("server 500"),
-        ]
+        # Reset the client to simulate partial again for _process_upload_results
+        client = imx_api_client(side_effect=[cover_success, RuntimeError("server 500")])
 
         with patch('src.utils.metrics_store.get_metrics_store', return_value=None), \
+             patch('src.processing.upload_workers.create_image_host_client', return_value=client), \
              patch.object(worker, '_save_artifacts_for_result', return_value={}), \
              patch('src.processing.upload_workers.execute_gallery_hooks', return_value={}):
             worker._process_upload_results(item, engine_results)

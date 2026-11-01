@@ -1,8 +1,30 @@
 # tests/unit/processing/test_cover_pipeline.py
-"""Tests for cover photo upload wired into the upload pipeline."""
+"""Tests for cover photo upload wired into the upload pipeline.
+
+IMX covers on an IMX gallery are uploaded by the engine, not by the worker, so the
+worker-side cases here use a gallery on another host (Turbo) with IMX as the cover host.
+"""
 from unittest.mock import patch, MagicMock, Mock
 
 from src.storage.queue_manager import GalleryQueueItem
+from tests.unit.processing.test_upload_worker_imx_covers import imx_api_client, upload_cover_via
+
+_COVER_OK = {
+    "status": "success",
+    "bbcode": "[url=img][img]thumb[/img][/url]",
+    "image_url": "img",
+    "thumb_url": "thumb",
+}
+
+
+def _turbo_item(cover_source_path="/tmp/test/cover.jpg", cover_host_id="imx"):
+    return GalleryQueueItem(
+        path="/tmp/test",
+        name="test",
+        image_host_id="turbo",
+        cover_source_path=cover_source_path,
+        cover_host_id=cover_host_id,
+    )
 
 
 class TestCoverPipeline:
@@ -10,34 +32,20 @@ class TestCoverPipeline:
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_uploaded_when_source_path_set(self, mock_rw_class):
-        """When item has cover_source_path, _upload_cover is called."""
+        """When item has cover_source_path, _upload_cover uploads it."""
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {
-            "status": "success",
-            "bbcode": "[url=img][img]thumb[/img][/url]",
-            "image_url": "img",
-            "thumb_url": "thumb",
-        }
+        client = imx_api_client(return_value=_COVER_OK)
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, _turbo_item(), client)
 
         assert result is not None
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["status"] == "success"
         assert result[0]["source_path"] == "/tmp/test/cover.jpg"
-        worker.rename_worker.upload_cover.assert_called_once()
+        client.upload_image.assert_called_once()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_no_cover_when_source_path_none(self, mock_rw_class):
@@ -56,59 +64,25 @@ class TestCoverPipeline:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = None
+        client = imx_api_client(return_value=None)
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, _turbo_item(), client)
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]['status'] == 'failed'
         assert result[0]['source_path'] == '/tmp/test/cover.jpg'
 
     @patch('src.processing.upload_workers.RenameWorker')
-    def test_cover_skipped_when_no_rename_worker(self, mock_rw_class):
-        """Cover upload skipped when rename_worker not available."""
+    def test_cover_needs_no_rename_worker(self, mock_rw_class):
+        """IMX covers on another host's gallery use the API, so no RenameWorker or web login is needed."""
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
         worker.rename_worker = None
+        client = imx_api_client(return_value=_COVER_OK)
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
-        assert result is None
-
-    @patch('src.processing.upload_workers.RenameWorker')
-    def test_cover_skipped_when_not_logged_in(self, mock_rw_class):
-        """Cover upload skipped when rename_worker exists but not authenticated."""
-        from src.processing.upload_workers import UploadWorker
-
-        worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = False
-
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
-        assert result is None
+        result = upload_cover_via(worker, _turbo_item(), client)
+        assert result[0]['status'] == 'success'
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_exception_returns_list_with_error(self, mock_rw_class):
@@ -116,18 +90,9 @@ class TestCoverPipeline:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.side_effect = RuntimeError("network error")
+        client = imx_api_client(side_effect=RuntimeError("network error"))
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, _turbo_item(), client)
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]['status'] == 'failed'
@@ -140,59 +105,33 @@ class TestCoverPipeline:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        cover_data = {
-            "status": "success",
-            "bbcode": "[url=img][img]thumb[/img][/url]",
-            "image_url": "img",
-            "thumb_url": "thumb",
-        }
-        worker.rename_worker.upload_cover.return_value = cover_data
+        client = imx_api_client(return_value=_COVER_OK)
+        item = _turbo_item()
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        worker._upload_cover(item, gallery_id="gal123")
+        upload_cover_via(worker, item, client)
         assert isinstance(item.cover_result, list)
         assert len(item.cover_result) == 1
-        # Result dict should contain original fields plus source_path
-        assert item.cover_result[0]['status'] == cover_data['status']
-        assert item.cover_result[0]['bbcode'] == cover_data['bbcode']
+        # Result dict should contain the cover fields plus source_path
+        assert item.cover_result[0]['status'] == _COVER_OK['status']
+        assert item.cover_result[0]['bbcode'] == _COVER_OK['bbcode']
         assert item.cover_result[0]['source_path'] == '/tmp/test/cover.jpg'
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_uses_item_host_id_fallback(self, mock_rw_class):
-        """When cover_host_id is None, falls back to image_host_id."""
+        """When cover_host_id is None, falls back to image_host_id (here Turbo)."""
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {
-            "status": "success",
-            "bbcode": "[url=img][img]thumb[/img][/url]",
-            "image_url": "img",
-            "thumb_url": "thumb",
-        }
-
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id=None,
-            image_host_id="imx",
-        )
+        client = imx_api_client(return_value=_COVER_OK)
+        item = _turbo_item(cover_host_id=None)
 
         mock_qs = MagicMock()
         mock_qs.value.return_value = ''
         with patch('src.processing.upload_workers.QSettings', return_value=mock_qs), \
-             patch('src.processing.upload_workers.get_image_host_setting', return_value=None):
+             patch('src.processing.upload_workers.get_image_host_setting', return_value=None), \
+             patch('src.processing.upload_workers.create_image_host_client', return_value=client) as factory:
             result = worker._upload_cover(item, gallery_id="gal123")
+        factory.assert_called_once_with('turbo')
         assert result is not None
         assert isinstance(result, list)
         assert len(result) == 1
@@ -302,7 +241,7 @@ class TestCoverProgressDecoupled:
 
 
 class TestMultiCoverUpload:
-    """Tests for multi-cover upload behavior (Task 5)."""
+    """Tests for multi-cover upload behavior (IMX cover on a gallery hosted elsewhere)."""
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_upload_cover_imx_uploads_all_paths(self, mock_rw_class):
@@ -310,26 +249,13 @@ class TestMultiCoverUpload:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {
-            "status": "success",
-            "bbcode": "[url=img][img]thumb[/img][/url]",
-            "image_url": "img",
-            "thumb_url": "thumb",
-        }
+        client = imx_api_client(return_value=_COVER_OK)
+        item = _turbo_item("/tmp/test/cover1.jpg;/tmp/test/cover2.jpg;/tmp/test/cover3.jpg")
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg;/tmp/test/cover3.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, item, client)
 
         # All 3 paths should have been uploaded
-        assert worker.rename_worker.upload_cover.call_count == 3
+        assert client.upload_image.call_count == 3
         assert isinstance(result, list)
         assert len(result) == 3
         # Each result should have its own source_path
@@ -343,23 +269,9 @@ class TestMultiCoverUpload:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {
-            "status": "success",
-            "bbcode": "[url=img][img]thumb[/img][/url]",
-            "image_url": "img",
-            "thumb_url": "thumb",
-        }
+        client = imx_api_client(return_value=_COVER_OK)
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, _turbo_item(), client)
 
         assert isinstance(result, list)
         assert len(result) == 1
@@ -373,18 +285,9 @@ class TestMultiCoverUpload:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.side_effect = RuntimeError("connection refused")
+        client = imx_api_client(side_effect=RuntimeError("connection refused"))
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, _turbo_item(), client)
 
         assert isinstance(result, list)
         assert len(result) == 1
@@ -398,23 +301,10 @@ class TestMultiCoverUpload:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {
-            "status": "success",
-            "bbcode": "bb",
-            "image_url": "img",
-            "thumb_url": "thumb",
-        }
+        client = imx_api_client(return_value=_COVER_OK)
+        item = _turbo_item("/tmp/test/cover1.jpg;/tmp/test/cover2.jpg")
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg",
-            cover_host_id="imx",
-        )
-
-        worker._upload_cover(item, gallery_id="gal123")
+        upload_cover_via(worker, item, client)
         assert item.cover_status == "completed"
 
     @patch('src.processing.upload_workers.RenameWorker')
@@ -423,22 +313,11 @@ class TestMultiCoverUpload:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
         # First call succeeds, second fails
-        worker.rename_worker.upload_cover.side_effect = [
-            {"status": "success", "bbcode": "bb", "image_url": "img", "thumb_url": "thumb"},
-            RuntimeError("timeout"),
-        ]
+        client = imx_api_client(side_effect=[_COVER_OK, RuntimeError("timeout")])
+        item = _turbo_item("/tmp/test/cover1.jpg;/tmp/test/cover2.jpg")
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, item, client)
         assert item.cover_status == "partial"
         assert len(result) == 2
         assert result[0]['status'] == 'success'
@@ -450,18 +329,10 @@ class TestMultiCoverUpload:
         from src.processing.upload_workers import UploadWorker
 
         worker = UploadWorker(Mock())
-        worker.rename_worker = MagicMock()
-        worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = None  # All uploads return None
+        client = imx_api_client(return_value=None)  # All uploads return nothing
+        item = _turbo_item("/tmp/test/cover1.jpg;/tmp/test/cover2.jpg")
 
-        item = GalleryQueueItem(
-            path="/tmp/test",
-            name="test",
-            cover_source_path="/tmp/test/cover1.jpg;/tmp/test/cover2.jpg",
-            cover_host_id="imx",
-        )
-
-        result = worker._upload_cover(item, gallery_id="gal123")
+        result = upload_cover_via(worker, item, client)
         assert item.cover_status == "failed"
         assert isinstance(result, list)
         assert len(result) == 2

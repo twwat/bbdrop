@@ -7,7 +7,7 @@ Handles gallery uploads and completion tracking in background threads
 import os
 import time
 import threading
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QSettings
 
@@ -15,7 +15,7 @@ from src.utils.templates import save_gallery_artifacts
 from src.network.image_host_factory import create_image_host_client
 from src.utils.logger import log
 from src.storage.queue_manager import GalleryQueueItem
-from src.core.engine import UploadEngine, AtomicCounter
+from src.core.engine import UploadEngine, AtomicCounter, COVER_THUMBNAIL_SIZE
 from src.core.image_host_config import get_image_host_setting, get_image_host_config_manager, is_image_host_enabled, get_enabled_hosts
 from src.processing.hooks_executor import execute_gallery_hooks
 
@@ -28,6 +28,63 @@ except ImportError:
 # Stub for generate_bbcode_from_results (for testing - doesn't exist in bbdrop)
 # Tests will patch this, real code imports locally
 generate_bbcode_from_results = None
+
+
+def _norm_cover_path(path: str) -> str:
+    """Spelling-independent form of a cover path (case, slashes, '..')."""
+    return os.path.normcase(os.path.normpath(path))
+
+
+def resolve_cover_host(item: GalleryQueueItem, settings_host: str) -> str:
+    """Host that uploads this item's covers: item, then the settings default, then the gallery host."""
+    return item.cover_host_id or settings_host or item.image_host_id or "imx"
+
+
+def imx_cover_plan(item: GalleryQueueItem, cover_host: str,
+                   cover_gallery_setting: str) -> Tuple[List[str], Optional[str]]:
+    """Covers the engine should upload for an IMX gallery, and the dedicated cover gallery.
+
+    Only an IMX gallery whose covers also go to IMX qualifies: the engine has no host gate,
+    so this is the one place that decides. Paths come back unchanged and in order, minus
+    any that already have a successful result from an earlier run (resume).
+    """
+    if item.image_host_id != 'imx' or cover_host != 'imx' or not item.cover_source_path:
+        return [], None
+    paths = [p for p in item.cover_source_path.split(';') if p.strip()]
+    done = {
+        _norm_cover_path(r['source_path'])
+        for r in (item.cover_result or [])
+        if r.get('status') == 'success' and r.get('source_path')
+    }
+    todo = [p for p in paths if _norm_cover_path(p) not in done]
+    return todo, (cover_gallery_setting or None)
+
+
+def cover_status_from_results(results: List[Dict[str, Any]]) -> str:
+    """'completed' when every cover succeeded, 'partial' when some did, else 'failed'."""
+    successes = sum(1 for r in results if r.get('status') == 'success')
+    if not results or successes == 0:
+        return "failed"
+    return "completed" if successes == len(results) else "partial"
+
+
+def merge_cover_results(previous: Optional[List[Dict[str, Any]]],
+                        new: List[Dict[str, Any]],
+                        order: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Earlier successes plus this run's results; a new entry replaces the same source path.
+
+    With ``order`` (the item's cover paths) the merged list follows that order, so a cover
+    retried on resume keeps its place in the BBCode; unlisted entries go last.
+    """
+    replaced = {_norm_cover_path(r['source_path']) for r in new if r.get('source_path')}
+    merged = [
+        r for r in (previous or [])
+        if r.get('status') == 'success' and _norm_cover_path(r.get('source_path') or '') not in replaced
+    ] + list(new)
+    if order:
+        position = {_norm_cover_path(p): i for i, p in enumerate(order)}
+        merged.sort(key=lambda r: position.get(_norm_cover_path(r.get('source_path') or ''), len(position)))
+    return merged
 
 
 class UploadWorker(QThread):
@@ -618,9 +675,13 @@ class UploadWorker(QThread):
 
         try:
             settings = QSettings("BBDropUploader", "BBDropGUI")
-            cover_host_id = (item.cover_host_id
-                             or settings.value('cover/host_id', '', type=str)
-                             or item.image_host_id or "imx")
+            cover_host_id = resolve_cover_host(item, settings.value('cover/host_id', '', type=str))
+
+            if (item.image_host_id == "imx" and cover_host_id == "imx"
+                    and getattr(item, 'media_type', 'image') != 'video'):
+                # The engine already uploaded these inside the gallery pass
+                # (video items never go through the engine, so they fall through)
+                return None
 
             cover_gallery_setting = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ""
             if cover_gallery_setting:
@@ -636,21 +697,14 @@ class UploadWorker(QThread):
             results = []
 
             if cover_host_id == "imx":
-                # IMX: upload each cover individually via session-based endpoint
-                if self.rename_worker and getattr(self.rename_worker, 'login_successful', False):
-                    for path in paths:
-                        try:
-                            res = self.rename_worker.upload_cover(
-                                image_path=path,
-                                gallery_id=cover_gallery_id,
-                                thumbnail_format=cover_thumbnail_format,
-                            )
-                            if res:
-                                results.append({**res, 'source_path': path})
-                            else:
-                                results.append({'status': 'failed', 'error': 'Upload returned None', 'source_path': path})
-                        except Exception as e:
-                            results.append({'status': 'failed', 'error': str(e), 'source_path': path})
+                # IMX cover on a gallery hosted elsewhere: IMX API, 600 px size
+                cover_client = create_image_host_client(cover_host_id)
+                for path in paths:
+                    try:
+                        results.append(self._imx_cover_via_api(
+                            cover_client, path, cover_gallery_id, cover_thumbnail_format))
+                    except Exception as e:
+                        results.append({'status': 'failed', 'error': str(e), 'source_path': path})
 
             elif cover_host_id == "pixhost":
                 # Pixhost: dual-image composite for first 2, then individual for extras
@@ -732,17 +786,14 @@ class UploadWorker(QThread):
 
             # Determine cover_status from results
             successes = sum(1 for r in results if r.get('status') == 'success')
+            item.cover_status = cover_status_from_results(results)
             if not results:
-                item.cover_status = "failed"
                 log(f"Cover photo upload failed for {item.name}: no results", level="warning", category="cover")
-            elif successes == len(results):
-                item.cover_status = "completed"
+            elif item.cover_status == "completed":
                 log(f"Cover photo(s) uploaded for {item.name} ({successes} images)", level="info", category="cover")
-            elif successes > 0:
-                item.cover_status = "partial"
+            elif item.cover_status == "partial":
                 log(f"Cover photo(s) partially uploaded for {item.name} ({successes}/{len(results)})", level="warning", category="cover")
             else:
-                item.cover_status = "failed"
                 log(f"All cover photo uploads failed for {item.name}", level="error", category="cover")
 
             return results if results else None
@@ -751,6 +802,35 @@ class UploadWorker(QThread):
             log(f"Cover upload error for {item.name}: {e}", level="error", category="cover")
             item.cover_status = "failed"
             return None
+
+    @staticmethod
+    def _imx_cover_via_api(client, path: str, gallery_id: str, thumbnail_format: int) -> Dict[str, Any]:
+        """Upload one cover to IMX through its API at the 600 px size (ID 5).
+
+        Used for galleries hosted elsewhere; IMX galleries get their covers from the engine.
+        """
+        normalized = client.upload_image(
+            path,
+            gallery_id=gallery_id or None,
+            thumbnail_size=COVER_THUMBNAIL_SIZE,
+            thumbnail_format=thumbnail_format,
+        )
+        if not normalized or normalized.get('status') != 'success':
+            error = (normalized or {}).get('error') or 'Upload failed'
+            return {'status': 'failed', 'error': str(error), 'source_path': path}
+        data = normalized.get('data') or {}
+        image_url = data.get('image_url') or ''
+        thumb_url = data.get('thumb_url') or ''
+        bbcode = data.get('bbcode') or ''
+        if not bbcode and image_url and thumb_url:
+            bbcode = f"[URL={image_url}][IMG]{thumb_url}[/IMG][/URL]"
+        return {
+            'status': 'success',
+            'bbcode': bbcode,
+            'image_url': image_url,
+            'thumb_url': thumb_url,
+            'source_path': path,
+        }
 
     def _process_upload_results(self, item: GalleryQueueItem, results: Optional[Dict[str, Any]]):
         """Process upload results and update item status"""
@@ -1053,6 +1133,22 @@ class UploadWorker(QThread):
             if exclude_from_gallery:
                 exclude_covers = [os.path.basename(p) for p in item.cover_source_path.split(';') if p.strip()]
 
+        # -- IMX covers --------------------------------------------------------
+        # The engine uploads them first, inside the gallery pass. imx_cover_plan is the
+        # only host gate: Turbo/Pixhost galleries and non-IMX cover hosts get nothing.
+        imx_covers: List[str] = []
+        imx_cover_gallery: Optional[str] = None
+        cover_thumbnail_format = 2
+        imx_cover_host = False
+        if item.cover_source_path:
+            cover_host = resolve_cover_host(
+                item, QSettings("BBDropUploader", "BBDropGUI").value('cover/host_id', '', type=str))
+            imx_cover_host = item.image_host_id == 'imx' and cover_host == 'imx'
+            if imx_cover_host:
+                imx_covers, imx_cover_gallery = imx_cover_plan(
+                    item, cover_host, get_image_host_setting('imx', 'cover_gallery', 'str') or "")
+                cover_thumbnail_format = get_image_host_setting('imx', 'cover_thumbnail_format', 'int') or 2
+
         # -- run ---------------------------------------------------------------
         results = engine.run(
             folder_path=folder_path,
@@ -1066,13 +1162,29 @@ class UploadWorker(QThread):
             existing_gallery_id=existing_gallery_id,
             precalculated_dimensions=item,
             exclude_cover_files=exclude_covers if exclude_covers else None,
+            cover_files=imx_covers or None,
+            cover_thumbnail_format=cover_thumbnail_format,
+            cover_gallery_id=imx_cover_gallery,
             on_progress=on_progress,
             should_soft_stop=should_soft_stop,
             on_image_uploaded=on_image_uploaded,
         )
 
+        # Keep the stored cover results: this run's, merged with earlier successes
+        if 'cover_result' in results:
+            item.cover_result = merge_cover_results(
+                item.cover_result, results['cover_result'],
+                order=[p for p in (item.cover_source_path or '').split(';') if p.strip()])
+            item.cover_status = cover_status_from_results(item.cover_result)
+
         # Merge results from this run with previously uploaded images (resume)
         results = self._merge_resume_results(item, results, folder_path)
+
+        # A resumed gallery whose covers all succeeded earlier asks the engine for none;
+        # its results must still carry them or the BBCode loses #cover#.
+        if imx_cover_host and item.cover_result:
+            results = dict(results)
+            results['cover_result'] = item.cover_result
         return results
 
     def _merge_resume_results(self, item: GalleryQueueItem,
