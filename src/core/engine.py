@@ -36,7 +36,9 @@ def cover_result_from_response(response: Optional[Dict[str, Any]], path: str) ->
     ``{'status': 'failed', 'error', 'source_path'}``.
     """
     if not response or response.get('status') != 'success':
-        error = (response or {}).get('error') or f"API error: {response}"
+        if response:
+            log(f"Cover upload rejected, raw response: {response}", level="debug", category="uploads")
+        error = (response or {}).get('error') or 'no error message from the host'
         return {'status': 'failed', 'error': str(error), 'source_path': path}
     data = response.get('data') or {}
     image_url = data.get('image_url') or ''
@@ -151,41 +153,49 @@ class UploadEngine:
     ) -> Tuple[Dict[str, Any], bool]:
         """Upload the first image with create_gallery=True, naming the gallery in that request.
 
-        If the host rejects the name (error text mentions ``gallery_name``), retry once
-        without a name so the upload still succeeds and the caller can rename later.
+        If the host rejects the name, retry once without a name so the upload still
+        succeeds and the caller can rename later. A rejection is either an error response
+        or (the client raises on any non-200) an exception, in both cases with
+        ``gallery_name`` in the text. Other exceptions propagate unchanged.
 
-        Returns ``(response, named)``; ``named`` is True only when the API reported the
-        gallery name back. The caller is responsible for checking ``response['status']``.
+        Returns ``(response, named)``; ``named`` is True only when a name was sent, no
+        retry happened and the API reported the gallery name back. After a retry the
+        reported name is the host's default ("untitled gallery"), so it never counts.
+        The caller is responsible for checking ``response['status']``.
         """
-        response = self.uploader.upload_image(
-            image_path,
-            create_gallery=True,
-            thumbnail_size=thumbnail_size,
-            thumbnail_format=thumbnail_format,
-            progress_callback=progress_callback,
-            gallery_name=gallery_name,
-        )
-        error_text = str(response.get('error') or '')
-        if (
-            response.get('status') == 'error'
-            and gallery_name is not None
-            and 'gallery_name' in error_text.lower()
-        ):
-            log(
-                f"Host rejected gallery name '{gallery_name}' ({error_text}); retrying without a name",
-                level="warning",
-                category="uploads",
-            )
-            response = self.uploader.upload_image(
+        def attempt(name: Optional[str]) -> Dict[str, Any]:
+            return self.uploader.upload_image(
                 image_path,
                 create_gallery=True,
                 thumbnail_size=thumbnail_size,
                 thumbnail_format=thumbnail_format,
                 progress_callback=progress_callback,
-                gallery_name=None,
+                gallery_name=name,
             )
+
+        def rejected_name(error_text: str) -> bool:
+            return gallery_name is not None and 'gallery_name' in error_text.lower()
+
+        retried = False
+        try:
+            response = attempt(gallery_name)
+            error_text = str(response.get('error') or '')
+            if response.get('status') == 'error' and rejected_name(error_text):
+                retried = True
+        except Exception as e:
+            if not rejected_name(str(e)):
+                raise
+            error_text = str(e)
+            retried = True
+        if retried:
+            log(
+                f"Host rejected gallery name '{gallery_name}' ({error_text}); retrying without a name",
+                level="warning",
+                category="uploads",
+            )
+            response = attempt(None)
         data = response.get('data') or {}
-        named = bool(data.get('gallery_name'))
+        named = bool(gallery_name) and not retried and bool(data.get('gallery_name'))
         return response, named
 
     def _upload_cover_file(
@@ -450,7 +460,8 @@ class UploadEngine:
                 )
                 first_upload_duration = time.time() - first_upload_start
                 if first_response.get('status') != 'success':
-                    raise Exception(f"Failed to create gallery: {first_response.get('error')} ({first_response})")
+                    log(f"Gallery create rejected, raw response: {first_response}", level="debug", category="uploads")
+                    raise Exception(f"Failed to create gallery: {first_response.get('error') or 'no error message from the host'}")
                 gallery_id = first_response['data'].get('gallery_id')
                 preseed_images = [first_response['data']]
                 # Log first image success with URL
@@ -521,7 +532,8 @@ class UploadEngine:
                 upload_duration = time.time() - upload_start
                 if response.get('status') == 'success':
                     return image_file, response['data'], None, upload_duration, image_path
-                return image_file, None, f"API error: {response}", None, image_path
+                log(f"Upload of {image_file} rejected, raw response: {response}", level="debug", category="uploads")
+                return image_file, None, f"API error: {response.get('error') or 'no error message from the host'}", None, image_path
             except Exception as e:
                 return image_file, None, f"Upload error: {e}", None, image_path
 

@@ -146,3 +146,115 @@ def test_untitled_name_from_disallowed_folder_still_uploads(tmp_path):
 
     assert up.upload_image.call_args_list[0].kwargs['gallery_name'] == 'untitled'
     assert result['gallery_id'] == 'gal1'
+
+
+def test_retry_response_with_default_name_still_queues_rename(tmp_path):
+    """After the unnamed retry the API reports 'untitled gallery'; that is not a name we chose."""
+    _make_images(tmp_path)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [
+        {'status': 'error', 'error': 'Invalid gallery_name', 'data': {}},
+        _ok(gallery_name='untitled gallery'),
+        _ok(),
+    ]
+    engine = _engine(up)
+    _run(engine, tmp_path)
+
+    engine.rename_worker.queue_rename.assert_called_once_with('gal1', 'Test Gallery')
+
+
+def test_create_helper_no_name_sent_is_not_named(tmp_path):
+    img = tmp_path / 'a.jpg'
+    img.write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 10)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [_ok(gallery_name='untitled gallery')]
+    response, named = _engine(up)._create_gallery_with(str(img), None, 6, 2, None)
+    assert named is False
+    assert response['status'] == 'success'
+
+
+def test_invalid_name_raised_as_exception_retries_unnamed(tmp_path):
+    """The client raises on any non-200 response; the name rejection must still retry."""
+    _make_images(tmp_path)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [
+        Exception("Upload failed with status code 400: Invalid gallery_name"),
+        _ok(gallery_name='untitled gallery'),
+        _ok(),
+    ]
+    engine = _engine(up)
+    result = _run(engine, tmp_path)
+
+    assert up.upload_image.call_args_list[0].kwargs['gallery_name'] == 'Test Gallery'
+    assert up.upload_image.call_args_list[1].kwargs['gallery_name'] is None
+    assert result['gallery_id'] == 'gal1'
+    engine.rename_worker.queue_rename.assert_called_once_with('gal1', 'Test Gallery')
+
+
+def test_name_exception_check_is_case_insensitive(tmp_path):
+    _make_images(tmp_path)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [Exception("bad GALLERY_NAME"), _ok(), _ok()]
+    result = _run(_engine(up), tmp_path)
+    assert result['gallery_id'] == 'gal1'
+
+
+def test_other_exception_on_create_propagates_unchanged(tmp_path):
+    _make_images(tmp_path)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = Exception("Upload failed with status code 401: Invalid or inactive API key")
+    with pytest.raises(Exception, match='Invalid or inactive API key'):
+        _run(_engine(up), tmp_path)
+    assert up.upload_image.call_count == 1
+
+
+def test_name_exception_is_not_retried_when_no_name_was_sent(tmp_path):
+    img = tmp_path / 'a.jpg'
+    img.write_bytes(b'\xff\xd8\xff\xe0' + b'\x00' * 10)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = Exception("Invalid gallery_name")
+    with pytest.raises(Exception, match='gallery_name'):
+        _engine(up)._create_gallery_with(str(img), None, 6, 2, None)
+    assert up.upload_image.call_count == 1
+
+
+def test_failed_create_message_has_no_dict(tmp_path):
+    _make_images(tmp_path)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [{'status': 'error', 'error': 'Invalid or inactive API key', 'data': {}}]
+    with pytest.raises(Exception) as excinfo:
+        _run(_engine(up), tmp_path)
+    text = str(excinfo.value)
+    assert text == 'Failed to create gallery: Invalid or inactive API key'
+    assert '{' not in text
+
+
+def test_failed_create_without_message_has_no_dict(tmp_path):
+    _make_images(tmp_path)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [{'status': 'error', 'data': {}}]
+    with pytest.raises(Exception) as excinfo:
+        _run(_engine(up), tmp_path)
+    assert '{' not in str(excinfo.value)
+    assert 'Failed to create gallery' in str(excinfo.value)
+
+
+def test_per_image_failure_reason_has_no_dict(tmp_path):
+    _make_images(tmp_path, count=2)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [
+        _ok(),
+        {'status': 'error', 'error': 'File too large', 'data': {}},
+    ]
+    result = _run(_engine(up), tmp_path)
+
+    reasons = [reason for _name, reason in result['failed_details']]
+    assert reasons == ['API error: File too large']
+
+
+def test_per_image_failure_without_message_has_no_dict(tmp_path):
+    _make_images(tmp_path, count=2)
+    up = _make_mock_uploader()
+    up.upload_image.side_effect = [_ok(), {'status': 'error', 'data': {}}]
+    result = _run(_engine(up), tmp_path)
+    assert all('{' not in reason for _n, reason in result['failed_details'])

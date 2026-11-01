@@ -144,14 +144,17 @@ class TestCoverStatusAndMerge:
 
 class TestUploadCoverRouting:
     def test_upload_cover_returns_none_for_imx(self, worker):
-        item = _item(image_host_id="imx", cover_host_id="imx")
+        done = [{'status': 'success', 'source_path': 'C:/g/cover.jpg', 'bbcode': 'a'},
+                {'status': 'failed', 'source_path': 'C:/g/cover2.jpg', 'error': 'x'}]
+        item = _item(image_host_id="imx", cover_host_id="imx", cover_result=list(done))
         with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
              patch('src.processing.upload_workers.get_image_host_setting', side_effect=_host_setting()), \
              patch('src.processing.upload_workers.create_image_host_client') as factory:
             assert worker._upload_cover(item, gallery_id="gal") is None
         worker.rename_worker.upload_cover.assert_not_called()
         factory.assert_not_called()
-        assert item.cover_result is None
+        # Covers the engine already tried (even failed ones) are not repeated by the worker
+        assert item.cover_result == done
 
     def test_turbo_gallery_imx_cover_uses_api_with_size_5(self, worker):
         item = _item(image_host_id="turbo", cover_host_id="imx", cover_source_path="/tmp/test/cover.jpg")
@@ -435,3 +438,179 @@ class TestReplacedCoverAndDurability:
         _, results = self._run_with(worker, item, fake_run)
         assert item.cover_result == [cover]
         assert results['cover_result'] == [cover]
+
+
+class TestLateImxCovers:
+    """A cover set by the started hook or by Set cover during the upload is uploaded after the images."""
+
+    def _call(self, worker, item, client, host_overrides=None, gallery_id="gal7"):
+        with patch('src.processing.upload_workers.QSettings', return_value=_mock_qsettings()), \
+             patch('src.processing.upload_workers.get_image_host_setting',
+                   side_effect=_host_setting(host_overrides)), \
+             patch('src.processing.upload_workers.create_image_host_client', return_value=client) as factory:
+            result = worker._upload_cover(item, gallery_id=gallery_id)
+        return result, factory
+
+    def test_unplanned_cover_is_uploaded_into_the_gallery(self, worker):
+        item = _item(cover_source_path="C:/g/late.jpg", cover_result=None)
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'L', 'image_url': 'i', 'thumb_url': 't'})
+        result, factory = self._call(worker, item, client, {'cover_thumbnail_format': 3})
+        factory.assert_called_once_with('imx')
+        client.upload_image.assert_called_once_with(
+            "C:/g/late.jpg", gallery_id="gal7", thumbnail_size=5, thumbnail_format=3)
+        assert [r['bbcode'] for r in result] == ['L']
+        assert item.cover_result == result and item.cover_status == 'completed'
+        worker.queue_manager.store.set_cover_result.assert_called_once()
+
+    def test_dedicated_cover_gallery_wins(self, worker):
+        item = _item(cover_source_path="C:/g/late.jpg")
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'L', 'image_url': 'i', 'thumb_url': 't'})
+        self._call(worker, item, client, {'cover_gallery': 'ded1'})
+        assert client.upload_image.call_args.kwargs['gallery_id'] == 'ded1'
+
+    def test_only_the_missing_cover_is_uploaded_and_results_are_merged(self, worker):
+        done = {'status': 'success', 'source_path': 'C:/g/cover.jpg', 'bbcode': 'A'}
+        item = _item(cover_source_path="C:/g/cover.jpg;C:/g/late.jpg", cover_result=[dict(done)])
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'L', 'image_url': 'i', 'thumb_url': 't'})
+        result, _ = self._call(worker, item, client)
+        assert client.upload_image.call_count == 1
+        assert [r['bbcode'] for r in result] == ['A', 'L']
+
+    def test_a_cover_the_engine_already_failed_is_not_retried_straight_away(self, worker):
+        failed = {'status': 'failed', 'source_path': 'C:/g/cover.jpg', 'error': 'x'}
+        item = _item(cover_source_path="C:/g/cover.jpg", cover_result=[failed])
+        client = imx_api_client(return_value=None)
+        result, factory = self._call(worker, item, client)
+        assert result is None
+        factory.assert_not_called()
+
+    def test_late_upload_failure_is_recorded(self, worker):
+        item = _item(cover_source_path="C:/g/late.jpg")
+        client = imx_api_client(side_effect=RuntimeError("net down"))
+        result, _ = self._call(worker, item, client)
+        assert result[0]['status'] == 'failed' and 'net down' in result[0]['error']
+        assert item.cover_status == 'failed'
+
+    def test_replaced_cover_result_is_not_kept(self, worker):
+        old = {'status': 'success', 'source_path': 'C:/g/old.jpg', 'bbcode': 'OLD'}
+        item = _item(cover_source_path="C:/g/new.jpg", cover_result=[old])
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'NEW', 'image_url': 'i', 'thumb_url': 't'})
+        result, _ = self._call(worker, item, client)
+        assert [r['bbcode'] for r in result] == ['NEW']
+
+    def test_join_waits_for_the_started_hook_before_reading_the_path(self, worker):
+        import threading
+        import time
+        item = _item(cover_source_path=None, cover_result=None)
+
+        def hook():
+            time.sleep(0.2)
+            item.cover_source_path = "C:/g/hooked.jpg"
+
+        worker._started_hook_thread = threading.Thread(target=hook, daemon=True)
+        worker._started_hook_thread.start()
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'H', 'image_url': 'i', 'thumb_url': 't'})
+        result, _ = self._call(worker, item, client)
+        assert [r['bbcode'] for r in result] == ['H']
+
+
+class TestEndToEndThroughEngine:
+    """Real UploadEngine with a mocked uploader, driven through the worker's two entry points."""
+
+    def _worker(self, item):
+        from src.core.engine import AtomicCounter
+        from src.processing.upload_workers import UploadWorker
+        from tests.unit.core.test_engine_cover_first import _make_mock_uploader
+        w = UploadWorker(Mock())
+        w.rename_worker = MagicMock()
+        w.uploader = _make_mock_uploader()
+        w.current_item = item
+        w.current_gallery_counter = AtomicCounter()
+        w.queue_manager = MagicMock()
+        w.queue_manager.store.get_uploaded_images.return_value = []
+        w.gallery_completed = MagicMock()
+        w.gallery_failed = MagicMock()
+        w._emit_queue_stats = MagicMock()
+        return w
+
+    def _drive(self, worker, item, client):
+        captured = {}
+
+        def fake_save(it, results):
+            captured['results'] = dict(results)
+            return {}
+
+        with patch('src.processing.upload_workers.QSettings',
+                   return_value=_mock_qsettings({'cover/exclude_from_gallery': True})), \
+             patch('src.processing.upload_workers.get_image_host_setting', side_effect=_host_setting()), \
+             patch('src.processing.upload_workers.create_image_host_client', return_value=client), \
+             patch('src.utils.metrics_store.get_metrics_store', return_value=None), \
+             patch.object(worker, '_save_artifacts_for_result', side_effect=fake_save), \
+             patch('src.processing.upload_workers.execute_gallery_hooks', return_value={}):
+            results = worker._run_upload_engine(item, 3, 2, 0, 1)
+            worker._process_upload_results(item, results)
+        return captured['results']
+
+    def _folder(self, tmp_path):
+        from tests.unit.core.test_engine_cover_first import _folder
+        return _folder(tmp_path, names=('cover.jpg', 'late.jpg', '001.jpg', '002.jpg'))
+
+    def test_cover_set_by_the_started_hook_during_the_upload_is_posted(self, tmp_path):
+        import threading
+        import time
+        folder = self._folder(tmp_path)
+        item = _item(path=str(folder), name="g", cover_source_path=None, cover_result=None)
+        worker = self._worker(item)
+        late = str(folder / 'late.jpg')
+
+        def hook():
+            time.sleep(0.2)
+            item.cover_source_path = late
+
+        worker._started_hook_thread = threading.Thread(target=hook, daemon=True)
+        worker._started_hook_thread.start()
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'LATE', 'image_url': 'i', 'thumb_url': 't'})
+
+        results = self._drive(worker, item, client)
+
+        client.upload_image.assert_called_once()
+        assert client.upload_image.call_args.args[0] == late
+        assert client.upload_image.call_args.kwargs['gallery_id'] == 'gal1'
+        assert [r['bbcode'] for r in results['cover_result']] == ['LATE']
+        assert item.cover_status == 'completed'
+
+    def test_known_cover_is_uploaded_once_by_the_engine_only(self, tmp_path):
+        folder = self._folder(tmp_path)
+        cover = str(folder / 'cover.jpg')
+        item = _item(path=str(folder), name="g", cover_source_path=cover, cover_result=None)
+        worker = self._worker(item)
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'X', 'image_url': 'i', 'thumb_url': 't'})
+
+        results = self._drive(worker, item, client)
+
+        client.upload_image.assert_not_called()
+        engine_calls = [c for c in worker.uploader.upload_image.call_args_list
+                        if c.args[0].endswith('cover.jpg')]
+        assert len(engine_calls) == 1
+        assert len(results['cover_result']) == 1 and results['cover_result'][0]['status'] == 'success'
+
+    def test_known_and_late_covers_both_end_up_in_the_post(self, tmp_path):
+        folder = self._folder(tmp_path)
+        cover, late = str(folder / 'cover.jpg'), str(folder / 'late.jpg')
+        item = _item(path=str(folder), name="g", cover_source_path=cover, cover_result=None)
+        worker = self._worker(item)
+        client = imx_api_client(return_value={'status': 'success', 'bbcode': 'LATE', 'image_url': 'i', 'thumb_url': 't'})
+        # Set cover adds a second cover while the engine is running
+        original_run = worker.uploader.upload_image.side_effect
+
+        def upload(*a, **k):
+            if a[0].endswith('001.jpg'):
+                item.cover_source_path = cover + ';' + late
+            return original_run(*a, **k)
+
+        worker.uploader.upload_image.side_effect = upload
+
+        results = self._drive(worker, item, client)
+
+        assert [os.path.basename(r['source_path']) for r in results['cover_result']] == ['cover.jpg', 'late.jpg']
+        client.upload_image.assert_called_once()

@@ -132,9 +132,9 @@ def main():
     parser.add_argument('-v', '--version', action='store_true', help='Show version and exit')
     parser.add_argument('folder_paths', nargs='*', help='Paths to folders containing images')
     parser.add_argument('--name', help='Gallery name (optional, uses folder name if not specified)')
-    parser.add_argument('--size', type=int, choices=[1, 2, 3, 4, 6], 
+    parser.add_argument('--size', type=int, choices=[1, 2, 3, 4, 5, 6], 
                        default=user_defaults.get('thumbnail_size', 3),
-                       help='Thumbnail size: 1=100x100, 2=180x180, 3=250x250, 4=300x300, 6=150x150 (default: 3)')
+                       help='Thumbnail size: 1=100x100, 2=180x180, 3=250x250, 4=300x300, 5=600x600 (cover size), 6=150x150 (default: 3)')
     parser.add_argument('--format', type=int, choices=[1, 2, 3, 4], 
                        default=user_defaults.get('thumbnail_format', 2),
                        help='Thumbnail format: 1=Fixed width, 2=Proportional, 3=Square, 4=Fixed height (default: 2)')

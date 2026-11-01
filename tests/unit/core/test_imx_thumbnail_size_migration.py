@@ -102,3 +102,37 @@ def test_other_content_preserved(ini_path):
     assert cfg.get("IMAGE_HOSTS", "turbo_thumbnail_size") == "300"
     assert cfg.get("DEFAULTS", "max_retries") == "3"
     assert cfg.get("CREDENTIALS", "username") == "someone"
+
+
+def test_unwritable_ini_is_logged_and_does_not_raise(ini_path):
+    # A directory where the INI should be: reading finds nothing, writing fails
+    os.makedirs(ini_path)
+    try:
+        assert migrate_imx_thumbnail_size_ids() is False
+    finally:
+        os.rmdir(ini_path)
+
+
+def test_unreadable_ini_is_logged_and_does_not_raise(ini_path):
+    _write(ini_path, {"IMAGE_HOSTS": {"imx_thumbnail_size": "5"}})
+    with pytest.MonkeyPatch.context() as mp:
+        def boom(self, *a, **k):
+            raise OSError("locked")
+        mp.setattr(configparser.ConfigParser, "read", boom)
+        assert migrate_imx_thumbnail_size_ids() is False
+
+
+def test_cli_size_choices_include_cover_size_and_150():
+    """bbdrop.py --size must accept 5 (600 px cover size) and 6 (150 px)."""
+    import ast
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    with open(os.path.join(root, "bbdrop.py"), encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "add_argument"
+                and node.args and getattr(node.args[0], "value", None) == "--size"):
+            kwargs = {k.arg: k.value for k in node.keywords}
+            assert ast.literal_eval(kwargs["choices"]) == [1, 2, 3, 4, 5, 6]
+            assert "5=600x600" in ast.literal_eval(kwargs["help"])
+            return
+    pytest.fail("--size argument not found in bbdrop.py")

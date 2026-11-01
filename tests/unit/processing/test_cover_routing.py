@@ -58,6 +58,8 @@ class TestCoverRouting:
             path="/tmp/test",
             image_host_id="imx",
             cover_source_path="/tmp/test/cover.jpg",
+            # The engine already uploaded this one during the gallery pass
+            cover_result=[{"status": "success", "source_path": "/tmp/test/cover.jpg"}],
             cover_host_id="imx",
         )
 
@@ -202,6 +204,8 @@ class TestCoverRouting:
             path="/tmp/test",
             image_host_id="imx",
             cover_source_path="/tmp/test/cover.jpg",
+            # The engine already uploaded this one during the gallery pass
+            cover_result=[{"status": "success", "source_path": "/tmp/test/cover.jpg"}],
             cover_host_id=None,  # Not set, should default to image_host_id
         )
 
@@ -229,6 +233,8 @@ class TestCoverRouting:
             path="/tmp/test",
             image_host_id="imx",
             cover_source_path="/tmp/test/cover.jpg",
+            # The engine already uploaded this one during the gallery pass
+            cover_result=[{"status": "success", "source_path": "/tmp/test/cover.jpg"}],
             cover_host_id="imx",
         )
 
@@ -255,6 +261,8 @@ class TestCoverRouting:
             path="/tmp/test",
             image_host_id="imx",
             cover_source_path="/tmp/test/cover.jpg",
+            # The engine already uploaded this one during the gallery pass
+            cover_result=[{"status": "success", "source_path": "/tmp/test/cover.jpg"}],
             cover_host_id="imx",
         )
 

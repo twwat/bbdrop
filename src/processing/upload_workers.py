@@ -678,7 +678,14 @@ class UploadWorker(QThread):
             [{status: 'success', bbcode, image_url, thumb_url, source_path}, ...]
             [{status: 'failed', error, source_path}, ...]
         Returns None if no covers to upload.
+
+        For an IMX gallery with IMX covers the engine has already uploaded the ones that
+        were known when the gallery pass started; this uploads only the rest (a cover set
+        by the started hook or by "Set cover" while the gallery was uploading).
         """
+        # The started hook may still be setting the cover path; settle it before reading
+        self._join_started_hook()
+
         if not item.cover_source_path:
             return None
 
@@ -690,12 +697,6 @@ class UploadWorker(QThread):
             settings = QSettings("BBDropUploader", "BBDropGUI")
             cover_host_id = resolve_cover_host(item, settings.value('cover/host_id', '', type=str))
 
-            if (item.image_host_id == "imx" and cover_host_id == "imx"
-                    and getattr(item, 'media_type', 'image') != 'video'):
-                # The engine already uploaded these inside the gallery pass
-                # (video items never go through the engine, so they fall through)
-                return None
-
             cover_gallery_setting = get_image_host_setting(cover_host_id, 'cover_gallery', 'str') or ""
             if cover_gallery_setting:
                 cover_gallery_id = cover_gallery_setting
@@ -705,6 +706,12 @@ class UploadWorker(QThread):
                 cover_gallery_id = ""
             cover_thumbnail_format = get_image_host_setting(cover_host_id, 'cover_thumbnail_format', 'int') or 2
             cover_thumbnail_size = get_image_host_setting(cover_host_id, 'cover_thumbnail_size', 'int') or 600
+
+            if (item.image_host_id == "imx" and cover_host_id == "imx"
+                    and getattr(item, 'media_type', 'image') != 'video'):
+                # The engine handled every cover known at the start of the gallery pass
+                # (video items never go through the engine, so they fall through)
+                return self._upload_late_imx_covers(item, cover_gallery_id, cover_thumbnail_format)
 
             item.cover_status = "uploading"
             results = []
@@ -815,6 +822,36 @@ class UploadWorker(QThread):
             log(f"Cover upload error for {item.name}: {e}", level="error", category="cover")
             item.cover_status = "failed"
             return None
+
+    def _join_started_hook(self) -> None:
+        """Wait (bounded) for the started-hook thread so ext fields and the cover path are settled."""
+        t = getattr(self, '_started_hook_thread', None)
+        if t is not None and t.is_alive():
+            t.join(timeout=30)  # Bounded timeout prevents hung hook from deadlocking worker
+
+    def _upload_late_imx_covers(self, item: GalleryQueueItem, cover_gallery_id: str,
+                                thumbnail_format: int) -> Optional[list]:
+        """Upload IMX covers the engine never saw; return all of the item's cover results, or None.
+
+        A cover the engine already tried (uploaded, failed, or skipped by a stop) is left
+        alone: failures are retried on the next run, not straight after the engine gave up.
+        """
+        attempted = {_norm_cover_path(r['source_path']) for r in current_cover_results(item)}
+        paths, _ = imx_cover_plan(item, 'imx', '')
+        todo = [p for p in paths if _norm_cover_path(p) not in attempted]
+        if not todo:
+            return None
+        log(f"Uploading {len(todo)} cover(s) added during the upload of {item.name}",
+            level="info", category="cover")
+        client = create_image_host_client('imx')
+        new = []
+        for path in todo:
+            try:
+                new.append(self._imx_cover_via_api(client, path, cover_gallery_id, thumbnail_format))
+            except Exception as e:
+                new.append({'status': 'failed', 'error': str(e), 'source_path': path})
+        self._store_cover_results(item, new, persist=True)
+        return item.cover_result
 
     @staticmethod
     def _imx_cover_via_api(client, path: str, gallery_id: str, thumbnail_format: int) -> Dict[str, Any]:
@@ -974,9 +1011,7 @@ class UploadWorker(QThread):
         try:
             # Join the started-hook thread if it exists and is still running
             # This ensures ext1-4 are settled before we read them below
-            t = getattr(self, '_started_hook_thread', None)
-            if t is not None and t.is_alive():
-                t.join(timeout=30)  # Bounded timeout prevents hung hook from deadlocking worker
+            self._join_started_hook()
 
             # Build custom fields dict including ext1-4
             custom_fields = {

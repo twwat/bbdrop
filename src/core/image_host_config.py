@@ -213,7 +213,7 @@ def migrate_imx_thumbnail_size_ids() -> bool:
     [IMAGE_HOSTS] imx_thumbnail_size and legacy [DEFAULTS] thumbnail_size, then
     sets [IMAGE_HOSTS] imx_thumbnail_size_ids_migrated = true so it never runs
     again. A missing INI is created holding only the marker. Returns True when
-    a value was rewritten.
+    a value was rewritten; an unreadable or unwritable INI is logged and gives False.
     """
     from src.utils.paths import get_config_path
 
@@ -223,8 +223,13 @@ def migrate_imx_thumbnail_size_ids() -> bool:
         cfg = configparser.ConfigParser()
         # A missing INI still gets the marker: a fresh install that later picks
         # the 600x600 cover size (ID 5) must not be rewritten to 6 on next start.
-        if os.path.exists(ini_path):
-            cfg.read(ini_path, encoding='utf-8')
+        try:
+            if os.path.exists(ini_path):
+                cfg.read(ini_path, encoding='utf-8')
+        except Exception as e:
+            log(f"Could not read the INI to migrate IMX thumbnail size IDs: {e}",
+                level="error", category="image_hosts")
+            return False
 
         if cfg.has_option("IMAGE_HOSTS", _IMX_SIZE_MIGRATION_KEY):
             return False
@@ -244,9 +249,10 @@ def migrate_imx_thumbnail_size_ids() -> bool:
             with open(ini_path, 'w', encoding='utf-8') as f:
                 cfg.write(f)
         except Exception as e:
+            # Never stop the app from starting over this; the migration retries next launch
             log(f"Error migrating IMX thumbnail size IDs: {e}",
                 level="error", category="image_hosts")
-            raise
+            return False
 
         if rewritten:
             log(f"Migrated IMX thumbnail size ID 5 -> 6 in {', '.join(rewritten)}",
