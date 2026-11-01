@@ -24,6 +24,9 @@ from src.utils.format_utils import format_binary_size, format_binary_rate
 from src.utils.logger import log
 from src.network.image_host_client import ImageHostClient
 
+# IMX thumbnail size ID for 600 px; covers always use it (see the IMX API update design, section 4)
+COVER_THUMBNAIL_SIZE = 5
+
 
 class AtomicCounter:
     """Thread-safe byte counter for tracking upload progress across multiple threads."""
@@ -160,6 +163,62 @@ class UploadEngine:
         named = bool(data.get('gallery_name'))
         return response, named
 
+    def _upload_cover_file(
+        self,
+        image_path: str,
+        gallery_id: Optional[str],
+        create: bool,
+        gallery_name: Optional[str],
+        thumbnail_format: int,
+        progress_callback: Any,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """Upload one cover image with the 600 px size (size ID 5) and build its result dict.
+
+        With ``create`` the cover is the first upload of a new gallery and carries the
+        gallery name; otherwise it joins ``gallery_id``. Never raises: any failure comes
+        back as ``{'status': 'failed', 'error', 'source_path'}``.
+
+        Returns ``(result, named)``. On a successful create the result also carries a
+        private ``gallery_id`` key for the caller to consume and remove.
+        """
+        try:
+            if create:
+                response, named = self._create_gallery_with(
+                    image_path, gallery_name, COVER_THUMBNAIL_SIZE, thumbnail_format, progress_callback,
+                )
+            else:
+                response = self.uploader.upload_image(
+                    image_path,
+                    gallery_id=gallery_id,
+                    thumbnail_size=COVER_THUMBNAIL_SIZE,
+                    thumbnail_format=thumbnail_format,
+                    progress_callback=progress_callback,
+                )
+                named = False
+        except Exception as e:
+            return {'status': 'failed', 'error': f"Upload error: {e}", 'source_path': image_path}, False
+
+        if response.get('status') != 'success':
+            error = response.get('error') or f"API error: {response}"
+            return {'status': 'failed', 'error': str(error), 'source_path': image_path}, False
+
+        data = response.get('data') or {}
+        image_url = data.get('image_url') or ''
+        thumb_url = data.get('thumb_url') or ''
+        bbcode = data.get('bbcode') or ''
+        if not bbcode and image_url and thumb_url:
+            bbcode = f"[URL={image_url}][IMG]{thumb_url}[/IMG][/URL]"
+        result: Dict[str, Any] = {
+            'status': 'success',
+            'bbcode': bbcode,
+            'image_url': image_url,
+            'thumb_url': thumb_url,
+            'source_path': image_path,
+        }
+        if create:
+            result['gallery_id'] = data.get('gallery_id')
+        return result, named
+
     def run(
         self,
         folder_path: str,
@@ -177,6 +236,13 @@ class UploadEngine:
         precalculated_dimensions: Optional[Dict[str, float]] = None,
         # Cover photo exclusion: filenames (basenames) to skip from gallery upload
         exclude_cover_files: Optional[List[str]] = None,
+        # Covers uploaded through the host client at size 5 (600 px), ahead of the gallery
+        # images. Absolute paths are used as is; relative ones are joined to folder_path.
+        cover_files: Optional[List[str]] = None,
+        cover_thumbnail_format: int = 2,
+        # When set, covers go into this gallery after the main pass instead of
+        # creating or joining the gallery being uploaded.
+        cover_gallery_id: Optional[str] = None,
         # Callbacks (all optional)
         on_progress: Optional[ProgressCallback] = None,
         should_soft_stop: Optional[SoftStopCallback] = None,
@@ -224,7 +290,11 @@ class UploadEngine:
             exclude_set = set(exclude_cover_files)
             all_image_files = [f for f in all_image_files if f not in exclude_set]
 
-        if not all_image_files:
+        cover_paths: List[str] = [
+            os.path.abspath(os.path.join(folder_path, c)) for c in (cover_files or []) if c
+        ]
+
+        if not all_image_files and not cover_paths:
             raise ValueError(f"No image files found in {folder_path}")
 
         # Skip files over host's max file size limit
@@ -280,9 +350,42 @@ class UploadEngine:
         preseed_images: List[Dict[str, Any]] = []
         files_to_upload: List[str]
 
+        cover_results: List[Dict[str, Any]] = []
+
+        def maybe_soft_stopping() -> bool:
+            return bool(should_soft_stop and should_soft_stop())
+
+        def upload_cover(cover_path: str, target_gallery_id: Optional[str], create: bool) -> None:
+            """Upload one cover, record its result, and adopt the gallery it created."""
+            nonlocal gallery_id, named
+            if not create and maybe_soft_stopping():
+                cover_results.append({'status': 'failed', 'error': 'Skipped: upload stopped', 'source_path': cover_path})
+                return
+            started = time.time()
+            res, cover_named = self._upload_cover_file(
+                cover_path,
+                target_gallery_id,
+                create,
+                gallery_name,
+                cover_thumbnail_format,
+                ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
+            )
+            created_id = res.pop('gallery_id', None)
+            cover_results.append(res)
+            if res.get('status') == 'success':
+                log(f"Uploaded cover (in {time.time() - started:.3f}s): {cover_path}  ({res.get('image_url', '')})", category="uploads:file")
+                if create and created_id:
+                    gallery_id = created_id
+                    named = cover_named
+            else:
+                log(f"Cover upload failed: {cover_path} - {res.get('error')}", level="warning", category="uploads")
+
         if gallery_id:
             # Resume/append to existing gallery - no need to create new one
             log(f"Resuming/appending to existing gallery: {gallery_id}", level="info", category="uploads")
+            if not cover_gallery_id:
+                for cover_path in cover_paths:
+                    upload_cover(cover_path, gallery_id, False)
             files_to_upload = image_files
             # Set initial completed to the number of already-uploaded files for correct progress
             initial_completed = len(already_uploaded)
@@ -295,40 +398,57 @@ class UploadEngine:
             if hasattr(self.uploader, 'clear_api_cookies'):
                 self.uploader.clear_api_cookies()
 
-            first_file = image_files[0]
-            first_image_path = os.path.join(folder_path, first_file)
-            first_upload_start = time.time()
-            first_response, named = self._create_gallery_with(
-                first_image_path,
-                gallery_name,
-                thumbnail_size,
-                thumbnail_format,
-                ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
-            )
-            first_upload_duration = time.time() - first_upload_start
-            if first_response.get('status') != 'success':
-                raise Exception(f"Failed to create gallery: {first_response.get('error')} ({first_response})")
-            gallery_id = first_response['data'].get('gallery_id')
-            preseed_images = [first_response['data']]
-            # Log first image success with URL
-            try:
-                first_url = first_response['data'].get('image_url', '')
-                log(f"Uploaded (in {first_upload_duration:.3f}s): {first_image_path}  ({first_url})", category="uploads:file")
-            except Exception:
-                pass
-            # First image uploaded - set counters and files_to_upload
-            files_to_upload = image_files[1:]  # Remaining files after first
-            initial_completed = 1
-            try:
-                initial_uploaded_size = os.path.getsize(first_image_path)
-            except Exception:
+            # Covers go first: the first one that succeeds creates and names the gallery,
+            # the rest join it. If none succeeds, the first regular image creates it below.
+            if not cover_gallery_id:
+                for cover_path in cover_paths:
+                    upload_cover(cover_path, gallery_id, not gallery_id)
+
+            if gallery_id:
+                # A cover created (and, when the API allows, named) the gallery; every image still needs uploading
+                files_to_upload = image_files
+                initial_completed = 0
                 initial_uploaded_size = 0
-            # Report the first image upload so GUI resume/merge includes it
-            if on_image_uploaded:
+            else:
+                if not image_files:
+                    raise Exception(
+                        "Failed to create gallery: no cover uploaded and no gallery images to upload "
+                        f"({'; '.join(str(r.get('error')) for r in cover_results) or 'no files'})"
+                    )
+                first_file = image_files[0]
+                first_image_path = os.path.join(folder_path, first_file)
+                first_upload_start = time.time()
+                first_response, named = self._create_gallery_with(
+                    first_image_path,
+                    gallery_name,
+                    thumbnail_size,
+                    thumbnail_format,
+                    ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
+                )
+                first_upload_duration = time.time() - first_upload_start
+                if first_response.get('status') != 'success':
+                    raise Exception(f"Failed to create gallery: {first_response.get('error')} ({first_response})")
+                gallery_id = first_response['data'].get('gallery_id')
+                preseed_images = [first_response['data']]
+                # Log first image success with URL
                 try:
-                    on_image_uploaded(first_file, first_response['data'], initial_uploaded_size)
-                except Exception as e:
-                    log(f"on_image_uploaded callback failed: {e}", level="error", category="uploads")
+                    first_url = first_response['data'].get('image_url', '')
+                    log(f"Uploaded (in {first_upload_duration:.3f}s): {first_image_path}  ({first_url})", category="uploads:file")
+                except Exception:
+                    pass
+                # First image uploaded - set counters and files_to_upload
+                files_to_upload = image_files[1:]  # Remaining files after first
+                initial_completed = 1
+                try:
+                    initial_uploaded_size = os.path.getsize(first_image_path)
+                except Exception:
+                    initial_uploaded_size = 0
+                # Report the first image upload so GUI resume/merge includes it
+                if on_image_uploaded:
+                    try:
+                        on_image_uploaded(first_file, first_response['data'], initial_uploaded_size)
+                    except Exception as e:
+                        log(f"on_image_uploaded callback failed: {e}", level="error", category="uploads")
         if named:
             log(f"Gallery {gallery_id} named via API: '{gallery_name}'", level="debug", category="renaming")
         # Queue gallery rename for background processing to avoid blocking uploads
@@ -386,9 +506,6 @@ class UploadEngine:
         uploaded_images: List[Tuple[str, Dict[str, Any]]] = []
         failed_images: List[Tuple[str, str]] = []
         file_position = {fname: idx for idx, fname in enumerate(all_image_files)}
-
-        def maybe_soft_stopping() -> bool:
-            return bool(should_soft_stop and should_soft_stop())
 
         # Track concurrent uploads for visibility
         active_uploads = 0
@@ -491,6 +608,11 @@ class UploadEngine:
                             nxt = remaining.pop(0)
                             futures_map[executor.submit(upload_single_image, nxt)] = nxt
             failed_images = retry_failed
+
+        # Dedicated cover gallery: covers cannot create it, so they follow the main pass
+        if cover_gallery_id:
+            for cover_path in cover_paths:
+                upload_cover(cover_path, cover_gallery_id, False)
 
         # Log concurrency summary
         #if on_log:
@@ -654,6 +776,9 @@ class UploadEngine:
             'total_images': original_total_images,
             'started_at': datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S'),
         })
+
+        if cover_paths:
+            results['cover_result'] = cover_results
 
         # Emit consolidated success at gallery level when appropriate
         try:
