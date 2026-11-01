@@ -161,7 +161,7 @@ class TestNoHardcodedHomePaths:
         # unavailable -- these sit inside `except` handlers whose whole purpose
         # is that get_base_path() could not be imported. No other value exists
         # at that point, and both try get_base_path() first.
-        ("src/gui/main_window.py", 1515, "~/.bbdrop"),
+        ("src/gui/main_window.py", 1516, "~/.bbdrop"),
         ("src/utils/artifact_finder.py", 50, ".bbdrop"),
     }
 
