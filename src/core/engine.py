@@ -113,6 +113,53 @@ class UploadEngine:
             log(f"Failed to check gallery rename status: {e}", level="error", category="engine")
             return False
 
+    def _create_gallery_with(
+        self,
+        image_path: str,
+        gallery_name: Optional[str],
+        thumbnail_size: int,
+        thumbnail_format: int,
+        progress_callback: Any,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """Upload the first image with create_gallery=True, naming the gallery in that request.
+
+        If the host rejects the name (error text mentions ``gallery_name``), retry once
+        without a name so the upload still succeeds and the caller can rename later.
+
+        Returns ``(response, named)``; ``named`` is True only when the API reported the
+        gallery name back. The caller is responsible for checking ``response['status']``.
+        """
+        response = self.uploader.upload_image(
+            image_path,
+            create_gallery=True,
+            thumbnail_size=thumbnail_size,
+            thumbnail_format=thumbnail_format,
+            progress_callback=progress_callback,
+            gallery_name=gallery_name,
+        )
+        error_text = str(response.get('error') or '')
+        if (
+            response.get('status') == 'error'
+            and gallery_name is not None
+            and 'gallery_name' in error_text.lower()
+        ):
+            log(
+                f"Host rejected gallery name '{gallery_name}' ({error_text}); retrying without a name",
+                level="warning",
+                category="uploads",
+            )
+            response = self.uploader.upload_image(
+                image_path,
+                create_gallery=True,
+                thumbnail_size=thumbnail_size,
+                thumbnail_format=thumbnail_format,
+                progress_callback=progress_callback,
+                gallery_name=None,
+            )
+        data = response.get('data') or {}
+        named = bool(data.get('gallery_name'))
+        return response, named
+
     def run(
         self,
         folder_path: str,
@@ -227,6 +274,7 @@ class UploadEngine:
 
         # Use existing gallery or create new one
         gallery_id: Optional[str] = existing_gallery_id
+        named = False
         initial_completed = 0
         initial_uploaded_size = 0
         preseed_images: List[Dict[str, Any]] = []
@@ -250,17 +298,16 @@ class UploadEngine:
             first_file = image_files[0]
             first_image_path = os.path.join(folder_path, first_file)
             first_upload_start = time.time()
-            first_response = self.uploader.upload_image(
+            first_response, named = self._create_gallery_with(
                 first_image_path,
-                create_gallery=True,
-                thumbnail_size=thumbnail_size,
-                thumbnail_format=thumbnail_format,
-                progress_callback=ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
-                gallery_name=gallery_name,
+                gallery_name,
+                thumbnail_size,
+                thumbnail_format,
+                ByteCountingCallback(self.global_byte_counter, self.gallery_byte_counter, self.worker_thread),
             )
             first_upload_duration = time.time() - first_upload_start
             if first_response.get('status') != 'success':
-                raise Exception(f"Failed to create gallery: {first_response}")
+                raise Exception(f"Failed to create gallery: {first_response.get('error')} ({first_response})")
             gallery_id = first_response['data'].get('gallery_id')
             preseed_images = [first_response['data']]
             # Log first image success with URL
@@ -282,8 +329,11 @@ class UploadEngine:
                     on_image_uploaded(first_file, first_response['data'], initial_uploaded_size)
                 except Exception as e:
                     log(f"on_image_uploaded callback failed: {e}", level="error", category="uploads")
+        if named:
+            log(f"Gallery {gallery_id} named via API: '{gallery_name}'", level="debug", category="renaming")
         # Queue gallery rename for background processing to avoid blocking uploads
-        if self.uploader.supports_gallery_rename() and gallery_name and gallery_id and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
+        # (skipped when the API already named the gallery at creation)
+        if self.uploader.supports_gallery_rename() and gallery_name and gallery_id and not named and (not existing_gallery_id or self._is_gallery_unnamed(gallery_id)):
             try:
                 last_method = getattr(self.uploader, 'last_login_method', None)
             except Exception:
