@@ -203,7 +203,14 @@ class TestSanitizeGalleryName:
         assert len(client.sanitize_gallery_name('x' * 150)) == 100
 
     def test_cap_does_not_leave_trailing_space(self, client):
-        assert not client.sanitize_gallery_name(('ab ' * 40)).endswith(' ')
+        result = client.sanitize_gallery_name('x' * 99 + ' ' + 'y' * 20)
+        assert result == 'x' * 99
+
+    def test_tab_becomes_a_space(self, client):
+        assert client.sanitize_gallery_name('A\tB') == 'A B'
+
+    def test_non_breaking_space_becomes_a_space(self, client):
+        assert client.sanitize_gallery_name('A\u00a0B') == 'A B'
 
 
 def test_imx_config_has_size_5_and_name_cap():
