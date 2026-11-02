@@ -93,7 +93,7 @@ Three detection methods are available (can be combined):
 ### Cover Upload Options
 
 - **Upload host** — which image host receives the cover (can differ from the gallery's host)
-- **Thumbnail format** — per-host thumbnail settings for covers. IMX.to covers always use the 600 px thumbnail and upload through the API as the first images of the gallery
+- **Thumbnail format** — per-host thumbnail settings for covers. IMX.to covers always use the 600 px thumbnail and upload through the API before the gallery images. IMX.to lists a gallery's images by filename, so a cover appears first only if its filename sorts first
 - **Max covers per gallery** — limit how many covers are detected
 - **Skip duplicates** — don't upload a cover if it's identical to a gallery image
 

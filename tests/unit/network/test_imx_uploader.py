@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pycurl
 import pytest
 
-from src.core.image_host_config import get_image_host_config_manager
+from src.core.image_host_config import ImageHostConfigManager
 from src.network.imx_uploader import ImxToUploader
 
 pytestmark = pytest.mark.unit
@@ -214,7 +214,10 @@ class TestSanitizeGalleryName:
 
 
 def test_imx_config_has_size_5_and_name_cap():
-    cfg = get_image_host_config_manager().get_host('imx')
+    # A fresh manager: the shared one may have been built by another test under patches
+    manager = ImageHostConfigManager()
+    manager.load_all()
+    cfg = manager.get_host('imx')
     assert [s['id'] for s in cfg.thumbnail_sizes] == [1, 6, 2, 3, 4, 5]
     assert cfg.thumbnail_sizes[-1]['label'] == '600x600 (Cover)'
     assert cfg.gallery_name_max_length == 100

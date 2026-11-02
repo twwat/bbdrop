@@ -210,6 +210,7 @@ class TestThumbnailConfiguration:
         assert 2 in THUMBNAIL_SIZES
         assert 3 in THUMBNAIL_SIZES
         assert 4 in THUMBNAIL_SIZES
+        assert 5 in THUMBNAIL_SIZES
         assert 6 in THUMBNAIL_SIZES
 
     def test_thumbnail_size_values_are_strings(self):
@@ -237,10 +238,10 @@ class TestThumbnailConfiguration:
         assert DEFAULT_THUMBNAIL_FORMAT in THUMBNAIL_FORMATS
 
     @pytest.mark.parametrize("format_id,format_name", [
-        (1, "JPEG 70%"),
-        (2, "JPEG 90%"),
-        (3, "PNG"),
-        (4, "WEBP"),
+        (1, "Fixed Width"),
+        (2, "Proportional"),
+        (3, "Square"),
+        (4, "Fixed Height"),
     ])
     def test_thumbnail_format_names(self, format_id, format_name):
         """Test thumbnail format names are correct."""

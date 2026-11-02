@@ -42,16 +42,17 @@ THUMBNAIL_SIZES = {
     2: "180x180", 
     3: "250x250",  # Default
     4: "300x300",
+    5: "600x600 (Cover)",
     6: "150x150"
 }
 DEFAULT_THUMBNAIL_SIZE = 3
 
-# Thumbnail Formats
+# Thumbnail Formats (imx.to API crop modes)
 THUMBNAIL_FORMATS = {
-    1: "JPEG 70%",
-    2: "JPEG 90%",  # Default
-    3: "PNG",
-    4: "WEBP"
+    1: "Fixed Width",
+    2: "Proportional",  # Default
+    3: "Square",
+    4: "Fixed Height",
 }
 DEFAULT_THUMBNAIL_FORMAT = 2
 
@@ -69,12 +70,7 @@ DEFAULT_COVER_SKIP_DUPLICATES = True
 DEFAULT_COVER_THUMBNAIL_FORMAT = 2  # Proportional
 
 # Cover thumbnail format labels (for UI)
-COVER_THUMBNAIL_FORMATS = {
-    1: "Fixed Width",
-    2: "Proportional",
-    3: "Square",
-    4: "Fixed Height",
-}
+COVER_THUMBNAIL_FORMATS = THUMBNAIL_FORMATS
 
 # Progress Updates
 PROGRESS_UPDATE_BATCH_INTERVAL = 0.05  # seconds

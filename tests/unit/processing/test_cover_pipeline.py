@@ -194,12 +194,6 @@ class TestCoverProgressDecoupled:
         worker = UploadWorker(Mock())
         worker.rename_worker = MagicMock()
         worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {
-            "status": "success",
-            "bbcode": "[url=img][img]thumb[/img][/url]",
-            "image_url": "img",
-            "thumb_url": "thumb",
-        }
         worker.queue_manager = MagicMock()
         worker.gallery_completed = MagicMock()
         worker.gallery_failed = MagicMock()

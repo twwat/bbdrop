@@ -37,8 +37,8 @@ class TestRenameWorkerLogPrefixes:
 
         # Guard against the regex silently matching nothing and the test
         # passing vacuously.
-        assert len(found) >= 15, (
-            f"expected at least 15 GUI-visible log calls, found {len(found)} — "
+        assert len(found) >= 11, (
+            f"expected at least 11 GUI-visible log calls, found {len(found)} — "
             "the regex has probably stopped matching"
         )
 

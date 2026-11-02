@@ -151,7 +151,6 @@ class TestUploadCoverRouting:
              patch('src.processing.upload_workers.get_image_host_setting', side_effect=_host_setting()), \
              patch('src.processing.upload_workers.create_image_host_client') as factory:
             assert worker._upload_cover(item, gallery_id="gal") is None
-        worker.rename_worker.upload_cover.assert_not_called()
         factory.assert_not_called()
         # Covers the engine already tried (even failed ones) are not repeated by the worker
         assert item.cover_result == done
@@ -172,7 +171,6 @@ class TestUploadCoverRouting:
         factory.assert_called_once_with('imx')
         client.upload_image.assert_called_once_with(
             "/tmp/test/cover.jpg", gallery_id="dedicated", thumbnail_size=5, thumbnail_format=3)
-        worker.rename_worker.upload_cover.assert_not_called()
         assert result == [{
             'status': 'success', 'bbcode': "[URL=x][IMG]y[/IMG][/URL]",
             'image_url': "https://imx.to/i/1", 'thumb_url': "https://imx.to/u/t/1.jpg",

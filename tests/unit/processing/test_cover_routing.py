@@ -52,7 +52,6 @@ class TestCoverRouting:
         worker = UploadWorker(Mock())
         worker.rename_worker = MagicMock()
         worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {"status": "success", "bbcode": "x"}
 
         item = GalleryQueueItem(
             path="/tmp/test",
@@ -70,7 +69,6 @@ class TestCoverRouting:
 
         # The engine uploads IMX covers inside the gallery pass; the worker does nothing
         assert result is None
-        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_non_imx_gallery_imx_cover_with_explicit_cover_gallery(self, mock_rw_class):
@@ -80,7 +78,6 @@ class TestCoverRouting:
         worker = UploadWorker(Mock())
         worker.rename_worker = MagicMock()
         worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {"status": "success", "bbcode": "x"}
 
         item = GalleryQueueItem(
             path="/tmp/test",
@@ -108,7 +105,6 @@ class TestCoverRouting:
             thumbnail_size=5,
             thumbnail_format=2,
         )
-        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_non_imx_gallery_imx_cover_empty_cover_gallery(self, mock_rw_class):
@@ -118,7 +114,6 @@ class TestCoverRouting:
         worker = UploadWorker(Mock())
         worker.rename_worker = MagicMock()
         worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {"status": "success", "bbcode": "x"}
 
         item = GalleryQueueItem(
             path="/tmp/test",
@@ -146,7 +141,6 @@ class TestCoverRouting:
             thumbnail_size=5,
             thumbnail_format=2,
         )
-        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_same_host_turbo_routes_to_image_host_client(self, mock_rw_class):
@@ -178,7 +172,6 @@ class TestCoverRouting:
             result = worker._upload_cover(item, gallery_id="turbo_gal")
 
         # rename_worker should NOT be called for non-IMX cover host
-        worker.rename_worker.upload_cover.assert_not_called()
         # Same host, no explicit cover_gallery -> passes gallery_id
         mock_client.upload_image.assert_called_once_with(
             "/tmp/test/cover.jpg",
@@ -198,7 +191,6 @@ class TestCoverRouting:
         worker = UploadWorker(Mock())
         worker.rename_worker = MagicMock()
         worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {"status": "success", "bbcode": "x"}
 
         item = GalleryQueueItem(
             path="/tmp/test",
@@ -217,7 +209,6 @@ class TestCoverRouting:
 
         # cover_host_id defaults to image_host_id ("imx"): the engine handles it
         assert result is None
-        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_explicit_cover_gallery_overrides_same_host_fallback(self, mock_rw_class):
@@ -227,7 +218,6 @@ class TestCoverRouting:
         worker = UploadWorker(Mock())
         worker.rename_worker = MagicMock()
         worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {"status": "success", "bbcode": "x"}
 
         item = GalleryQueueItem(
             path="/tmp/test",
@@ -245,7 +235,6 @@ class TestCoverRouting:
 
         # A dedicated cover gallery is also handled by the engine, not the worker
         assert result is None
-        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_cover_thumbnail_format_from_ini(self, mock_rw_class):
@@ -255,7 +244,6 @@ class TestCoverRouting:
         worker = UploadWorker(Mock())
         worker.rename_worker = MagicMock()
         worker.rename_worker.login_successful = True
-        worker.rename_worker.upload_cover.return_value = {"status": "success", "bbcode": "x"}
 
         item = GalleryQueueItem(
             path="/tmp/test",
@@ -273,7 +261,6 @@ class TestCoverRouting:
 
         # The thumbnail format reaches the engine through the call site, not here
         assert result is None
-        worker.rename_worker.upload_cover.assert_not_called()
 
     @patch('src.processing.upload_workers.RenameWorker')
     def test_non_imx_cover_passes_thumbnail_size(self, mock_rw_class):
