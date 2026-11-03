@@ -4,6 +4,36 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.10] - 2026-11-03 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.9...v0.9.10))
+
+### Added
+- **Editable Discord messages**: Each Discord notification event has its own message template
+  - **Edit…** button per event with placeholders, a Discord-style preview, **Reset to default** and, for gallery and file host completions, a preset with links
+  - File host messages name the host, gallery and download link (or the error); gallery completion messages list counts, links and failed hosts
+  - **Show link previews** toggle; link previews are suppressed by default
+  - **Send sample to Discord** posts the rendered preview; test and sample sends no longer freeze the window
+  - Long messages are split into ordered chunks between links
+- **File host connection limits**: Global and per-host simultaneous upload limits are back on the Hosts tab and apply as soon as you save
+- **600x600 (Cover) IMX thumbnail size**: New size option for IMX.to
+
+### Changed
+- **IMX galleries are named at creation**: New IMX.to galleries get their folder name in the upload request itself, with no rename afterwards. Names keep letters, digits, spaces and `- _ . , ( ) [ ]`, up to 100 characters. If IMX.to rejects a name, the gallery uploads unnamed and is renamed in the background
+- **IMX covers upload through the API**: Covers upload before the gallery images at the 600 px size, and the first cover creates and names the gallery. IMX.to lists gallery images by filename, so a cover shows first only if its filename sorts first
+- **IMX error messages**: Upload failures show IMX.to's own error text
+- **IMX thumbnail size setting**: The size dropdown now saves IMX.to's size ID. A saved 150x150 setting is converted once at startup
+- **Tabs remember their scroll position**: Each tab reopens at the gallery you left it on, including after a restart
+- **Clearer connection-limit waits**: A waiting file host upload is logged once and names the BBDrop limit it is waiting on, instead of repeating every second
+
+### Fixed
+- **Gallery dimensions lost after restart**: Dimensions were not loaded back from the database, and the next save overwrote scanned values with 0x0
+- **BBCode regeneration reset stats**: Regenerating BBCode no longer resets upload time, size, speed, start time and thumbnail settings
+- **Gallery status ignored file hosts**: A gallery shows done only when every file host is done; rows waiting on hosts that will never run show incomplete instead of spinning forever
+- **Discord gallery completion never sent**: The gallery message now arrives when a file host fails, and handles K2S family retries and multi-part failures
+- **K2S hash copies**: createFileByHash copies are verified before being recorded as uploaded, and a copy the family mirror already tried is not retried
+- **File host server lookup timeout**: The upload server lookup uses the connect timeout setting instead of a fixed 10 seconds
+- **Speed statistics**: Average speed is computed from period totals, and impossible peak speeds clamped by an old migration are cleared
+- **Link Scanner**: RapidGator token loading, per-host logins and host-prefixed log lines
+
 ## [0.9.9] - 2026-10-14 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.8...v0.9.9))
 
 ### Added
