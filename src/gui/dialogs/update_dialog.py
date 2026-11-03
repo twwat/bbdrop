@@ -5,13 +5,37 @@ Update Dialog for BBDrop
 Modal dialog showing available update information with download option.
 """
 
+import re
+from datetime import datetime
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QTextEdit, QPushButton, QCheckBox, QApplication
+    QTextBrowser, QPushButton, QCheckBox, QApplication
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QFont
-from PyQt6.QtCore import QUrl
+
+
+def _format_release_date(raw: str) -> str:
+    """Turn GitHub's ISO timestamp (2026-11-03T12:00:00Z) into 'November 3, 2026'."""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return raw
+    return f"{dt:%B} {dt.day}, {dt.year}"
+
+
+# A bare URL not already inside a markdown link "(...)" or autolink "<...>".
+_BARE_URL = re.compile(r'(?<![(<])\bhttps?://[^\s<>()]*[^\s<>().,;:!?\'"]')
+
+
+def _link_bare_urls(markdown: str) -> str:
+    """Wrap bare URLs in <...> so Qt links the whole URL.
+
+    Qt's own bare-URL detection stops at '...', which cuts GitHub compare
+    links (v0.9.9...v0.9.10) short.
+    """
+    return _BARE_URL.sub(lambda m: f"<{m.group(0)}>", markdown)
 
 
 class UpdateDialog(QDialog):
@@ -48,8 +72,8 @@ class UpdateDialog(QDialog):
         """Configure dialog window properties."""
         self.setWindowTitle("Update Available")
         self.setModal(True)
-        self.setMinimumSize(500, 400)
-        self.resize(500, 450)
+        self.setMinimumSize(560, 450)
+        self.resize(680, 620)
 
     def _create_ui(
         self,
@@ -88,7 +112,7 @@ class UpdateDialog(QDialog):
         layout.addWidget(version_label)
 
         # Release date
-        date_label = QLabel(f"Released: {release_date}")
+        date_label = QLabel(f"Released: {_format_release_date(release_date)}")
         date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         date_label.setStyleSheet("color: gray;")
         layout.addWidget(date_label)
@@ -101,20 +125,17 @@ class UpdateDialog(QDialog):
         notes_header.setStyleSheet("font-weight: bold;")
         layout.addWidget(notes_header)
 
-        # Release notes content (scrollable, read-only)
-        self._notes_viewer = QTextEdit()
-        self._notes_viewer.setReadOnly(True)
-        self._notes_viewer.setPlainText(release_notes)
-        self._notes_viewer.setMaximumHeight(200)
-        self._notes_viewer.setMinimumHeight(150)
-        layout.addWidget(self._notes_viewer)
+        # Release notes content: GitHub release bodies are markdown, so render
+        # them (headings, bold, lists, links) and open links in the browser.
+        self._notes_viewer = QTextBrowser()
+        self._notes_viewer.setOpenExternalLinks(True)
+        self._notes_viewer.setMarkdown(_link_bare_urls(release_notes or ""))
+        self._notes_viewer.setMinimumHeight(200)
+        layout.addWidget(self._notes_viewer, 1)
 
         # Skip checkbox
         self._skip_checkbox = QCheckBox("Don't remind me about this version")
         layout.addWidget(self._skip_checkbox)
-
-        # Spacing before buttons
-        layout.addStretch()
 
         # Buttons
         button_layout = QHBoxLayout()
