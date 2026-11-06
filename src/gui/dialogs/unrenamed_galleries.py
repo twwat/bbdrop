@@ -3,11 +3,114 @@
 Dialog for managing unrenamed galleries (galleries still titled "untitled gallery" on imx.to)
 """
 
+import time
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QDialogButtonBox, QAbstractItemView, QHeaderView, QMessageBox, QApplication
+    QPushButton, QDialogButtonBox, QAbstractItemView, QHeaderView, QMessageBox, QApplication,
+    QLineEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+
+
+def imx_galleries_for_rename_list(items, unnamed):
+    """(gallery_id, name, timestamp) of IMX galleries that could go on the rename list, newest first.
+
+    ``items`` are QueueStore.load_all_items() dicts; galleries without an IMX
+    gallery ID or a name, and those already on the list (``unnamed``), are left out.
+    """
+    rows = []
+    for item in items:
+        gallery_id = item.get('gallery_id') or ''
+        name = item.get('name') or ''
+        if not gallery_id or not name or gallery_id in unnamed:
+            continue
+        if (item.get('image_host_id') or 'imx') != 'imx':
+            continue
+        rows.append((gallery_id, name, item.get('finished_time') or item.get('added_time') or 0))
+    rows.sort(key=lambda r: r[2], reverse=True)
+    return rows
+
+
+def add_galleries_to_rename_list(entries, rename_worker=None):
+    """Put (gallery_id, name) entries on the rename list; queue them now if a RenameWorker runs.
+
+    Saved first, so a gallery stays on the list until imx.to confirms the rename.
+    Without a running worker they are renamed at the next login.
+    """
+    from src.storage.gallery_management import save_unnamed_gallery
+    for gallery_id, name in entries:
+        save_unnamed_gallery(gallery_id, name)
+        if rename_worker is not None:
+            rename_worker.queue_rename(gallery_id, name)
+    return len(entries)
+
+
+class AddGalleriesDialog(QDialog):
+    """Pick IMX galleries BBDrop already has to put back on the rename list."""
+
+    def __init__(self, rows, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Galleries to Rename List")
+        self.setModal(True)
+        self.resize(900, 500)
+
+        layout = QVBoxLayout(self)
+        info = QLabel("Select the galleries to rename on imx.to (Ctrl/Shift-click for several). "
+                      "Each keeps the name it has in BBDrop.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search by name")
+        self.search_edit.textChanged.connect(self._apply_filter)
+        layout.addWidget(self.search_edit)
+
+        self.table = QTableWidget(len(rows), 3)
+        self.table.setHorizontalHeaderLabels(["Name", "Gallery ID", "Uploaded"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setVisible(False)
+        for row, (gallery_id, name, ts) in enumerate(rows):
+            self.table.setItem(row, 0, QTableWidgetItem(name))
+            self.table.setItem(row, 1, QTableWidgetItem(gallery_id))
+            when = time.strftime('%Y-%m-%d %H:%M', time.localtime(ts)) if ts else ''
+            self.table.setItem(row, 2, QTableWidgetItem(when))
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.itemSelectionChanged.connect(self._update_add_button)
+        layout.addWidget(self.table)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        self.add_btn = QPushButton("Add")
+        self.add_btn.setEnabled(False)
+        self.add_btn.clicked.connect(self.accept)
+        buttons.addWidget(self.add_btn)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        buttons.addWidget(cancel_btn)
+        layout.addLayout(buttons)
+
+    def _apply_filter(self, text):
+        needle = text.strip().lower()
+        for row in range(self.table.rowCount()):
+            name = self.table.item(row, 0).text().lower()
+            self.table.setRowHidden(row, bool(needle) and needle not in name)
+        self._update_add_button()
+
+    def selected_entries(self):
+        """(gallery_id, name) of the selected rows the search still shows."""
+        rows = sorted({i.row() for i in self.table.selectedItems()})
+        return [(self.table.item(r, 1).text(), self.table.item(r, 0).text())
+                for r in rows if not self.table.isRowHidden(r)]
+
+    def _update_add_button(self):
+        self.add_btn.setEnabled(bool(self.selected_entries()))
 
 
 class UnrenamedGalleriesDialog(QDialog):
@@ -59,6 +162,10 @@ class UnrenamedGalleriesDialog(QDialog):
         button_layout = QHBoxLayout()
 
         # Action buttons
+        self.add_btn = QPushButton("Add Galleries…")
+        self.add_btn.clicked.connect(self.add_galleries)
+        button_layout.addWidget(self.add_btn)
+
         self.remove_selected_btn = QPushButton("Remove Selected")
         self.remove_selected_btn.clicked.connect(self.remove_selected)
         button_layout.addWidget(self.remove_selected_btn)
@@ -114,6 +221,45 @@ class UnrenamedGalleriesDialog(QDialog):
 
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load galleries: {str(e)}")
+
+    def add_galleries(self):
+        """Pick galleries BBDrop already has and put them on the rename list"""
+        try:
+            from src.storage.database import QueueStore
+            from src.storage.gallery_management import get_unnamed_galleries
+            rows = imx_galleries_for_rename_list(QueueStore().load_all_items(), get_unnamed_galleries())
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to load galleries: {str(e)}")
+            return
+
+        if not rows:
+            QMessageBox.information(self, "No Galleries", "Every IMX gallery BBDrop has is already on the list.")
+            return
+
+        picker = AddGalleriesDialog(rows, self)
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            return
+        entries = picker.selected_entries()
+        if not entries:
+            return
+
+        # Rename right away when the upload worker's RenameWorker is running
+        worker = getattr(self.parent(), 'worker', None)
+        rename_worker = getattr(worker, 'rename_worker', None)
+        try:
+            added = add_galleries_to_rename_list(entries, rename_worker)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to add galleries: {str(e)}")
+            return
+
+        self.load_galleries()
+        self.galleries_changed.emit()
+        when = "now" if rename_worker is not None else "the next time BBDrop logs in to imx.to"
+        QMessageBox.information(
+            self, "Added",
+            f"Added {added} gallery{'ies' if added != 1 else 'y'} to the rename list. "
+            f"They will be renamed {when}."
+        )
 
     def remove_selected(self):
         """Remove selected galleries from the unnamed list"""
