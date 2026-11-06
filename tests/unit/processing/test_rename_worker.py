@@ -184,29 +184,45 @@ class TestRenameWorkerLogin:
             assert result is False
 
 
+def _edit_page(current_name, csrf="tok123"):
+    """Mock imx.to edit-gallery page, shaped like the live page (2026-11-06)."""
+    page = Mock()
+    page.status_code = 200
+    page.url = "https://imx.to/user/gallery/edit?id=12345"
+    csrf_input = f'<input type="hidden" name="csrf" value="{csrf}" />' if csrf else ''
+    page.text = (
+        '<a class="btnimxto" href="/logout.php">Log out</a>'
+        f'<form action="" method="POST">{csrf_input}'
+        f'<input class=\'\' type="text" value="{current_name}" name="gallery_name" title="{current_name}"/>'
+        '<input class=\'gal-w125\' type="submit" value="Rename Gallery" name="submit_new_gallery"  />'
+        '</form>'
+    )
+    return page
+
+
+def _post_response(error=None):
+    resp = Mock()
+    resp.status_code = 200
+    resp.text = f"<div class='error'>{error}</div>" if error else "<form></form>"
+    return resp
+
+
 class TestRenameWorkerGalleryRename:
     """Test gallery renaming functionality"""
 
     @patch('threading.Thread')
     @patch('src.processing.rename_worker.get_credential')
     def test_rename_gallery_success(self, mock_get_cred, mock_thread_class):
-        """Test successful gallery rename"""
+        """Rename sends the form's csrf token and succeeds once imx.to shows the new name"""
         mock_get_cred.return_value = None
         worker = RenameWorker()
         worker.session = Mock()
 
-        # Mock edit page response
-        mock_edit_response = Mock()
-        mock_edit_response.status_code = 200
-        mock_edit_response.url = "https://imx.to/user/gallery/edit?id=12345"
-        mock_edit_response.text = "<form>Gallery Edit</form>"
-
-        # Mock rename POST response
-        mock_rename_response = Mock()
-        mock_rename_response.status_code = 200
-
-        worker.session.get.return_value = mock_edit_response
-        worker.session.post.return_value = mock_rename_response
+        worker.session.get.side_effect = [
+            _edit_page("untitled gallery"),   # before the rename
+            _edit_page("New Gallery Name"),   # after: imx.to shows the new name
+        ]
+        worker.session.post.return_value = _post_response()
 
         with patch('src.processing.rename_worker.log') as mock_log:
             result = worker.rename_gallery_with_session("12345", "New Gallery Name")
@@ -216,6 +232,7 @@ class TestRenameWorkerGalleryRename:
         worker.session.post.assert_called_with(
             "https://imx.to/user/gallery/edit?id=12345",
             data={
+                'csrf': 'tok123',
                 'gallery_name': "New Gallery Name",
                 'submit_new_gallery': 'Rename Gallery'
             }
@@ -223,6 +240,30 @@ class TestRenameWorkerGalleryRename:
         mock_log.assert_any_call(
             "IMX: Renamed gallery '12345' to 'New Gallery Name'",
             category="renaming", level="info")
+
+    @patch('threading.Thread')
+    @patch('src.processing.rename_worker.get_credential')
+    def test_rename_refused_with_http_200_is_a_failure(self, mock_get_cred, mock_thread_class):
+        """imx.to refuses with HTTP 200 and an error text; the name is unchanged, so it failed"""
+        mock_get_cred.return_value = None
+        worker = RenameWorker()
+        worker.session = Mock()
+
+        worker.session.get.side_effect = [
+            _edit_page("untitled gallery"),
+            _edit_page("untitled gallery"),
+        ]
+        worker.session.post.return_value = _post_response(
+            "Your request could not be processed. Please reload the page and try again.")
+
+        with patch('src.processing.rename_worker.log') as mock_log:
+            result = worker.rename_gallery_with_session("12345", "New Gallery Name")
+
+        assert result is False
+        messages = [c.args[0] for c in mock_log.call_args_list]
+        assert not any(m.startswith("IMX: Renamed gallery") for m in messages)
+        assert any("not applied" in m and "untitled gallery" in m
+                   and "Your request could not be processed" in m for m in messages)
 
     @patch('threading.Thread')
     @patch('src.processing.rename_worker.get_credential')
@@ -237,17 +278,10 @@ class TestRenameWorkerGalleryRename:
         mock_edit_response_403 = Mock()
         mock_edit_response_403.status_code = 403
 
-        # After reauth, return 200
-        mock_edit_response_200 = Mock()
-        mock_edit_response_200.status_code = 200
-        mock_edit_response_200.text = "Edit form"
-        mock_edit_response_200.url = "https://imx.to/user/gallery/edit?id=12345"
-
-        mock_rename_response = Mock()
-        mock_rename_response.status_code = 200
-
-        worker.session.get.side_effect = [mock_edit_response_403, mock_edit_response_200]
-        worker.session.post.return_value = mock_rename_response
+        # After reauth, the edit page loads; afterwards it shows the new name
+        worker.session.get.side_effect = [
+            mock_edit_response_403, _edit_page("untitled gallery"), _edit_page("New Name")]
+        worker.session.post.return_value = _post_response()
 
         # Mock successful reauth
         with patch.object(worker, '_attempt_reauth_with_rate_limit', return_value=True):
@@ -263,23 +297,16 @@ class TestRenameWorkerGalleryRename:
         worker = RenameWorker()
         worker.session = Mock()
 
-        mock_edit_response = Mock()
-        mock_edit_response.status_code = 200
-        mock_edit_response.text = "Edit form"
-        mock_edit_response.url = "https://imx.to/user/gallery/edit?id=12345"
-
-        mock_rename_response = Mock()
-        mock_rename_response.status_code = 200
-
-        worker.session.get.return_value = mock_edit_response
-        worker.session.post.return_value = mock_rename_response
+        worker.session.get.side_effect = [_edit_page("untitled gallery"), _edit_page("TestGalleryName")]
+        worker.session.post.return_value = _post_response()
 
         # Name with special characters
         result = worker.rename_gallery_with_session("12345", "Test/Gallery\\Name")
 
         assert result is True
-        # Verify POST was called (name will be sanitized internally)
+        # The sanitized name is sent and is what the check compares against
         worker.session.post.assert_called_once()
+        assert worker.session.post.call_args.kwargs['data']['gallery_name'] == "TestGalleryName"
 
     @patch('threading.Thread')
     @patch('src.processing.rename_worker.get_credential')

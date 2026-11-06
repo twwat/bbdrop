@@ -5,6 +5,7 @@ Uses EXACT working code from ImxToUploader for renames.
 Extends with image status checking via imx.to/user/moderate endpoint.
 """
 
+import html
 import threading
 import queue
 import time
@@ -14,6 +15,24 @@ from typing import List, Dict, Optional, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.utils.logger import log
 from src.utils.credentials import decrypt_password, get_credential
+
+
+def _form_input_value(page_html: str, field_name: str) -> Optional[str]:
+    """Value of the <input name=field_name> on an imx.to page, or None if absent."""
+    for tag in re.findall(r'<input\b[^>]*>', page_html or '', re.IGNORECASE):
+        name = re.search(r'\bname\s*=\s*["\']([^"\']*)["\']', tag, re.IGNORECASE)
+        if name and name.group(1) == field_name:
+            value = re.search(r'\bvalue\s*=\s*"([^"]*)"|\bvalue\s*=\s*\'([^\']*)\'', tag, re.IGNORECASE)
+            if not value:
+                return ''
+            return html.unescape(value.group(1) if value.group(1) is not None else value.group(2))
+    return None
+
+
+def _page_error(page_html: str) -> Optional[str]:
+    """Text of the error box imx.to shows on a refused form, or None."""
+    m = re.search(r'class\s*=\s*["\']error["\'][^>]*>([^<]+)', page_html or '', re.IGNORECASE)
+    return html.unescape(m.group(1)).strip() if m else None
 
 
 def save_session_cookies_to_keyring(session_cookies):
@@ -529,20 +548,38 @@ class RenameWorker(QObject):
                     self.login_successful = False  # Mark session as dead to stop queue processing
                 return False
 
-            # Submit gallery rename form
+            # Submit gallery rename form. imx.to requires the form's csrf token; without
+            # it the rename is refused (found 2026-11-06).
             rename_data = {
                 'gallery_name': new_name,
                 'submit_new_gallery': 'Rename Gallery',
             }
+            csrf = _form_input_value(edit_page.text, 'csrf')
+            if csrf:
+                rename_data['csrf'] = csrf
 
-            response = self.session.post(f"{self.web_url}/user/gallery/edit?id={gallery_id}", data=rename_data)
+            edit_url = f"{self.web_url}/user/gallery/edit?id={gallery_id}"
+            response = self.session.post(edit_url, data=rename_data)
 
-            if response.status_code == 200:
-                log(f"IMX: Renamed gallery '{gallery_id}' to '{new_name}'", category="renaming", level="info")
-                return True
-            else:
+            if response.status_code != 200:
                 log(f"Rename failed (HTTP {response.status_code})", level="debug", category="renaming")
                 return False
+
+            # imx.to answers a refused rename with HTTP 200 too, so only the name
+            # the edit page shows afterwards proves the rename happened
+            check = self.session.get(edit_url)
+            current = _form_input_value(check.text, 'gallery_name') if check.status_code == 200 else None
+            if current is not None and ' '.join(current.split()) == ' '.join(new_name.split()):
+                log(f"IMX: Renamed gallery '{gallery_id}' to '{new_name}'", category="renaming", level="info")
+                return True
+
+            reason = _page_error(response.text)
+            log(
+                f"IMX: Rename of gallery '{gallery_id}' to '{new_name}' not applied "
+                f"(imx.to shows '{current}')" + (f": {reason}" if reason else ""),
+                level="warning", category="renaming",
+            )
+            return False
 
         except Exception as e:
             log(f"Error renaming gallery: {str(e)}", level="debug", category="renaming")
