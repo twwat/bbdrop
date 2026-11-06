@@ -4,6 +4,15 @@ All notable changes to BBDrop will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.11] - 2026-11-06 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.10...v0.9.11))
+
+### Added
+- **Add galleries to the rename list**: Tools → Unnamed Galleries has an **Add Galleries…** button listing the IMX galleries BBDrop already has, newest first and searchable by name. Selected galleries go back on the rename list with their BBDrop names and are renamed on IMX.to
+
+### Fixed
+- **IMX renames silently failing**: IMX.to's edit-gallery form now requires a security token. Without it every website rename was refused, while BBDrop logged "Renamed gallery", dropped the gallery from the rename list and ticked the Renamed column. Renames now send the token, and a gallery only counts as renamed once IMX.to shows the new name; a refused rename stays on the list with IMX.to's error in the log
+- **Update notes**: Release notes in the update dialog render as formatted text with working links
+
 ## [0.9.10] - 2026-11-03 ([full changelog](https://github.com/twwat/bbdrop/compare/v0.9.9...v0.9.10))
 
 ### Added
